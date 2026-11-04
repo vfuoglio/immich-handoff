@@ -19,6 +19,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -392,8 +393,8 @@ func TestEndToEnd(t *testing.T) {
 		if code, body := get(cookieFor("family@e2e.test")); code != 200 || !strings.Contains(body, "You receive") {
 			t.Errorf("receiver dashboard: %d %.200s", code, body)
 		}
-		if code, _ := get(cookieFor("admin@e2e.test")); code != 403 {
-			t.Errorf("an account outside the service must be refused, got %d", code)
+		if code, body := get(cookieFor("admin@e2e.test")); code != 200 || !strings.Contains(body, "do not take part in any service") || strings.Contains(body, "Last run") {
+			t.Errorf("an account outside every service sees an empty page without activity: %d %.200s", code, body)
 		}
 	})
 
@@ -629,4 +630,176 @@ func atoi(s string) int {
 	n := 0
 	fmt.Sscanf(s, "%d", &n)
 	return n
+}
+
+// loginCookie signs in to Immich like a browser and returns the Cookie header value.
+func loginCookie(t *testing.T, email string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"email": email, "password": "Passw0rd!x"})
+	res, err := http.Post(baseURL+"/api/auth/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	var parts []string
+	for _, c := range res.Cookies() {
+		parts = append(parts, c.Name+"="+c.Value)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// post sends a state-changing request to the app as a browser would (cookie plus the CSRF header).
+func post(t *testing.T, port, path, cookie string, form url.Values) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest("POST", "http://localhost:"+port+path, strings.NewReader(form.Encode()))
+	req.Header.Set("Cookie", cookie)
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	return res
+}
+
+func keyNames(t *testing.T, u user) []string {
+	var keys []struct{ Name string }
+	call(t, "GET", "/api-keys", keyAuth(u), nil, &keys)
+	var out []string
+	for _, k := range keys {
+		out = append(out, k.Name)
+	}
+	return out
+}
+
+func hasName(names []string, want string) bool {
+	for _, n := range names {
+		if n == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSelfService: a person joins an open service from the page, hands photos over with the key the
+// app created for them, survives an app restart, and leaves again.
+func TestSelfService(t *testing.T) {
+	_, bob, family, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 2)
+	dir := t.TempDir()
+	routes := filepath.Join(dir, "routes.yaml")
+	if err := os.WriteFile(routes, []byte(`
+accounts:
+  family: { key: ${E2E_FAMILY} }
+services:
+  - name: open
+    tag: join-me
+    receivers: [family]
+    allow_join: true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	launch := func() *app {
+		cmd := exec.Command(bin)
+		cmd.Env = append(os.Environ(),
+			"IMMICH_BASE_URL="+baseURL, "ROUTES_FILE="+routes, "E2E_FAMILY="+family.appKey,
+			"WEBHOOK_SECRET="+secret, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+dir,
+			"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+port+"/webhook/immich", "LISTEN_ADDR=:"+port, "SWEEP_INTERVAL_HOURS=1")
+		var buf bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &buf, &buf
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		a := &app{cmd: cmd, log: &buf}
+		t.Cleanup(a.stop)
+		eventually(t, "app healthy", 30*time.Second, func() bool {
+			res, err := http.Get("http://localhost:" + port + "/healthz")
+			if err != nil {
+				return false
+			}
+			res.Body.Close()
+			return res.StatusCode == 200
+		})
+		return a
+	}
+	a := launch()
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("app log:\n%s", a.log.String())
+		}
+	})
+
+	cookie := loginCookie(t, "bob@e2e.test")
+	handedOver := func(label string, seed int) {
+		id, _ := upload(t, bob, label, jpegBytes(seed))
+		tagAsset(t, bob, "join-me", id)
+		eventually(t, label+" handed over", 90*time.Second, func() bool {
+			x, code := getAsset(t, bob, id)
+			return code == 200 && x.IsTrashed
+		})
+	}
+	notHandedOver := func(label string, seed int) {
+		id, _ := upload(t, bob, label, jpegBytes(seed))
+		tagAsset(t, bob, "join-me", id)
+		time.Sleep(10 * time.Second)
+		if x, _ := getAsset(t, bob, id); x.IsTrashed {
+			t.Errorf("%s was handed over although bob has left", label)
+		}
+	}
+
+	t.Run("a stranger is offered the service and joins", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "http://localhost:"+port+"/", nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if !strings.Contains(string(b), "Services you can join") || !strings.Contains(string(b), "open") {
+			t.Fatalf("join offer missing: %.300s", b)
+		}
+		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}}); res.StatusCode != 204 {
+			t.Fatalf("join: HTTP %d", res.StatusCode)
+		}
+		if names := keyNames(t, bob); !hasName(names, "handoff: open") {
+			t.Errorf("the app must have created a key named 'handoff: open', keys: %v", names)
+		}
+		eventually(t, "bob's workflow exists", 60*time.Second, func() bool {
+			var wfs []struct{ Name string }
+			call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+			for _, w := range wfs {
+				if w.Name == "immich-handoff: open" {
+					return true
+				}
+			}
+			return false
+		})
+	})
+
+	t.Run("the new member hands photos over, also after a restart", func(t *testing.T) {
+		handedOver("before-restart.jpg", 80)
+		a.stop()
+		a = launch()
+		handedOver("after-restart.jpg", 81)
+	})
+
+	t.Run("leaving removes the key and the workflow and stops the hand-over", func(t *testing.T) {
+		if res := post(t, port, "/leave", cookie, url.Values{"service": {"open"}}); res.StatusCode != 204 {
+			t.Fatalf("leave: HTTP %d", res.StatusCode)
+		}
+		if names := keyNames(t, bob); hasName(names, "handoff: open") {
+			t.Errorf("the key must be deleted from Immich, keys: %v", names)
+		}
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: open" {
+				t.Errorf("the workflow must be deleted")
+			}
+		}
+		notHandedOver("after-leaving.jpg", 82)
+	})
 }

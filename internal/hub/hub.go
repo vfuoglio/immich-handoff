@@ -1,0 +1,269 @@
+// Package hub combines the services from the configuration with the people who joined them from
+// the web page, and implements joining and leaving.
+package hub
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+
+	"github.com/google/uuid"
+
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
+)
+
+// Errors a person can be shown as they are.
+var (
+	ErrNotJoinable = errors.New("this service does not accept new senders")
+	ErrAlready     = errors.New("you already take part in this service")
+	ErrNotJoined   = errors.New("you have not joined this service from this page")
+)
+
+type Hub struct {
+	Static  []*syncer.Service // from the environment or the routes file
+	Store   *store.Store      // nil: self-service is switched off
+	Connect func(key string) (*immich.API, error)
+	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
+	Wake    func(reason string)
+	Retry   func() // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Log     *slog.Logger
+
+	mu       sync.RWMutex
+	snapshot []*syncer.Service
+	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
+}
+
+// SelfService reports whether people can join and leave from the web page.
+func (h *Hub) SelfService() bool { return h.Store != nil }
+
+// Services implements syncer.Provider.
+func (h *Hub) Services() []*syncer.Service {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.snapshot == nil {
+		return h.Static
+	}
+	return h.snapshot
+}
+
+// Reload rebuilds the merged view from the store.
+func (h *Hub) Reload(ctx context.Context) error {
+	var links []store.Link
+	if h.Store != nil {
+		var err error
+		if links, err = h.Store.Links(ctx); err != nil {
+			return err
+		}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.accounts == nil {
+		h.accounts = map[string]*syncer.Account{}
+	}
+	live := map[string]bool{}
+	extra := map[string][]*syncer.Account{}
+	for _, l := range links {
+		if l.State != store.StateActive || l.Role != store.RoleSender {
+			continue
+		}
+		live[l.ID] = true
+		acct, ok := h.accounts[l.ID]
+		if !ok {
+			api, err := h.Connect(l.Key)
+			if err != nil {
+				h.Log.Error("cannot use stored key", "link", l.ID, "err", err)
+				continue
+			}
+			acct = &syncer.Account{Name: l.Name, API: api, UserID: l.ImmichUserID}
+			h.accounts[l.ID] = acct
+		}
+		extra[l.Service] = append(extra[l.Service], acct)
+	}
+	for id := range h.accounts {
+		if !live[id] {
+			delete(h.accounts, id)
+		}
+	}
+	merged := make([]*syncer.Service, 0, len(h.Static))
+	for _, svc := range h.Static {
+		cp := *svc
+		cp.Senders = append(append([]*syncer.Account(nil), svc.Senders...), extra[svc.Label()]...)
+		merged = append(merged, &cp)
+	}
+	h.snapshot = merged
+	return nil
+}
+
+func (h *Hub) service(name string) *syncer.Service {
+	for _, s := range h.Services() {
+		if s.Label() == name {
+			return s
+		}
+	}
+	return nil
+}
+
+// Takes reports whether the user already sends to or receives from the service.
+func Takes(svc *syncer.Service, user uuid.UUID) bool {
+	for _, group := range [][]*syncer.Account{svc.Senders, svc.Receivers} {
+		for _, a := range group {
+			if a.UserID == user {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Joinable lists the services this person may add themselves to.
+func (h *Hub) Joinable(user uuid.UUID) []*syncer.Service {
+	if !h.SelfService() {
+		return nil
+	}
+	var out []*syncer.Service
+	for _, svc := range h.Services() {
+		if svc.AllowJoin && !Takes(svc, user) {
+			out = append(out, svc)
+		}
+	}
+	return out
+}
+
+// Joined lists the services this person joined from the page (and so can leave from it).
+func (h *Hub) Joined(ctx context.Context, user uuid.UUID) (map[string]bool, error) {
+	out := map[string]bool{}
+	if !h.SelfService() {
+		return out, nil
+	}
+	links, err := h.Store.Links(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range links {
+		if l.ImmichUserID == user && l.Role == store.RoleSender {
+			out[l.Service] = true
+		}
+	}
+	return out, nil
+}
+
+func keyName(service string) string { return "handoff: " + service }
+
+// Join makes the signed-in person a sender of the service. sess acts with their own Immich session.
+// If the key or the membership cannot be created, everything already done is undone, so no orphan
+// key or record is left behind. If only the workflow cannot be created yet (Immich is still loading
+// its plugins), the person is a member anyway and the workflow is retried in the background.
+func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service string) error {
+	if !h.SelfService() {
+		return ErrNotJoinable
+	}
+	svc := h.service(service)
+	if svc == nil || !svc.AllowJoin {
+		return ErrNotJoinable
+	}
+	if Takes(svc, user.ID) {
+		return ErrAlready
+	}
+
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), immich.SenderPermissions)
+	if err != nil {
+		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
+	}
+	undoKey := func() {
+		if err := sess.DeleteAPIKey(context.WithoutCancel(ctx), keyID); err != nil {
+			h.Log.Error("could not remove the key created for a failed join", "err", err)
+		}
+	}
+
+	api, err := h.Connect(secret)
+	if err != nil {
+		undoKey()
+		return err
+	}
+	if me, err := api.Me(ctx); err != nil || me.ID != user.ID {
+		undoKey()
+		return fmt.Errorf("the new key does not work for your account: %v", err)
+	}
+	link, err := h.Store.AddLink(ctx, store.Link{
+		Service: service, Role: store.RoleSender, ImmichUserID: user.ID, Name: user.Name, Email: user.Email, KeyID: keyID, Key: secret,
+	})
+	if err != nil {
+		undoKey()
+		if errors.Is(err, store.ErrExists) {
+			return ErrAlready
+		}
+		return err
+	}
+	if err := h.Reload(ctx); err != nil {
+		h.Store.RemoveLink(ctx, link.ID)
+		undoKey()
+		return err
+	}
+
+	if h.Hook.URL != "" {
+		if err := h.provision(ctx, svc, api); err != nil {
+			h.Log.Warn("joined, but the workflow is not ready yet; retrying in the background", "user", user.Email, "err", err)
+			if h.Retry != nil {
+				go h.Retry()
+			}
+		}
+	}
+	h.Log.Info("joined", "service", service, "user", user.Email)
+	if h.Wake != nil {
+		h.Wake("joined: " + user.Email)
+	}
+	return nil
+}
+
+func (h *Hub) provision(ctx context.Context, svc *syncer.Service, api *immich.API) error {
+	tag, err := api.FindTag(ctx, svc.Tag, true)
+	if err != nil || tag == nil {
+		return fmt.Errorf("tag %q: %v", svc.Tag, err)
+	}
+	_, err = api.EnsureWorkflow(ctx, immich.WorkflowSpec{
+		Name: svc.WorkflowName(), TagID: *tag, WebhookURL: h.Hook.URL, HeaderName: h.Hook.Header, HeaderSecret: h.Hook.Secret,
+	})
+	return err
+}
+
+// Leave removes the person's workflow and key from Immich and forgets the membership.
+// Problems removing things in Immich are logged but do not stop the membership from ending.
+func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, service string) error {
+	if !h.SelfService() {
+		return ErrNotJoined
+	}
+	links, err := h.Store.Links(ctx)
+	if err != nil {
+		return err
+	}
+	var link *store.Link
+	for i := range links {
+		if links[i].Service == service && links[i].Role == store.RoleSender && links[i].ImmichUserID == user.ID {
+			link = &links[i]
+		}
+	}
+	if link == nil {
+		return ErrNotJoined
+	}
+	if svc := h.service(service); svc != nil {
+		if id, err := sess.FindWorkflow(ctx, svc.WorkflowName()); err != nil {
+			h.Log.Warn("leave: could not look up the workflow", "err", err)
+		} else if id != nil {
+			if err := sess.DeleteWorkflow(ctx, *id); err != nil {
+				h.Log.Warn("leave: could not delete the workflow", "err", err)
+			}
+		}
+	}
+	if err := sess.DeleteAPIKey(ctx, link.KeyID); err != nil {
+		h.Log.Warn("leave: could not delete the API key (it may already be gone)", "err", err)
+	}
+	if err := h.Store.RemoveLink(ctx, link.ID); err != nil {
+		return err
+	}
+	h.Log.Info("left", "service", service, "user", user.Email)
+	return h.Reload(ctx)
+}

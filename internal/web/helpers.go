@@ -58,3 +58,11 @@ func badClass(b bool) string {
 	}
 	return ""
 }
+
+// joinConfirm tells the person exactly what joining does before they agree.
+func joinConfirm(j JoinView) string {
+	return "Joining creates an API key named \"handoff: " + j.Name + "\" in your Immich account. " +
+		"Immich Handoff uses it to read and download the photos you tag \"" + j.Tag + "\" and to delete the originals " +
+		"after they have been handed over. Nobody else can see the key. You can stop at any time with Leave, " +
+		"or by deleting that key in Immich."
+}

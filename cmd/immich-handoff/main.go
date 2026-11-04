@@ -13,8 +13,11 @@ import (
 	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/config"
+	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
+	"github.com/vfuoglio/immich-handoff/internal/vault"
 	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
@@ -45,9 +48,8 @@ func run(log *slog.Logger) error {
 	}
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
 
-	services, err := config.Load(os.Getenv, func(key string) (*immich.API, error) {
-		return immich.New(base, immich.Auth{APIKey: key}, nil)
-	})
+	connect := func(key string) (*immich.API, error) { return immich.New(base, immich.Auth{APIKey: key}, nil) }
+	services, err := config.Load(os.Getenv, connect)
 	if err != nil {
 		return err
 	}
@@ -72,13 +74,43 @@ func run(log *slog.Logger) error {
 		log.Warn("Immich < 3.2: the tag workflow trigger is not available; only the startup and daily passes will hand photos over")
 	}
 
-	w := &web.Server{S: s, BaseURL: base, WebhookHeader: env("WEBHOOK_HEADER", "X-Webhook-Secret"),
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx}
-	if err := w.Init(ctx); err != nil {
-		return err
+	webhookHeader := env("WEBHOOK_HEADER", "X-Webhook-Secret")
+	hook := syncer.Webhook{URL: os.Getenv("PUBLIC_WEBHOOK_URL"), Header: webhookHeader, Secret: secret}
+
+	for _, a := range syncer.ResolveUsers(ctx, services) {
+		log.Warn("an API key from the configuration is not accepted by Immich", "account", a.Name)
 	}
 
-	hook := syncer.Webhook{URL: os.Getenv("PUBLIC_WEBHOOK_URL"), Header: w.WebhookHeader, Secret: secret}
+	// Self-service joining needs a place to keep keys, protected by a key of its own.
+	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log,
+		Wake:  func(reason string) { go s.Run(ctx, reason, false) },
+		Retry: func() { s.ProvisionRetry(ctx, hook) }}
+	if storeKey, err := readStoreKey(); err != nil {
+		return err
+	} else if storeKey == "" {
+		log.Info("HANDOFF_STORE_KEY is not set: people cannot join from the web page (keys from the configuration still work)")
+	} else {
+		v, err := vault.New(storeKey)
+		if err != nil {
+			return err
+		}
+		dir := env("DATA_DIR", "/data")
+		st, err := store.Open(dir+"/handoff.db", v)
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		h.Store = st
+		log.Info("self-service joining is on", "data", dir)
+	}
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	s.Provider = h
+
+	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx}
+
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 
 	// Startup catch-up and a slow daily sweep (also expires the inbox tag). This is a safety net, not polling.
@@ -108,4 +140,16 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+// readStoreKey reads the store key from HANDOFF_STORE_KEY_FILE (a Docker secret) or HANDOFF_STORE_KEY.
+func readStoreKey() (string, error) {
+	if path := os.Getenv("HANDOFF_STORE_KEY_FILE"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	return strings.TrimSpace(os.Getenv("HANDOFF_STORE_KEY")), nil
 }

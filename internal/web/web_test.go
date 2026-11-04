@@ -76,10 +76,8 @@ func setup(t *testing.T) (*httptest.Server, *syncer.Syncer) {
 	svc := &syncer.Service{Name: "family", Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30,
 		Senders: []*syncer.Account{mk("alice", "k-alice")}, Receivers: []*syncer.Account{mk("family", "k-family")}}
 	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Cfg: syncer.Config{DryRun: true}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	syncer.ResolveUsers(context.Background(), s.Services)
 	srv := &web.Server{S: s, BaseURL: im.URL, WebhookHeader: "X-Webhook-Secret", WebhookSecret: "s3cret", Log: s.Log, BackgroundCtx: context.Background()}
-	if err := srv.Init(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	app := httptest.NewServer(srv.Handler())
 	t.Cleanup(app.Close)
 	return app, s
@@ -108,8 +106,15 @@ func TestSignInStates(t *testing.T) {
 	if code, body := do(t, "GET", app.URL+"/", "", nil); code != 401 || !strings.Contains(body, "Sign in to Immich first") {
 		t.Errorf("no cookie: %d %.80s", code, body)
 	}
-	if code, body := do(t, "GET", app.URL+"/", "sess=other", nil); code != 403 || !strings.Contains(body, "does not take part") {
-		t.Errorf("stranger: %d %.80s", code, body)
+	// any signed-in Immich user may open the page; without a service it is simply empty
+	if code, body := do(t, "GET", app.URL+"/", "sess=other", nil); code != 200 || !strings.Contains(body, "do not take part in any service") || strings.Contains(body, "Last run") {
+		t.Errorf("stranger: %d %.120s", code, body)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/lastrun", "sess=other", nil); code != 403 {
+		t.Errorf("activity must stay hidden from non-members, got %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/events", "sess=other", nil); code != 403 {
+		t.Errorf("the live stream must stay hidden from non-members, got %d", code)
 	}
 	if code, _ := do(t, "GET", app.URL+"/", "sess=bogus", nil); code != 401 {
 		t.Errorf("unknown session must be 401, got %d", code)
@@ -150,6 +155,9 @@ func TestSyncNeedsHeaderAndSignIn(t *testing.T) {
 	}
 	if code, _ := do(t, "POST", app.URL+"/sync", "", map[string]string{"X-Requested-With": "immich-handoff"}); code != 401 {
 		t.Errorf("without sign-in: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/sync", "sess=other", map[string]string{"X-Requested-With": "immich-handoff"}); code != 403 {
+		t.Errorf("a non-member must not trigger syncs: %d", code)
 	}
 	if code, body := do(t, "POST", app.URL+"/sync", "sess=alice", map[string]string{"X-Requested-With": "immich-handoff"}); code != 202 || body != "Sync started" {
 		t.Errorf("sync: %d %q", code, body)
@@ -210,5 +218,19 @@ func TestEventsAnnounceFinishedRuns(t *testing.T) {
 		case <-deadline:
 			t.Fatal("no run event after a pass finished")
 		}
+	}
+}
+
+func TestJoinAndLeaveAreOffWithoutSelfService(t *testing.T) {
+	app, _ := setup(t)
+	h := map[string]string{"X-Requested-With": "immich-handoff"}
+	if code, _ := do(t, "POST", app.URL+"/join", "sess=other", h); code != 404 {
+		t.Errorf("join with self-service off: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/leave", "sess=alice", h); code != 404 {
+		t.Errorf("leave with self-service off: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/join", "sess=other", nil); code != 400 {
+		t.Errorf("join without the CSRF header: %d", code)
 	}
 }

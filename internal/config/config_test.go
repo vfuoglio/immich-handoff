@@ -73,6 +73,18 @@ func TestRoutesProblems(t *testing.T) {
 	}
 }
 
+func TestOpenServiceMayStartWithoutSenders(t *testing.T) {
+	y := "accounts: {f: {key: k}}\nservices:\n  - {name: open, tag: join, receivers: [f], allow_join: true}\n"
+	svcs, err := parseRoutes([]byte(y), env(nil), DefaultsFrom(env(nil)), connect)
+	if err != nil || !svcs[0].AllowJoin || len(svcs[0].Senders) != 0 {
+		t.Fatalf("open service: %v %+v", err, svcs)
+	}
+	closed := strings.Replace(y, ", allow_join: true", "", 1)
+	if _, err := parseRoutes([]byte(closed), env(nil), DefaultsFrom(env(nil)), connect); err == nil || !strings.Contains(err.Error(), "allow_join") {
+		t.Errorf("a closed service without senders must be rejected, got %v", err)
+	}
+}
+
 func TestPlainEnvMakesOneDefaultService(t *testing.T) {
 	svcs, err := Load(env(map[string]string{"IMMICH_SOURCE_API_KEYS": "a, b", "IMMICH_DEST_API_KEY": "f", "SHARE_TAG": "send"}), connect)
 	if err != nil {

@@ -13,6 +13,13 @@ type ServiceView struct {
 	Tag  string // the tag the user adds (sender) or looks for (receiver)
 	From int    // number of senders
 	To   int    // number of receivers
+	CanLeave bool // the person joined from this page, so can leave from it
+}
+
+// JoinView is a service the signed-in person may add themselves to.
+type JoinView struct {
+	Name string
+	Tag  string
 }
 
 templ Layout(title, user string) {
@@ -51,7 +58,7 @@ templ Layout(title, user string) {
 	</html>
 }
 
-templ Dashboard(user string, services []ServiceView, last *syncer.RunInfo) {
+templ Dashboard(user string, services []ServiceView, joinable []JoinView, last *syncer.RunInfo) {
 	@Layout("Immich Handoff", user) {
 		<h1>Your services</h1>
 		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
@@ -61,12 +68,21 @@ templ Dashboard(user string, services []ServiceView, last *syncer.RunInfo) {
 		for _, s := range services {
 			@ServiceCard(s)
 		}
-		<h2>Activity</h2>
-		@LastRun(last)
-		<p class="row">
-			<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">Sync now</button>
-			<span id="synctoast" class="toast" aria-live="polite"></span>
-		</p>
+		if len(joinable) > 0 {
+			<h2>Services you can join</h2>
+			<p id="joinmsg" class="toast" role="status" aria-live="polite"></p>
+			for _, j := range joinable {
+				@JoinCard(j)
+			}
+		}
+		if len(services) > 0 {
+			<h2>Activity</h2>
+			@LastRun(last)
+			<p class="row">
+				<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">Sync now</button>
+				<span id="synctoast" class="toast" aria-live="polite"></span>
+			</p>
+		}
 	}
 }
 
@@ -84,6 +100,12 @@ templ ServiceCard(s ServiceView) {
 			}
 			{ fmt.Sprintf(" %d %s, %d %s.", s.From, plural(s.From, "sender", "senders"), s.To, plural(s.To, "receiver", "receivers")) }
 		</p>
+		if s.CanLeave {
+			<p class="row">
+				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#leavemsg" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>
+				<span id="leavemsg" class="toast" role="status" aria-live="polite"></span>
+			</p>
+		}
 		<div class="stats">
 			<div class="stat" hx-get={ "fragments/count?service=" + s.Name + "&role=" + s.Role } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
 				<span class="skeleton"></span>
@@ -130,4 +152,17 @@ templ Notice(title, text string, bad bool) {
 			<p class="lead">{ text }</p>
 		</div>
 	}
+}
+
+templ JoinCard(j JoinView) {
+	<article class="card">
+		<header>
+			<h3>{ j.Name }</h3>
+			<span class="chip">Open to join</span>
+		</header>
+		<p class="meta">Send photos by adding the tag <code class="tag">{ j.Tag }</code> to them in Immich.</p>
+		<p class="row">
+			<button class="primary" hx-post="join" hx-vals={ `{"service":"` + j.Name + `"}` } hx-target="#joinmsg" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(j) }>Join</button>
+		</p>
+	</article>
 }

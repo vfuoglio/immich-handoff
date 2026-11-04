@@ -45,7 +45,8 @@ type RunInfo struct {
 
 type Syncer struct {
 	Cfg      Config
-	Services []*Service
+	Services []*Service // fixed services (used when Provider is nil)
+	Provider Provider   // optional: services that can change while running
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -190,7 +191,7 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 	}()
 
 	resolved := map[uuid.UUID]bool{}
-	for _, svc := range s.Services {
+	for _, svc := range s.Current() {
 		c := s.runService(ctx, svc, hints, resolved)
 		info.Counts.add(c)
 		info.PerService[svc.Label()] = c
@@ -346,7 +347,7 @@ func (s *Syncer) cleanupAll(ctx context.Context) (untagged, errs int) {
 	}
 	jobs := map[key]*job{}
 	var order []key
-	for _, svc := range s.Services {
+	for _, svc := range s.Current() {
 		for _, r := range svc.Receivers {
 			k := key{r.Name, svc.InboxTag}
 			if j, ok := jobs[k]; ok {

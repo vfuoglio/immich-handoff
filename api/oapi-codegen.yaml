@@ -23,3 +23,8 @@ output-options:
     - searchWorkflows
     - createWorkflow
     - updateWorkflow
+    - deleteWorkflow
+    - createApiKey
+    - deleteApiKey
+    - getMyApiKey
+    - getApiKeys

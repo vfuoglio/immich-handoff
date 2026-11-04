@@ -150,6 +150,522 @@ func (e BulkIdErrorReason) Valid() bool {
 	}
 }
 
+// Defines values for Permission.
+const (
+	ActivityCreate            Permission = "activity.create"
+	ActivityDelete            Permission = "activity.delete"
+	ActivityRead              Permission = "activity.read"
+	ActivityStatistics        Permission = "activity.statistics"
+	ActivityUpdate            Permission = "activity.update"
+	AdminAuthUnlinkAll        Permission = "adminAuth.unlinkAll"
+	AdminConfigRead           Permission = "adminConfig.read"
+	AdminConfigUpdate         Permission = "adminConfig.update"
+	AdminSessionRead          Permission = "adminSession.read"
+	AdminUserCreate           Permission = "adminUser.create"
+	AdminUserDelete           Permission = "adminUser.delete"
+	AdminUserRead             Permission = "adminUser.read"
+	AdminUserUpdate           Permission = "adminUser.update"
+	AlbumAssetCreate          Permission = "albumAsset.create"
+	AlbumAssetDelete          Permission = "albumAsset.delete"
+	AlbumCreate               Permission = "album.create"
+	AlbumDelete               Permission = "album.delete"
+	AlbumDownload             Permission = "album.download"
+	AlbumRead                 Permission = "album.read"
+	AlbumShare                Permission = "album.share"
+	AlbumStatistics           Permission = "album.statistics"
+	AlbumUpdate               Permission = "album.update"
+	AlbumUserCreate           Permission = "albumUser.create"
+	AlbumUserDelete           Permission = "albumUser.delete"
+	AlbumUserUpdate           Permission = "albumUser.update"
+	All                       Permission = "all"
+	ApiKeyCreate              Permission = "apiKey.create"
+	ApiKeyDelete              Permission = "apiKey.delete"
+	ApiKeyRead                Permission = "apiKey.read"
+	ApiKeyRotate              Permission = "apiKey.rotate"
+	ApiKeyUpdate              Permission = "apiKey.update"
+	ArchiveRead               Permission = "archive.read"
+	AssetCopy                 Permission = "asset.copy"
+	AssetDelete               Permission = "asset.delete"
+	AssetDerive               Permission = "asset.derive"
+	AssetDownload             Permission = "asset.download"
+	AssetEditCreate           Permission = "asset.edit.create"
+	AssetEditDelete           Permission = "asset.edit.delete"
+	AssetEditGet              Permission = "asset.edit.get"
+	AssetFileDelete           Permission = "assetFile.delete"
+	AssetFileDownload         Permission = "assetFile.download"
+	AssetFileRead             Permission = "assetFile.read"
+	AssetRead                 Permission = "asset.read"
+	AssetShare                Permission = "asset.share"
+	AssetStatistics           Permission = "asset.statistics"
+	AssetUpdate               Permission = "asset.update"
+	AssetUpload               Permission = "asset.upload"
+	AssetView                 Permission = "asset.view"
+	AuthChangePassword        Permission = "auth.changePassword"
+	AuthDeviceDelete          Permission = "authDevice.delete"
+	BackupDelete              Permission = "backup.delete"
+	BackupDownload            Permission = "backup.download"
+	BackupList                Permission = "backup.list"
+	BackupUpload              Permission = "backup.upload"
+	ClusterGroupLeave         Permission = "clusterGroup.leave"
+	ClusterGroupRead          Permission = "clusterGroup.read"
+	ClusterGroupRequestCreate Permission = "clusterGroupRequest.create"
+	ClusterGroupRequestDelete Permission = "clusterGroupRequest.delete"
+	ClusterGroupRequestRead   Permission = "clusterGroupRequest.read"
+	DuplicateDelete           Permission = "duplicate.delete"
+	DuplicateRead             Permission = "duplicate.read"
+	FaceCreate                Permission = "face.create"
+	FaceDelete                Permission = "face.delete"
+	FaceRead                  Permission = "face.read"
+	FaceUpdate                Permission = "face.update"
+	FolderRead                Permission = "folder.read"
+	JobCreate                 Permission = "job.create"
+	JobRead                   Permission = "job.read"
+	LibraryCreate             Permission = "library.create"
+	LibraryDelete             Permission = "library.delete"
+	LibraryRead               Permission = "library.read"
+	LibraryStatistics         Permission = "library.statistics"
+	LibraryUpdate             Permission = "library.update"
+	Maintenance               Permission = "maintenance"
+	MapRead                   Permission = "map.read"
+	MapSearch                 Permission = "map.search"
+	MemoryAssetCreate         Permission = "memoryAsset.create"
+	MemoryAssetDelete         Permission = "memoryAsset.delete"
+	MemoryCreate              Permission = "memory.create"
+	MemoryDelete              Permission = "memory.delete"
+	MemoryRead                Permission = "memory.read"
+	MemoryStatistics          Permission = "memory.statistics"
+	MemoryUpdate              Permission = "memory.update"
+	NotificationCreate        Permission = "notification.create"
+	NotificationDelete        Permission = "notification.delete"
+	NotificationRead          Permission = "notification.read"
+	NotificationUpdate        Permission = "notification.update"
+	PartnerCreate             Permission = "partner.create"
+	PartnerDelete             Permission = "partner.delete"
+	PartnerRead               Permission = "partner.read"
+	PartnerUpdate             Permission = "partner.update"
+	PersonCreate              Permission = "person.create"
+	PersonDelete              Permission = "person.delete"
+	PersonMerge               Permission = "person.merge"
+	PersonRead                Permission = "person.read"
+	PersonReassign            Permission = "person.reassign"
+	PersonStatistics          Permission = "person.statistics"
+	PersonUpdate              Permission = "person.update"
+	PinCodeCreate             Permission = "pinCode.create"
+	PinCodeDelete             Permission = "pinCode.delete"
+	PinCodeUpdate             Permission = "pinCode.update"
+	PluginCreate              Permission = "plugin.create"
+	PluginDelete              Permission = "plugin.delete"
+	PluginRead                Permission = "plugin.read"
+	PluginUpdate              Permission = "plugin.update"
+	QueueJobCreate            Permission = "queueJob.create"
+	QueueJobDelete            Permission = "queueJob.delete"
+	QueueJobRead              Permission = "queueJob.read"
+	QueueJobUpdate            Permission = "queueJob.update"
+	QueueRead                 Permission = "queue.read"
+	QueueUpdate               Permission = "queue.update"
+	ServerAbout               Permission = "server.about"
+	ServerApkLinks            Permission = "server.apkLinks"
+	ServerLicenseDelete       Permission = "serverLicense.delete"
+	ServerLicenseRead         Permission = "serverLicense.read"
+	ServerLicenseUpdate       Permission = "serverLicense.update"
+	ServerStatistics          Permission = "server.statistics"
+	ServerStorage             Permission = "server.storage"
+	ServerVersionCheck        Permission = "server.versionCheck"
+	SessionCreate             Permission = "session.create"
+	SessionDelete             Permission = "session.delete"
+	SessionLock               Permission = "session.lock"
+	SessionRead               Permission = "session.read"
+	SessionUpdate             Permission = "session.update"
+	SharedLinkCreate          Permission = "sharedLink.create"
+	SharedLinkDelete          Permission = "sharedLink.delete"
+	SharedLinkRead            Permission = "sharedLink.read"
+	SharedLinkUpdate          Permission = "sharedLink.update"
+	StackCreate               Permission = "stack.create"
+	StackDelete               Permission = "stack.delete"
+	StackRead                 Permission = "stack.read"
+	StackUpdate               Permission = "stack.update"
+	SyncCheckpointDelete      Permission = "syncCheckpoint.delete"
+	SyncCheckpointRead        Permission = "syncCheckpoint.read"
+	SyncCheckpointUpdate      Permission = "syncCheckpoint.update"
+	SyncStream                Permission = "sync.stream"
+	SystemConfigRead          Permission = "systemConfig.read"
+	SystemConfigUpdate        Permission = "systemConfig.update"
+	SystemMetadataRead        Permission = "systemMetadata.read"
+	SystemMetadataUpdate      Permission = "systemMetadata.update"
+	TagAsset                  Permission = "tag.asset"
+	TagCreate                 Permission = "tag.create"
+	TagDelete                 Permission = "tag.delete"
+	TagRead                   Permission = "tag.read"
+	TagUpdate                 Permission = "tag.update"
+	TimelineDownload          Permission = "timeline.download"
+	TimelineRead              Permission = "timeline.read"
+	UserConfigRead            Permission = "userConfig.read"
+	UserLicenseCreate         Permission = "userLicense.create"
+	UserLicenseDelete         Permission = "userLicense.delete"
+	UserLicenseRead           Permission = "userLicense.read"
+	UserLicenseUpdate         Permission = "userLicense.update"
+	UserOnboardingDelete      Permission = "userOnboarding.delete"
+	UserOnboardingRead        Permission = "userOnboarding.read"
+	UserOnboardingUpdate      Permission = "userOnboarding.update"
+	UserPreferenceRead        Permission = "userPreference.read"
+	UserPreferenceUpdate      Permission = "userPreference.update"
+	UserProfileImageCreate    Permission = "userProfileImage.create"
+	UserProfileImageDelete    Permission = "userProfileImage.delete"
+	UserProfileImageRead      Permission = "userProfileImage.read"
+	UserProfileImageUpdate    Permission = "userProfileImage.update"
+	UserRead                  Permission = "user.read"
+	UserUpdate                Permission = "user.update"
+	WorkflowCreate            Permission = "workflow.create"
+	WorkflowDelete            Permission = "workflow.delete"
+	WorkflowLogs              Permission = "workflow.logs"
+	WorkflowRead              Permission = "workflow.read"
+	WorkflowUpdate            Permission = "workflow.update"
+)
+
+// Valid indicates whether the value is a known member of the Permission enum.
+func (e Permission) Valid() bool {
+	switch e {
+	case ActivityCreate:
+		return true
+	case ActivityDelete:
+		return true
+	case ActivityRead:
+		return true
+	case ActivityStatistics:
+		return true
+	case ActivityUpdate:
+		return true
+	case AdminAuthUnlinkAll:
+		return true
+	case AdminConfigRead:
+		return true
+	case AdminConfigUpdate:
+		return true
+	case AdminSessionRead:
+		return true
+	case AdminUserCreate:
+		return true
+	case AdminUserDelete:
+		return true
+	case AdminUserRead:
+		return true
+	case AdminUserUpdate:
+		return true
+	case AlbumAssetCreate:
+		return true
+	case AlbumAssetDelete:
+		return true
+	case AlbumCreate:
+		return true
+	case AlbumDelete:
+		return true
+	case AlbumDownload:
+		return true
+	case AlbumRead:
+		return true
+	case AlbumShare:
+		return true
+	case AlbumStatistics:
+		return true
+	case AlbumUpdate:
+		return true
+	case AlbumUserCreate:
+		return true
+	case AlbumUserDelete:
+		return true
+	case AlbumUserUpdate:
+		return true
+	case All:
+		return true
+	case ApiKeyCreate:
+		return true
+	case ApiKeyDelete:
+		return true
+	case ApiKeyRead:
+		return true
+	case ApiKeyRotate:
+		return true
+	case ApiKeyUpdate:
+		return true
+	case ArchiveRead:
+		return true
+	case AssetCopy:
+		return true
+	case AssetDelete:
+		return true
+	case AssetDerive:
+		return true
+	case AssetDownload:
+		return true
+	case AssetEditCreate:
+		return true
+	case AssetEditDelete:
+		return true
+	case AssetEditGet:
+		return true
+	case AssetFileDelete:
+		return true
+	case AssetFileDownload:
+		return true
+	case AssetFileRead:
+		return true
+	case AssetRead:
+		return true
+	case AssetShare:
+		return true
+	case AssetStatistics:
+		return true
+	case AssetUpdate:
+		return true
+	case AssetUpload:
+		return true
+	case AssetView:
+		return true
+	case AuthChangePassword:
+		return true
+	case AuthDeviceDelete:
+		return true
+	case BackupDelete:
+		return true
+	case BackupDownload:
+		return true
+	case BackupList:
+		return true
+	case BackupUpload:
+		return true
+	case ClusterGroupLeave:
+		return true
+	case ClusterGroupRead:
+		return true
+	case ClusterGroupRequestCreate:
+		return true
+	case ClusterGroupRequestDelete:
+		return true
+	case ClusterGroupRequestRead:
+		return true
+	case DuplicateDelete:
+		return true
+	case DuplicateRead:
+		return true
+	case FaceCreate:
+		return true
+	case FaceDelete:
+		return true
+	case FaceRead:
+		return true
+	case FaceUpdate:
+		return true
+	case FolderRead:
+		return true
+	case JobCreate:
+		return true
+	case JobRead:
+		return true
+	case LibraryCreate:
+		return true
+	case LibraryDelete:
+		return true
+	case LibraryRead:
+		return true
+	case LibraryStatistics:
+		return true
+	case LibraryUpdate:
+		return true
+	case Maintenance:
+		return true
+	case MapRead:
+		return true
+	case MapSearch:
+		return true
+	case MemoryAssetCreate:
+		return true
+	case MemoryAssetDelete:
+		return true
+	case MemoryCreate:
+		return true
+	case MemoryDelete:
+		return true
+	case MemoryRead:
+		return true
+	case MemoryStatistics:
+		return true
+	case MemoryUpdate:
+		return true
+	case NotificationCreate:
+		return true
+	case NotificationDelete:
+		return true
+	case NotificationRead:
+		return true
+	case NotificationUpdate:
+		return true
+	case PartnerCreate:
+		return true
+	case PartnerDelete:
+		return true
+	case PartnerRead:
+		return true
+	case PartnerUpdate:
+		return true
+	case PersonCreate:
+		return true
+	case PersonDelete:
+		return true
+	case PersonMerge:
+		return true
+	case PersonRead:
+		return true
+	case PersonReassign:
+		return true
+	case PersonStatistics:
+		return true
+	case PersonUpdate:
+		return true
+	case PinCodeCreate:
+		return true
+	case PinCodeDelete:
+		return true
+	case PinCodeUpdate:
+		return true
+	case PluginCreate:
+		return true
+	case PluginDelete:
+		return true
+	case PluginRead:
+		return true
+	case PluginUpdate:
+		return true
+	case QueueJobCreate:
+		return true
+	case QueueJobDelete:
+		return true
+	case QueueJobRead:
+		return true
+	case QueueJobUpdate:
+		return true
+	case QueueRead:
+		return true
+	case QueueUpdate:
+		return true
+	case ServerAbout:
+		return true
+	case ServerApkLinks:
+		return true
+	case ServerLicenseDelete:
+		return true
+	case ServerLicenseRead:
+		return true
+	case ServerLicenseUpdate:
+		return true
+	case ServerStatistics:
+		return true
+	case ServerStorage:
+		return true
+	case ServerVersionCheck:
+		return true
+	case SessionCreate:
+		return true
+	case SessionDelete:
+		return true
+	case SessionLock:
+		return true
+	case SessionRead:
+		return true
+	case SessionUpdate:
+		return true
+	case SharedLinkCreate:
+		return true
+	case SharedLinkDelete:
+		return true
+	case SharedLinkRead:
+		return true
+	case SharedLinkUpdate:
+		return true
+	case StackCreate:
+		return true
+	case StackDelete:
+		return true
+	case StackRead:
+		return true
+	case StackUpdate:
+		return true
+	case SyncCheckpointDelete:
+		return true
+	case SyncCheckpointRead:
+		return true
+	case SyncCheckpointUpdate:
+		return true
+	case SyncStream:
+		return true
+	case SystemConfigRead:
+		return true
+	case SystemConfigUpdate:
+		return true
+	case SystemMetadataRead:
+		return true
+	case SystemMetadataUpdate:
+		return true
+	case TagAsset:
+		return true
+	case TagCreate:
+		return true
+	case TagDelete:
+		return true
+	case TagRead:
+		return true
+	case TagUpdate:
+		return true
+	case TimelineDownload:
+		return true
+	case TimelineRead:
+		return true
+	case UserConfigRead:
+		return true
+	case UserLicenseCreate:
+		return true
+	case UserLicenseDelete:
+		return true
+	case UserLicenseRead:
+		return true
+	case UserLicenseUpdate:
+		return true
+	case UserOnboardingDelete:
+		return true
+	case UserOnboardingRead:
+		return true
+	case UserOnboardingUpdate:
+		return true
+	case UserPreferenceRead:
+		return true
+	case UserPreferenceUpdate:
+		return true
+	case UserProfileImageCreate:
+		return true
+	case UserProfileImageDelete:
+		return true
+	case UserProfileImageRead:
+		return true
+	case UserProfileImageUpdate:
+		return true
+	case UserRead:
+		return true
+	case UserUpdate:
+		return true
+	case WorkflowCreate:
+		return true
+	case WorkflowDelete:
+		return true
+	case WorkflowLogs:
+		return true
+	case WorkflowRead:
+		return true
+	case WorkflowUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SearchOrderField.
 const (
 	FileCreatedAt   SearchOrderField = "fileCreatedAt"
@@ -331,6 +847,64 @@ type AlbumUserResponseDto struct {
 
 // AlbumUserRole Album user role
 type AlbumUserRole string
+
+// ApiKeyCreateDto defines model for ApiKeyCreateDto.
+type ApiKeyCreateDto struct {
+	// Name API key name
+	Name *string `json:"name,omitempty"`
+
+	// Permissions List of permissions
+	Permissions []Permission `json:"permissions"`
+}
+
+// ApiKeyCreateResponseDto defines model for ApiKeyCreateResponseDto.
+type ApiKeyCreateResponseDto struct {
+	ApiKey ApiKeyResponseDto `json:"apiKey"`
+
+	// CreatedAt Creation date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Id API key ID
+	Id openapi_types.UUID `json:"id"`
+
+	// Name API key name
+	Name string `json:"name"`
+
+	// Permissions List of permissions
+	Permissions []Permission `json:"permissions"`
+
+	// Secret API key secret (only shown once)
+	Secret string `json:"secret"`
+
+	// UpdatedAt Last update date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// ApiKeyResponseDto defines model for ApiKeyResponseDto.
+type ApiKeyResponseDto struct {
+	// CreatedAt Creation date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Id API key ID
+	Id openapi_types.UUID `json:"id"`
+
+	// Name API key name
+	Name string `json:"name"`
+
+	// Permissions List of permissions
+	Permissions []Permission `json:"permissions"`
+
+	// UpdatedAt Last update date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	UpdatedAt time.Time `json:"updatedAt"`
+}
 
 // AssetBulkDeleteDto defines model for AssetBulkDeleteDto.
 type AssetBulkDeleteDto struct {
@@ -908,6 +1482,9 @@ type NumberFilterNullable struct {
 	NotIn *[]float64 `json:"notIn,omitempty"`
 }
 
+// Permission List of permissions
+type Permission string
+
 // PersonResponseDto defines model for PersonResponseDto.
 type PersonResponseDto struct {
 	// BirthDate Person date of birth
@@ -1395,6 +1972,9 @@ type SearchWorkflowsParams struct {
 	Trigger *WorkflowTrigger `form:"trigger,omitempty" json:"trigger,omitempty"`
 }
 
+// CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
+type CreateApiKeyJSONRequestBody = ApiKeyCreateDto
+
 // DeleteAssetsJSONRequestBody defines body for DeleteAssets for application/json ContentType.
 type DeleteAssetsJSONRequestBody = AssetBulkDeleteDto
 
@@ -1494,6 +2074,45 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+
+	// GetApiKeys List all API keys
+	//
+	// Retrieve all API keys of the current user.
+	//
+	// Corresponds with GET /api-keys (the `GetApiKeys` operationId).
+	GetApiKeys(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateApiKeyWithBody Create an API key
+	//
+	// Creates a new API key. It will be limited to the permissions specified.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+	CreateApiKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateApiKey Create an API key
+	//
+	// Creates a new API key. It will be limited to the permissions specified.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+	CreateApiKey(ctx context.Context, body CreateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMyApiKey Retrieve the current API key
+	//
+	// Retrieve the API key that is used to access this endpoint.
+	//
+	// Corresponds with GET /api-keys/me (the `GetMyApiKey` operationId).
+	GetMyApiKey(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteApiKey Delete an API key
+	//
+	// Deletes an API key identified by its ID. The current user must own this API key.
+	//
+	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
+	DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteAssetsWithBody Delete assets
 	//
@@ -1661,6 +2280,13 @@ type ClientInterface interface {
 	// Corresponds with GET /workflows/triggers (the `GetWorkflowTriggers` operationId).
 	GetWorkflowTriggers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteWorkflow Delete a workflow
+	//
+	// Delete a workflow by its ID.
+	//
+	// Corresponds with DELETE /workflows/{id} (the `DeleteWorkflow` operationId).
+	DeleteWorkflow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UpdateWorkflowWithBody Update a workflow
 	//
 	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
@@ -1682,6 +2308,95 @@ type ClientInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetApiKeys List all API keys
+//
+// Retrieve all API keys of the current user.
+//
+// Corresponds with GET /api-keys (the `GetApiKeys` operationId).
+func (c *Client) GetApiKeys(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiKeysRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateApiKeyWithBody Create an API key
+//
+// Creates a new API key. It will be limited to the permissions specified.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+func (c *Client) CreateApiKeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateApiKeyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateApiKey Create an API key
+//
+// Creates a new API key. It will be limited to the permissions specified.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+func (c *Client) CreateApiKey(ctx context.Context, body CreateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateApiKeyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetMyApiKey Retrieve the current API key
+//
+// Retrieve the API key that is used to access this endpoint.
+//
+// Corresponds with GET /api-keys/me (the `GetMyApiKey` operationId).
+func (c *Client) GetMyApiKey(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMyApiKeyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteApiKey Delete an API key
+//
+// Deletes an API key identified by its ID. The current user must own this API key.
+//
+// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
+func (c *Client) DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteApiKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // DeleteAssetsWithBody Delete assets
@@ -2050,6 +2765,23 @@ func (c *Client) GetWorkflowTriggers(ctx context.Context, reqEditors ...RequestE
 	return c.Client.Do(req)
 }
 
+// DeleteWorkflow Delete a workflow
+//
+// Delete a workflow by its ID.
+//
+// Corresponds with DELETE /workflows/{id} (the `DeleteWorkflow` operationId).
+func (c *Client) DeleteWorkflow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteWorkflowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // UpdateWorkflowWithBody Update a workflow
 //
 // Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
@@ -2088,6 +2820,134 @@ func (c *Client) UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetApiKeysRequest constructs an http.Request for the GetApiKeys method
+func NewGetApiKeysRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateApiKeyRequest calls the generic CreateApiKey builder with application/json body
+func NewCreateApiKeyRequest(server string, body CreateApiKeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateApiKeyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateApiKeyRequestWithBody constructs an http.Request for the CreateApiKey method, with any body, and a specified content type
+func NewCreateApiKeyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetMyApiKeyRequest constructs an http.Request for the GetMyApiKey method
+func NewGetMyApiKeyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/me")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteApiKeyRequest constructs an http.Request for the DeleteApiKey method
+func NewDeleteApiKeyRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewDeleteAssetsRequest calls the generic DeleteAssets builder with application/json body
@@ -2846,6 +3706,40 @@ func NewGetWorkflowTriggersRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewDeleteWorkflowRequest constructs an http.Request for the DeleteWorkflow method
+func NewDeleteWorkflowRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/workflows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewUpdateWorkflowRequest calls the generic UpdateWorkflow builder with application/json body
 func NewUpdateWorkflowRequest(server string, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2936,6 +3830,51 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+
+	// GetApiKeysWithResponse List all API keys
+	//
+	// Retrieve all API keys of the current user.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api-keys (the `GetApiKeys` operationId).
+	GetApiKeysWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiKeysResponse, error)
+
+	// CreateApiKeyWithBodyWithResponse Create an API key
+	//
+	// Creates a new API key. It will be limited to the permissions specified.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+	CreateApiKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateApiKeyResponse, error)
+
+	// CreateApiKeyWithResponse Create an API key
+	//
+	// Creates a new API key. It will be limited to the permissions specified.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+	CreateApiKeyWithResponse(ctx context.Context, body CreateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateApiKeyResponse, error)
+
+	// GetMyApiKeyWithResponse Retrieve the current API key
+	//
+	// Retrieve the API key that is used to access this endpoint.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api-keys/me (the `GetMyApiKey` operationId).
+	GetMyApiKeyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyApiKeyResponse, error)
+
+	// DeleteApiKeyWithResponse Delete an API key
+	//
+	// Deletes an API key identified by its ID. The current user must own this API key.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
+	DeleteApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiKeyResponse, error)
 
 	// DeleteAssetsWithBodyWithResponse Delete assets
 	//
@@ -3117,6 +4056,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /workflows/triggers (the `GetWorkflowTriggers` operationId).
 	GetWorkflowTriggersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetWorkflowTriggersResponse, error)
 
+	// DeleteWorkflowWithResponse Delete a workflow
+	//
+	// Delete a workflow by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /workflows/{id} (the `DeleteWorkflow` operationId).
+	DeleteWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteWorkflowResponse, error)
+
 	// UpdateWorkflowWithBodyWithResponse Update a workflow
 	//
 	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
@@ -3138,6 +4086,163 @@ type ClientWithResponsesInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error)
+}
+
+type GetApiKeysResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiKeysResponse) GetJSON200() *[]ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiKeysResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiKeysResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiKeysResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiKeysResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ApiKeyCreateResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateApiKeyResponse) GetJSON201() *ApiKeyCreateResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetMyApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetMyApiKeyResponse) GetJSON200() *ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetMyApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMyApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMyApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetMyApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type DeleteAssetsResponse struct {
@@ -3707,6 +4812,40 @@ func (r GetWorkflowTriggersResponse) ContentType() string {
 	return ""
 }
 
+type DeleteWorkflowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteWorkflowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteWorkflowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteWorkflowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteWorkflowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type UpdateWorkflowResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3746,6 +4885,81 @@ func (r UpdateWorkflowResponse) ContentType() string {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
 	return ""
+}
+
+// GetApiKeysWithResponse List all API keys
+//
+// Retrieve all API keys of the current user.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api-keys (the `GetApiKeys` operationId).
+func (c *ClientWithResponses) GetApiKeysWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetApiKeysResponse, error) {
+	rsp, err := c.GetApiKeys(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiKeysResponse(rsp)
+}
+
+// CreateApiKeyWithBodyWithResponse Create an API key
+//
+// Creates a new API key. It will be limited to the permissions specified.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+func (c *ClientWithResponses) CreateApiKeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateApiKeyResponse, error) {
+	rsp, err := c.CreateApiKeyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateApiKeyResponse(rsp)
+}
+
+// CreateApiKeyWithResponse Create an API key
+//
+// Creates a new API key. It will be limited to the permissions specified.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api-keys (the `CreateApiKey` operationId).
+func (c *ClientWithResponses) CreateApiKeyWithResponse(ctx context.Context, body CreateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateApiKeyResponse, error) {
+	rsp, err := c.CreateApiKey(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateApiKeyResponse(rsp)
+}
+
+// GetMyApiKeyWithResponse Retrieve the current API key
+//
+// Retrieve the API key that is used to access this endpoint.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api-keys/me (the `GetMyApiKey` operationId).
+func (c *ClientWithResponses) GetMyApiKeyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyApiKeyResponse, error) {
+	rsp, err := c.GetMyApiKey(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMyApiKeyResponse(rsp)
+}
+
+// DeleteApiKeyWithResponse Delete an API key
+//
+// Deletes an API key identified by its ID. The current user must own this API key.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
+func (c *ClientWithResponses) DeleteApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiKeyResponse, error) {
+	rsp, err := c.DeleteApiKey(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteApiKeyResponse(rsp)
 }
 
 // DeleteAssetsWithBodyWithResponse Delete assets
@@ -4048,6 +5262,21 @@ func (c *ClientWithResponses) GetWorkflowTriggersWithResponse(ctx context.Contex
 	return ParseGetWorkflowTriggersResponse(rsp)
 }
 
+// DeleteWorkflowWithResponse Delete a workflow
+//
+// Delete a workflow by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /workflows/{id} (the `DeleteWorkflow` operationId).
+func (c *ClientWithResponses) DeleteWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteWorkflowResponse, error) {
+	rsp, err := c.DeleteWorkflow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteWorkflowResponse(rsp)
+}
+
 // UpdateWorkflowWithBodyWithResponse Update a workflow
 //
 // Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
@@ -4079,6 +5308,100 @@ func (c *ClientWithResponses) UpdateWorkflowWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseUpdateWorkflowResponse(rsp)
+}
+
+// ParseGetApiKeysResponse parses an HTTP response from a GetApiKeysWithResponse call
+func ParseGetApiKeysResponse(rsp *http.Response) (*GetApiKeysResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiKeysResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateApiKeyResponse parses an HTTP response from a CreateApiKeyWithResponse call
+func ParseCreateApiKeyResponse(rsp *http.Response) (*CreateApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ApiKeyCreateResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMyApiKeyResponse parses an HTTP response from a GetMyApiKeyWithResponse call
+func ParseGetMyApiKeyResponse(rsp *http.Response) (*GetMyApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMyApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteApiKeyResponse parses an HTTP response from a DeleteApiKeyWithResponse call
+func ParseDeleteApiKeyResponse(rsp *http.Response) (*DeleteApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
 }
 
 // ParseDeleteAssetsResponse parses an HTTP response from a DeleteAssetsWithResponse call
@@ -4427,6 +5750,22 @@ func ParseGetWorkflowTriggersResponse(rsp *http.Response) (*GetWorkflowTriggersR
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseDeleteWorkflowResponse parses an HTTP response from a DeleteWorkflowWithResponse call
+func ParseDeleteWorkflowResponse(rsp *http.Response) (*DeleteWorkflowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteWorkflowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

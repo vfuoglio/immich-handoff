@@ -74,7 +74,7 @@ func fromEnv(env Env, d Defaults, connect Connect) ([]*syncer.Service, error) {
 	if dest == "" || len(srcKeys) == 0 {
 		return nil, errors.New("IMMICH_DEST_API_KEY and IMMICH_SOURCE_API_KEYS are required (or set ROUTES_FILE)")
 	}
-	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, ExpiryDays: d.ExpiryDays}
+	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, ExpiryDays: d.ExpiryDays, AllowJoin: env("ALLOW_JOIN") == "true"}
 	for i, k := range srcKeys {
 		api, err := connect(k)
 		if err != nil {
@@ -102,6 +102,7 @@ type routesFile struct {
 		InboxTag   string   `yaml:"inbox_tag"`
 		RefusedTag string   `yaml:"refused_tag"`
 		ExpiryDays int      `yaml:"inbox_expiry_days"`
+		AllowJoin  bool     `yaml:"allow_join"`
 	} `yaml:"services"`
 }
 
@@ -154,7 +155,7 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect) ([]*syncer.Se
 			problems = append(problems, where+": duplicate service name")
 		}
 		names[s.Name] = true
-		svc := &syncer.Service{Name: s.Name, Tag: s.Tag, InboxTag: s.InboxTag, RefusedTag: s.RefusedTag, ExpiryDays: s.ExpiryDays}
+		svc := &syncer.Service{Name: s.Name, Tag: s.Tag, InboxTag: s.InboxTag, RefusedTag: s.RefusedTag, ExpiryDays: s.ExpiryDays, AllowJoin: s.AllowJoin}
 		if svc.Tag == "" {
 			problems = append(problems, where+": tag is required")
 		}
@@ -167,8 +168,8 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect) ([]*syncer.Se
 		if svc.ExpiryDays <= 0 {
 			svc.ExpiryDays = d.ExpiryDays
 		}
-		if len(s.Senders) == 0 || len(s.Receivers) == 0 {
-			problems = append(problems, where+": needs at least one sender and one receiver")
+		if len(s.Receivers) == 0 || (len(s.Senders) == 0 && !s.AllowJoin) {
+			problems = append(problems, where+": needs at least one receiver, and at least one sender unless allow_join is true")
 		}
 		isSender := map[string]bool{}
 		for _, n := range s.Senders {

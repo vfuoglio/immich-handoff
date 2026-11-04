@@ -84,6 +84,18 @@ A plain install is one service: everyone's `share` photos go to one family accou
 
 With several receivers on one service, the original is removed only after **every** receiver holds a verified copy. If one receiver refuses (its trash holds that photo) or fails, the original stays and nothing is lost. An account that sends in one service and receives in another needs both permission lists from the table above. Each service gets its own workflow in the sender's account, named `immich-handoff: <service>`.
 
+## Letting people join by themselves (optional)
+
+By default a sender exists because an admin put their API key in `.env`. You can instead let people add themselves from the web page:
+
+1. Set `HANDOFF_STORE_KEY` in `.env` to a long random secret (`openssl rand -hex 24`). It encrypts the API keys the app keeps; **keep a copy of it**, because without it the saved keys cannot be read and people would have to join again. (`HANDOFF_STORE_KEY_FILE` reads it from a Docker secret instead.)
+2. Allow joining on the service: `ALLOW_JOIN=true` in `.env` for a plain install, or `allow_join: true` on a service in the routes file. Such a service may start with no senders at all.
+3. `docker compose up -d`. The compose file keeps the saved memberships in the `handoff-data` volume; include that volume in your backups.
+
+Anyone signed in to Immich then sees **Services you can join** on the web page. **Join** asks them to confirm, then the app creates an API key named `handoff: <service>` in their own Immich account (with only the permissions a sender needs), creates their tag and workflow, and starts handing over the photos they tag. Nobody, including the person who joined, ever sees the key; it is stored encrypted. **Leave** deletes the key and the workflow again. A person can also end it any time by deleting that key in Immich (Account Settings -> API Keys).
+
+If someone joins while Immich is still starting up, they are added straight away and the workflow is finished in the background once Immich is ready.
+
 ## The web page
 
 Open `http://<host>:8080/` to see the services you take part in, how many photos are waiting (if you send) or sit in your inbox (if you receive), and the result of the last run. It updates by itself when a run finishes, and has a **Sync now** button. It works on a phone and follows your device's light or dark setting.
@@ -99,6 +111,9 @@ Everything is set in `.env`. The keys and `WEBHOOK_SECRET` are required; the res
 | `IMMICH_SOURCE_API_KEYS` | | API keys of the sending accounts, comma separated (not needed with a routes file) |
 | `IMMICH_DEST_API_KEY` | | API key of the family account (not needed with a routes file) |
 | `ROUTES_FILE` | | Path of a routes file for several services (see above) |
+| `HANDOFF_STORE_KEY` | | Switches on joining from the web page; encrypts the saved API keys |
+| `ALLOW_JOIN` | `false` | Plain install: let people join the default service from the web page |
+| `DATA_DIR` | `/data` | Where the saved memberships live |
 | `WEBHOOK_SECRET` | | Shared secret Immich sends with every event |
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app |
 | `IMMICH_BASE_URL` | `http://immich-server:2283` | Address of Immich as seen from this container |
@@ -120,6 +135,7 @@ Start with the app's log: `docker compose logs --tail 100`. Then find your sympt
 | Symptom | Likely cause and fix |
 |---|---|
 | The app stops right away with "are required" | `.env` is missing a required value (keys or `WEBHOOK_SECRET`). |
+| "the store key does not match this database" | `HANDOFF_STORE_KEY` was changed. Put the original back, or delete the `handoff-data` volume and let people join again. |
 | `HTTP 401` or `HTTP 403` in the log | An API key is missing a permission from the table above. Create a new key with the full list. |
 | No `workflow ready` line | Immich needs about a minute after it starts before workflows can be created; the app keeps retrying. If it never appears, check the key permissions and that Immich is 3.2.0 or newer. |
 | Tagged a photo, nothing happens | In Immich open that account's workflow named `immich-handoff` and look at its runs. **No runs:** the tag was not `share`, or tags are not switched on for the account. **Failed runs:** Immich cannot reach `PUBLIC_WEBHOOK_URL`; it must be an address the Immich server container can reach. |
@@ -143,7 +159,7 @@ Start with the app's log: `docker compose logs --tail 100`. Then find your sympt
                             └───────────────┘
 ```
 
-- **One small container, no database, nothing written to disk.** All state lives in Immich (the tags and the workflow). The last-run summary is held in memory.
+- **One small container.** Without self-service joining nothing is stored: all state lives in Immich (the tags and the workflow) and the last-run summary is held in memory. With it, the app keeps one small SQLite file (`/data/handoff.db`) listing who joined what, with each API key encrypted (AES-256-GCM, key from `HANDOFF_STORE_KEY`). Whoever runs the container and holds that secret can read those keys, like the Immich admin can already read the photos.
 - **Events only wake the app.** When Immich reports a tag, the app asks Immich which photos carry `share` and handles those. A lost or repeated event therefore cannot lose or duplicate a photo. Bursts of events are combined into one run.
 - **Safety net.** One run at startup and one a day (`SWEEP_INTERVAL_HOURS`) pick up anything missed while the app was down, and do the `inbox` tidy-up.
 - **Streaming copy.** A photo is streamed straight from the sender's account into the family account, never stored on the app's disk. The app computes its SHA-1 on the way and compares it with what Immich stored.

@@ -22,7 +22,7 @@ func (s *Syncer) Provision(ctx context.Context, wh Webhook) (failures int) {
 		s.Log.Info("PUBLIC_WEBHOOK_URL not set: not creating workflows; only the startup and daily passes will hand photos over")
 		return 0
 	}
-	for _, svc := range s.Services {
+	for _, svc := range s.Current() {
 		for _, snd := range svc.Senders {
 			log := s.Log.With("service", svc.Label(), "sender", snd.Name)
 			if s.Cfg.DryRun {

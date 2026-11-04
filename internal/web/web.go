@@ -1,6 +1,6 @@
-// Package web serves the webhook receiver and the status page.
-// Authentication for the page is Immich's own session: the browser's cookie is forwarded to
-// /api/users/me and only accounts that take part in a service are let in.
+// Package web serves the webhook receiver and the web page.
+// The page uses Immich's own sign-in: the browser's cookie is forwarded to /api/users/me. Any Immich
+// user can open it; only people who take part in a service see its activity.
 package web
 
 import (
@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -26,33 +28,12 @@ var staticFS embed.FS
 
 type Server struct {
 	S             *syncer.Syncer
+	Hub           *hub.Hub // nil: people cannot join or leave from the page
 	BaseURL       string
 	WebhookHeader string
 	WebhookSecret string
 	Log           *slog.Logger
 	BackgroundCtx context.Context
-
-	// resolved at Init: which Immich user is which account
-	users map[uuid.UUID]*syncer.Account
-}
-
-// Init resolves which Immich user each configured account belongs to (once, at startup).
-func (w *Server) Init(ctx context.Context) error {
-	w.users = map[uuid.UUID]*syncer.Account{}
-	for _, svc := range w.S.Services {
-		for _, group := range [][]*syncer.Account{svc.Senders, svc.Receivers} {
-			for _, a := range group {
-				u, err := a.API.Me(ctx)
-				if err != nil {
-					return err
-				}
-				if _, ok := w.users[u.ID]; !ok {
-					w.users[u.ID] = a
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (w *Server) Handler() http.Handler {
@@ -66,6 +47,8 @@ func (w *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
 	mux.HandleFunc("POST /sync", w.syncNow)
+	mux.HandleFunc("POST /join", w.join)
+	mux.HandleFunc("POST /leave", w.leave)
 	return mux
 }
 
@@ -100,9 +83,10 @@ func (w *Server) webhook(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusAccepted)
 }
 
+// member is the signed-in Immich user, with a client that acts with their own session.
 type member struct {
 	user immich.User
-	acct *syncer.Account
+	sess *immich.API
 }
 
 func (w *Server) authenticate(r *http.Request) (*member, int, string) {
@@ -118,70 +102,105 @@ func (w *Server) authenticate(r *http.Request) (*member, int, string) {
 	if err != nil {
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
-	acct, ok := w.users[u.ID]
-	if !ok {
-		return nil, http.StatusForbidden, "this Immich account does not take part in any service"
-	}
-	return &member{user: u, acct: acct}, 0, ""
+	return &member{user: u, sess: a}, 0, ""
 }
 
-// servicesFor lists the services the member takes part in (a member can both send and receive).
-func (w *Server) servicesFor(me *member) []ServiceView {
-	var out []ServiceView
-	for _, svc := range w.S.Services {
-		for _, a := range svc.Senders {
-			if a == me.acct {
-				out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers)})
-			}
+// takesPart is the account the user holds in the service in this role, if any.
+func (m *member) account(svc *syncer.Service, role string) *syncer.Account {
+	group := svc.Senders
+	if role == "receiver" {
+		group = svc.Receivers
+	}
+	for _, a := range group {
+		if a.UserID == m.user.ID {
+			return a
 		}
-		for _, a := range svc.Receivers {
-			if a == me.acct {
-				out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers)})
-			}
+	}
+	return nil
+}
+
+func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
+	joined := map[string]bool{}
+	if w.Hub != nil {
+		joined, _ = w.Hub.Joined(ctx, m.user.ID)
+	}
+	var out []ServiceView
+	for _, svc := range w.S.Current() {
+		if m.account(svc, "sender") != nil {
+			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()]})
+		}
+		if m.account(svc, "receiver") != nil {
+			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false})
 		}
 	}
 	return out
 }
 
+func (w *Server) joinable(m *member) []JoinView {
+	if w.Hub == nil {
+		return nil
+	}
+	var out []JoinView
+	for _, svc := range w.Hub.Joinable(m.user.ID) {
+		out = append(out, JoinView{svc.Label(), svc.Tag})
+	}
+	return out
+}
+
 func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
-	me, code, msg := w.authenticate(r)
+	me, code, _ := w.authenticate(r)
 	if me == nil {
-		title := "Sign in to Immich first"
-		text := "This page uses your Immich login. Sign in to Immich in this browser, then reload this page."
-		if code == http.StatusForbidden {
-			title, text = "Not part of any service", msg
-		}
 		rw.WriteHeader(code)
-		Notice(title, text, code != http.StatusUnauthorized).Render(r.Context(), rw)
+		Notice("Sign in to Immich first",
+			"This page uses your Immich login. Sign in to Immich in this browser, then reload this page.", false).Render(r.Context(), rw)
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	Dashboard(me.user.Name, w.servicesFor(me), w.S.Last()).Render(r.Context(), rw)
+	Dashboard(me.user.Name, w.servicesFor(r.Context(), me), w.joinable(me), w.S.Last()).Render(r.Context(), rw)
+}
+
+// requireMember is for fragments and streams: sign-in plus taking part in at least one service.
+func (w *Server) requireMember(rw http.ResponseWriter, r *http.Request) *member {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return nil
+	}
+	if len(w.servicesFor(r.Context(), me)) == 0 {
+		http.Error(rw, "you do not take part in any service", http.StatusForbidden)
+		return nil
+	}
+	return me
 }
 
 // countFragment is how many photos wait (sender) or sit in the inbox (receiver) for one service.
 func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
-	me, code, msg := w.authenticate(r)
+	me := w.requireMember(rw, r)
 	if me == nil {
-		http.Error(rw, msg, code)
 		return
 	}
 	name, role := r.URL.Query().Get("service"), r.URL.Query().Get("role")
-	for _, sv := range w.servicesFor(me) {
-		if sv.Name != name || sv.Role != role {
+	for _, svc := range w.S.Current() {
+		if svc.Label() != name {
 			continue
 		}
-		n := w.count(r.Context(), me.acct, sv.Tag)
+		acct := me.account(svc, role)
+		if acct == nil {
+			break
+		}
+		tag := svc.Tag
+		if role == "receiver" {
+			tag = svc.InboxTag
+		}
 		rw.Header().Set("Cache-Control", "no-store")
-		Count(n, role).Render(r.Context(), rw)
+		Count(w.count(r.Context(), acct, tag), role).Render(r.Context(), rw)
 		return
 	}
 	http.Error(rw, "no such service for you", http.StatusNotFound)
 }
 
 func (w *Server) lastRunFragment(rw http.ResponseWriter, r *http.Request) {
-	if me, code, msg := w.authenticate(r); me == nil {
-		http.Error(rw, msg, code)
+	if w.requireMember(rw, r) == nil {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
@@ -190,8 +209,7 @@ func (w *Server) lastRunFragment(rw http.ResponseWriter, r *http.Request) {
 
 // events tells the open page when a pass has finished, so it can refresh its cards.
 func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
-	if me, code, msg := w.authenticate(r); me == nil {
-		http.Error(rw, msg, code)
+	if w.requireMember(rw, r) == nil {
 		return
 	}
 	fl, ok := rw.(http.Flusher)
@@ -234,18 +252,69 @@ func (w *Server) count(ctx context.Context, a *syncer.Account, tag string) int {
 	return len(assets)
 }
 
-func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
+// guarded runs an action that changes something: it needs the cross-site header and a sign-in.
+func (w *Server) guarded(rw http.ResponseWriter, r *http.Request) *member {
 	// Cookie auth is ambient, so require a header a cross-site form cannot send (CSRF guard).
 	if r.Header.Get("X-Requested-With") != "immich-handoff" {
 		http.Error(rw, "missing X-Requested-With", http.StatusBadRequest)
-		return
+		return nil
 	}
 	me, code, msg := w.authenticate(r)
 	if me == nil {
 		http.Error(rw, msg, code)
+		return nil
+	}
+	return me
+}
+
+func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if len(w.servicesFor(r.Context(), me)) == 0 {
+		http.Error(rw, "you do not take part in any service", http.StatusForbidden)
 		return
 	}
 	go w.S.Run(w.BackgroundCtx, "manual: "+me.user.Email, false)
 	rw.WriteHeader(http.StatusAccepted)
 	rw.Write([]byte("Sync started"))
+}
+
+func (w *Server) join(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "joined", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.Join(ctx, me.sess, me.user, service)
+	})
+}
+
+func (w *Server) leave(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "left", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.Leave(ctx, me.sess, me.user, service)
+	})
+}
+
+// membership runs a join or leave and answers htmx: a refresh on success, a short message on failure.
+func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string, act func(context.Context, *member, string) error) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.Error(rw, "joining from this page is not switched on", http.StatusNotFound)
+		return
+	}
+	service := r.PostFormValue("service")
+	if err := act(r.Context(), me, service); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, hub.ErrNotJoinable) || errors.Is(err, hub.ErrAlready) || errors.Is(err, hub.ErrNotJoined) {
+			status = http.StatusConflict
+		}
+		w.Log.Warn("membership change failed", "action", done, "user", me.user.Email, "service", service, "err", err)
+		rw.Header().Set("HX-Reswap", "innerHTML")
+		rw.WriteHeader(status)
+		fmt.Fprint(rw, "Could not do that: ", err.Error())
+		return
+	}
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusNoContent)
 }
