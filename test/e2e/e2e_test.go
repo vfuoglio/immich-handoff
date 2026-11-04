@@ -220,16 +220,39 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 	t.Helper()
 	var tags []struct{ ID string }
 	mustOK(t, call(t, "PUT", "/tags", keyAuth(u), map[string]any{"tags": []string{tag}}, &tags), "upsert tag")
-	var results []struct {
-		ID      string `json:"id"`
-		Success bool   `json:"success"`
-		Error   string `json:"error"`
-	}
-	mustOK(t, call(t, "PUT", "/tags/"+tags[0].ID+"/assets", keyAuth(u), map[string]any{"ids": ids}, &results), "tag asset")
-	for _, r := range results {
-		if !r.Success {
-			t.Fatalf("tagging %s with %q failed: %q", r.ID, tag, r.Error)
+	apply := func(ids []string) {
+		var results []struct {
+			ID      string `json:"id"`
+			Success bool   `json:"success"`
+			Error   string `json:"error"`
 		}
+		mustOK(t, call(t, "PUT", "/tags/"+tags[0].ID+"/assets", keyAuth(u), map[string]any{"ids": ids}, &results), "tag asset")
+		for _, r := range results {
+			if !r.Success && r.Error != "duplicate" {
+				t.Fatalf("tagging %s with %q failed: %q", r.ID, tag, r.Error)
+			}
+		}
+	}
+	apply(ids)
+	// Immich itself occasionally drops a tag applied right after an upload (seen with no handoff app
+	// running at all), so, like a person would, make sure it stuck and add it again if not.
+	for attempt := 0; attempt < 6; attempt++ {
+		time.Sleep(700 * time.Millisecond)
+		var missing []string
+		for _, id := range ids {
+			x, _ := getAsset(t, u, id)
+			found := false
+			for _, tg := range x.Tags {
+				found = found || tg.Name == tag
+			}
+			if !found {
+				missing = append(missing, id)
+			}
+		}
+		if len(missing) == 0 {
+			return
+		}
+		apply(missing)
 	}
 }
 
@@ -289,7 +312,7 @@ func startApp(t *testing.T, bin string, alice, bob, family user) *app {
 		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+appPort+"/webhook/immich",
 		"LISTEN_ADDR=:"+appPort,
 		"LOG_LEVEL=debug",
-		"SWEEP_INTERVAL_HOURS=1", // so anything imported after startup arrived through the webhook
+		"HANDOFF_MODE=move", "SWEEP_INTERVAL_HOURS=1", // so anything imported after startup arrived through the webhook
 	)
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
@@ -574,6 +597,7 @@ services:
     tag: for-grandma
     senders: [alice]
     receivers: [grandma, family]
+    mode: move
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -699,6 +723,7 @@ services:
     tag: join-me
     receivers: [family]
     allow_join: true
+    mode: move
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -864,7 +889,7 @@ func TestHubServices(t *testing.T) {
 			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
 		}
 	}
-	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"hol"}, "policy": {"approval"}}), 204, "create service")
+	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"hol"}, "policy": {"approval"}, "mode": {"move"}}), 204, "create service")
 	if names := keyNames(t, alice); !hasName(names, "handoff: holiday (receiving)") {
 		t.Fatalf("the receiver key must be made in the owner's account, keys: %v", names)
 	}
@@ -945,7 +970,7 @@ func TestLinkHealth(t *testing.T) {
 			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
 		}
 	}
-	must(post(t, port, "/services", owner, url.Values{"name": {"pause"}, "tag": {"pause-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/services", owner, url.Values{"name": {"pause"}, "tag": {"pause-tag"}, "policy": {"open"}, "mode": {"move"}}), 204, "create")
 	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}}), 204, "join")
 	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
 		var wfs []struct{ Name string }
@@ -1034,7 +1059,7 @@ func TestInvitations(t *testing.T) {
 		return m[1]
 	}
 
-	want(post(t, port, "/services", owner, url.Values{"name": {"club"}, "tag": {"club-tag"}, "policy": {"approval"}, "visibility": {"invite"}}), 204, "create")
+	want(post(t, port, "/services", owner, url.Values{"name": {"club"}, "tag": {"club-tag"}, "policy": {"approval"}, "visibility": {"invite"}, "mode": {"move"}}), 204, "create")
 	if _, body := status("/", guest); strings.Contains(body, ">club<") {
 		t.Fatalf("an invitation-only service must not be in the directory: %.400s", body)
 	}

@@ -53,7 +53,7 @@ type CreateParams struct {
 	Name, Tag  string
 	Policy     string // approval (default) | open
 	Visibility string // listed (default) | invite
-	Mode       string // move (default) | copy
+	Mode       string // copy (default) | move
 	InboxTag   string
 	ExpiryDays int
 }
@@ -79,9 +79,9 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if p.Visibility == store.VisInvite {
 		visibility, invite = store.VisInvite, newToken()
 	}
-	mode := syncer.ModeMove
-	if p.Mode == syncer.ModeCopy {
-		mode = syncer.ModeCopy
+	mode := syncer.ModeCopy // keeping the sender's originals is the safe default
+	if p.Mode == syncer.ModeMove {
+		mode = syncer.ModeMove
 	}
 	inboxTag := strings.TrimSpace(p.InboxTag)
 	if inboxTag == "" {

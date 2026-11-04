@@ -50,8 +50,15 @@ func TestRoutesFile(t *testing.T) {
 	if svcs[1].InboxTag != "from-alice" || svcs[1].ExpiryDays != 7 || !svcs[1].Copies() || svcs[1].SentTag != "given" {
 		t.Errorf("overrides not applied: %+v", svcs[1])
 	}
-	if svcs[0].Copies() || svcs[0].Mode != "move" || svcs[0].SentTag != "handed-over" {
-		t.Errorf("move is the default: %+v", svcs[0])
+	if !svcs[0].Copies() || svcs[0].Mode != "copy" || svcs[0].SentTag != "handed-over" {
+		t.Errorf("copy is the default: %+v", svcs[0])
+	}
+	moved, err := parseRoutes([]byte(strings.Replace(good, "    tag: share\n", "    tag: share\n    mode: move\n", 1)), env(goodEnv), DefaultsFrom(env(nil)), connect, false)
+	if err != nil || moved[0].Copies() {
+		t.Errorf("a service can ask for move: %v %+v", err, moved)
+	}
+	if d := DefaultsFrom(env(map[string]string{"HANDOFF_MODE": "move"})); d.Mode != "move" {
+		t.Errorf("HANDOFF_MODE=move must be honoured, got %q", d.Mode)
 	}
 	if svcs[0].WorkflowName() != "immich-handoff: family" {
 		t.Errorf("workflow name = %q", svcs[0].WorkflowName())

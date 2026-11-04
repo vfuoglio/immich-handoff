@@ -663,7 +663,7 @@ func TestCopyModeSenderKeyCannotDeleteAndMoveModeCan(t *testing.T) {
 	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "keeps", Tag: "keeps", Policy: "open", Mode: "copy"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moves", Tag: "moves", Policy: "open"}); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moves", Tag: "moves", Policy: "open", Mode: "move"}); err != nil {
 		t.Fatal(err)
 	}
 	if !service(e, "keeps").Copies() || service(e, "moves").Copies() {
@@ -696,5 +696,17 @@ func TestCreateOptionsAreValidated(t *testing.T) {
 	}
 	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bad2", Tag: "t", ExpiryDays: 99999}); !errors.Is(err, hub.ErrBadExpiry) {
 		t.Errorf("bad expiry: %v", err)
+	}
+}
+
+func TestNewServicesKeepOriginalsUnlessTheOwnerAsksForMove(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "plain", Tag: "plain", Policy: "open"})
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moving", Tag: "moving", Policy: "open", Mode: "move"})
+	if !service(e, "plain").Copies() {
+		t.Error("a new service must keep the sender's originals by default")
+	}
+	if service(e, "moving").Copies() {
+		t.Error("an owner can ask for move")
 	}
 }

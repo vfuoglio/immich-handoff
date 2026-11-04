@@ -275,7 +275,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 		v.Visibility = VisListed
 	}
 	if v.Mode == "" {
-		v.Mode = "move"
+		v.Mode = "copy"
 	}
 	v.ID = uuid.NewString()
 	v.CreatedAt = time.Now().UTC()

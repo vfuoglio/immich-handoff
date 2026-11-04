@@ -30,7 +30,7 @@ type Defaults struct {
 type Env func(string) string
 
 func DefaultsFrom(env Env) Defaults {
-	d := Defaults{Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", SentTag: "handed-over", Mode: syncer.ModeMove, ExpiryDays: 30}
+	d := Defaults{Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", SentTag: "handed-over", Mode: syncer.ModeCopy, ExpiryDays: 30}
 	if v := env("SHARE_TAG"); v != "" {
 		d.Tag = v
 	}
@@ -43,8 +43,8 @@ func DefaultsFrom(env Env) Defaults {
 	if v := env("SENT_TAG"); v != "" {
 		d.SentTag = v
 	}
-	if v := env("HANDOFF_MODE"); v == syncer.ModeCopy {
-		d.Mode = syncer.ModeCopy
+	if v := env("HANDOFF_MODE"); v == syncer.ModeMove || v == syncer.ModeCopy {
+		d.Mode = v
 	}
 	if v := env("INBOX_EXPIRY_DAYS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
