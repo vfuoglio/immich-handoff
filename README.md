@@ -4,7 +4,7 @@ Event-driven successor to [immich_family_sync](../immich_family_sync) for **Immi
 
 A family member tags a photo `share` in the Immich app. An Immich **workflow** calls this app's webhook, and the app moves the photo to the shared family account and tags the copy `inbox`. The original is removed only after the copy is verified. No polling for new photos.
 
-> **Status: end-to-end tested against Immich v3.2.0 in Docker (`test/run.sh`); not yet run on a production server.** See [Open questions](#open-questions).
+> **Status: end-to-end tested against Immich v3.2.0 in Docker (`test/run.sh`); not yet run on a production server.** See [Requirements and compatibility](#requirements-and-compatibility) and [Troubleshooting](#troubleshooting).
 
 ## How it works
 
@@ -51,18 +51,29 @@ Things the real-server tests found, now handled in the code:
 3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-handoff:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-handoff` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need `workflow.create`, `workflow.read`, `workflow.update`, `tag.create`, `tag.read` on top of the permissions in immich_family_sync. Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
 4. Try `DRY_RUN=true` first. Tag one photo and watch `docker logs`.
 
-## Open questions
+## Requirements and compatibility
 
-Verify on your server before relying on this:
+- **Immich 3.2.0 or later.** The `tag added` workflow trigger arrived in 3.2.0. On an older v3 server the app still runs (and warns), but photos only move at startup and in the daily sweep.
+- **Tags enabled** for each account (Account Settings -> Features -> Tags), and Immich's storage writable, because Immich writes tag changes to sidecar files.
+- **`PUBLIC_WEBHOOK_URL` reachable from the Immich server container** (not from your browser). With both in one compose network, use the service name, for example `http://immich-handoff:8080/webhook/immich`.
+- **API key permissions**, per account:
+  - source accounts: `asset.read`, `asset.download`, `asset.delete`, `tag.create`, `tag.read`, `tag.asset`, `workflow.create`, `workflow.read`, `workflow.update`
+  - destination account: `asset.upload`, `asset.read`, `tag.create`, `tag.read`, `tag.asset`, `album.read`
+- **Workflows are a preview feature in Immich**, so their interface can change between releases. The Immich client is generated from the pinned v3.2.0 spec (a changed operation fails the build), and `IMMICH_VERSION=<tag> test/run.sh` runs the whole end-to-end suite against any other release before you upgrade.
 
-- Workflow provisioning, the webhook path and the import rules are verified against a real Immich 3.2.0 in Docker. Still unverified: tagging from the **mobile app** firing the trigger, and your server's reverse-proxy/network setup (`PUBLIC_WEBHOOK_URL` must be reachable from the Immich container).
-- Webhook host restrictions: the plugin manifest allows any host, but check that the container is reachable from Immich.
-- Whether the tag trigger fires for tags added from the mobile app.
-- Name of Immich's session cookie and whether `/api/users/me` accepts it (the app forwards all cookies, so the name should not matter).
-- Whether phones re-upload originals that were trashed on the server (inherited from the script).
-- Uploads omit the `x-immich-checksum` hint (the hash is only known after streaming). Verified: Immich still reports duplicates correctly without it.
-- Search pagination follows `nextCursor`, falling back to `nextPage`; the cursor semantics are untested.
-- Workflows are a preview feature in Immich; the interface may change.
+## Phone backup and the trashed original
+
+By default the original is moved to the source account's trash, not deleted permanently. While it is there, Immich's duplicate check (`POST /assets/bulk-upload-check`, the endpoint clients use before uploading) reports it as an existing, trashed duplicate, so a phone's backup skips it. This is asserted by the end-to-end suite. Once Immich empties the trash (30 days by default) that protection ends, and a phone that still has the photo can back it up again; delete the photo from the phone, or let the family copy be the only one you keep.
+
+## Troubleshooting
+
+Tagging a photo should import it within a few seconds. If it does not:
+
+1. **App log.** Each pass logs what it found and did (`LOG_LEVEL=debug` also logs webhook payloads). A line `photos were found by the daily sweep instead of by webhook` means the events are not arriving: check `PUBLIC_WEBHOOK_URL` and that the workflow is enabled.
+2. **Workflow log in Immich.** Open the account's `immich-handoff` workflow; each tag event is one run. No runs means the trigger never fired (is the tag really `share`, and are tags enabled for that account?). A failed webhook step means Immich could not reach the URL.
+3. **Refused imports.** A photo whose copy sits in the family account's trash is not imported. Its tag becomes `share-duplicate` (see `REFUSED_TAG`); empty the family trash and add `share` again to retry.
+4. **Errors in the log mentioning `HTTP 401/403`** mean an API key lacks a permission from the list above.
+5. **Status page says "Sign in to Immich first".** The page must be served on the same hostname as Immich (any port) so it receives Immich's login cookie.
 
 ## License
 

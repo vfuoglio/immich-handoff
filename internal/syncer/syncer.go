@@ -50,32 +50,33 @@ type Syncer struct {
 	Sources []*immich.API
 	Log     *slog.Logger
 
-	mu     sync.Mutex
-	provMu sync.Mutex
-	hintMu sync.Mutex
-	hints  map[uuid.UUID]int // asset id -> attempts so far
-	rerun  atomic.Bool
-	last   atomic.Pointer[RunInfo]
+	mu          sync.Mutex
+	provMu      sync.Mutex
+	hintMu      sync.Mutex
+	hints       map[uuid.UUID]time.Time // asset id -> first seen
+	retryQueued atomic.Bool
+	rerun       atomic.Bool
+	last        atomic.Pointer[RunInfo]
 }
 
 func (s *Syncer) Last() *RunInfo { return s.last.Load() }
 
 // AddHint records an asset id taken from a webhook payload. A hint is never trusted: the next pass
 // fetches the asset with the source account's own key and checks it really carries the share tag.
-// Immich can announce a tag before the tag is visible through its API, so unresolved hints are retried
-// with a short backoff (see retryHints).
+// Immich can announce a tag before the tag is visible through its API (search and lookups alike), so
+// hints that cannot be confirmed yet are retried every few seconds for hintTTL.
 func (s *Syncer) AddHint(id uuid.UUID) {
 	s.hintMu.Lock()
 	defer s.hintMu.Unlock()
 	if s.hints == nil {
-		s.hints = map[uuid.UUID]int{}
+		s.hints = map[uuid.UUID]time.Time{}
 	}
 	if _, ok := s.hints[id]; !ok {
-		s.hints[id] = 0
+		s.hints[id] = time.Now()
 	}
 }
 
-func (s *Syncer) takeHints() map[uuid.UUID]int {
+func (s *Syncer) takeHints() map[uuid.UUID]time.Time {
 	s.hintMu.Lock()
 	defer s.hintMu.Unlock()
 	out := s.hints
@@ -83,34 +84,38 @@ func (s *Syncer) takeHints() map[uuid.UUID]int {
 	return out
 }
 
-const maxHintAttempts = 6 // backoff 1s,2s,4s,8s,16s,32s: ~1 minute before leaving it to the daily sweep
+const (
+	hintTTL   = 90 * time.Second // after this the daily sweep is the only retry
+	hintRetry = 2 * time.Second
+)
 
-// retryHints re-queues hints that no source could confirm and schedules another pass for them.
-func (s *Syncer) retryHints(ctx context.Context, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) {
-	delay := time.Duration(0)
+// retryHints re-queues hints that no source could confirm and schedules one more pass for them.
+// Events whose asset never ends up carrying the share tag (untagged quickly, or retagged after a
+// refusal) are normal and simply expire quietly.
+func (s *Syncer) retryHints(ctx context.Context, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) {
+	pending := false
 	s.hintMu.Lock()
-	for id, attempts := range hints {
-		if resolved[id] {
-			if attempts > 0 {
-				s.Log.Info("tag became visible after retries", "asset", id, "retries", attempts)
+	for id, first := range hints {
+		age := time.Since(first)
+		switch {
+		case resolved[id]:
+			if age > time.Second {
+				s.Log.Info("tag became visible after a delay", "asset", id, "after", age.Round(100*time.Millisecond).String())
 			}
-			continue
-		}
-		if attempts+1 >= maxHintAttempts {
-			s.Log.Warn("tag still not visible; leaving the asset to the next sweep", "asset", id)
-			continue
-		}
-		if s.hints == nil {
-			s.hints = map[uuid.UUID]int{}
-		}
-		s.hints[id] = attempts + 1
-		if d := time.Second << attempts; d > delay {
-			delay = d
+		case age > hintTTL:
+			s.Log.Debug("event hint expired without the share tag appearing", "asset", id)
+		default:
+			if s.hints == nil {
+				s.hints = map[uuid.UUID]time.Time{}
+			}
+			s.hints[id] = first
+			pending = true
 		}
 	}
 	s.hintMu.Unlock()
-	if delay > 0 {
-		time.AfterFunc(delay, func() {
+	if pending && s.retryQueued.CompareAndSwap(false, true) {
+		time.AfterFunc(hintRetry, func() {
+			s.retryQueued.Store(false)
 			if ctx.Err() == nil {
 				s.Run(ctx, "retry: tag not yet visible", false)
 			}
@@ -136,12 +141,19 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 	}
 }
 
-func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]int) {
+func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]time.Time) {
 	info := &RunInfo{Started: time.Now(), Reason: reason}
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
 		s.Log.Info("pass finished", "reason", reason, "counts", info.Counts, "untagged", info.Untagged, "error", info.Error)
+		if reason == "daily sweep" && info.Counts.Imported+info.Counts.Duplicate+info.Counts.Refused > 0 {
+			// Photos reached the daily sweep untouched: the tag events never arrived. The usual cause is
+			// PUBLIC_WEBHOOK_URL not being reachable from the Immich container (or the workflow being off).
+			msg := "photos were found by the daily sweep instead of by webhook: check that PUBLIC_WEBHOOK_URL is reachable from Immich and the workflow is enabled (see workflow logs in Immich)"
+			s.Log.Warn(msg)
+			s.notify("immich-handoff: " + msg)
+		}
 		if info.Error != "" || info.Counts.Errors > 0 || info.Counts.Refused > 0 {
 			s.notify(fmt.Sprintf("immich-handoff: %+v %s", info.Counts, info.Error))
 		}
@@ -177,7 +189,7 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 	}
 }
 
-func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uuid.UUID, inbox uuid.UUID, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) (c Counts) {
+func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uuid.UUID, inbox uuid.UUID, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
 	log := s.Log.With("source", n)
 	me, err := src.Me(ctx)
 	if err != nil {
@@ -311,7 +323,7 @@ func (s *Syncer) cleanup(ctx context.Context, inbox uuid.UUID) (int, error) {
 // withHinted adds assets named by webhook events that the tag search did not return, after checking
 // with this account's own key that they exist and carry the share tag. Hints that this account can
 // confirm (or that are trashed, so there is nothing to do) are recorded in resolved.
-func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.API, found []immich.AssetResponseDto, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) []immich.AssetResponseDto {
+func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.API, found []immich.AssetResponseDto, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) []immich.AssetResponseDto {
 	have := map[uuid.UUID]bool{}
 	for _, a := range found {
 		have[a.Id] = true

@@ -22,6 +22,8 @@ import (
 // (or, for the status page, to one browser session cookie).
 type API struct {
 	c *ClientWithResponses
+	// PageSize is the search page size (default 250); tests lower it to exercise pagination.
+	PageSize int
 }
 
 type Auth struct {
@@ -47,7 +49,7 @@ func New(baseURL string, a Auth, hc *http.Client) (*API, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &API{c: c}, nil
+	return &API{c: c, PageSize: 250}, nil
 }
 
 func statusErr(op string, code int, body []byte) error {
@@ -155,7 +157,10 @@ func (a *API) UntagAssets(ctx context.Context, tag openapi_types.UUID, ids []ope
 // Search follows pagination and returns every matching asset.
 func (a *API) Search(ctx context.Context, f MetadataSearchDto) ([]AssetResponseDto, error) {
 	var out []AssetResponseDto
-	size := 250
+	size := a.PageSize
+	if size <= 0 {
+		size = 250
+	}
 	f.Size = &size
 	page := 1
 	for {
@@ -168,18 +173,17 @@ func (a *API) Search(ctx context.Context, f MetadataSearchDto) ([]AssetResponseD
 			return nil, statusErr("searchAssets", r.StatusCode(), r.Body)
 		}
 		out = append(out, r.JSON200.Assets.Items...)
-		switch {
-		case r.JSON200.Assets.NextCursor != nil && *r.JSON200.Assets.NextCursor != "":
-			f.Cursor = r.JSON200.Assets.NextCursor
-		case r.JSON200.Assets.NextPage != nil && *r.JSON200.Assets.NextPage != "":
-			n, err := strconv.Atoi(*r.JSON200.Assets.NextPage)
-			if err != nil {
-				return nil, fmt.Errorf("searchAssets: bad nextPage %q", *r.JSON200.Assets.NextPage)
-			}
-			page = n
-		default:
+		// Immich 3.2 still pages with `page`/`nextPage`; the newer `cursor` is accepted but never returned.
+		// If `page` is removed upstream, this stops compiling against a newer generated client.
+		next := r.JSON200.Assets.NextPage
+		if next == nil || *next == "" {
 			return out, nil
 		}
+		n, err := strconv.Atoi(*next)
+		if err != nil || n <= page {
+			return nil, fmt.Errorf("searchAssets: unexpected nextPage %q after page %d", *next, page)
+		}
+		page = n
 	}
 }
 

@@ -94,9 +94,11 @@ func run(log *slog.Logger) error {
 
 	// Startup catch-up and a slow daily sweep (also expires the inbox tag). This is a safety net, not polling.
 	go func() {
+		reason := "startup"
 		for {
 			s.Provision(ctx, hook) // heals a deleted or edited workflow; no-op when already correct
-			s.Run(ctx, "sweep", true)
+			s.Run(ctx, reason, true)
+			reason = "daily sweep"
 			select {
 			case <-ctx.Done():
 				return

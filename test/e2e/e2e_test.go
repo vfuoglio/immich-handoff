@@ -7,6 +7,9 @@ package e2e
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -22,6 +25,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 )
 
 const (
@@ -327,6 +334,63 @@ func TestEndToEnd(t *testing.T) {
 			x, code := getAsset(t, alice, aliceOrig)
 			return code == 200 && x.IsTrashed
 		})
+	})
+
+	t.Run("the trashed original is still reported as already uploaded (phone backup will skip it)", func(t *testing.T) {
+		sum := sha1.Sum(imgA)
+		var out struct {
+			Results []struct {
+				Action, Reason string
+				IsTrashed      bool
+			} `json:"results"`
+		}
+		mustOK(t, call(t, "POST", "/assets/bulk-upload-check", keyAuth(alice), map[string]any{
+			"assets": []map[string]string{{"id": "x", "checksum": hex.EncodeToString(sum[:])}}}, &out), "bulk-upload-check")
+		if len(out.Results) != 1 || out.Results[0].Action != "reject" || out.Results[0].Reason != "duplicate" || !out.Results[0].IsTrashed {
+			t.Errorf("upload check = %+v", out.Results)
+		}
+	})
+
+	t.Run("search pagination returns every tagged asset", func(t *testing.T) {
+		var ids []string
+		for i := 10; i < 15; i++ {
+			id, st := upload(t, alice, fmt.Sprintf("page-%d.jpg", i), jpegBytes(i))
+			t.Logf("uploaded page-%d.jpg -> %s (%s)", i, id, st)
+			ids = append(ids, id)
+		}
+		tagAsset(t, alice, "pagination-check", ids...)
+		var tags []struct{ ID, Name string }
+		call(t, "GET", "/tags", keyAuth(alice), nil, &tags)
+		var tid string
+		for _, x := range tags {
+			if x.Name == "pagination-check" {
+				tid = x.ID
+			}
+		}
+		// freshly tagged assets can lag in search results; wait until all five are visible before paging
+		eventually(t, "all five tagged assets visible in search", 20*time.Second, func() bool {
+			got := searchTag(t, alice, "pagination-check", false)
+			if len(got) != 5 {
+				t.Logf("visible %d of %v; searching has: %v", len(got), ids, got)
+			}
+			return len(got) == 5
+		})
+		api, err := immich.New(baseURL, immich.Auth{APIKey: alice.key}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		api.PageSize = 2 // 5 assets over 3 pages
+		got, err := api.Search(context.Background(), immich.MetadataSearchDto{TagIds: &[]uuid.UUID{uuid.MustParse(tid)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]bool{}
+		for _, a := range got {
+			seen[a.Id.String()] = true
+		}
+		if len(got) != 5 || len(seen) != 5 {
+			t.Errorf("got %d results, %d distinct; want 5", len(got), len(seen))
+		}
 	})
 
 	t.Run("duplicate is removed from source but not tagged again", func(t *testing.T) {
