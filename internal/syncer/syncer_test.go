@@ -312,3 +312,25 @@ func TestCopyModeKeepsTheOriginalAndMarksItHandedOver(t *testing.T) {
 		t.Errorf("the original must lose the service tag and get the sent tag: sent=%v untagged=%v", f.refusedTagged, f.untaggedShare)
 	}
 }
+
+// Immich's search can keep listing a photo for a while after its tag was removed. It must not be handed
+// over again (downloaded and uploaded once more) while that lasts.
+func TestAPhotoJustHandedOverIsNotHandedOverAgain(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created"} // this fake keeps listing the photo, like a lagging search
+	srv := httptest.NewServer(f.handler())
+	defer srv.Close()
+	svc := service(
+		[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src"), Mode: syncer.ModeCopy}},
+		[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	svc.SentTag = "handed-over"
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	for i := 0; i < 3; i++ {
+		s.Run(context.Background(), "test", false)
+	}
+	if len(f.uploaded) != 1 {
+		t.Errorf("the photo was uploaded %d times; once is enough", len(f.uploaded))
+	}
+	if c := s.Totals().Counts; c.Imported != 1 || c.Duplicate != 0 {
+		t.Errorf("later passes must skip it: %+v", c)
+	}
+}

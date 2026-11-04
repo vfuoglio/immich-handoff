@@ -62,6 +62,9 @@ type Syncer struct {
 
 	totMu  sync.Mutex
 	totals Totals
+
+	recentMu sync.Mutex
+	recent   map[uuid.UUID]time.Time // photos handled a moment ago
 }
 
 // Totals are cumulative since the app started (kept in memory only).
@@ -128,6 +131,37 @@ func (s *Syncer) takeHints() map[uuid.UUID]time.Time {
 	out := s.hints
 	s.hints = nil
 	return out
+}
+
+// justHandledFor is how long a photo that was just handed over is left alone if Immich's search still
+// lists it. Immich's search lags behind tag removals, as it does behind additions, so without this a
+// handed-over photo can come back for several passes and be downloaded and uploaded again each time.
+const justHandledFor = 2 * time.Minute
+
+func (s *Syncer) justHandled(id uuid.UUID) bool {
+	s.recentMu.Lock()
+	defer s.recentMu.Unlock()
+	t, ok := s.recent[id]
+	if ok && time.Since(t) > justHandledFor {
+		delete(s.recent, id)
+		return false
+	}
+	return ok
+}
+
+func (s *Syncer) markJustHandled(id uuid.UUID) {
+	s.recentMu.Lock()
+	defer s.recentMu.Unlock()
+	if s.recent == nil {
+		s.recent = map[uuid.UUID]time.Time{}
+	}
+	now := time.Now()
+	for k, t := range s.recent { // keep the map small
+		if now.Sub(t) > justHandledFor {
+			delete(s.recent, k)
+		}
+	}
+	s.recent[id] = now
 }
 
 const (
@@ -306,16 +340,23 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 	}
 	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
 	for _, a := range assets {
+		if s.justHandled(a.Id) {
+			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
+			continue
+		}
 		switch out, err := s.process(ctx, log, svc, snd, rs, a, *tag); {
 		case err != nil:
 			c.Errors++
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
 		case out == "imported":
 			c.Imported++
+			s.markJustHandled(a.Id)
 		case out == "duplicate":
 			c.Duplicate++
+			s.markJustHandled(a.Id)
 		case out == "refused":
 			c.Refused++
+			s.markJustHandled(a.Id)
 		case out == "dryrun":
 			c.DryRun++
 		}

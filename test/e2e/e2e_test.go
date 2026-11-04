@@ -235,17 +235,15 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 	}
 	apply(ids)
 	// Immich itself occasionally drops a tag applied right after an upload (seen with no handoff app
-	// running at all), so, like a person would, make sure it stuck and add it again if not.
+	// running at all), so, like a person would, make sure it stuck and add it again if it was lost.
+	// "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already
+	// handled carries a marker tag or is trashed, and must not have the tag put back on it.
 	for attempt := 0; attempt < 6; attempt++ {
 		time.Sleep(700 * time.Millisecond)
 		var missing []string
 		for _, id := range ids {
 			x, _ := getAsset(t, u, id)
-			found := false
-			for _, tg := range x.Tags {
-				found = found || tg.Name == tag
-			}
-			if !found {
+			if len(x.Tags) == 0 && !x.IsTrashed {
 				missing = append(missing, id)
 			}
 		}
@@ -1117,7 +1115,7 @@ func TestCopyMode(t *testing.T) {
 	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
 	bin := buildApp(t)
 	port := fmt.Sprint(atoi(appPort) + 6)
-	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	a := launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
 	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
 	must := func(res *http.Response, want int, what string) {
 		t.Helper()
@@ -1182,5 +1180,8 @@ func TestCopyMode(t *testing.T) {
 	time.Sleep(8 * time.Second)
 	if n := len(searchTag(t, alice, "inbox/keep", false)); n != before+1 {
 		t.Errorf("a copied photo must not be handed over again, inbox grew to %d", n-before)
+	}
+	if strings.Contains(a.log.String(), `"msg":"duplicate"`) {
+		t.Errorf("Immich's search kept listing the photo and it was processed again:\n%s", a.log.String())
 	}
 }
