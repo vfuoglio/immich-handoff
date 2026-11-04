@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 )
 
 // Webhook describes how Immich should call this app.
@@ -12,7 +12,7 @@ type Webhook struct {
 	URL, Header, Secret string
 }
 
-const WorkflowName = "immich-sync-console"
+const WorkflowName = "immich-handoff"
 
 // Provision makes sure every source account has the share tag and the workflow that wakes this app.
 // It is idempotent, so it is safe to run on every start. Failures are logged, not fatal: the daily

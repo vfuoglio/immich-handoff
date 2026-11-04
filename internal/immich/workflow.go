@@ -57,7 +57,7 @@ func (a *API) EnsureWorkflow(ctx context.Context, w WorkflowSpec) (string, error
 		return "updated", nil
 	}
 	enabled, logging := true, true
-	desc := "Sends photos tagged for sharing to the family account. Managed by immich-sync-console."
+	desc := "Sends photos tagged for sharing to the family account. Managed by immich-handoff."
 	c, err := a.c.CreateWorkflowWithResponse(ctx, CreateWorkflowJSONRequestBody{
 		Name: &name, Description: &desc, Trigger: AssetTagged, Enabled: &enabled, Logging: &logging, Steps: &want,
 	})

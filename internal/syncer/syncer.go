@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 )
 
 type Config struct {
@@ -143,7 +143,7 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 		s.last.Store(info)
 		s.Log.Info("pass finished", "reason", reason, "counts", info.Counts, "untagged", info.Untagged, "error", info.Error)
 		if info.Error != "" || info.Counts.Errors > 0 || info.Counts.Refused > 0 {
-			s.notify(fmt.Sprintf("immich-sync-console: %+v %s", info.Counts, info.Error))
+			s.notify(fmt.Sprintf("immich-handoff: %+v %s", info.Counts, info.Error))
 		}
 	}()
 

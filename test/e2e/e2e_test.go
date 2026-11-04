@@ -268,8 +268,8 @@ func (a *app) stop() {
 }
 
 func buildApp(t *testing.T) string {
-	bin := filepath.Join(t.TempDir(), "sync-console")
-	out, err := exec.Command("go", "build", "-o", bin, "../../cmd/sync-console").CombinedOutput()
+	bin := filepath.Join(t.TempDir(), "immich-handoff")
+	out, err := exec.Command("go", "build", "-o", bin, "../../cmd/immich-handoff").CombinedOutput()
 	if err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -302,7 +302,7 @@ func TestEndToEnd(t *testing.T) {
 				}
 				call(t, "GET", "/workflows", keyAuth(u), nil, &wfs)
 				for _, w := range wfs {
-					if w.Name == "immich-sync-console" && w.Enabled && w.Trigger == "AssetTagged" {
+					if w.Name == "immich-handoff" && w.Enabled && w.Trigger == "AssetTagged" {
 						return true
 					}
 				}

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
-	"github.com/vfuoglio/immich-sync-console/internal/syncer"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
 // fakeWorkflows stores one workflow per fake server, mimicking create/search/update.

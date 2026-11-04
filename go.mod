@@ -1,4 +1,4 @@
-module github.com/vfuoglio/immich-sync-console
+module github.com/vfuoglio/immich-handoff
 
 go 1.27.3
 

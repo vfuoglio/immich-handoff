@@ -3,9 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/sync-console ./cmd/sync-console
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/immich-handoff ./cmd/immich-handoff
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/sync-console /sync-console
+COPY --from=build /out/immich-handoff /immich-handoff
 EXPOSE 8080
-ENTRYPOINT ["/sync-console"]
+ENTRYPOINT ["/immich-handoff"]

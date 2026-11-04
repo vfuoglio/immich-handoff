@@ -1,4 +1,4 @@
-# immich-sync-console
+# immich-handoff
 
 Event-driven successor to [immich_family_sync](../immich_family_sync) for **Immich ≥ 3.2**.
 
@@ -47,8 +47,8 @@ Things the real-server tests found, now handled in the code:
 ## Setup
 
 1. Copy `.env.example` to `.env` and fill it in (API keys as in immich_family_sync; pick a long random `WEBHOOK_SECRET`).
-2. `docker compose up -d --build` (or `go run ./cmd/sync-console` with the variables exported). Join Immich's compose network (see `docker-compose.yml`) so the app can reach `immich-server`.
-3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-sync-console:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-sync-console` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need `workflow.create`, `workflow.read`, `workflow.update`, `tag.create`, `tag.read` on top of the permissions in immich_family_sync. Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
+2. `docker compose up -d --build` (or `go run ./cmd/immich-handoff` with the variables exported). Join Immich's compose network (see `docker-compose.yml`) so the app can reach `immich-server`.
+3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-handoff:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-handoff` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need `workflow.create`, `workflow.read`, `workflow.update`, `tag.create`, `tag.read` on top of the permissions in immich_family_sync. Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
 4. Try `DRY_RUN=true` first. Tag one photo and watch `docker logs`.
 
 ## Open questions

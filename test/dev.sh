@@ -29,4 +29,4 @@ cat <<MSG
 Immich UI:   ${IMMICH_BASE_URL}     logins: alice@e2e.test, bob@e2e.test, family@e2e.test   password: $PW
 Try it:      log in as alice, select a photo, Add tag "share"; watch this log, then look at family's library.
 MSG
-exec go run ./cmd/sync-console
+exec go run ./cmd/immich-handoff

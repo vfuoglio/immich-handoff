@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
-	"github.com/vfuoglio/immich-sync-console/internal/syncer"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
 const (

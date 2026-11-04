@@ -1,5 +1,5 @@
 # Disposable Immich for end-to-end tests. Ephemeral (no host volumes); `docker compose down -v` wipes it.
-name: sync-console-e2e
+name: immich-handoff-e2e
 services:
   immich-server:
     image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3.2.0}

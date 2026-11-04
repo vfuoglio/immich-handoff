@@ -1,7 +1,7 @@
 <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Immich Sync Console</title>
+<title>Immich Handoff</title>
 <body style="font-family:system-ui;max-width:40rem;margin:2rem auto;padding:0 1rem">
-<h1>Immich Sync Console</h1><div id=out>Loading…</div>
+<h1>Immich Handoff</h1><div id=out>Loading…</div>
 <p><button id=sync>Sync now</button></p>
 <script>
 async function load(){
@@ -15,7 +15,7 @@ async function load(){
   add(l?('Last run '+l.Finished+' ('+l.Reason+'): '+JSON.stringify(l.Counts)+(l.Error?' ERROR '+l.Error:'')):'No run yet since start');
 }
 document.getElementById('sync').onclick=async()=>{
-  await fetch('api/sync',{method:'POST',headers:{'X-Requested-With':'sync-console'}});
+  await fetch('api/sync',{method:'POST',headers:{'X-Requested-With':'immich-handoff'}});
   setTimeout(load,3000);
 };
 load();

@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
-	"github.com/vfuoglio/immich-sync-console/internal/syncer"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
 //go:embed index.html
@@ -135,7 +135,7 @@ func (w *Server) status(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 	// Cookie auth is ambient, so require a header a cross-site form cannot send (CSRF guard).
-	if r.Header.Get("X-Requested-With") != "sync-console" {
+	if r.Header.Get("X-Requested-With") != "immich-handoff" {
 		http.Error(rw, "missing X-Requested-With", http.StatusBadRequest)
 		return
 	}

@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vfuoglio/immich-sync-console/internal/immich"
-	"github.com/vfuoglio/immich-sync-console/internal/syncer"
-	"github.com/vfuoglio/immich-sync-console/internal/web"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
+	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
 func env(k, def string) string {
