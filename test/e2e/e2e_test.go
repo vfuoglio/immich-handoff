@@ -48,7 +48,8 @@ func envOr(k, d string) string {
 
 // --- tiny Immich REST helper (independent of the app's generated client on purpose) ---
 
-type user struct{ id, token, key string }
+// key plays the user (full access, like their own session); appKey is the restricted key given to the app.
+type user struct{ id, token, key, appKey string }
 
 func call(t *testing.T, method, path string, auth map[string]string, body any, out any) int {
 	t.Helper()
@@ -80,6 +81,13 @@ func call(t *testing.T, method, path string, auth map[string]string, body any, o
 	return res.StatusCode
 }
 
+// The exact API key permissions documented in the README. The suite runs with these (not "all"),
+// so a permission the app really needs but the README omits fails the tests.
+var (
+	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update"}
+	destPermissions   = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload"}
+)
+
 func keyAuth(u user) map[string]string { return map[string]string{"x-api-key": u.key} }
 
 func mustOK(t *testing.T, code int, what string) {
@@ -107,7 +115,7 @@ func bootstrap(t *testing.T) (alice, bob, family user) {
 	mustOK(t, call(t, "POST", "/auth/login", nil, map[string]string{"email": "admin@e2e.test", "password": pw}, &login), "admin login")
 	admin := map[string]string{"Authorization": "Bearer " + login.AccessToken}
 
-	mk := func(name string) user {
+	mk := func(name string, perms []string) user {
 		email := name + "@e2e.test"
 		call(t, "POST", "/admin/users", admin, map[string]any{"email": email, "name": name, "password": pw, "shouldChangePassword": false}, nil) // 400 if exists
 		var l struct {
@@ -115,16 +123,19 @@ func bootstrap(t *testing.T) (alice, bob, family user) {
 			UserID      string `json:"userId"`
 		}
 		mustOK(t, call(t, "POST", "/auth/login", nil, map[string]string{"email": email, "password": pw}, &l), "login "+name)
-		var k struct {
-			Secret string `json:"secret"`
+		newKey := func(label string, perms []string) string {
+			var k struct {
+				Secret string `json:"secret"`
+			}
+			mustOK(t, call(t, "POST", "/api-keys", map[string]string{"Authorization": "Bearer " + l.AccessToken},
+				map[string]any{"name": label + fmt.Sprint(time.Now().UnixNano()), "permissions": perms}, &k), "api key "+name)
+			return k.Secret
 		}
-		mustOK(t, call(t, "POST", "/api-keys", map[string]string{"Authorization": "Bearer " + l.AccessToken},
-			map[string]any{"name": "e2e-" + fmt.Sprint(time.Now().UnixNano()), "permissions": []string{"all"}}, &k), "api key "+name)
-		u := user{id: l.UserID, token: l.AccessToken, key: k.Secret}
+		u := user{id: l.UserID, token: l.AccessToken, key: newKey("e2e-user-", []string{"all"}), appKey: newKey("e2e-app-", perms)}
 		call(t, "PUT", "/users/me/preferences", keyAuth(u), map[string]any{"tags": map[string]any{"enabled": true}}, nil)
 		return u
 	}
-	return mk("alice"), mk("bob"), mk("family")
+	return mk("alice", sourcePermissions), mk("bob", sourcePermissions), mk("family", destPermissions)
 }
 
 // jpeg returns distinct, valid JPEG bytes per seed.
@@ -167,7 +178,26 @@ func upload(t *testing.T, u user, name string, data []byte) (id, status string) 
 	if res.StatusCode >= 300 || out.ID == "" {
 		t.Fatalf("upload %s: HTTP %d %s", name, res.StatusCode, b)
 	}
+	waitProcessed(t, u, out.ID)
 	return out.ID, out.Status
+}
+
+// waitProcessed returns once Immich has finished reading the uploaded photo's metadata. A tag added
+// before that point can be overwritten by Immich's own metadata job, so a user (who taps the photo
+// seconds after it appeared) never meets that window but a script that tags instantly does.
+func waitProcessed(t *testing.T, u user, id string) {
+	t.Helper()
+	for i := 0; i < 100; i++ {
+		var a struct {
+			HasMetadata bool           `json:"hasMetadata"`
+			ExifInfo    map[string]any `json:"exifInfo"`
+		}
+		if call(t, "GET", "/assets/"+id, keyAuth(u), nil, &a) == 200 && a.HasMetadata && a.ExifInfo != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("Immich did not finish processing %s", id)
 }
 
 type asset struct {
@@ -188,7 +218,17 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 	t.Helper()
 	var tags []struct{ ID string }
 	mustOK(t, call(t, "PUT", "/tags", keyAuth(u), map[string]any{"tags": []string{tag}}, &tags), "upsert tag")
-	mustOK(t, call(t, "PUT", "/tags/"+tags[0].ID+"/assets", keyAuth(u), map[string]any{"ids": ids}, nil), "tag asset")
+	var results []struct {
+		ID      string `json:"id"`
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+	}
+	mustOK(t, call(t, "PUT", "/tags/"+tags[0].ID+"/assets", keyAuth(u), map[string]any{"ids": ids}, &results), "tag asset")
+	for _, r := range results {
+		if !r.Success {
+			t.Fatalf("tagging %s with %q failed: %q", r.ID, tag, r.Error)
+		}
+	}
 }
 
 // search returns the ids of assets with a tag, optionally including trashed ones.
@@ -240,8 +280,8 @@ func startApp(t *testing.T, bin string, alice, bob, family user) *app {
 	cmd := exec.Command(bin)
 	cmd.Env = append(os.Environ(),
 		"IMMICH_BASE_URL="+baseURL,
-		"IMMICH_SOURCE_API_KEYS="+alice.key+","+bob.key,
-		"IMMICH_DEST_API_KEY="+family.key,
+		"IMMICH_SOURCE_API_KEYS="+alice.appKey+","+bob.appKey,
+		"IMMICH_DEST_API_KEY="+family.appKey,
 		"WEBHOOK_SECRET="+secret,
 		// Immich runs in a container; the app runs on the host.
 		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+appPort+"/webhook/immich",
@@ -367,13 +407,23 @@ func TestEndToEnd(t *testing.T) {
 				tid = x.ID
 			}
 		}
-		// freshly tagged assets can lag in search results; wait until all five are visible before paging
-		eventually(t, "all five tagged assets visible in search", 20*time.Second, func() bool {
-			got := searchTag(t, alice, "pagination-check", false)
-			if len(got) != 5 {
-				t.Logf("visible %d of %v; searching has: %v", len(got), ids, got)
+		// Immich itself occasionally drops a tag applied right after an upload (seen without this app
+		// running at all), so, like a user would, re-apply the tag to anything that lost it.
+		eventually(t, "all five tagged assets visible in search", time.Minute, func() bool {
+			seen := map[string]bool{}
+			for _, id := range searchTag(t, alice, "pagination-check", false) {
+				seen[id] = true
 			}
-			return len(got) == 5
+			var missing []string
+			for _, id := range ids {
+				if !seen[id] {
+					missing = append(missing, id)
+				}
+			}
+			if len(missing) > 0 {
+				tagAsset(t, alice, "pagination-check", missing...)
+			}
+			return len(missing) == 0
 		})
 		api, err := immich.New(baseURL, immich.Auth{APIKey: alice.key}, nil)
 		if err != nil {

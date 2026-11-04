@@ -22,8 +22,8 @@ export IMMICH_BASE_URL=${IMMICH_E2E_URL:-http://localhost:2284}
 export IMMICH_SOURCE_API_KEYS="$(key alice),$(key bob)"
 export IMMICH_DEST_API_KEY="$(key family)"
 export WEBHOOK_SECRET=dev-secret
-export PUBLIC_WEBHOOK_URL=http://host.docker.internal:18080/webhook/immich   # Immich container -> app on this host
-export LISTEN_ADDR=:18080
+export PUBLIC_WEBHOOK_URL=http://host.docker.internal:${APP_PORT:-18080}/webhook/immich   # Immich container -> app on this host
+export LISTEN_ADDR=:${APP_PORT:-18080}
 export LOG_LEVEL=${LOG_LEVEL:-info}
 cat <<MSG
 Immich UI:   ${IMMICH_BASE_URL}     logins: alice@e2e.test, bob@e2e.test, family@e2e.test   password: $PW

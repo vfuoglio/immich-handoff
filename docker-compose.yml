@@ -3,10 +3,13 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    # Join Immich's compose network so IMMICH_BASE_URL can be http://immich-server:2283
-    # networks: [immich_default]
     ports:
-      - "8080:8080"   # reverse-proxy at the SAME host as Immich (e.g. /handoff/)
-# networks:
-#   immich_default:
-#     external: true
+      - "8080:8080"
+    networks:
+      - immich
+
+networks:
+  immich:
+    # The network your Immich containers are on. A default Immich install uses immich_default.
+    name: ${IMMICH_NETWORK:-immich_default}
+    external: true
