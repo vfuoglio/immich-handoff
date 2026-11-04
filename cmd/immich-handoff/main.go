@@ -46,8 +46,8 @@ func main() {
 func run(log *slog.Logger) error {
 	base := strings.TrimRight(env("IMMICH_BASE_URL", "http://immich-server:2283"), "/")
 	secret := os.Getenv("WEBHOOK_SECRET")
-	if secret == "" {
-		return errors.New("WEBHOOK_SECRET is required")
+	if len(secret) < 16 {
+		return errors.New("WEBHOOK_SECRET is required and must be at least 16 characters (openssl rand -hex 24 makes a good one)")
 	}
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
 

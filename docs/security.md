@@ -1,0 +1,40 @@
+# Security and trust
+
+What you are agreeing to when you run this, or join a service. The short version: an app that can act on your photos has to be trusted, so it is built to ask for as little as possible, show people what it does, and make leaving easy.
+
+## What a key can do
+
+An Immich API key cannot be limited to one tag or album. So a sender's key can read and download any photo in that account, and, if the sender chose **move**, delete any photo too. The app only ever acts on photos tagged for a service, and the key is never shown to anyone. If the sender chose **keep my originals** (the default), the key is created **without any permission to delete**.
+
+The receiver's key can upload photos, read the receiver's library and add tags. It cannot delete anything.
+
+Each key is named `handoff: <service>` in the owner's own Immich settings, so people can see exactly what exists and delete it whenever they like. Deleting it ends the connection at once: Immich refuses the key, the app notices and pauses, and no photo is touched.
+
+## Who decides what
+
+- **The sender** decides what happens to their own originals, when they join. The owner has no say over that.
+- **The owner** decides who may send, and whether the service is listed or invitation-only.
+- **Nobody** sees anyone's key, including their own.
+
+## What is stored
+
+- Without self-service ([Fixed accounts](fixed-accounts.md)) nothing is stored: all state lives in Immich as tags and workflows.
+- With self-service, one SQLite file in the `handoff-data` volume lists who joined what. Every API key in it is encrypted with AES-256-GCM using `HANDOFF_STORE_KEY`. The app refuses to start if that key does not match the database.
+- **Whoever runs the container and holds the store key can read those keys**, in the same way the person running Immich can already read the photos. This is the trust you place in the person who hosts it.
+- The activity log keeps the last 500 events (who joined, left, asked, was approved, lost a connection), in the same file.
+
+## What other people can see
+
+Anyone signed in to Immich can open the page and sees the services that are **listed**, with the owner's name (not email). An owner sees the name and email of someone asking to send, and the names of their senders. Invitation-only services appear only to people who have the link; the link is only as private as how you share it, and **New link** revokes the old one.
+
+## Protections in the app
+
+- Immich's events carry a shared secret (`WEBHOOK_SECRET`); the app refuses one that is missing or shorter than 16 characters.
+- The page accepts only people signed in to Immich. Every change needs a header that a page on another website cannot send, and each person is limited to 30 changes a minute.
+- Pages are served with a strict content security policy, cannot be placed in a frame, and only load scripts and styles from the app itself.
+- The metrics page needs the same secret.
+- A photo is only removed after every receiver holds a verified copy (checked by checksum), and never while a connection is broken or a service has no healthy receiver.
+
+## Reporting a problem
+
+If you find a security problem, please open a private security advisory on the GitHub repository rather than a public issue.

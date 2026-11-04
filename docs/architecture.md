@@ -1,0 +1,62 @@
+# How it works inside
+
+For the curious, and for anyone changing the code.
+
+![Tag, notify, arrive](images/flow.svg)
+
+```
+ Immich app ──tag──►  Immich server
+                           │  a workflow in the sender's account: "tag added" + "tag is <service tag>"
+                           ▼  POST /webhook/immich  (with the secret)
+                    ┌───────────────┐
+                    │ immich-handoff│── Immich API ──► sender's account    (find, download, mark or trash the original)
+                    │ (one Go       │── Immich API ──► receiving account   (upload, tag inbox, tidy tags)
+                    │  container)   │── /data/handoff.db (encrypted keys, memberships, activity)
+                    └───────────────┘
+ Browser ── Immich login cookie ──► the page (same hostname as Immich) ── join / offer / approve / leave
+```
+
+## The ideas that hold it together
+
+- **Events only wake the app.** When Immich reports a tag, the app asks Immich which photos carry the service's tag and handles those, using the sender's own key. A lost or repeated event cannot lose or duplicate a photo. Bursts are combined into one run, and an announced photo whose tag is not yet visible through Immich's API is retried for a short while.
+- **A safety net, not polling.** One run at startup and one a day (`SWEEP_INTERVAL_HOURS`) pick up anything missed while the app was down, check that stored keys still work, and tidy the inbox tags. A pass also runs as soon as workflows exist after a delayed setup.
+- **Streaming copy.** A photo is streamed straight from the sender's account into the receiver's, never stored on the app's disk. The app computes its SHA-1 on the way and compares it with what Immich stored.
+- **The original is touched last,** only after every receiver holds a verified copy, and never while a connection is broken or a service has no healthy receiver. In move mode it goes to the trash; in copy mode it gets the sent tag and loses the service tag.
+- **The sender's choice lives with the sender.** Each membership stores move or copy, and the sender's key is created with or without delete permission to match.
+- **Tag changes are verified.** Immich can drop a tag changed right after another change to the same photo, so the app checks each change took effect and adds a new tag before removing the old one. Photos handled in the last two minutes are skipped, because Immich's search lags behind tag removals.
+- **Self-configuring.** At startup and every daily run the app makes sure each sender has the service's tag and workflow, and repairs the workflow if the URL or secret changes. Immich reports healthy about half a minute before its workflow plugins load, so this retries until it works.
+- **Keys are made by the person they belong to.** Joining and offering use the person's own Immich session to create a named, restricted API key, so the app never handles anyone's password.
+- **Typed everywhere.** The Immich API client is generated from Immich's published OpenAPI description (kept in `api/`), and the web pages are type-checked templates, so an incompatible Immich change or a template mistake stops the build instead of failing quietly.
+
+## The pieces
+
+| Folder | What it does |
+|---|---|
+| `cmd/immich-handoff` | Starts everything from the environment. |
+| `internal/syncer` | The engine: passes, hand-overs, tag cleanup, workflow setup. |
+| `internal/hub` | People and services: joining, offering, approval, invitations, key health. |
+| `internal/store`, `internal/vault` | The SQLite file and the encryption of keys in it. |
+| `internal/immich` | The generated client plus a small wrapper. |
+| `internal/web` | The page: templates, handlers, styles, live updates. |
+| `internal/config` | Environment and routes file. |
+| `test/` | The end-to-end suite and the throwaway Immich it runs against. |
+| `tools/screenshots` | Makes the pictures in `docs/images` from a real running demo. |
+
+## Testing
+
+```
+go test ./...        # unit tests, no Docker needed
+test/run.sh          # end-to-end: starts a throwaway Immich 3.2.0, runs the real app against it, tears it down
+```
+
+`test/run.sh` creates users with the exact API-key permissions the docs list and checks the whole flow against a real Immich: workflow creation, a tag arriving through the real workflow, duplicates, trashed copies, the inbox tidy-up, one-to-many routes, joining and leaving, offering services with approval and invitation links, move and copy, tagging the way the phone app does, and keys deleted on either side. `keep=1 test/run.sh` leaves Immich running afterwards, and `test/dev.sh` starts the app against it. `IMMICH_VERSION=<tag> test/run.sh` tests another Immich release. `E2E_PORT` and `E2E_APP_PORT` move the test ports if the defaults are taken.
+
+Generated code (`go generate ./...`: the Immich client and the templates) is committed; CI fails if it is stale. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).
+
+## Documentation images
+
+`tools/screenshots` makes the pictures from a real running demo, so they can be remade whenever the page changes. See its README.
+
+## Releasing
+
+Pushing a version tag such as `v1.2.3` starts the release workflow, which builds and publishes the container image (amd64 and arm64) to GitHub's container registry. GitHub starts no tag-triggered run when more than three tags are pushed at once, so a release can also be started by hand from the repository's Actions tab (**release -> Run workflow**).

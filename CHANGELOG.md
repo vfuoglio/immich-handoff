@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+- **The sender decides what happens to their originals**, when they join: keep them (the default) or move them to their trash. The owner of a service no longer sets this. The key made for a sender who keeps their originals has no delete permission. Existing members keep the behaviour they had.
+- Fixed-account services (`.env`, routes file) now **default to copy** (`HANDOFF_MODE=copy`). Set `HANDOFF_MODE=move`, or `mode: move` on a service, to keep the old behaviour.
+- Services created on the page get their own nested inbox tag (`inbox/<name>`) by default, so one owner with several services sees the arrivals separately.
+- The page: the offer form is a collapsed section, the last run is described in plain words, a pending request no longer leaves an empty row, cards are tidier.
+- Fix: a photo handed over a moment ago is no longer handed over again while Immich's search still lists it.
+- `WEBHOOK_SECRET` must be at least 16 characters.
+- `.env.example` is now hub-first: a fresh install needs no API keys.
+- Documentation reorganised into `docs/` with screenshots; tooling to remake them in `tools/screenshots`.
+- The release workflow can be started by hand from the Actions tab.
+
 ## 1.0.0
 - Release workflow publishes a multi-architecture container image for each tag.
 - Security headers (strict CSP, no framing), request size limit, per-person rate limit on changes, `/metrics`.

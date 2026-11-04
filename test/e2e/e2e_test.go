@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	secret = "e2e-secret"
+	secret = "e2e-secret-0123456789"
 )
 
 var appPort = envOr("E2E_APP_PORT", "18080")
