@@ -394,7 +394,10 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			return "", fmt.Errorf("checksum mismatch on %s's copy %s", r.acct.Name, up.Id)
 		}
 		if up.Status == immich.AssetMediaStatusCreated {
-			if err := r.acct.API.TagAssets(ctx, r.inbox, up.Id); err != nil {
+			// Immich can drop a tag added before it has finished reading a new upload, so wait for that
+			// first, then add the tag and check it stuck (a copy without it would arrive unnoticed).
+			s.waitProcessed(ctx, r.acct.API, up.Id)
+			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
 				return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
 			}
 			outcome = "imported"
@@ -552,6 +555,28 @@ func (s *Syncer) markSent(ctx context.Context, svc *Service, src *immich.API, id
 		}
 	}
 	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
+}
+
+// processingWait is how long to wait for Immich to finish reading a new upload, and how often to look.
+var (
+	processingWait = 30 * time.Second
+	processingPoll = 150 * time.Millisecond
+)
+
+// waitProcessed returns once Immich has read the new asset's metadata (or the wait runs out; the tag
+// check that follows still catches a dropped tag).
+func (s *Syncer) waitProcessed(ctx context.Context, api *immich.API, id uuid.UUID) {
+	deadline := time.Now().Add(processingWait)
+	for time.Now().Before(deadline) {
+		if a, err := api.Asset(ctx, id); err == nil && a.HasMetadata && a.ExifInfo != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(processingPoll):
+		}
+	}
 }
 
 // SettleDelay is how long to wait before checking that a tag change took effect.

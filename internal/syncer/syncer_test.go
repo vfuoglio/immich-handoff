@@ -38,6 +38,7 @@ type fakeImmich struct {
 	deleted, uploaded []string
 	tagged            []string
 	refusedTagged     []string
+	dropInboxTags     int // how many inbox tag requests Immich "accepts" but silently loses
 	untaggedShare     []string
 	uploadedBytes     string
 	gotChecksumHeader string
@@ -116,11 +117,22 @@ func (f *fakeImmich) handler() http.Handler {
 		if cs == "" {
 			cs = good
 		}
-		j(w, 200, asset(dstAsset, f.destTrashed, cs))
+		a := asset(dstAsset, f.destTrashed, cs)
+		a["hasMetadata"], a["exifInfo"] = true, map[string]any{} // Immich has finished reading it
+		f.mu.Lock()
+		if len(f.tagged) > 0 { // once tagged, the copy carries the inbox tag
+			a["tags"] = []any{tag(inboxTag, "inbox")}
+		}
+		f.mu.Unlock()
+		j(w, 200, a)
 	})
 	mux.HandleFunc("PUT /api/tags/"+inboxTag+"/assets", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
-		f.tagged = append(f.tagged, dstAsset)
+		if f.dropInboxTags > 0 {
+			f.dropInboxTags-- // reported as success, but the tag never lands
+		} else {
+			f.tagged = append(f.tagged, dstAsset)
+		}
 		f.mu.Unlock()
 		j(w, 200, []any{map[string]any{"id": dstAsset, "success": true}})
 	})
@@ -332,5 +344,29 @@ func TestAPhotoJustHandedOverIsNotHandedOverAgain(t *testing.T) {
 	}
 	if c := s.Totals().Counts; c.Imported != 1 || c.Duplicate != 0 {
 		t.Errorf("later passes must skip it: %+v", c)
+	}
+}
+
+// Immich can accept a tag on a fresh upload and then lose it. A copy without its inbox tag would arrive
+// unnoticed, so the app must check the tag is there and add it again.
+func TestAReceiversCopyThatLosesItsInboxTagIsTaggedAgain(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", dropInboxTags: 2}
+	c := run(t, f)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts = %+v", c)
+	}
+	if len(f.tagged) != 1 {
+		t.Errorf("the copy must end up tagged (after the dropped attempts), got %d", len(f.tagged))
+	}
+	if len(f.deleted) != 1 {
+		t.Errorf("the original goes to the trash once the copy is tagged: %v", f.deleted)
+	}
+}
+
+func TestACopyThatNeverKeepsItsTagLeavesTheOriginalAlone(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", dropInboxTags: 99}
+	c := run(t, f)
+	if c.Errors != 1 || len(f.deleted) != 0 {
+		t.Errorf("counts=%+v deleted=%v: if the tag cannot be made to stick the original must be kept", c, f.deleted)
 	}
 }
