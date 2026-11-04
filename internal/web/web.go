@@ -32,7 +32,7 @@ type Server struct {
 	destID        uuid.UUID
 }
 
-// Init resolves which Immich users are part of the family sync (once, at startup).
+// Init resolves which Immich users are part of the handoff (once, at startup).
 func (w *Server) Init(ctx context.Context) error {
 	w.sourceIDs = map[uuid.UUID]*immich.API{}
 	for _, src := range w.S.Sources {
@@ -108,7 +108,7 @@ func (w *Server) authenticate(r *http.Request) (*who, int, string) {
 	if src, ok := w.sourceIDs[u.ID]; ok {
 		return &who{u, "source", src}, 0, ""
 	}
-	return nil, http.StatusForbidden, "this Immich account is not part of the family sync"
+	return nil, http.StatusForbidden, "this Immich account is not part of the handoff"
 }
 
 func (w *Server) status(rw http.ResponseWriter, r *http.Request) {

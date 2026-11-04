@@ -1,6 +1,6 @@
 # immich-handoff
 
-Event-driven successor to [immich_family_sync](../immich_family_sync) for **Immich ≥ 3.2**.
+Moves photos from personal Immich accounts into a shared family account, triggered by a tag, for **Immich ≥ 3.2**.
 
 A family member tags a photo `share` in the Immich app. An Immich **workflow** calls this app's webhook, and the app moves the photo to the shared family account and tags the copy `inbox`. The original is removed only after the copy is verified. No polling for new photos.
 
@@ -21,7 +21,7 @@ phone: tag "share" ──► Immich workflow ──► POST /webhook/immich ─�
 
 ## Status page (auth option A: Immich's own login)
 
-Serve the app on the **same host as Immich** through the Synology reverse proxy (for example `/family-sync/`). The browser then sends Immich's session cookie; the app forwards it to `GET /api/users/me` and accepts only the family accounts.
+Serve the app on the **same host as Immich** through the Synology reverse proxy (for example `/handoff/`). The browser then sends Immich's session cookie; the app forwards it to `GET /api/users/me` and accepts only the family accounts.
 
 - Source user: sees how many of their photos are waiting. Destination user: sees the `inbox` count.
 - Both see the last run. "Sync now" is guarded with an `X-Requested-With` header (CSRF).
@@ -46,9 +46,9 @@ Things the real-server tests found, now handled in the code:
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill it in (API keys as in immich_family_sync; pick a long random `WEBHOOK_SECRET`).
+1. Copy `.env.example` to `.env` and fill it in (one API key per account with the permissions under [Requirements and compatibility](#requirements-and-compatibility); pick a long random `WEBHOOK_SECRET`).
 2. `docker compose up -d --build` (or `go run ./cmd/immich-handoff` with the variables exported). Join Immich's compose network (see `docker-compose.yml`) so the app can reach `immich-server`.
-3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-handoff:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-handoff` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need `workflow.create`, `workflow.read`, `workflow.update`, `tag.create`, `tag.read` on top of the permissions in immich_family_sync. Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
+3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-handoff:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-handoff` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need the workflow and tag permissions listed under [Requirements and compatibility](#requirements-and-compatibility). Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
 4. Try `DRY_RUN=true` first. Tag one photo and watch `docker logs`.
 
 ## Requirements and compatibility
@@ -74,6 +74,10 @@ Tagging a photo should import it within a few seconds. If it does not:
 3. **Refused imports.** A photo whose copy sits in the family account's trash is not imported. Its tag becomes `share-duplicate` (see `REFUSED_TAG`); empty the family trash and add `share` again to retry.
 4. **Errors in the log mentioning `HTTP 401/403`** mean an API key lacks a permission from the list above.
 5. **Status page says "Sign in to Immich first".** The page must be served on the same hostname as Immich (any port) so it receives Immich's login cookie.
+
+## Background
+
+immich-handoff is based on the idea of immich_family_sync.
 
 ## License
 
