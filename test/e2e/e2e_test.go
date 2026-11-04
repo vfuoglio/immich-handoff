@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -758,7 +759,7 @@ services:
 		}
 		b, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if !strings.Contains(string(b), "Services you can join") || !strings.Contains(string(b), "open") {
+		if !strings.Contains(string(b), "Services you can send to") || !strings.Contains(string(b), "open") {
 			t.Fatalf("join offer missing: %.300s", b)
 		}
 		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}}); res.StatusCode != 204 {
@@ -802,4 +803,116 @@ services:
 		}
 		notHandedOver("after-leaving.jpg", 82)
 	})
+}
+
+// launchApp starts the built binary with the given extra environment and waits until it answers.
+func launchApp(t *testing.T, bin, port string, extra ...string) *app {
+	t.Helper()
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(), append([]string{
+		"IMMICH_BASE_URL=" + baseURL, "WEBHOOK_SECRET=" + secret, "LISTEN_ADDR=:" + port, "SWEEP_INTERVAL_HOURS=1",
+		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:" + port + "/webhook/immich",
+	}, extra...)...)
+	var buf bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &buf, &buf
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{cmd: cmd, log: &buf}
+	t.Cleanup(func() {
+		a.stop()
+		if t.Failed() {
+			t.Logf("app log:\n%s", buf.String())
+		}
+	})
+	eventually(t, "app healthy", 30*time.Second, func() bool {
+		res, err := http.Get("http://localhost:" + port + "/healthz")
+		if err != nil {
+			return false
+		}
+		res.Body.Close()
+		return res.StatusCode == 200
+	})
+	return a
+}
+
+func page(t *testing.T, port, cookie string) string {
+	t.Helper()
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+"/", nil)
+	req.Header.Set("Cookie", cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return string(b)
+}
+
+// TestHubServices: a person creates a service, another asks, the owner approves, the sender activates,
+// photos flow, and when the owner deletes the service the sender can clean up.
+func TestHubServices(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 3)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	ownerCookie, senderCookie := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+
+	expect := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"hol"}, "policy": {"approval"}}), 204, "create service")
+	if names := keyNames(t, alice); !hasName(names, "handoff: holiday (receiving)") {
+		t.Fatalf("the receiver key must be made in the owner's account, keys: %v", names)
+	}
+	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"x"}}), 409, "duplicate name")
+
+	if body := page(t, port, senderCookie); !strings.Contains(body, "Needs approval") || !strings.Contains(body, "Ask to join") {
+		t.Fatalf("bob should be offered the service: %.400s", body)
+	}
+	expect(post(t, port, "/join", senderCookie, url.Values{"service": {"holiday"}}), 409, "activating before approval")
+	expect(post(t, port, "/ask", senderCookie, url.Values{"service": {"holiday"}}), 204, "ask")
+	if body := page(t, port, senderCookie); !strings.Contains(body, "Waiting for approval") {
+		t.Errorf("bob should see the request is pending")
+	}
+
+	body := page(t, port, ownerCookie)
+	m := regexp.MustCompile(`request(?:"|&#34;|&quot;):(?:"|&#34;|&quot;)([0-9a-f-]{36})`).FindStringSubmatch(body)
+	if m == nil || !strings.Contains(body, "bob@e2e.test") {
+		t.Fatalf("the owner should see bob's request: %.600s", body)
+	}
+	expect(post(t, port, "/decide", senderCookie, url.Values{"service": {"holiday"}, "request": {m[1]}, "decision": {"approve"}}), 409, "a non-owner deciding")
+	expect(post(t, port, "/decide", ownerCookie, url.Values{"service": {"holiday"}, "request": {m[1]}, "decision": {"approve"}}), 204, "approve")
+
+	if body := page(t, port, senderCookie); !strings.Contains(body, "Activate") {
+		t.Fatalf("bob should be able to activate: %.400s", body)
+	}
+	expect(post(t, port, "/join", senderCookie, url.Values{"service": {"holiday"}}), 204, "activate")
+	if names := keyNames(t, bob); !hasName(names, "handoff: holiday") {
+		t.Errorf("bob's sender key must exist, keys: %v", names)
+	}
+
+	before := len(searchTag(t, alice, "inbox", false))
+	id, _ := upload(t, bob, "holiday.jpg", jpegBytes(90))
+	tagAsset(t, bob, "hol", id)
+	eventually(t, "photo reaches the owner and the original is removed", 90*time.Second, func() bool {
+		x, code := getAsset(t, bob, id)
+		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox", false)) == before+1
+	})
+
+	expect(post(t, port, "/services/delete", senderCookie, url.Values{"service": {"holiday"}}), 409, "a non-owner deleting")
+	expect(post(t, port, "/services/delete", ownerCookie, url.Values{"service": {"holiday"}}), 204, "delete service")
+	if names := keyNames(t, alice); hasName(names, "handoff: holiday (receiving)") {
+		t.Errorf("the receiver key must be deleted, keys: %v", names)
+	}
+	if body := page(t, port, senderCookie); !strings.Contains(body, "Removed by its owner") {
+		t.Fatalf("bob must be told the service is gone: %.400s", body)
+	}
+	expect(post(t, port, "/leave", senderCookie, url.Values{"service": {"holiday"}}), 204, "clean up")
+	if names := keyNames(t, bob); hasName(names, "handoff: holiday") {
+		t.Errorf("bob's key must be deleted after cleaning up, keys: %v", names)
+	}
 }

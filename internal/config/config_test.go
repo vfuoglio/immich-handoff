@@ -35,7 +35,7 @@ services:
 var goodEnv = map[string]string{"ALICE": "a", "BOB": "b", "FAMILY": "f", "GRANDMA": "g"}
 
 func TestRoutesFile(t *testing.T) {
-	svcs, err := parseRoutes([]byte(good), env(goodEnv), DefaultsFrom(env(nil)), connect)
+	svcs, err := parseRoutes([]byte(good), env(goodEnv), DefaultsFrom(env(nil)), connect, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestRoutesProblems(t *testing.T) {
 		"unknown yaml key": {good + "bogus: 1\n", "field bogus not found", goodEnv},
 	}
 	for name, c := range cases {
-		_, err := parseRoutes([]byte(c.yaml), env(c.env), DefaultsFrom(env(nil)), connect)
+		_, err := parseRoutes([]byte(c.yaml), env(c.env), DefaultsFrom(env(nil)), connect, false)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: error %v does not contain %q", name, err, c.want)
 		}
@@ -75,13 +75,23 @@ func TestRoutesProblems(t *testing.T) {
 
 func TestOpenServiceMayStartWithoutSenders(t *testing.T) {
 	y := "accounts: {f: {key: k}}\nservices:\n  - {name: open, tag: join, receivers: [f], allow_join: true}\n"
-	svcs, err := parseRoutes([]byte(y), env(nil), DefaultsFrom(env(nil)), connect)
+	svcs, err := parseRoutes([]byte(y), env(nil), DefaultsFrom(env(nil)), connect, false)
 	if err != nil || !svcs[0].AllowJoin || len(svcs[0].Senders) != 0 {
 		t.Fatalf("open service: %v %+v", err, svcs)
 	}
 	closed := strings.Replace(y, ", allow_join: true", "", 1)
-	if _, err := parseRoutes([]byte(closed), env(nil), DefaultsFrom(env(nil)), connect); err == nil || !strings.Contains(err.Error(), "allow_join") {
+	if _, err := parseRoutes([]byte(closed), env(nil), DefaultsFrom(env(nil)), connect, false); err == nil || !strings.Contains(err.Error(), "allow_join") {
 		t.Errorf("a closed service without senders must be rejected, got %v", err)
+	}
+}
+
+func TestNoConfiguredServicesIsFineWithSelfService(t *testing.T) {
+	svcs, err := Load(env(map[string]string{"HANDOFF_STORE_KEY": "a-long-enough-key-123"}), connect)
+	if err != nil || len(svcs) != 0 {
+		t.Errorf("self-service install with nothing configured: %v %v", svcs, err)
+	}
+	if _, err := Load(env(nil), connect); err == nil {
+		t.Error("without self-service, missing keys stay an error")
 	}
 }
 

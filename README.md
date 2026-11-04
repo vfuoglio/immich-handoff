@@ -92,9 +92,22 @@ By default a sender exists because an admin put their API key in `.env`. You can
 2. Allow joining on the service: `ALLOW_JOIN=true` in `.env` for a plain install, or `allow_join: true` on a service in the routes file. Such a service may start with no senders at all.
 3. `docker compose up -d`. The compose file keeps the saved memberships in the `handoff-data` volume; include that volume in your backups.
 
-Anyone signed in to Immich then sees **Services you can join** on the web page. **Join** asks them to confirm, then the app creates an API key named `handoff: <service>` in their own Immich account (with only the permissions a sender needs), creates their tag and workflow, and starts handing over the photos they tag. Nobody, including the person who joined, ever sees the key; it is stored encrypted. **Leave** deletes the key and the workflow again. A person can also end it any time by deleting that key in Immich (Account Settings -> API Keys).
+Anyone signed in to Immich then sees **Services you can send to** on the web page. **Join** asks them to confirm, then the app creates an API key named `handoff: <service>` in their own Immich account (with only the permissions a sender needs), creates their tag and workflow, and starts handing over the photos they tag. Nobody, including the person who joined, ever sees the key; it is stored encrypted. **Leave** deletes the key and the workflow again. A person can also end it any time by deleting that key in Immich (Account Settings -> API Keys).
 
 If someone joins while Immich is still starting up, they are added straight away and the workflow is finished in the background once Immich is ready.
+
+## Offering your own service (optional)
+
+With `HANDOFF_STORE_KEY` set, anyone signed in to Immich can also **offer a service** from the web page: a name, the tag senders will use, and who may send (**people I approve** or **anyone on this Immich server**). The person offering is the receiver: the photos land in their account.
+
+1. The owner presses **Create service**. The app makes a receiver key in the owner's account and keeps it encrypted.
+2. Others see the service under **Services you can send to**. For a service that needs approval they press **Ask to join**; the owner sees the request and presses **Approve** or **Decline**.
+3. After approval the sender presses **Activate**. (The app can only create a key in your account while you are signed in, which is why the sender has the last step.) For an open service, senders just press **Join**.
+4. A sender may not use the same tag for two services.
+
+Neither side ever sees the other's key, or their own. Either side can end it: the sender with **Leave**, the owner with **Delete service**, or either by deleting the key named `handoff: ...` in Immich (Account Settings -> API Keys), which stops the hand-over. If an owner deletes a service, its senders see **Removed by its owner** and press **Clean up** to remove their own key and workflow.
+
+A plain `.env` install needs no service in the configuration for this: with only `HANDOFF_STORE_KEY` set and no keys, everything is created from the web page.
 
 ## The web page
 

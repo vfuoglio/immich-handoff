@@ -20,7 +20,15 @@ const (
 	RoleSender   = "sender"
 	RoleReceiver = "receiver"
 
-	StateActive = "active"
+	StateActive   = "active"
+	StateOrphaned = "orphaned" // the service was removed by its owner; the member can still clean up
+
+	PolicyApproval = "approval"
+	PolicyOpen     = "open"
+
+	StatusPending  = "pending"
+	StatusApproved = "approved"
+	StatusDeclined = "declined"
 )
 
 // ErrExists is returned when a person already holds that role in that service.
@@ -59,6 +67,31 @@ var migrations = []string{
 	   state          TEXT NOT NULL DEFAULT 'active',
 	   created_at     TEXT NOT NULL,
 	   UNIQUE (service, role, immich_user_id)
+	 );`,
+	`CREATE TABLE services (
+	   id          TEXT PRIMARY KEY,
+	   name        TEXT NOT NULL UNIQUE,
+	   tag         TEXT NOT NULL,
+	   inbox_tag   TEXT NOT NULL,
+	   refused_tag TEXT NOT NULL,
+	   expiry_days INTEGER NOT NULL,
+	   owner_id    TEXT NOT NULL,
+	   owner_name  TEXT NOT NULL,
+	   owner_email TEXT NOT NULL,
+	   key_id      TEXT NOT NULL,
+	   key_enc     BLOB NOT NULL,
+	   policy      TEXT NOT NULL CHECK (policy IN ('approval','open')),
+	   created_at  TEXT NOT NULL
+	 );
+	 CREATE TABLE requests (
+	   id         TEXT PRIMARY KEY,
+	   service    TEXT NOT NULL,
+	   user_id    TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   email      TEXT NOT NULL,
+	   status     TEXT NOT NULL CHECK (status IN ('pending','approved','declined')),
+	   created_at TEXT NOT NULL,
+	   UNIQUE (service, user_id)
 	 );`,
 }
 
@@ -144,7 +177,7 @@ func (s *Store) AddLink(ctx context.Context, l Link) (Link, error) {
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO links (id, service, role, immich_user_id, name, email, key_id, key_enc, state, created_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		l.ID, l.Service, l.Role, l.ImmichUserID.String(), l.Name, l.Email, l.KeyID.String(), enc, l.State, l.CreatedAt.Format(time.RFC3339))
+		l.ID, l.Service, l.Role, l.ImmichUserID.String(), l.Name, l.Email, l.KeyID.String(), enc, l.State, l.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		if isUnique(err) {
 			return l, ErrExists
@@ -177,7 +210,7 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 		}
 		l.ImmichUserID, _ = uuid.Parse(user)
 		l.KeyID, _ = uuid.Parse(keyID)
-		l.CreatedAt, _ = time.Parse(time.RFC3339, created)
+		l.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		plain, err := s.vault.Open(enc, l.ID)
 		if err != nil {
 			return nil, fmt.Errorf("link %s: %w", l.ID, err)
@@ -191,3 +224,141 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 func isUnique(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE")
 }
+
+// Service is a service someone created from the web page. Its receiver key lives in the owner's account.
+type Service struct {
+	ID, Name               string
+	Tag, InboxTag, Refused string
+	ExpiryDays             int
+	OwnerID                uuid.UUID
+	OwnerName, OwnerEmail  string
+	KeyID                  uuid.UUID // the receiver key's id in Immich
+	Key                    string    // decrypted
+	Policy                 string
+	CreatedAt              time.Time
+}
+
+// Request is someone asking to send to a service that wants approval.
+type Request struct {
+	ID, Service string
+	UserID      uuid.UUID
+	Name, Email string
+	Status      string
+	CreatedAt   time.Time
+}
+
+func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
+	v.ID = uuid.NewString()
+	v.CreatedAt = time.Now().UTC()
+	enc, err := s.vault.Seal([]byte(v.Key), v.ID)
+	if err != nil {
+		return v, err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.CreatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		if isUnique(err) {
+			return v, ErrExists
+		}
+		return v, err
+	}
+	return v, nil
+}
+
+func (s *Store) Services(ctx context.Context) ([]Service, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, created_at FROM services ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Service
+	for rows.Next() {
+		var v Service
+		var owner, keyID, created string
+		var enc []byte
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &created); err != nil {
+			return nil, err
+		}
+		v.OwnerID, _ = uuid.Parse(owner)
+		v.KeyID, _ = uuid.Parse(keyID)
+		v.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		plain, err := s.vault.Open(enc, v.ID)
+		if err != nil {
+			return nil, fmt.Errorf("service %s: %w", v.ID, err)
+		}
+		v.Key = string(plain)
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// RemoveService deletes the service and its requests, and marks its members' links orphaned.
+func (s *Store) RemoveService(ctx context.Context, name string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`UPDATE links SET state = 'orphaned' WHERE service = ?`,
+		`DELETE FROM requests WHERE service = ?`,
+		`DELETE FROM services WHERE name = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, name); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) AddRequest(ctx context.Context, r Request) (Request, error) {
+	r.ID = uuid.NewString()
+	r.Status = StatusPending
+	r.CreatedAt = time.Now().UTC()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO requests (id, service, user_id, name, email, status, created_at) VALUES (?,?,?,?,?,?,?)`,
+		r.ID, r.Service, r.UserID.String(), r.Name, r.Email, r.Status, r.CreatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		if isUnique(err) {
+			return r, ErrExists
+		}
+		return r, err
+	}
+	return r, nil
+}
+
+func (s *Store) Requests(ctx context.Context) ([]Request, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, service, user_id, name, email, status, created_at FROM requests ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Request
+	for rows.Next() {
+		var r Request
+		var user, created string
+		if err := rows.Scan(&r.ID, &r.Service, &user, &r.Name, &r.Email, &r.Status, &created); err != nil {
+			return nil, err
+		}
+		r.UserID, _ = uuid.Parse(user)
+		r.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetRequestStatus(ctx context.Context, id, status string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE requests SET status = ? WHERE id = ?`, status, id)
+	return err
+}
+
+func (s *Store) RemoveRequest(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM requests WHERE id = ?`, id)
+	return err
+}
+
+// AllLinks returns memberships in every state (Links is the same; kept for readability at call sites).
+func (s *Store) AllLinks(ctx context.Context) ([]Link, error) { return s.Links(ctx) }

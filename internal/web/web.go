@@ -8,7 +8,6 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -49,6 +48,10 @@ func (w *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sync", w.syncNow)
 	mux.HandleFunc("POST /join", w.join)
 	mux.HandleFunc("POST /leave", w.leave)
+	mux.HandleFunc("POST /services", w.createService)
+	mux.HandleFunc("POST /services/delete", w.deleteService)
+	mux.HandleFunc("POST /ask", w.ask)
+	mux.HandleFunc("POST /decide", w.decide)
 	return mux
 }
 
@@ -136,15 +139,42 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	return out
 }
 
-func (w *Server) joinable(m *member) []JoinView {
-	if w.Hub == nil {
-		return nil
+func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
+	d := DashboardData{User: me.user.Name, Services: w.servicesFor(ctx, me), Last: w.S.Last()}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		return d
 	}
-	var out []JoinView
-	for _, svc := range w.Hub.Joinable(m.user.ID) {
-		out = append(out, JoinView{svc.Label(), svc.Tag})
+	d.CanOffer = true
+	if offers, err := w.Hub.Offers(ctx, me.user.ID); err == nil {
+		for _, o := range offers {
+			owner := ""
+			if o.Service.OwnerID != uuid.Nil {
+				owner = ownerName(o.Service)
+			}
+			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State})
+		}
 	}
-	return out
+	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
+		for _, o := range owned {
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval"}
+			if o.Service.AllowJoin {
+				ov.Policy = "open"
+			}
+			for _, r := range o.Requests {
+				ov.Requests = append(ov.Requests, RequestView{ID: r.ID, Name: r.Name, Email: r.Email})
+			}
+			d.Owned = append(d.Owned, ov)
+		}
+	}
+	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
+	return d
+}
+
+func ownerName(s *syncer.Service) string {
+	if len(s.Receivers) > 0 {
+		return s.Receivers[0].Name
+	}
+	return ""
 }
 
 func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
@@ -156,7 +186,7 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	Dashboard(me.user.Name, w.servicesFor(r.Context(), me), w.joinable(me), w.S.Last()).Render(r.Context(), rw)
+	Dashboard(w.dashboardData(r.Context(), me)).Render(r.Context(), rw)
 }
 
 // requireMember is for fragments and streams: sign-in plus taking part in at least one service.
@@ -306,7 +336,7 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 	service := r.PostFormValue("service")
 	if err := act(r.Context(), me, service); err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, hub.ErrNotJoinable) || errors.Is(err, hub.ErrAlready) || errors.Is(err, hub.ErrNotJoined) {
+		if hub.IsUserError(err) {
 			status = http.StatusConflict
 		}
 		w.Log.Warn("membership change failed", "action", done, "user", me.user.Email, "service", service, "err", err)
@@ -317,4 +347,28 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 	}
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "created", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.CreateService(ctx, me.sess, me.user, r.PostFormValue("name"), r.PostFormValue("tag"), r.PostFormValue("policy"))
+	})
+}
+
+func (w *Server) deleteService(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "deleted", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.DeleteService(ctx, me.sess, me.user, service)
+	})
+}
+
+func (w *Server) ask(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "asked", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.Ask(ctx, me.user, service)
+	})
+}
+
+func (w *Server) decide(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "decided", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.Decide(ctx, me.user, service, r.PostFormValue("request"), r.PostFormValue("decision") == "approve")
+	})
 }

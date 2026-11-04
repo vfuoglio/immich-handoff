@@ -1,6 +1,9 @@
 package web
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 func initial(name string) string {
 	name = strings.TrimSpace(name)
@@ -60,9 +63,55 @@ func badClass(b bool) string {
 }
 
 // joinConfirm tells the person exactly what joining does before they agree.
-func joinConfirm(j JoinView) string {
-	return "Joining creates an API key named \"handoff: " + j.Name + "\" in your Immich account. " +
-		"Immich Handoff uses it to read and download the photos you tag \"" + j.Tag + "\" and to delete the originals " +
+func joinConfirm(name, tag string) string {
+	return "This creates an API key named \"handoff: " + name + "\" in your Immich account. " +
+		"Immich Handoff uses it to read and download the photos you tag \"" + tag + "\" and to delete the originals " +
 		"after they have been handed over. Nobody else can see the key. You can stop at any time with Leave, " +
 		"or by deleting that key in Immich."
+}
+
+// vals builds the JSON for hx-vals.
+func vals(k, v string) string {
+	b, _ := json.Marshal(map[string]string{k: v})
+	return string(b)
+}
+
+func decideVals(service, request, decision string) string {
+	b, _ := json.Marshal(map[string]string{"service": service, "request": request, "decision": decision})
+	return string(b)
+}
+
+func offerLabel(state string) string {
+	switch state {
+	case "join":
+		return "Open to join"
+	case "request":
+		return "Needs approval"
+	case "pending":
+		return "Waiting for approval"
+	case "approved":
+		return "Approved"
+	case "declined":
+		return "Declined"
+	}
+	return state
+}
+
+func offerChip(state string) string {
+	switch state {
+	case "approved":
+		return "ok"
+	case "declined":
+		return "bad"
+	case "pending":
+		return "warn"
+	}
+	return ""
+}
+
+func policyLabel(p string) string {
+	if p == "open" {
+		return "Anyone may send"
+	}
+	return "You approve senders"
 }

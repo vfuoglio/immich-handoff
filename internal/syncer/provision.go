@@ -52,9 +52,12 @@ func (s *Syncer) Provision(ctx context.Context, wh Webhook) (failures int) {
 // ProvisionRetry keeps trying in the background until every sender is provisioned. Immich reports
 // healthy about half a minute before its workflow plugins finish loading, so the first attempts after
 // an Immich (re)start can fail with "Unknown method"; that is expected and retried with backoff.
+// Photos tagged while a workflow was missing raised no event, so once the workflows exist after such
+// a delay a pass is run to hand them over.
 func (s *Syncer) ProvisionRetry(ctx context.Context, wh Webhook) {
-	start, delay := time.Now(), 5*time.Second
+	start, delay, delayed := time.Now(), 5*time.Second, false
 	for s.Provision(ctx, wh) > 0 {
+		delayed = true
 		if time.Since(start) > 15*time.Minute {
 			s.Log.Error("giving up provisioning workflows; the daily sweep will retry")
 			return
@@ -64,6 +67,9 @@ func (s *Syncer) ProvisionRetry(ctx context.Context, wh Webhook) {
 			return
 		case <-time.After(delay):
 		}
-		delay = min(delay*2, time.Minute)
+		delay = min(delay*2, 20*time.Second)
+	}
+	if delayed {
+		s.Run(ctx, "workflows ready after a delay", false)
 	}
 }

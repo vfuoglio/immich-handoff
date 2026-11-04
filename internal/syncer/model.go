@@ -26,6 +26,9 @@ type Service struct {
 	Senders    []*Account
 	Receivers  []*Account
 	AllowJoin  bool // people may add themselves as senders from the web page
+
+	NeedsApproval bool      // people may ask to send; the owner decides, then the sender activates
+	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
 }
 
 // Label is the name used in logs and on the status page.

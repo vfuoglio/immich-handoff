@@ -64,7 +64,10 @@ func run(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	probe := services[0].Receivers[0].API
+	probe, err := connect("") // the version endpoint needs no key
+	if err != nil {
+		return err
+	}
 	major, minor, err := probe.ServerVersion(ctx)
 	if err != nil {
 		return err
@@ -82,9 +85,11 @@ func run(log *slog.Logger) error {
 	}
 
 	// Self-service joining needs a place to keep keys, protected by a key of its own.
+	defaults := config.DefaultsFrom(os.Getenv)
 	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log,
-		Wake:  func(reason string) { go s.Run(ctx, reason, false) },
-		Retry: func() { s.ProvisionRetry(ctx, hook) }}
+		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, ExpiryDays: defaults.ExpiryDays},
+		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
+		Retry:   func() { s.ProvisionRetry(ctx, hook) }}
 	if storeKey, err := readStoreKey(); err != nil {
 		return err
 	} else if storeKey == "" {

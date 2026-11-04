@@ -18,10 +18,17 @@ import (
 
 // Errors a person can be shown as they are.
 var (
-	ErrNotJoinable = errors.New("this service does not accept new senders")
-	ErrAlready     = errors.New("you already take part in this service")
-	ErrNotJoined   = errors.New("you have not joined this service from this page")
+	ErrNotJoinable   = errors.New("this service does not accept new senders")
+	ErrAlready       = errors.New("you already take part in this service")
+	ErrNotJoined     = errors.New("you have not joined this service from this page")
+	ErrNeedsApproval = errors.New("the owner of this service has not approved you yet")
 )
+
+// Options are the defaults for services created on the web page.
+type Options struct {
+	InboxTag, RefusedTag string
+	ExpiryDays           int
+}
 
 type Hub struct {
 	Static  []*syncer.Service // from the environment or the routes file
@@ -31,6 +38,7 @@ type Hub struct {
 	Wake    func(reason string)
 	Retry   func() // sets up missing workflows in the background (Immich may still be loading its plugins)
 	Log     *slog.Logger
+	Options Options // defaults for services people create
 
 	mu       sync.RWMutex
 	snapshot []*syncer.Service
@@ -53,9 +61,13 @@ func (h *Hub) Services() []*syncer.Service {
 // Reload rebuilds the merged view from the store.
 func (h *Hub) Reload(ctx context.Context) error {
 	var links []store.Link
+	var owned []store.Service
 	if h.Store != nil {
 		var err error
 		if links, err = h.Store.Links(ctx); err != nil {
+			return err
+		}
+		if owned, err = h.Store.Services(ctx); err != nil {
 			return err
 		}
 	}
@@ -64,6 +76,19 @@ func (h *Hub) Reload(ctx context.Context) error {
 	if h.accounts == nil {
 		h.accounts = map[string]*syncer.Account{}
 	}
+	account := func(id, name string, user uuid.UUID, key string) *syncer.Account {
+		if a, ok := h.accounts[id]; ok {
+			return a
+		}
+		api, err := h.Connect(key)
+		if err != nil {
+			h.Log.Error("cannot use stored key", "id", id, "err", err)
+			return nil
+		}
+		a := &syncer.Account{Name: name, API: api, UserID: user}
+		h.accounts[id] = a
+		return a
+	}
 	live := map[string]bool{}
 	extra := map[string][]*syncer.Account{}
 	for _, l := range links {
@@ -71,28 +96,32 @@ func (h *Hub) Reload(ctx context.Context) error {
 			continue
 		}
 		live[l.ID] = true
-		acct, ok := h.accounts[l.ID]
-		if !ok {
-			api, err := h.Connect(l.Key)
-			if err != nil {
-				h.Log.Error("cannot use stored key", "link", l.ID, "err", err)
-				continue
-			}
-			acct = &syncer.Account{Name: l.Name, API: api, UserID: l.ImmichUserID}
-			h.accounts[l.ID] = acct
+		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key); a != nil {
+			extra[l.Service] = append(extra[l.Service], a)
 		}
-		extra[l.Service] = append(extra[l.Service], acct)
+	}
+	merged := make([]*syncer.Service, 0, len(h.Static)+len(owned))
+	for _, svc := range h.Static {
+		cp := *svc
+		cp.Senders = append(append([]*syncer.Account(nil), svc.Senders...), extra[svc.Label()]...)
+		merged = append(merged, &cp)
+	}
+	for _, v := range owned {
+		live[v.ID] = true
+		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key)
+		if rcv == nil {
+			continue
+		}
+		merged = append(merged, &syncer.Service{
+			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
+			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
+			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
+		})
 	}
 	for id := range h.accounts {
 		if !live[id] {
 			delete(h.accounts, id)
 		}
-	}
-	merged := make([]*syncer.Service, 0, len(h.Static))
-	for _, svc := range h.Static {
-		cp := *svc
-		cp.Senders = append(append([]*syncer.Account(nil), svc.Senders...), extra[svc.Label()]...)
-		merged = append(merged, &cp)
 	}
 	h.snapshot = merged
 	return nil
@@ -162,11 +191,24 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 		return ErrNotJoinable
 	}
 	svc := h.service(service)
-	if svc == nil || !svc.AllowJoin {
+	if svc == nil || !(svc.AllowJoin || svc.NeedsApproval) {
 		return ErrNotJoinable
 	}
 	if Takes(svc, user.ID) {
 		return ErrAlready
+	}
+	if err := h.tagFree(user.ID, svc); err != nil {
+		return err
+	}
+	var approval *store.Request
+	if svc.NeedsApproval {
+		var err error
+		if approval, err = h.request(ctx, service, user.ID); err != nil {
+			return err
+		}
+		if approval == nil || approval.Status != store.StatusApproved {
+			return ErrNeedsApproval
+		}
 	}
 
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), immich.SenderPermissions)
@@ -212,6 +254,9 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 			}
 		}
 	}
+	if approval != nil {
+		h.Store.RemoveRequest(ctx, approval.ID) // the approval is used up; the link is the record now
+	}
 	h.Log.Info("joined", "service", service, "user", user.Email)
 	if h.Wake != nil {
 		h.Wake("joined: " + user.Email)
@@ -230,8 +275,17 @@ func (h *Hub) provision(ctx context.Context, svc *syncer.Service, api *immich.AP
 	return err
 }
 
-// Leave removes the person's workflow and key from Immich and forgets the membership.
-// Problems removing things in Immich are logged but do not stop the membership from ending.
+// workflowName is the workflow a service keeps in each sender's account (see syncer.Service.WorkflowName).
+func workflowName(service string) string {
+	if service == "default" {
+		return "immich-handoff"
+	}
+	return "immich-handoff: " + service
+}
+
+// Leave removes the person's workflow and key from Immich and forgets the membership, also when the
+// service has since been removed by its owner. Problems removing things in Immich are logged but do
+// not stop the membership from ending.
 func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, service string) error {
 	if !h.SelfService() {
 		return ErrNotJoined
@@ -249,13 +303,11 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	if link == nil {
 		return ErrNotJoined
 	}
-	if svc := h.service(service); svc != nil {
-		if id, err := sess.FindWorkflow(ctx, svc.WorkflowName()); err != nil {
-			h.Log.Warn("leave: could not look up the workflow", "err", err)
-		} else if id != nil {
-			if err := sess.DeleteWorkflow(ctx, *id); err != nil {
-				h.Log.Warn("leave: could not delete the workflow", "err", err)
-			}
+	if id, err := sess.FindWorkflow(ctx, workflowName(service)); err != nil {
+		h.Log.Warn("leave: could not look up the workflow", "err", err)
+	} else if id != nil {
+		if err := sess.DeleteWorkflow(ctx, *id); err != nil {
+			h.Log.Warn("leave: could not delete the workflow", "err", err)
 		}
 	}
 	if err := sess.DeleteAPIKey(ctx, link.KeyID); err != nil {

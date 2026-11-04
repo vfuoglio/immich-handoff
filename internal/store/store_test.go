@@ -68,3 +68,54 @@ func TestLinksRoundTripAndEncryptedAtRest(t *testing.T) {
 		t.Error("opening with a different store key must fail")
 	}
 }
+
+func TestServicesRequestsAndOrphaning(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	s, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	owner, bob := uuid.New(), uuid.New()
+	svc, err := s.AddService(ctx, Service{Name: "holiday", Tag: "hol", InboxTag: "inbox", Refused: "r", ExpiryDays: 30, OwnerID: owner, OwnerName: "Ann", OwnerEmail: "a@x",
+		KeyID: uuid.New(), Key: "RECEIVER-KEY", Policy: PolicyApproval})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddService(ctx, Service{Name: "holiday", Tag: "x", InboxTag: "i", Refused: "r", ExpiryDays: 1, OwnerID: owner, KeyID: uuid.New(), Key: "k", Policy: PolicyOpen}); err != ErrExists {
+		t.Errorf("duplicate service name: %v", err)
+	}
+	got, _ := s.Services(ctx)
+	if len(got) != 1 || got[0].Key != "RECEIVER-KEY" || got[0].ID != svc.ID || got[0].Policy != PolicyApproval {
+		t.Fatalf("services: %+v", got)
+	}
+	req, err := s.AddRequest(ctx, Request{Service: "holiday", UserID: bob, Name: "Bob", Email: "b@x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddRequest(ctx, Request{Service: "holiday", UserID: bob}); err != ErrExists {
+		t.Errorf("duplicate request: %v", err)
+	}
+	if err := s.SetRequestStatus(ctx, req.ID, StatusApproved); err != nil {
+		t.Fatal(err)
+	}
+	if rs, _ := s.Requests(ctx); len(rs) != 1 || rs[0].Status != StatusApproved {
+		t.Errorf("requests: %+v", rs)
+	}
+	if _, err := s.AddLink(ctx, Link{Service: "holiday", Role: RoleSender, ImmichUserID: bob, KeyID: uuid.New(), Key: "bobkey"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveService(ctx, "holiday"); err != nil {
+		t.Fatal(err)
+	}
+	if rest, _ := s.Services(ctx); len(rest) != 0 {
+		t.Errorf("service must be gone")
+	}
+	if rs, _ := s.Requests(ctx); len(rs) != 0 {
+		t.Errorf("its requests must be gone")
+	}
+	links, _ := s.Links(ctx)
+	if len(links) != 1 || links[0].State != StateOrphaned {
+		t.Errorf("the member's link must be kept but orphaned so they can clean up: %+v", links)
+	}
+}

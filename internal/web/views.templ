@@ -16,10 +16,34 @@ type ServiceView struct {
 	CanLeave bool // the person joined from this page, so can leave from it
 }
 
-// JoinView is a service the signed-in person may add themselves to.
-type JoinView struct {
-	Name string
-	Tag  string
+// OfferView is a service the signed-in person is not part of yet, and what they can do about it.
+type OfferView struct {
+	Name  string
+	Tag   string
+	Owner string // empty for services from the configuration
+	State string // join | request | pending | approved | declined
+}
+
+// RequestView is someone waiting for the owner's decision.
+type RequestView struct {
+	ID, Name, Email string
+}
+
+// OwnedView is a service the signed-in person created.
+type OwnedView struct {
+	Name, Tag, Policy string
+	Requests          []RequestView
+}
+
+// DashboardData is everything the main page shows.
+type DashboardData struct {
+	User     string
+	Services []ServiceView
+	Offers   []OfferView
+	Owned    []OwnedView
+	Orphaned []string // services the person joined that their owner has since removed
+	CanOffer bool     // people may create services on this install
+	Last     *syncer.RunInfo
 }
 
 templ Layout(title, user string) {
@@ -58,26 +82,39 @@ templ Layout(title, user string) {
 	</html>
 }
 
-templ Dashboard(user string, services []ServiceView, joinable []JoinView, last *syncer.RunInfo) {
-	@Layout("Immich Handoff", user) {
+templ Dashboard(d DashboardData) {
+	@Layout("Immich Handoff", d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
 		<h1>Your services</h1>
 		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
-		if len(services) == 0 {
+		if len(d.Services) == 0 {
 			<div class="card empty">You do not take part in any service yet.</div>
 		}
-		for _, s := range services {
+		for _, s := range d.Services {
 			@ServiceCard(s)
 		}
-		if len(joinable) > 0 {
-			<h2>Services you can join</h2>
-			<p id="joinmsg" class="toast" role="status" aria-live="polite"></p>
-			for _, j := range joinable {
-				@JoinCard(j)
+		for _, name := range d.Orphaned {
+			@OrphanCard(name)
+		}
+		if len(d.Owned) > 0 {
+			<h2>Services you offer</h2>
+			for _, o := range d.Owned {
+				@OwnedCard(o)
 			}
 		}
-		if len(services) > 0 {
+		if len(d.Offers) > 0 {
+			<h2>Services you can send to</h2>
+			for _, o := range d.Offers {
+				@OfferCard(o)
+			}
+		}
+		if d.CanOffer {
+			<h2>Offer a service</h2>
+			@OfferForm()
+		}
+		if len(d.Services) > 0 {
 			<h2>Activity</h2>
-			@LastRun(last)
+			@LastRun(d.Last)
 			<p class="row">
 				<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">Sync now</button>
 				<span id="synctoast" class="toast" aria-live="polite"></span>
@@ -102,8 +139,7 @@ templ ServiceCard(s ServiceView) {
 		</p>
 		if s.CanLeave {
 			<p class="row">
-				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#leavemsg" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>
-				<span id="leavemsg" class="toast" role="status" aria-live="polite"></span>
+				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>
 			</p>
 		}
 		<div class="stats">
@@ -154,15 +190,89 @@ templ Notice(title, text string, bad bool) {
 	}
 }
 
-templ JoinCard(j JoinView) {
+templ OfferCard(o OfferView) {
 	<article class="card">
 		<header>
-			<h3>{ j.Name }</h3>
-			<span class="chip">Open to join</span>
+			<h3>{ o.Name }</h3>
+			<span class={ "chip", offerChip(o.State) }>{ offerLabel(o.State) }</span>
 		</header>
-		<p class="meta">Send photos by adding the tag <code class="tag">{ j.Tag }</code> to them in Immich.</p>
+		<p class="meta">
+			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich.
+			if o.Owner != "" {
+				{ " Offered by " + o.Owner + "." }
+			}
+		</p>
 		<p class="row">
-			<button class="primary" hx-post="join" hx-vals={ `{"service":"` + j.Name + `"}` } hx-target="#joinmsg" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(j) }>Join</button>
+			switch o.State {
+				case "join", "approved":
+					<button class="primary" hx-post="join" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag) }>
+						if o.State == "approved" {
+							Activate
+						} else {
+							Join
+						}
+					</button>
+				case "request":
+					<button class="primary" hx-post="ask" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
+			}
 		</p>
 	</article>
+}
+
+templ OwnedCard(o OwnedView) {
+	<article class="card">
+		<header>
+			<h3>{ o.Name }</h3>
+			<span class="chip">{ policyLabel(o.Policy) }</span>
+		</header>
+		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
+		if len(o.Requests) == 0 {
+			<p class="meta">No requests waiting.</p>
+		}
+		for _, r := range o.Requests {
+			<div class="row">
+				<span><strong>{ r.Name }</strong> <span class="meta">{ r.Email }</span> wants to send.</span>
+				<button class="primary" hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "approve") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Approve</button>
+				<button hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "decline") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Decline</button>
+			</div>
+		}
+		<p class="row">
+			<button hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Delete " + o.Name + "? Its receiver key is removed from your Immich account and senders stop handing photos to you." }>Delete service</button>
+		</p>
+	</article>
+}
+
+templ OrphanCard(name string) {
+	<article class="card notice bad">
+		<header>
+			<h3>{ name }</h3>
+			<span class="chip bad">Removed by its owner</span>
+		</header>
+		<p class="meta">Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.</p>
+		<p class="row">
+			<button class="primary" hx-post="leave" hx-vals={ vals("service", name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
+		</p>
+	</article>
+}
+
+templ OfferForm() {
+	<form class="card" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm="Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.">
+		<p class="meta">Others can then send you photos by tagging them. You decide who may send.</p>
+		<div class="field">
+			<label for="svc-name">Service name</label>
+			<input id="svc-name" name="name" required minlength="2" maxlength="40" placeholder="Holiday 2026"/>
+		</div>
+		<div class="field">
+			<label for="svc-tag">Tag senders add</label>
+			<input id="svc-tag" name="tag" required maxlength="64" placeholder="holiday"/>
+		</div>
+		<div class="field">
+			<label for="svc-policy">Who may send</label>
+			<select id="svc-policy" name="policy">
+				<option value="approval">People I approve</option>
+				<option value="open">Anyone on this Immich server</option>
+			</select>
+		</div>
+		<p class="row"><button class="primary" type="submit">Create service</button></p>
+	</form>
 }

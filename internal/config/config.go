@@ -53,23 +53,29 @@ type Connect func(key string) (*immich.API, error)
 // IMMICH_SOURCE_API_KEYS / IMMICH_DEST_API_KEY variables define one default service.
 func Load(env Env, connect Connect) ([]*syncer.Service, error) {
 	d := DefaultsFrom(env)
+	// With self-service on (a store key is set) the app may start with no configured services at all:
+	// everything is then created from the web page.
+	selfService := env("HANDOFF_STORE_KEY") != "" || env("HANDOFF_STORE_KEY_FILE") != ""
 	if path := env("ROUTES_FILE"); path != "" {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("routes file: %w", err)
 		}
-		return parseRoutes(raw, env, d, connect)
+		return parseRoutes(raw, env, d, connect, selfService)
 	}
-	return fromEnv(env, d, connect)
+	return fromEnv(env, d, connect, selfService)
 }
 
-func fromEnv(env Env, d Defaults, connect Connect) ([]*syncer.Service, error) {
+func fromEnv(env Env, d Defaults, connect Connect, selfService bool) ([]*syncer.Service, error) {
 	dest := env("IMMICH_DEST_API_KEY")
 	var srcKeys []string
 	for _, k := range strings.Split(env("IMMICH_SOURCE_API_KEYS"), ",") {
 		if k = strings.TrimSpace(k); k != "" {
 			srcKeys = append(srcKeys, k)
 		}
+	}
+	if dest == "" && len(srcKeys) == 0 && selfService {
+		return nil, nil
 	}
 	if dest == "" || len(srcKeys) == 0 {
 		return nil, errors.New("IMMICH_DEST_API_KEY and IMMICH_SOURCE_API_KEYS are required (or set ROUTES_FILE)")
@@ -108,7 +114,7 @@ type routesFile struct {
 
 var varRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-func parseRoutes(raw []byte, env Env, d Defaults, connect Connect) ([]*syncer.Service, error) {
+func parseRoutes(raw []byte, env Env, d Defaults, connect Connect, selfService bool) ([]*syncer.Service, error) {
 	var problems []string
 	expanded := varRef.ReplaceAllStringFunc(string(raw), func(m string) string {
 		name := m[2 : len(m)-1]
@@ -137,7 +143,7 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect) ([]*syncer.Se
 		}
 		accounts[name] = &syncer.Account{Name: name, API: api}
 	}
-	if len(f.Services) == 0 {
+	if len(f.Services) == 0 && !selfService {
 		problems = append(problems, "no services defined")
 	}
 

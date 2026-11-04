@@ -27,7 +27,13 @@ const ts = "2025-01-02T03:04:05.000Z"
 
 var (
 	bobID    = uuid.MustParse("bbbbbbbb-0000-0000-0000-000000000001")
+	annID    = uuid.MustParse("cccccccc-0000-0000-0000-000000000001")
 	familyID = uuid.MustParse("aaaaaaaa-0000-0000-0000-000000000002")
+
+	people = map[string]struct {
+		id          uuid.UUID
+		name, email string
+	}{"bob": {bobID, "Bob", "bob@x.test"}, "ann": {annID, "Ann", "ann@x.test"}}
 )
 
 // fakeImmich is a small Immich: one signed-in person (bob) who can create and delete keys and workflows.
@@ -35,9 +41,19 @@ type fakeImmich struct {
 	mu            sync.Mutex
 	failWorkflows bool
 	keys          map[string]string // secret -> key id
+	owners        map[string]string // secret -> person
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
+}
+
+// person is who a request is from: a session cookie ("sess=bob") or one of the keys created for them.
+// The caller holds f.mu.
+func (f *fakeImmich) person(r *http.Request) string {
+	if c := r.Header.Get("Cookie"); strings.HasPrefix(c, "sess=") {
+		return strings.TrimPrefix(c, "sess=")
+	}
+	return f.owners[r.Header.Get("x-api-key")]
 }
 
 func (f *fakeImmich) handler() http.Handler {
@@ -50,9 +66,9 @@ func (f *fakeImmich) handler() http.Handler {
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		_, keyOK := f.keys[r.Header.Get("x-api-key")]
-		if r.Header.Get("Cookie") == "sess=bob" || keyOK {
-			j(w, 200, map[string]any{"id": bobID, "name": "Bob", "email": "bob@x.test"})
+		who := f.person(r)
+		if p, ok := people[who]; ok {
+			j(w, 200, map[string]any{"id": p.id, "name": p.name, "email": p.email})
 			return
 		}
 		http.Error(w, "no", 401)
@@ -67,6 +83,7 @@ func (f *fakeImmich) handler() http.Handler {
 		json.NewDecoder(r.Body).Decode(&body)
 		id, secret := uuid.NewString(), "secret-"+uuid.NewString()
 		f.keys[secret] = id
+		f.owners[secret] = f.person(r)
 		j(w, 201, map[string]any{"id": id, "name": body.Name, "secret": secret, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
 			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
 	})
@@ -121,17 +138,19 @@ type env struct {
 	h     *hub.Hub
 	f     *fakeImmich
 	sess  *immich.API
+	ann   *immich.API // the owner of services created in the tests
 	woken []string
 	st    *store.Store
 }
 
 func setup(t *testing.T, allowJoin bool) *env {
 	t.Helper()
-	f := &fakeImmich{keys: map[string]string{}, workflows: map[string]string{}}
+	f := &fakeImmich{keys: map[string]string{}, owners: map[string]string{}, workflows: map[string]string{}}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
 	connect := func(key string) (*immich.API, error) { return immich.New(srv.URL, immich.Auth{APIKey: key}, nil) }
 	sess, _ := immich.New(srv.URL, immich.Auth{Cookie: "sess=bob"}, nil)
+	annSess, _ := immich.New(srv.URL, immich.Auth{Cookie: "sess=ann"}, nil)
 	family, _ := connect("k-family")
 
 	v, _ := vault.New("a-test-store-key-0123456789")
@@ -143,17 +162,21 @@ func setup(t *testing.T, allowJoin bool) *env {
 
 	svc := &syncer.Service{Name: "family", Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30, AllowJoin: allowJoin,
 		Receivers: []*syncer.Account{{Name: "family", API: family, UserID: familyID}}}
-	e := &env{f: f, sess: sess, st: st}
+	e := &env{f: f, sess: sess, ann: annSess, st: st}
 	e.h = &hub.Hub{Static: []*syncer.Service{svc}, Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Hook: syncer.Webhook{URL: "http://app/webhook/immich", Header: "X-Webhook-Secret", Secret: "s"},
-		Wake: func(reason string) { e.woken = append(e.woken, reason) }}
+		Options: hub.Options{InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30},
+		Hook:    syncer.Webhook{URL: "http://app/webhook/immich", Header: "X-Webhook-Secret", Secret: "s"},
+		Wake:    func(reason string) { e.woken = append(e.woken, reason) }}
 	if err := e.h.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	return e
 }
 
-var bob = immich.User{ID: bobID, Name: "Bob", Email: "bob@x.test"}
+var (
+	bob = immich.User{ID: bobID, Name: "Bob", Email: "bob@x.test"}
+	ann = immich.User{ID: annID, Name: "Ann", Email: "ann@x.test"}
+)
 
 func senders(e *env) int { return len(e.h.Services()[0].Senders) }
 
@@ -275,5 +298,148 @@ func TestReloadKeepsMembersAcrossARestart(t *testing.T) {
 	}
 	if got := fresh.Services()[0].Senders; len(got) != 1 || got[0].UserID != bobID {
 		t.Errorf("members must be restored from the store: %+v", got)
+	}
+}
+
+func service(e *env, name string) *syncer.Service {
+	for _, s := range e.h.Services() {
+		if s.Label() == name {
+			return s
+		}
+	}
+	return nil
+}
+
+func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval"); err != nil {
+		t.Fatal(err)
+	}
+	svc := service(e, "holiday")
+	if svc == nil || svc.OwnerID != annID || !svc.NeedsApproval || svc.AllowJoin || len(svc.Receivers) != 1 || svc.Receivers[0].UserID != annID {
+		t.Fatalf("service: %+v", svc)
+	}
+	if len(e.f.keys) != 1 {
+		t.Errorf("one receiver key expected, got %d", len(e.f.keys))
+	}
+	owned, _ := e.h.Owned(ctx, annID)
+	if len(owned) != 1 || owned[0].Service.Label() != "holiday" {
+		t.Errorf("owner view: %+v", owned)
+	}
+	for _, bad := range [][2]string{{"x", "t"}, {"ok name", "a/b"}, {"default", "t"}, {"family", "t"}, {"holiday", "t"}} {
+		if err := e.h.CreateService(ctx, e.ann, ann, bad[0], bad[1], "open"); err == nil {
+			t.Errorf("service %q with tag %q must be refused", bad[0], bad[1])
+		}
+	}
+	if len(e.f.keys) != 1 {
+		t.Errorf("refused services must not leave keys behind: %d", len(e.f.keys))
+	}
+}
+
+func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval"); err != nil {
+		t.Fatal(err)
+	}
+	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 || offers[0].State != "request" {
+		t.Fatalf("bob should be able to ask: %+v", offers)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+		t.Fatalf("joining without approval: %v", err)
+	}
+	if len(e.f.keys) != 1 {
+		t.Fatalf("no sender key may be made before approval (keys=%d)", len(e.f.keys))
+	}
+	if err := e.h.Ask(ctx, bob, "holiday"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Ask(ctx, bob, "holiday"); err != nil {
+		t.Errorf("asking twice is harmless: %v", err)
+	}
+	owned, _ := e.h.Owned(ctx, annID)
+	if len(owned[0].Requests) != 1 {
+		t.Fatalf("owner must see one pending request: %+v", owned[0].Requests)
+	}
+	if err := e.h.Decide(ctx, bob, "holiday", owned[0].Requests[0].ID, true); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("a non-owner must not decide: %v", err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+		t.Errorf("still pending: %v", err)
+	}
+	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "approved" {
+		t.Errorf("bob should be able to activate: %+v", offers)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "holiday"); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "holiday").Senders; len(got) != 1 || got[0].UserID != bobID {
+		t.Errorf("bob must be a sender now")
+	}
+	if left, _ := e.st.Requests(ctx); len(left) != 0 {
+		t.Errorf("the used approval must be gone")
+	}
+}
+
+func TestDeclinedRequestCannotActivate(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval")
+	e.h.Ask(ctx, bob, "holiday")
+	owned, _ := e.h.Owned(ctx, annID)
+	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+		t.Errorf("declined: %v", err)
+	}
+	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "declined" {
+		t.Errorf("state: %+v", offers)
+	}
+}
+
+func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
+	e, ctx := setup(t, true), context.Background() // the static "family" service is open and uses tag "share"
+	if err := e.h.CreateService(ctx, e.ann, ann, "everyone", "SHARE", "open"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "everyone"); !errors.Is(err, hub.ErrTagInUse) {
+		t.Errorf("bob already sends with the tag 'share' to another service: %v", err)
+	}
+}
+
+func TestDeletingAServiceLeavesMembersAbleToCleanUp(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
+	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.DeleteService(ctx, e.sess, bob, "party"); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("only the owner may delete: %v", err)
+	}
+	if err := e.h.DeleteService(ctx, e.ann, ann, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "party") != nil {
+		t.Errorf("the service must be gone")
+	}
+	if len(e.f.deletedKeys) != 1 {
+		t.Errorf("the receiver key must be deleted: %v", e.f.deletedKeys)
+	}
+	if o, _ := e.h.Orphaned(ctx, bobID); len(o) != 1 || o[0] != "party" {
+		t.Fatalf("bob must be told the service is gone: %v", o)
+	}
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("bob can still clean up: %v", err)
+	}
+	if len(e.f.keys) != 0 {
+		t.Errorf("every key must be deleted after cleaning up, %d left", len(e.f.keys))
+	}
+	if o, _ := e.h.Orphaned(ctx, bobID); len(o) != 0 {
+		t.Errorf("nothing left to clean up: %v", o)
 	}
 }
