@@ -1,0 +1,90 @@
+package config
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+)
+
+func env(m map[string]string) Env { return func(k string) string { return m[k] } }
+
+func connect(key string) (*immich.API, error) {
+	return immich.New("http://immich.invalid", immich.Auth{APIKey: key}, nil)
+}
+
+const good = `
+accounts:
+  alice:   { key: ${ALICE} }
+  bob:     { key: ${BOB} }
+  family:  { key: ${FAMILY} }
+  grandma: { key: ${GRANDMA} }
+services:
+  - name: family
+    tag: share
+    senders: [alice, bob]
+    receivers: [family]
+  - name: grandma
+    tag: for-grandma
+    senders: [alice]
+    receivers: [grandma, family]
+    inbox_tag: from-alice
+    inbox_expiry_days: 7
+`
+
+var goodEnv = map[string]string{"ALICE": "a", "BOB": "b", "FAMILY": "f", "GRANDMA": "g"}
+
+func TestRoutesFile(t *testing.T) {
+	svcs, err := parseRoutes([]byte(good), env(goodEnv), DefaultsFrom(env(nil)), connect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 2 || svcs[0].Name != "family" || len(svcs[0].Senders) != 2 || len(svcs[1].Receivers) != 2 {
+		t.Fatalf("unexpected services: %+v", svcs)
+	}
+	if svcs[0].InboxTag != "inbox" || svcs[0].ExpiryDays != 30 || svcs[0].RefusedTag != "share-duplicate" {
+		t.Errorf("defaults not applied: %+v", svcs[0])
+	}
+	if svcs[1].InboxTag != "from-alice" || svcs[1].ExpiryDays != 7 {
+		t.Errorf("overrides not applied: %+v", svcs[1])
+	}
+	if svcs[0].WorkflowName() != "immich-handoff: family" {
+		t.Errorf("workflow name = %q", svcs[0].WorkflowName())
+	}
+}
+
+func TestRoutesProblems(t *testing.T) {
+	cases := map[string]struct {
+		yaml, want string
+		env        map[string]string
+	}{
+		"unset variable":   {good, "GRANDMA is not set", map[string]string{"ALICE": "a", "BOB": "b", "FAMILY": "f"}},
+		"unknown account":  {strings.Replace(good, "receivers: [grandma, family]", "receivers: [nobody]", 1), "unknown receiver account nobody", goodEnv},
+		"same sender tag":  {strings.Replace(good, "tag: for-grandma", "tag: share", 1), `sender alice already uses tag "share"`, goodEnv},
+		"sender=receiver":  {strings.Replace(good, "senders: [alice]", "senders: [grandma]", 1), "cannot be both sender and receiver", goodEnv},
+		"no services":      {"accounts: {a: {key: x}}\n", "no services defined", goodEnv},
+		"unknown yaml key": {good + "bogus: 1\n", "field bogus not found", goodEnv},
+	}
+	for name, c := range cases {
+		_, err := parseRoutes([]byte(c.yaml), env(c.env), DefaultsFrom(env(nil)), connect)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: error %v does not contain %q", name, err, c.want)
+		}
+	}
+}
+
+func TestPlainEnvMakesOneDefaultService(t *testing.T) {
+	svcs, err := Load(env(map[string]string{"IMMICH_SOURCE_API_KEYS": "a, b", "IMMICH_DEST_API_KEY": "f", "SHARE_TAG": "send"}), connect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || svcs[0].Name != "" || svcs[0].Tag != "send" || len(svcs[0].Senders) != 2 || len(svcs[0].Receivers) != 1 {
+		t.Fatalf("unexpected: %+v", svcs[0])
+	}
+	if svcs[0].WorkflowName() != "immich-handoff" {
+		t.Errorf("default service must keep the original workflow name, got %q", svcs[0].WorkflowName())
+	}
+	if _, err := Load(env(nil), connect); err == nil {
+		t.Error("missing keys must be an error")
+	}
+}

@@ -1,6 +1,6 @@
 // Package web serves the webhook receiver and the status page.
-// Authentication for the page is Immich's own session ("option A"): the browser's cookie is
-// forwarded to /api/users/me and only the family accounts are accepted.
+// Authentication for the page is Immich's own session: the browser's cookie is forwarded to
+// /api/users/me and only accounts that take part in a service are let in.
 package web
 
 import (
@@ -28,23 +28,28 @@ type Server struct {
 	WebhookSecret string
 	Log           *slog.Logger
 	BackgroundCtx context.Context
-	sourceIDs     map[uuid.UUID]*immich.API
-	destID        uuid.UUID
+
+	// resolved at Init: which Immich user is which account
+	users map[uuid.UUID]*syncer.Account
 }
 
-// Init resolves which Immich users are part of the handoff (once, at startup).
+// Init resolves which Immich user each configured account belongs to (once, at startup).
 func (w *Server) Init(ctx context.Context) error {
-	w.sourceIDs = map[uuid.UUID]*immich.API{}
-	for _, src := range w.S.Sources {
-		u, err := src.Me(ctx)
-		if err != nil {
-			return err
+	w.users = map[uuid.UUID]*syncer.Account{}
+	for _, svc := range w.S.Services {
+		for _, group := range [][]*syncer.Account{svc.Senders, svc.Receivers} {
+			for _, a := range group {
+				u, err := a.API.Me(ctx)
+				if err != nil {
+					return err
+				}
+				if _, ok := w.users[u.ID]; !ok {
+					w.users[u.ID] = a
+				}
+			}
 		}
-		w.sourceIDs[u.ID] = src
 	}
-	d, err := w.S.Dest.Me(ctx)
-	w.destID = d.ID
-	return err
+	return nil
 }
 
 func (w *Server) Handler() http.Handler {
@@ -60,7 +65,8 @@ func (w *Server) Handler() http.Handler {
 	return mux
 }
 
-// The payload is deliberately ignored: the webhook only wakes the importer.
+// The payload is deliberately not trusted: the webhook only wakes the importer, and the asset id it
+// names is a hint that is checked against Immich before use.
 func (w *Server) webhook(rw http.ResponseWriter, r *http.Request) {
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(w.WebhookHeader)), []byte(w.WebhookSecret)) != 1 {
 		http.Error(rw, "bad webhook secret", http.StatusUnauthorized)
@@ -76,20 +82,19 @@ func (w *Server) webhook(rw http.ResponseWriter, r *http.Request) {
 			} `json:"data"`
 		}
 		if json.Unmarshal(body, &ev) == nil && ev.Data.Asset.ID != uuid.Nil {
-			w.S.AddHint(ev.Data.Asset.ID) // only a hint: verified against Immich before use
+			w.S.AddHint(ev.Data.Asset.ID)
 		}
 	}
 	go w.S.Run(w.BackgroundCtx, "webhook", false)
 	rw.WriteHeader(http.StatusAccepted)
 }
 
-type who struct {
+type member struct {
 	user immich.User
-	role string // "source" | "destination"
-	api  *immich.API
+	acct *syncer.Account
 }
 
-func (w *Server) authenticate(r *http.Request) (*who, int, string) {
+func (w *Server) authenticate(r *http.Request) (*member, int, string) {
 	cookie := r.Header.Get("Cookie")
 	if cookie == "" {
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
@@ -102,13 +107,18 @@ func (w *Server) authenticate(r *http.Request) (*who, int, string) {
 	if err != nil {
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
-	if u.ID == w.destID {
-		return &who{u, "destination", w.S.Dest}, 0, ""
+	acct, ok := w.users[u.ID]
+	if !ok {
+		return nil, http.StatusForbidden, "this Immich account does not take part in any service"
 	}
-	if src, ok := w.sourceIDs[u.ID]; ok {
-		return &who{u, "source", src}, 0, ""
-	}
-	return nil, http.StatusForbidden, "this Immich account is not part of the handoff"
+	return &member{user: u, acct: acct}, 0, ""
+}
+
+type serviceStatus struct {
+	Name    string `json:"name"`
+	Role    string `json:"role"` // sender | receiver
+	Tag     string `json:"tag"`
+	Waiting int    `json:"waiting"`
 }
 
 func (w *Server) status(rw http.ResponseWriter, r *http.Request) {
@@ -117,20 +127,33 @@ func (w *Server) status(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, code, map[string]string{"detail": msg})
 		return
 	}
-	out := map[string]any{"user": me.user.Name, "role": me.role, "lastRun": w.S.Last()}
-	tagName := w.S.Cfg.ShareTag
-	key := "pendingShare"
-	if me.role == "destination" {
-		tagName, key = w.S.Cfg.InboxTag, "inbox"
-	}
-	n := 0
-	if tag, err := me.api.FindTag(r.Context(), tagName, false); err == nil && tag != nil {
-		if assets, err := me.api.Search(r.Context(), immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}}); err == nil {
-			n = len(assets)
+	var services []serviceStatus
+	for _, svc := range w.S.Services {
+		for _, a := range svc.Senders {
+			if a == me.acct {
+				services = append(services, serviceStatus{svc.Label(), "sender", svc.Tag, w.count(r.Context(), a, svc.Tag)})
+			}
+		}
+		for _, a := range svc.Receivers {
+			if a == me.acct {
+				services = append(services, serviceStatus{svc.Label(), "receiver", svc.InboxTag, w.count(r.Context(), a, svc.InboxTag)})
+			}
 		}
 	}
-	out[key] = n
-	writeJSON(rw, http.StatusOK, out)
+	writeJSON(rw, http.StatusOK, map[string]any{"user": me.user.Name, "services": services, "lastRun": w.S.Last()})
+}
+
+// count is how many photos carry the tag in the account (the app's own key does the looking).
+func (w *Server) count(ctx context.Context, a *syncer.Account, tag string) int {
+	id, err := a.API.FindTag(ctx, tag, false)
+	if err != nil || id == nil {
+		return 0
+	}
+	assets, err := a.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*id}})
+	if err != nil {
+		return 0
+	}
+	return len(assets)
 }
 
 func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {

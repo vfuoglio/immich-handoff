@@ -1,4 +1,4 @@
-// Package syncer moves tagged assets from source accounts to the destination account.
+// Package syncer hands tagged assets from sender accounts to receiver accounts, per service.
 package syncer
 
 import (
@@ -14,13 +14,11 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 )
 
+// Config holds the options that apply to every service.
 type Config struct {
-	ShareTag, InboxTag string
-	RefusedTag         string // put on an original whose import was refused; replaces ShareTag so it is not retried
-	ExpiryDays         int
-	DeleteForce        bool
-	DryRun             bool
-	NotifyURL          string
+	DeleteForce bool // delete originals permanently instead of trashing them
+	DryRun      bool
+	NotifyURL   string
 }
 
 type Counts struct {
@@ -40,15 +38,15 @@ type RunInfo struct {
 	Started, Finished time.Time
 	Reason            string
 	Counts            Counts
+	PerService        map[string]Counts
 	Untagged          int
 	Error             string
 }
 
 type Syncer struct {
-	Cfg     Config
-	Dest    *immich.API
-	Sources []*immich.API
-	Log     *slog.Logger
+	Cfg      Config
+	Services []*Service
+	Log      *slog.Logger
 
 	mu          sync.Mutex
 	provMu      sync.Mutex
@@ -142,7 +140,7 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 }
 
 func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]time.Time) {
-	info := &RunInfo{Started: time.Now(), Reason: reason}
+	info := &RunInfo{Started: time.Now(), Reason: reason, PerService: map[string]Counts{}}
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
@@ -159,50 +157,71 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 		}
 	}()
 
-	destUser, err := s.Dest.Me(ctx)
-	if err != nil {
-		info.Error = err.Error()
-		return
-	}
-	inbox, err := s.Dest.FindTag(ctx, s.Cfg.InboxTag, !s.Cfg.DryRun)
-	if err != nil {
-		info.Error = err.Error()
-		return
-	}
-	var inboxID uuid.UUID
-	if inbox != nil {
-		inboxID = *inbox
-	}
 	resolved := map[uuid.UUID]bool{}
-	for i, src := range s.Sources {
-		c := s.ingest(ctx, i+1, src, destUser.ID, inboxID, hints, resolved)
+	for _, svc := range s.Services {
+		c := s.runService(ctx, svc, hints, resolved)
 		info.Counts.add(c)
+		info.PerService[svc.Label()] = c
 	}
 	s.retryHints(ctx, hints, resolved)
-	if cleanup && inbox != nil {
-		n, err := s.cleanup(ctx, inboxID)
+	if cleanup {
+		n, errs := s.cleanupAll(ctx)
 		info.Untagged = n
-		if err != nil {
-			info.Counts.Errors++
-			s.Log.Error("cleanup failed", "err", err)
-		}
+		info.Counts.Errors += errs
 	}
 }
 
-func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uuid.UUID, inbox uuid.UUID, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
-	log := s.Log.With("source", n)
-	me, err := src.Me(ctx)
+// receiver is a resolved destination for one pass.
+type receiver struct {
+	acct   *Account
+	userID uuid.UUID
+	inbox  uuid.UUID
+}
+
+func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
+	log := s.Log.With("service", svc.Label())
+	var rs []receiver
+	for _, r := range svc.Receivers {
+		me, err := r.API.Me(ctx)
+		if err != nil {
+			log.Error("cannot authenticate receiver", "receiver", r.Name, "err", err)
+			c.Errors++
+			return
+		}
+		inbox, err := r.API.FindTag(ctx, svc.InboxTag, !s.Cfg.DryRun)
+		if err != nil {
+			log.Error("cannot ensure inbox tag", "receiver", r.Name, "err", err)
+			c.Errors++
+			return
+		}
+		rc := receiver{acct: r, userID: me.ID}
+		if inbox != nil {
+			rc.inbox = *inbox
+		}
+		rs = append(rs, rc)
+	}
+	for _, snd := range svc.Senders {
+		c.add(s.ingest(ctx, log, svc, snd, rs, hints, resolved))
+	}
+	return
+}
+
+func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
+	log = log.With("sender", snd.Name)
+	me, err := snd.API.Me(ctx)
 	if err != nil {
-		log.Error("cannot authenticate", "err", err)
+		log.Error("cannot authenticate sender", "err", err)
 		c.Errors++
 		return
 	}
-	if me.ID == destUser {
-		log.Error("source key belongs to the destination account; refusing")
-		c.Errors++
-		return
+	for _, r := range rs {
+		if r.userID == me.ID {
+			log.Error("sender and receiver are the same Immich account; refusing", "receiver", r.acct.Name)
+			c.Errors++
+			return
+		}
 	}
-	tag, err := src.FindTag(ctx, s.Cfg.ShareTag, false)
+	tag, err := snd.API.FindTag(ctx, svc.Tag, false)
 	if err != nil {
 		log.Error("tag lookup failed", "err", err)
 		c.Errors++
@@ -211,20 +230,20 @@ func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uu
 	if tag == nil {
 		return
 	}
-	assets, err := src.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
+	assets, err := snd.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
 	if err != nil {
 		log.Error("search failed", "err", err)
 		c.Errors++
 		return
 	}
-	assets = s.withHinted(ctx, log, src, assets, hints, resolved)
+	assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	ids := make([]string, 0, len(assets))
 	for _, a := range assets {
 		ids = append(ids, a.Id.String())
 	}
 	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
 	for _, a := range assets {
-		switch out, err := s.process(ctx, src, a, inbox, *tag); {
+		switch out, err := s.process(ctx, log, svc, snd, rs, a, *tag); {
 		case err != nil:
 			c.Errors++
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
@@ -241,59 +260,101 @@ func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uu
 	return
 }
 
-// process imports one asset. The original is deleted last, and only after the copy is verified.
-func (s *Syncer) process(ctx context.Context, src *immich.API, a immich.AssetResponseDto, inbox, shareTag uuid.UUID) (string, error) {
+// process hands one asset to every receiver. The original is deleted last, and only after every
+// receiver holds a verified copy. Any failure keeps the original; because Immich recognises
+// duplicates by checksum, a later retry is safe for receivers that already have their copy.
+func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID) (string, error) {
 	if s.Cfg.DryRun {
-		s.Log.Info("[dry-run] would import and remove original", "asset", a.Id, "file", a.OriginalFileName)
+		log.Info("[dry-run] would hand over and remove original", "asset", a.Id, "file", a.OriginalFileName)
 		return "dryrun", nil
 	}
-	up, sum, err := immich.Transfer(ctx, src, s.Dest, a)
-	if err != nil {
-		return "", err
-	}
-	copy_, err := s.Dest.Asset(ctx, up.Id)
-	if err != nil {
-		return "", err
-	}
-	if copy_.IsTrashed {
-		s.Log.Warn("a copy exists in the destination trash; import refused, original kept and retagged",
-			"file", a.OriginalFileName, "tag", s.Cfg.RefusedTag)
-		if err := s.markRefused(ctx, src, a.Id, shareTag); err != nil {
-			return "", fmt.Errorf("import refused but could not retag the original: %w", err)
-		}
-		return "refused", nil
-	}
-	if !immich.ChecksumMatches(copy_.Checksum, sum) {
-		return "", fmt.Errorf("checksum mismatch on destination copy %s", up.Id)
-	}
 	outcome := "duplicate"
-	if up.Status == immich.AssetMediaStatusCreated {
-		if err := s.Dest.TagAssets(ctx, inbox, up.Id); err != nil {
-			return "", fmt.Errorf("tag copy %s: %w", up.Id, err)
+	for _, r := range rs {
+		up, sum, err := immich.Transfer(ctx, snd.API, r.acct.API, a)
+		if err != nil {
+			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
 		}
-		outcome = "imported"
+		copy_, err := r.acct.API.Asset(ctx, up.Id)
+		if err != nil {
+			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
+		}
+		if copy_.IsTrashed {
+			log.Warn("a copy exists in a receiver's trash; handover refused, original kept and retagged",
+				"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
+			if err := s.markRefused(ctx, svc, snd.API, a.Id, shareTag); err != nil {
+				return "", fmt.Errorf("handover refused but could not retag the original: %w", err)
+			}
+			return "refused", nil
+		}
+		if !immich.ChecksumMatches(copy_.Checksum, sum) {
+			return "", fmt.Errorf("checksum mismatch on %s's copy %s", r.acct.Name, up.Id)
+		}
+		if up.Status == immich.AssetMediaStatusCreated {
+			if err := r.acct.API.TagAssets(ctx, r.inbox, up.Id); err != nil {
+				return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			}
+			outcome = "imported"
+		}
 	}
-	if err := src.DeleteAsset(ctx, a.Id, s.Cfg.DeleteForce); err != nil {
-		return "", fmt.Errorf("copy verified but original not removed: %w", err)
+	if err := snd.API.DeleteAsset(ctx, a.Id, s.Cfg.DeleteForce); err != nil {
+		return "", fmt.Errorf("copies verified but original not removed: %w", err)
 	}
-	s.Log.Info(outcome, "file", a.OriginalFileName, "dest", up.Id)
+	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
 	return outcome, nil
 }
 
-// cleanup removes the inbox tag from assets filed in an album or unfiled for ExpiryDays. Never deletes assets.
-func (s *Syncer) cleanup(ctx context.Context, inbox uuid.UUID) (int, error) {
-	tags := &[]uuid.UUID{inbox}
-	tagged, err := s.Dest.Search(ctx, immich.MetadataSearchDto{TagIds: tags})
+// cleanupAll removes the inbox tag from filed or expired copies in every receiver, once per
+// receiver account and tag name. Assets are never deleted.
+func (s *Syncer) cleanupAll(ctx context.Context) (untagged, errs int) {
+	type key struct{ acct, tag string }
+	type job struct {
+		acct   *Account
+		tag    string
+		expiry int
+	}
+	jobs := map[key]*job{}
+	var order []key
+	for _, svc := range s.Services {
+		for _, r := range svc.Receivers {
+			k := key{r.Name, svc.InboxTag}
+			if j, ok := jobs[k]; ok {
+				j.expiry = min(j.expiry, svc.ExpiryDays)
+				continue
+			}
+			jobs[k] = &job{r, svc.InboxTag, svc.ExpiryDays}
+			order = append(order, k)
+		}
+	}
+	for _, k := range order {
+		j := jobs[k]
+		n, err := s.cleanup(ctx, j.acct, j.tag, j.expiry)
+		untagged += n
+		if err != nil {
+			errs++
+			s.Log.Error("cleanup failed", "receiver", j.acct.Name, "err", err)
+		}
+	}
+	return
+}
+
+// cleanup removes the inbox tag from assets filed in an album or unfiled for expiryDays.
+func (s *Syncer) cleanup(ctx context.Context, rcv *Account, inboxTag string, expiryDays int) (int, error) {
+	inbox, err := rcv.API.FindTag(ctx, inboxTag, false)
+	if err != nil || inbox == nil {
+		return 0, err
+	}
+	tags := &[]uuid.UUID{*inbox}
+	tagged, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags})
 	if err != nil || len(tagged) == 0 {
 		return 0, err
 	}
 	yes := true
-	unfiled, err := s.Dest.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes})
+	unfiled, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes})
 	if err != nil {
 		return 0, err
 	}
-	cutoff := time.Now().AddDate(0, 0, -s.Cfg.ExpiryDays)
-	expired, err := s.Dest.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, UpdatedBefore: &cutoff})
+	cutoff := time.Now().AddDate(0, 0, -expiryDays)
+	expired, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, UpdatedBefore: &cutoff})
 	if err != nil {
 		return 0, err
 	}
@@ -314,16 +375,20 @@ func (s *Syncer) cleanup(ctx context.Context, inbox uuid.UUID) (int, error) {
 		return 0, nil
 	}
 	if s.Cfg.DryRun {
-		s.Log.Info("[dry-run] would untag", "count", len(drop))
+		s.Log.Info("[dry-run] would untag", "receiver", rcv.Name, "count", len(drop))
 		return 0, nil
 	}
-	return len(drop), s.Dest.UntagAssets(ctx, inbox, drop)
+	if err := rcv.API.UntagAssets(ctx, *inbox, drop); err != nil {
+		return 0, err
+	}
+	s.Log.Info("cleanup: removed inbox tag (assets kept)", "receiver", rcv.Name, "count", len(drop))
+	return len(drop), nil
 }
 
 // withHinted adds assets named by webhook events that the tag search did not return, after checking
-// with this account's own key that they exist and carry the share tag. Hints that this account can
+// with this account's own key that they exist and carry the service tag. Hints that this account can
 // confirm (or that are trashed, so there is nothing to do) are recorded in resolved.
-func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.API, found []immich.AssetResponseDto, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) []immich.AssetResponseDto {
+func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.API, tagName string, found []immich.AssetResponseDto, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) []immich.AssetResponseDto {
 	have := map[uuid.UUID]bool{}
 	for _, a := range found {
 		have[a.Id] = true
@@ -341,8 +406,8 @@ func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.A
 			resolved[id] = true
 			continue
 		}
-		if !hasTag(a, s.Cfg.ShareTag) {
-			continue // announced by an event but the tag is not visible yet; retried
+		if !hasTag(a, tagName) {
+			continue // announced by an event but the tag is not visible yet (or belongs to another service); retried
 		}
 		log.Info("tag search did not list a freshly tagged asset; using the event hint", "asset", id)
 		resolved[id] = true
@@ -363,16 +428,16 @@ func hasTag(a *immich.AssetResponseDto, name string) bool {
 	return false
 }
 
-// markRefused swaps the share tag for the refused tag on the source original, so the refusal is visible
-// to its owner in the Immich app and the photo is not retried (and not reported) on every pass.
-// Re-adding the share tag after clearing the destination trash retries it.
-func (s *Syncer) markRefused(ctx context.Context, src *immich.API, id, shareTag uuid.UUID) error {
-	if s.Cfg.RefusedTag == "" {
+// markRefused swaps the service tag for the refused tag on the sender's original, so the refusal is
+// visible to its owner in the Immich app and the photo is not retried (and not reported) on every pass.
+// Re-adding the service tag after the receiver clears its trash retries it.
+func (s *Syncer) markRefused(ctx context.Context, svc *Service, src *immich.API, id, shareTag uuid.UUID) error {
+	if svc.RefusedTag == "" {
 		return nil
 	}
-	tag, err := src.FindTag(ctx, s.Cfg.RefusedTag, true)
+	tag, err := src.FindTag(ctx, svc.RefusedTag, true)
 	if err != nil || tag == nil {
-		return fmt.Errorf("ensure tag %q: %v", s.Cfg.RefusedTag, err)
+		return fmt.Errorf("ensure tag %q: %v", svc.RefusedTag, err)
 	}
 	if err := src.TagAssets(ctx, *tag, id); err != nil {
 		return err

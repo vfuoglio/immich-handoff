@@ -97,7 +97,7 @@ func mustOK(t *testing.T, code int, what string) {
 	}
 }
 
-func bootstrap(t *testing.T) (alice, bob, family user) {
+func bootstrap(t *testing.T) (alice, bob, family, grandma user) {
 	t.Helper()
 	// wait for the API
 	deadline := time.Now().Add(2 * time.Minute)
@@ -135,7 +135,7 @@ func bootstrap(t *testing.T) (alice, bob, family user) {
 		call(t, "PUT", "/users/me/preferences", keyAuth(u), map[string]any{"tags": map[string]any{"enabled": true}}, nil)
 		return u
 	}
-	return mk("alice", sourcePermissions), mk("bob", sourcePermissions), mk("family", destPermissions)
+	return mk("alice", sourcePermissions), mk("bob", sourcePermissions), mk("family", destPermissions), mk("grandma", destPermissions)
 }
 
 // jpeg returns distinct, valid JPEG bytes per seed.
@@ -324,7 +324,7 @@ func buildApp(t *testing.T) string {
 }
 
 func TestEndToEnd(t *testing.T) {
-	alice, bob, family := bootstrap(t)
+	alice, bob, family, _ := bootstrap(t)
 	bin := buildApp(t)
 	a := startApp(t, bin, alice, bob, family)
 	t.Cleanup(func() {
@@ -477,7 +477,7 @@ func TestEndToEnd(t *testing.T) {
 		aliceB, _ := upload(t, alice, "alice-2.jpg", imgB)
 		tagAsset(t, alice, "share", aliceB)
 		eventually(t, "refusal logged", 90*time.Second, func() bool {
-			return strings.Contains(a.log.String(), "destination trash")
+			return strings.Contains(a.log.String(), "receiver's trash")
 		})
 		x, _ := getAsset(t, alice, aliceB)
 		if x.IsTrashed {
@@ -516,4 +516,81 @@ func TestEndToEnd(t *testing.T) {
 			t.Errorf("filed photo must be kept (code %d)", code)
 		}
 	})
+}
+
+// TestRoutes runs a routes file with a one-to-many service: one tag, two receivers.
+func TestRoutes(t *testing.T) {
+	alice, _, family, grandma := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 1)
+
+	dir := t.TempDir()
+	routes := filepath.Join(dir, "routes.yaml")
+	if err := os.WriteFile(routes, []byte(`
+accounts:
+  alice:   { key: ${E2E_ALICE} }
+  family:  { key: ${E2E_FAMILY} }
+  grandma: { key: ${E2E_GRANDMA} }
+services:
+  - name: grandma
+    tag: for-grandma
+    senders: [alice]
+    receivers: [grandma, family]
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(),
+		"IMMICH_BASE_URL="+baseURL,
+		"ROUTES_FILE="+routes,
+		"E2E_ALICE="+alice.appKey, "E2E_FAMILY="+family.appKey, "E2E_GRANDMA="+grandma.appKey,
+		"WEBHOOK_SECRET="+secret,
+		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+port+"/webhook/immich",
+		"LISTEN_ADDR=:"+port,
+		"SWEEP_INTERVAL_HOURS=1",
+	)
+	var logs bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &logs, &logs
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+		if t.Failed() {
+			t.Logf("app log:\n%s", logs.String())
+		}
+	})
+
+	eventually(t, "named workflow exists in alice's account", 4*time.Minute, func() bool {
+		var wfs []struct {
+			Name    string `json:"name"`
+			Enabled bool   `json:"enabled"`
+		}
+		call(t, "GET", "/workflows", keyAuth(alice), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: grandma" && w.Enabled {
+				return true
+			}
+		}
+		return false
+	})
+
+	familyBefore := len(searchTag(t, family, "inbox", false))
+	id, _ := upload(t, alice, "to-both.jpg", jpegBytes(70))
+	tagAsset(t, alice, "for-grandma", id)
+
+	eventually(t, "both receivers hold a tagged copy", 90*time.Second, func() bool {
+		return len(searchTag(t, grandma, "inbox", false)) == 1 && len(searchTag(t, family, "inbox", false)) == familyBefore+1
+	})
+	eventually(t, "original removed from alice only after both copies exist", 30*time.Second, func() bool {
+		x, code := getAsset(t, alice, id)
+		return code == 200 && x.IsTrashed
+	})
+}
+
+func atoi(s string) int {
+	n := 0
+	fmt.Sscanf(s, "%d", &n)
+	return n
 }

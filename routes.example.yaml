@@ -1,0 +1,22 @@
+# Several services at once. Copy to routes.yaml, set ROUTES_FILE=/routes.yaml in .env and mount the file
+# (see docker-compose.yml). Keys are read from environment variables, so no secret lives in this file.
+accounts:
+  alice:   { key: ${ALICE_KEY} }
+  bob:     { key: ${BOB_KEY} }
+  family:  { key: ${FAMILY_KEY} }
+  grandma: { key: ${GRANDMA_KEY} }
+
+services:
+  # Anything alice or bob tags "share" goes to the family account.
+  - name: family
+    tag: share
+    senders: [alice, bob]
+    receivers: [family]
+
+  # Anything alice tags "for-grandma" goes to grandma AND to the family account.
+  # The original is removed only after both have a verified copy.
+  - name: grandma
+    tag: for-grandma
+    senders: [alice]
+    receivers: [grandma, family]
+    # optional per service: inbox_tag, refused_tag, inbox_expiry_days

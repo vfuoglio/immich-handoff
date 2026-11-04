@@ -10,8 +10,8 @@ async function load(){
   const r=await fetch('api/status');
   if(!r.ok){add(r.status==401?'Sign in to Immich first, then reload this page.':(await r.json()).detail);return}
   const s=await r.json(), l=s.lastRun;
-  add('Signed in as '+s.user+' ('+s.role+')');
-  add(s.role=='source'?'Photos tagged to share, waiting: '+s.pendingShare:'Photos tagged inbox: '+s.inbox);
+  add('Signed in as '+s.user);
+  for(const v of s.services){add((v.role=='sender'?'Sending '+v.name+' (tag '+v.tag+'): '+v.waiting+' waiting':'Receiving '+v.name+' (tag '+v.tag+'): '+v.waiting+' photos'));}
   add(l?('Last run '+l.Finished+' ('+l.Reason+'): '+JSON.stringify(l.Counts)+(l.Error?' ERROR '+l.Error:'')):'No run yet since start');
 }
 document.getElementById('sync').onclick=async()=>{

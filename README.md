@@ -74,18 +74,29 @@ To rehearse without changing anything, set `DRY_RUN=true` in `.env` first (then 
 
 By default originals go to the sender's **trash**, not into oblivion, so a mistake can be undone for 30 days (Immich's trash period). Phone backups skip a photo that is in the trash. Once Immich empties the trash, a phone that still has the photo may back it up again, so delete the photo from the phone too.
 
+## Several services and receivers (optional)
+
+A plain install is one service: everyone's `share` photos go to one family account. To run more than one, or to send the same photo to several accounts, describe them in a routes file:
+
+1. Copy `routes.example.yaml` to `routes.yaml` and edit it. It names your accounts (keys come from `.env` variables, so no secret is written in the file) and lists services. Each service has a **tag**, the **senders** who use it and the **receivers** who get the photos.
+2. In `.env` set `ROUTES_FILE=/routes.yaml` and add the key variables the file refers to (for example `ALICE_KEY=...`).
+3. In `docker-compose.yml` uncomment the `routes.yaml` volume line, then `docker compose up -d`.
+
+With several receivers on one service, the original is removed only after **every** receiver holds a verified copy. If one receiver refuses (its trash holds that photo) or fails, the original stays and nothing is lost. An account that sends in one service and receives in another needs both permission lists from the table above. Each service gets its own workflow in the sender's account, named `immich-handoff: <service>`.
+
 ## Status page (optional)
 
 `http://<host>:8080/` shows who is signed in, how many photos are waiting, and the result of the last run, plus a **Sync now** button. It uses your Immich login, so it only works when it is served on the **same hostname** as Immich. The usual way is a reverse proxy that forwards a path such as `/handoff/` on your Immich address to port 8080. Only the sending and family accounts are let in.
 
 ## Settings
 
-Everything is set in `.env`. The first four are required; the rest are optional.
+Everything is set in `.env`. The keys and `WEBHOOK_SECRET` are required; the rest are optional.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `IMMICH_SOURCE_API_KEYS` | | API keys of the sending accounts, comma separated |
-| `IMMICH_DEST_API_KEY` | | API key of the family account |
+| `IMMICH_SOURCE_API_KEYS` | | API keys of the sending accounts, comma separated (not needed with a routes file) |
+| `IMMICH_DEST_API_KEY` | | API key of the family account (not needed with a routes file) |
+| `ROUTES_FILE` | | Path of a routes file for several services (see above) |
 | `WEBHOOK_SECRET` | | Shared secret Immich sends with every event |
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app |
 | `IMMICH_BASE_URL` | `http://immich-server:2283` | Address of Immich as seen from this container |

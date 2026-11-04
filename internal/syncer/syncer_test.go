@@ -5,10 +5,12 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -57,14 +59,12 @@ func (f *fakeImmich) handler() http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
-		id := "aaaaaaaa-0000-0000-0000-000000000001"
-		if r.Header.Get("x-api-key") == "dest" {
-			id = "aaaaaaaa-0000-0000-0000-000000000002"
-		}
+		sum := sha1.Sum([]byte(r.Header.Get("x-api-key")))
+		id := fmt.Sprintf("aaaaaaaa-0000-0000-0000-%012x", sum[:6])
 		j(w, 200, map[string]any{"id": id, "name": "n", "email": "a@b.c"})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("x-api-key") == "dest" {
+		if strings.HasPrefix(r.Header.Get("x-api-key"), "dest") {
 			j(w, 200, []any{tag(inboxTag, "inbox")})
 		} else {
 			j(w, 200, []any{tag(shareTag, "share")})
@@ -135,19 +135,29 @@ func (f *fakeImmich) handler() http.Handler {
 	return mux
 }
 
+func newAPI(t *testing.T, url, key string) *immich.API {
+	t.Helper()
+	a, err := immich.New(url, immich.Auth{APIKey: key}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func service(snd, rcv []*syncer.Account) *syncer.Service {
+	return &syncer.Service{Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30, Senders: snd, Receivers: rcv}
+}
+
 func run(t *testing.T, f *fakeImmich) syncer.Counts {
 	t.Helper()
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
-	mk := func(k string) *immich.API {
-		a, err := immich.New(srv.URL, immich.Auth{APIKey: k}, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return a
-	}
-	s := &syncer.Syncer{Cfg: syncer.Config{ShareTag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30},
-		Dest: mk("dest"), Sources: []*immich.API{mk("src")}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	svc := service(
+		[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
+		[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
 	s.Run(context.Background(), "test", false)
 	return s.Last().Counts
 }
@@ -190,5 +200,52 @@ func TestChecksumMismatchKeepsOriginal(t *testing.T) {
 	c := run(t, f)
 	if c.Errors != 1 || len(f.deleted) != 0 || len(f.tagged) != 0 {
 		t.Errorf("counts=%+v deleted=%v tagged=%v", c, f.deleted, f.tagged)
+	}
+}
+
+// One-to-many: the sender's server also hosts receiver 1; receiver 2 is a second server.
+func twoReceivers(t *testing.T, a, b *fakeImmich) syncer.Counts {
+	t.Helper()
+	sa, sb := httptest.NewServer(a.handler()), httptest.NewServer(b.handler())
+	t.Cleanup(sa.Close)
+	t.Cleanup(sb.Close)
+	svc := service(
+		[]*syncer.Account{{Name: "alice", API: newAPI(t, sa.URL, "src")}},
+		[]*syncer.Account{{Name: "family", API: newAPI(t, sa.URL, "dest")}, {Name: "grandma", API: newAPI(t, sb.URL, "dest2")}})
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	s.Run(context.Background(), "test", false)
+	return s.Last().Counts
+}
+
+func TestOneToManyRemovesOriginalOnlyAfterEveryReceiverHasACopy(t *testing.T) {
+	a, b := &fakeImmich{uploadStatus: "created"}, &fakeImmich{uploadStatus: "created"}
+	c := twoReceivers(t, a, b)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts = %+v", c)
+	}
+	if len(a.uploaded) != 1 || len(b.uploaded) != 1 || len(a.tagged) != 1 || len(b.tagged) != 1 {
+		t.Errorf("both receivers must get and tag a copy: a=%v/%v b=%v/%v", a.uploaded, a.tagged, b.uploaded, b.tagged)
+	}
+	if len(a.deleted) != 1 {
+		t.Errorf("original must be removed once, got %v", a.deleted)
+	}
+}
+
+func TestOneToManyKeepsOriginalWhenOneReceiverRefuses(t *testing.T) {
+	a, b := &fakeImmich{uploadStatus: "created"}, &fakeImmich{uploadStatus: "duplicate", destTrashed: true}
+	c := twoReceivers(t, a, b)
+	if c.Refused != 1 || len(a.deleted) != 0 {
+		t.Fatalf("counts=%+v deleted=%v", c, a.deleted)
+	}
+	if len(a.refusedTagged) != 1 || len(a.untaggedShare) != 1 {
+		t.Errorf("original must be retagged: %v %v", a.refusedTagged, a.untaggedShare)
+	}
+}
+
+func TestOneToManyKeepsOriginalWhenOneReceiverFails(t *testing.T) {
+	a, b := &fakeImmich{uploadStatus: "created"}, &fakeImmich{uploadStatus: "created", storedChecksum: "AAAA"}
+	c := twoReceivers(t, a, b)
+	if c.Errors != 1 || len(a.deleted) != 0 {
+		t.Errorf("counts=%+v deleted=%v", c, a.deleted)
 	}
 }

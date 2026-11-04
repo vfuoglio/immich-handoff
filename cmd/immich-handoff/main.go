@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/config"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/web"
@@ -38,49 +39,37 @@ func main() {
 
 func run(log *slog.Logger) error {
 	base := strings.TrimRight(env("IMMICH_BASE_URL", "http://immich-server:2283"), "/")
-	destKey, secret := os.Getenv("IMMICH_DEST_API_KEY"), os.Getenv("WEBHOOK_SECRET")
-	var srcKeys []string
-	for _, k := range strings.Split(os.Getenv("IMMICH_SOURCE_API_KEYS"), ",") {
-		if k = strings.TrimSpace(k); k != "" {
-			srcKeys = append(srcKeys, k)
-		}
+	secret := os.Getenv("WEBHOOK_SECRET")
+	if secret == "" {
+		return errors.New("WEBHOOK_SECRET is required")
 	}
-	if destKey == "" || secret == "" || len(srcKeys) == 0 {
-		return errors.New("IMMICH_DEST_API_KEY, IMMICH_SOURCE_API_KEYS and WEBHOOK_SECRET are required")
-	}
-	days, _ := strconv.Atoi(env("INBOX_EXPIRY_DAYS", "30"))
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
 
-	dest, err := immich.New(base, immich.Auth{APIKey: destKey}, nil)
+	services, err := config.Load(os.Getenv, func(key string) (*immich.API, error) {
+		return immich.New(base, immich.Auth{APIKey: key}, nil)
+	})
 	if err != nil {
 		return err
 	}
 	s := &syncer.Syncer{
-		Dest: dest, Log: log,
+		Services: services, Log: log,
 		Cfg: syncer.Config{
-			ShareTag: env("SHARE_TAG", "share"), InboxTag: env("INBOX_TAG", "inbox"), RefusedTag: env("REFUSED_TAG", "share-duplicate"), ExpiryDays: days,
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
 			NotifyURL: os.Getenv("NOTIFY_URL"),
 		},
-	}
-	for _, k := range srcKeys {
-		a, err := immich.New(base, immich.Auth{APIKey: k}, nil)
-		if err != nil {
-			return err
-		}
-		s.Sources = append(s.Sources, a)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	major, minor, err := dest.ServerVersion(ctx)
+	probe := services[0].Receivers[0].API
+	major, minor, err := probe.ServerVersion(ctx)
 	if err != nil {
 		return err
 	}
-	log.Info("connected to Immich", "major", major, "minor", minor)
+	log.Info("connected to Immich", "major", major, "minor", minor, "services", len(services))
 	if major < 3 || (major == 3 && minor < 2) {
-		log.Warn("Immich < 3.2: the tag workflow trigger is not available; only the daily sweep will import")
+		log.Warn("Immich < 3.2: the tag workflow trigger is not available; only the startup and daily passes will hand photos over")
 	}
 
 	w := &web.Server{S: s, BaseURL: base, WebhookHeader: env("WEBHOOK_HEADER", "X-Webhook-Secret"),

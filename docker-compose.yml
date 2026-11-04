@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    # volumes:
+    #   - ./routes.yaml:/routes.yaml:ro   # only with ROUTES_FILE=/routes.yaml
     ports:
       - "8080:8080"
     networks:

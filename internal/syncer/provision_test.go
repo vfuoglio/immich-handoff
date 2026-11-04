@@ -81,7 +81,7 @@ func provision(t *testing.T, f *fakeWorkflows, url string) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &syncer.Syncer{Cfg: syncer.Config{ShareTag: "share"}, Sources: []*immich.API{src}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	s := &syncer.Syncer{Services: []*syncer.Service{service([]*syncer.Account{{Name: "alice", API: src}}, nil)}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	return s.Provision(context.Background(), syncer.Webhook{URL: url, Header: "X-Webhook-Secret", Secret: "s3cret"})
 }
 
@@ -90,7 +90,7 @@ func TestProvisionCreatesThenIsIdempotentThenRepairs(t *testing.T) {
 	srv := httptest.NewServer(f.handler())
 	defer srv.Close()
 	src, _ := immich.New(srv.URL, immich.Auth{APIKey: "src"}, nil)
-	s := &syncer.Syncer{Cfg: syncer.Config{ShareTag: "share"}, Sources: []*immich.API{src}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	s := &syncer.Syncer{Services: []*syncer.Service{service([]*syncer.Account{{Name: "alice", API: src}}, nil)}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	ctx := context.Background()
 	wh := syncer.Webhook{URL: "http://app:8080/webhook/immich", Header: "X-Webhook-Secret", Secret: "s3cret"}
 
