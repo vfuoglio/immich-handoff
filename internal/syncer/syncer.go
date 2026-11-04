@@ -16,6 +16,7 @@ import (
 
 type Config struct {
 	ShareTag, InboxTag string
+	RefusedTag         string // put on an original whose import was refused; replaces ShareTag so it is not retried
 	ExpiryDays         int
 	DeleteForce        bool
 	DryRun             bool
@@ -211,7 +212,7 @@ func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uu
 	}
 	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
 	for _, a := range assets {
-		switch out, err := s.process(ctx, src, a, inbox); {
+		switch out, err := s.process(ctx, src, a, inbox, *tag); {
 		case err != nil:
 			c.Errors++
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
@@ -229,7 +230,7 @@ func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uu
 }
 
 // process imports one asset. The original is deleted last, and only after the copy is verified.
-func (s *Syncer) process(ctx context.Context, src *immich.API, a immich.AssetResponseDto, inbox uuid.UUID) (string, error) {
+func (s *Syncer) process(ctx context.Context, src *immich.API, a immich.AssetResponseDto, inbox, shareTag uuid.UUID) (string, error) {
 	if s.Cfg.DryRun {
 		s.Log.Info("[dry-run] would import and remove original", "asset", a.Id, "file", a.OriginalFileName)
 		return "dryrun", nil
@@ -243,7 +244,11 @@ func (s *Syncer) process(ctx context.Context, src *immich.API, a immich.AssetRes
 		return "", err
 	}
 	if copy_.IsTrashed {
-		s.Log.Warn("a copy exists in the destination trash; import refused, original kept", "file", a.OriginalFileName)
+		s.Log.Warn("a copy exists in the destination trash; import refused, original kept and retagged",
+			"file", a.OriginalFileName, "tag", s.Cfg.RefusedTag)
+		if err := s.markRefused(ctx, src, a.Id, shareTag); err != nil {
+			return "", fmt.Errorf("import refused but could not retag the original: %w", err)
+		}
 		return "refused", nil
 	}
 	if !immich.ChecksumMatches(copy_.Checksum, sum) {
@@ -344,4 +349,21 @@ func hasTag(a *immich.AssetResponseDto, name string) bool {
 		}
 	}
 	return false
+}
+
+// markRefused swaps the share tag for the refused tag on the source original, so the refusal is visible
+// to its owner in the Immich app and the photo is not retried (and not reported) on every pass.
+// Re-adding the share tag after clearing the destination trash retries it.
+func (s *Syncer) markRefused(ctx context.Context, src *immich.API, id, shareTag uuid.UUID) error {
+	if s.Cfg.RefusedTag == "" {
+		return nil
+	}
+	tag, err := src.FindTag(ctx, s.Cfg.RefusedTag, true)
+	if err != nil || tag == nil {
+		return fmt.Errorf("ensure tag %q: %v", s.Cfg.RefusedTag, err)
+	}
+	if err := src.TagAssets(ctx, *tag, id); err != nil {
+		return err
+	}
+	return src.UntagAssets(ctx, shareTag, []uuid.UUID{id})
 }

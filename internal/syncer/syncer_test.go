@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	srcAsset = "11111111-1111-1111-1111-111111111111"
-	dstAsset = "22222222-2222-2222-2222-222222222222"
-	shareTag = "33333333-3333-3333-3333-333333333333"
-	inboxTag = "44444444-4444-4444-4444-444444444444"
-	payload  = "pretend these are JPEG bytes"
-	ts       = "2025-01-02T03:04:05.000Z"
+	srcAsset   = "11111111-1111-1111-1111-111111111111"
+	dstAsset   = "22222222-2222-2222-2222-222222222222"
+	shareTag   = "33333333-3333-3333-3333-333333333333"
+	inboxTag   = "44444444-4444-4444-4444-444444444444"
+	refusedTag = "66666666-6666-6666-6666-666666666666"
+	payload    = "pretend these are JPEG bytes"
+	ts         = "2025-01-02T03:04:05.000Z"
 )
 
 // fakeImmich implements just enough of the Immich v3 API to exercise a full import.
@@ -33,6 +34,8 @@ type fakeImmich struct {
 	storedChecksum    string // what the destination reports
 	deleted, uploaded []string
 	tagged            []string
+	refusedTagged     []string
+	untaggedShare     []string
 	uploadedBytes     string
 	gotChecksumHeader string
 }
@@ -106,6 +109,21 @@ func (f *fakeImmich) handler() http.Handler {
 		f.mu.Unlock()
 		j(w, 200, []any{map[string]any{"id": dstAsset, "success": true}})
 	})
+	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		j(w, 200, []any{tag(refusedTag, "share-duplicate")})
+	})
+	mux.HandleFunc("PUT /api/tags/"+refusedTag+"/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.refusedTagged = append(f.refusedTagged, srcAsset)
+		f.mu.Unlock()
+		j(w, 200, []any{map[string]any{"id": srcAsset, "success": true}})
+	})
+	mux.HandleFunc("DELETE /api/tags/"+shareTag+"/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.untaggedShare = append(f.untaggedShare, srcAsset)
+		f.mu.Unlock()
+		j(w, 200, []any{map[string]any{"id": srcAsset, "success": true}})
+	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Ids []string }
 		json.NewDecoder(r.Body).Decode(&body)
@@ -128,7 +146,7 @@ func run(t *testing.T, f *fakeImmich) syncer.Counts {
 		}
 		return a
 	}
-	s := &syncer.Syncer{Cfg: syncer.Config{ShareTag: "share", InboxTag: "inbox", ExpiryDays: 30},
+	s := &syncer.Syncer{Cfg: syncer.Config{ShareTag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30},
 		Dest: mk("dest"), Sources: []*immich.API{mk("src")}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	s.Run(context.Background(), "test", false)
 	return s.Last().Counts
@@ -161,6 +179,9 @@ func TestTrashedCopyRefusesAndKeepsOriginal(t *testing.T) {
 	c := run(t, f)
 	if c.Refused != 1 || len(f.deleted) != 0 {
 		t.Errorf("counts=%+v deleted=%v", c, f.deleted)
+	}
+	if len(f.refusedTagged) != 1 || len(f.untaggedShare) != 1 {
+		t.Errorf("original must be retagged: refusedTagged=%v untaggedShare=%v", f.refusedTagged, f.untaggedShare)
 	}
 }
 

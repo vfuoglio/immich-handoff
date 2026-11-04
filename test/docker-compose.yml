@@ -11,7 +11,7 @@ services:
       REDIS_HOSTNAME: redis
       IMMICH_MACHINE_LEARNING_ENABLED: "false"
     ports:
-      - "2284:2283"
+      - "${E2E_PORT:-2284}:2283"
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets Immich's workflow webhook reach the app running on the host
     depends_on:

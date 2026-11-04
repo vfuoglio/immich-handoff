@@ -58,7 +58,7 @@ func run(log *slog.Logger) error {
 	s := &syncer.Syncer{
 		Dest: dest, Log: log,
 		Cfg: syncer.Config{
-			ShareTag: env("SHARE_TAG", "share"), InboxTag: env("INBOX_TAG", "inbox"), ExpiryDays: days,
+			ShareTag: env("SHARE_TAG", "share"), InboxTag: env("INBOX_TAG", "inbox"), RefusedTag: env("REFUSED_TAG", "share-duplicate"), ExpiryDays: days,
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
 			NotifyURL: os.Getenv("NOTIFY_URL"),
 		},

@@ -16,7 +16,7 @@ phone: tag "share" ──► Immich workflow ──► POST /webhook/immich ─�
 - **Webhook = wake-up signal.** The payload is not parsed or trusted. Each pass searches Immich by tag, so a lost, duplicated or malformed event cannot lose or double-import a photo. Bursts are coalesced into one extra pass.
 - **Safety net, not polling.** One pass at startup and one sweep per day (`SWEEP_INTERVAL_HOURS`) catch anything missed while the app was down. The sweep also removes the `inbox` tag from photos filed in an album, or unfiled for `INBOX_EXPIRY_DAYS`. Photos are never deleted by cleanup.
 - **Streaming import.** The original is streamed from the source account into the destination upload (`io.Pipe` + `TeeReader`): no temp files, no size limit. The SHA-1 is computed in flight and compared with the checksum Immich stored for the new copy before the original is touched.
-- **Import rules** (same as the script): checksum-verified copy, duplicates not tagged, a copy sitting in the destination trash refuses the import and keeps the original, originals go to the source trash unless `DELETE_FORCE=true`.
+- **Import rules** (same as the script): checksum-verified copy, duplicates not tagged, a copy sitting in the destination trash refuses the import: the original is kept and its `share` tag is swapped for `share-duplicate` (`REFUSED_TAG`), so the owner can see why in the Immich app and it is neither retried nor re-reported on every pass (re-add `share` after emptying the trash to retry), originals go to the source trash unless `DELETE_FORCE=true`.
 - **Stateless.** Config from environment; last-run info is in memory only.
 
 ## Status page (auth option A: Immich's own login)

@@ -25,9 +25,10 @@ import (
 )
 
 const (
-	appPort = "18080"
-	secret  = "e2e-secret"
+	secret = "e2e-secret"
 )
+
+var appPort = envOr("E2E_APP_PORT", "18080")
 
 var baseURL = envOr("IMMICH_E2E_URL", "http://localhost:2284")
 
@@ -368,6 +369,14 @@ func TestEndToEnd(t *testing.T) {
 		if x.IsTrashed {
 			t.Errorf("original was removed although the destination copy is trashed")
 		}
+		eventually(t, "refused original retagged share-duplicate instead of share", 30*time.Second, func() bool {
+			y, _ := getAsset(t, alice, aliceB)
+			names := map[string]bool{}
+			for _, tg := range y.Tags {
+				names[tg.Name] = true
+			}
+			return names["share-duplicate"] && !names["share"]
+		})
 	})
 
 	t.Run("restart cleans the inbox tag from photos filed in an album", func(t *testing.T) {
