@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"time"
 
 	"github.com/vfuoglio/immich-sync-console/internal/immich"
 )
@@ -17,6 +18,8 @@ const WorkflowName = "immich-sync-console"
 // It is idempotent, so it is safe to run on every start. Failures are logged, not fatal: the daily
 // sweep still imports tagged photos even if a workflow could not be created.
 func (s *Syncer) Provision(ctx context.Context, wh Webhook) (failures int) {
+	s.provMu.Lock()
+	defer s.provMu.Unlock()
 	if wh.URL == "" {
 		s.Log.Info("PUBLIC_WEBHOOK_URL not set: not creating workflows; only the startup and daily passes will import")
 		return 0
@@ -44,4 +47,23 @@ func (s *Syncer) Provision(ctx context.Context, wh Webhook) (failures int) {
 		log.Info("workflow ready", "result", res)
 	}
 	return failures
+}
+
+// ProvisionRetry keeps trying in the background until every source is provisioned. Immich reports
+// healthy about half a minute before its workflow plugins finish loading, so the first attempts after
+// an Immich (re)start can fail with "Unknown method"; that is expected and retried with backoff.
+func (s *Syncer) ProvisionRetry(ctx context.Context, wh Webhook) {
+	start, delay := time.Now(), 5*time.Second
+	for s.Provision(ctx, wh) > 0 {
+		if time.Since(start) > 15*time.Minute {
+			s.Log.Error("giving up provisioning workflows; the daily sweep will retry")
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, time.Minute)
+	}
 }

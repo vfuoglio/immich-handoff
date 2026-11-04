@@ -4,7 +4,7 @@ Event-driven successor to [immich_family_sync](../immich_family_sync) for **Immi
 
 A family member tags a photo `share` in the Immich app. An Immich **workflow** calls this app's webhook, and the app moves the photo to the shared family account and tags the copy `inbox`. The original is removed only after the copy is verified. No polling for new photos.
 
-> **Status: scaffold, untested against a real server.** See [Open questions](#open-questions).
+> **Status: end-to-end tested against Immich v3.2.0 in Docker (`test/run.sh`); not yet run on a production server.** See [Open questions](#open-questions).
 
 ## How it works
 
@@ -34,6 +34,16 @@ Serve the app on the **same host as Immich** through the Synology reverse proxy 
 - Tests run the full import against a fake Immich (`go test ./...`): streaming, duplicate, trashed copy, checksum mismatch.
 - To move to a newer Immich: replace the spec in `api/`, update the path in `internal/immich/generate.go`, run `go generate ./...`, fix what breaks.
 
+## Testing
+
+- `go test ./...`: unit tests against a fake Immich (fast, no Docker).
+- `test/run.sh`: starts a throwaway **Immich v3.2.0** (`test/docker-compose.yml`, port 2284, nothing persisted), builds the real binary, and runs `test/e2e` against it, then tears everything down (`keep=1 test/run.sh` leaves Immich running). It creates three users and checks: workflow creation, a tagged photo arriving through the real workflow webhook, duplicates, a trashed destination copy refusing the import, and inbox cleanup after filing in an album. `IMMICH_VERSION=...` tests another release.
+
+Things the real-server tests found, now handled in the code:
+
+- **Immich is healthy ~30 s before its workflow plugins load.** Creating the workflow right after an Immich start fails with `Unknown method`, so provisioning retries in the background with backoff and is re-checked at every daily sweep.
+- **The tag-added event can arrive before the tag is visible through the API** (neither the tag search nor a lookup by id shows it yet). The webhook payload's asset id is used as an *unverified hint*: the app re-checks it with the source account's own key and retries for about a minute before leaving it to the daily sweep.
+
 ## Setup
 
 1. Copy `.env.example` to `.env` and fill it in (API keys as in immich_family_sync; pick a long random `WEBHOOK_SECRET`).
@@ -45,12 +55,12 @@ Serve the app on the **same host as Immich** through the Synology reverse proxy 
 
 Verify on your server before relying on this:
 
-- Workflow provisioning follows the v3.2.0 spec and source (trigger `AssetTagged`, methods `immich-plugin-core#assetTagFilter` and `#webhook`) but has only run against a fake server. Check the logs for `workflow ready`, and the workflow in the Immich UI.
+- Workflow provisioning, the webhook path and the import rules are verified against a real Immich 3.2.0 in Docker. Still unverified: tagging from the **mobile app** firing the trigger, and your server's reverse-proxy/network setup (`PUBLIC_WEBHOOK_URL` must be reachable from the Immich container).
 - Webhook host restrictions: the plugin manifest allows any host, but check that the container is reachable from Immich.
 - Whether the tag trigger fires for tags added from the mobile app.
 - Name of Immich's session cookie and whether `/api/users/me` accepts it (the app forwards all cookies, so the name should not matter).
 - Whether phones re-upload originals that were trashed on the server (inherited from the script).
-- Uploads omit the `x-immich-checksum` hint (the hash is only known after streaming); confirm Immich still reports duplicates correctly without it.
+- Uploads omit the `x-immich-checksum` hint (the hash is only known after streaming). Verified: Immich still reports duplicates correctly without it.
 - Search pagination follows `nextCursor`, falling back to `nextPage`; the cursor semantics are untested.
 - Workflows are a preview feature in Immich; the interface may change.
 

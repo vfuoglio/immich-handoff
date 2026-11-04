@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -64,6 +65,19 @@ func (w *Server) webhook(rw http.ResponseWriter, r *http.Request) {
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(w.WebhookHeader)), []byte(w.WebhookSecret)) != 1 {
 		http.Error(rw, "bad webhook secret", http.StatusUnauthorized)
 		return
+	}
+	if body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10)); err == nil {
+		w.Log.Debug("webhook received", "body", string(body))
+		var ev struct {
+			Data struct {
+				Asset struct {
+					ID uuid.UUID `json:"id"`
+				} `json:"asset"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(body, &ev) == nil && ev.Data.Asset.ID != uuid.Nil {
+			w.S.AddHint(ev.Data.Asset.ID) // only a hint: verified against Immich before use
+		}
 	}
 	go w.S.Run(w.BackgroundCtx, "webhook", false)
 	rw.WriteHeader(http.StatusAccepted)

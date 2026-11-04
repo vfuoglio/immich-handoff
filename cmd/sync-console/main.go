@@ -25,7 +25,11 @@ func env(k, def string) string {
 }
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	level := slog.LevelInfo
+	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
+		level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	if err := run(log); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
@@ -85,11 +89,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	s.Provision(ctx, syncer.Webhook{URL: os.Getenv("PUBLIC_WEBHOOK_URL"), Header: w.WebhookHeader, Secret: secret})
+	hook := syncer.Webhook{URL: os.Getenv("PUBLIC_WEBHOOK_URL"), Header: w.WebhookHeader, Secret: secret}
+	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 
 	// Startup catch-up and a slow daily sweep (also expires the inbox tag). This is a safety net, not polling.
 	go func() {
 		for {
+			s.Provision(ctx, hook) // heals a deleted or edited workflow; no-op when already correct
 			s.Run(ctx, "sweep", true)
 			select {
 			case <-ctx.Done():

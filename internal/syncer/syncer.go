@@ -49,12 +49,73 @@ type Syncer struct {
 	Sources []*immich.API
 	Log     *slog.Logger
 
-	mu    sync.Mutex
-	rerun atomic.Bool
-	last  atomic.Pointer[RunInfo]
+	mu     sync.Mutex
+	provMu sync.Mutex
+	hintMu sync.Mutex
+	hints  map[uuid.UUID]int // asset id -> attempts so far
+	rerun  atomic.Bool
+	last   atomic.Pointer[RunInfo]
 }
 
 func (s *Syncer) Last() *RunInfo { return s.last.Load() }
+
+// AddHint records an asset id taken from a webhook payload. A hint is never trusted: the next pass
+// fetches the asset with the source account's own key and checks it really carries the share tag.
+// Immich can announce a tag before the tag is visible through its API, so unresolved hints are retried
+// with a short backoff (see retryHints).
+func (s *Syncer) AddHint(id uuid.UUID) {
+	s.hintMu.Lock()
+	defer s.hintMu.Unlock()
+	if s.hints == nil {
+		s.hints = map[uuid.UUID]int{}
+	}
+	if _, ok := s.hints[id]; !ok {
+		s.hints[id] = 0
+	}
+}
+
+func (s *Syncer) takeHints() map[uuid.UUID]int {
+	s.hintMu.Lock()
+	defer s.hintMu.Unlock()
+	out := s.hints
+	s.hints = nil
+	return out
+}
+
+const maxHintAttempts = 6 // backoff 1s,2s,4s,8s,16s,32s: ~1 minute before leaving it to the daily sweep
+
+// retryHints re-queues hints that no source could confirm and schedules another pass for them.
+func (s *Syncer) retryHints(ctx context.Context, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) {
+	delay := time.Duration(0)
+	s.hintMu.Lock()
+	for id, attempts := range hints {
+		if resolved[id] {
+			if attempts > 0 {
+				s.Log.Info("tag became visible after retries", "asset", id, "retries", attempts)
+			}
+			continue
+		}
+		if attempts+1 >= maxHintAttempts {
+			s.Log.Warn("tag still not visible; leaving the asset to the next sweep", "asset", id)
+			continue
+		}
+		if s.hints == nil {
+			s.hints = map[uuid.UUID]int{}
+		}
+		s.hints[id] = attempts + 1
+		if d := time.Second << attempts; d > delay {
+			delay = d
+		}
+	}
+	s.hintMu.Unlock()
+	if delay > 0 {
+		time.AfterFunc(delay, func() {
+			if ctx.Err() == nil {
+				s.Run(ctx, "retry: tag not yet visible", false)
+			}
+		})
+	}
+}
 
 // Run starts a pass, or, if one is already running, asks it to go round once more.
 // Webhooks are only wake-up signals: every pass searches by tag, so lost or duplicated events are harmless.
@@ -66,7 +127,7 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 	defer s.mu.Unlock()
 	for {
 		s.rerun.Store(false)
-		s.once(ctx, reason, cleanup)
+		s.once(ctx, reason, cleanup, s.takeHints())
 		if !s.rerun.Load() {
 			return
 		}
@@ -74,7 +135,7 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 	}
 }
 
-func (s *Syncer) once(ctx context.Context, reason string, cleanup bool) {
+func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]int) {
 	info := &RunInfo{Started: time.Now(), Reason: reason}
 	defer func() {
 		info.Finished = time.Now()
@@ -99,10 +160,12 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool) {
 	if inbox != nil {
 		inboxID = *inbox
 	}
+	resolved := map[uuid.UUID]bool{}
 	for i, src := range s.Sources {
-		c := s.ingest(ctx, i+1, src, destUser.ID, inboxID)
+		c := s.ingest(ctx, i+1, src, destUser.ID, inboxID, hints, resolved)
 		info.Counts.add(c)
 	}
+	s.retryHints(ctx, hints, resolved)
 	if cleanup && inbox != nil {
 		n, err := s.cleanup(ctx, inboxID)
 		info.Untagged = n
@@ -113,7 +176,7 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool) {
 	}
 }
 
-func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uuid.UUID, inbox uuid.UUID) (c Counts) {
+func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uuid.UUID, inbox uuid.UUID, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) (c Counts) {
 	log := s.Log.With("source", n)
 	me, err := src.Me(ctx)
 	if err != nil {
@@ -141,7 +204,12 @@ func (s *Syncer) ingest(ctx context.Context, n int, src *immich.API, destUser uu
 		c.Errors++
 		return
 	}
-	log.Info("tagged assets found", "user", me.Email, "count", len(assets))
+	assets = s.withHinted(ctx, log, src, assets, hints, resolved)
+	ids := make([]string, 0, len(assets))
+	for _, a := range assets {
+		ids = append(ids, a.Id.String())
+	}
+	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
 	for _, a := range assets {
 		switch out, err := s.process(ctx, src, a, inbox); {
 		case err != nil:
@@ -233,4 +301,47 @@ func (s *Syncer) cleanup(ctx context.Context, inbox uuid.UUID) (int, error) {
 		return 0, nil
 	}
 	return len(drop), s.Dest.UntagAssets(ctx, inbox, drop)
+}
+
+// withHinted adds assets named by webhook events that the tag search did not return, after checking
+// with this account's own key that they exist and carry the share tag. Hints that this account can
+// confirm (or that are trashed, so there is nothing to do) are recorded in resolved.
+func (s *Syncer) withHinted(ctx context.Context, log *slog.Logger, src *immich.API, found []immich.AssetResponseDto, hints map[uuid.UUID]int, resolved map[uuid.UUID]bool) []immich.AssetResponseDto {
+	have := map[uuid.UUID]bool{}
+	for _, a := range found {
+		have[a.Id] = true
+		resolved[a.Id] = true
+	}
+	for id := range hints {
+		if have[id] {
+			continue
+		}
+		a, err := src.Asset(ctx, id) // fails for assets owned by another account: simply not ours
+		if err != nil {
+			continue
+		}
+		if a.IsTrashed {
+			resolved[id] = true
+			continue
+		}
+		if !hasTag(a, s.Cfg.ShareTag) {
+			continue // announced by an event but the tag is not visible yet; retried
+		}
+		log.Info("tag search did not list a freshly tagged asset; using the event hint", "asset", id)
+		resolved[id] = true
+		found = append(found, *a)
+	}
+	return found
+}
+
+func hasTag(a *immich.AssetResponseDto, name string) bool {
+	if a.Tags == nil {
+		return false
+	}
+	for _, t := range *a.Tags {
+		if t.Name == name || t.Value == name {
+			return true
+		}
+	}
+	return false
 }
