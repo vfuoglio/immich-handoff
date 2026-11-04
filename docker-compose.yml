@@ -1,0 +1,12 @@
+services:
+  immich-sync-console:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    # Join Immich's compose network so IMMICH_BASE_URL can be http://immich-server:2283
+    # networks: [immich_default]
+    ports:
+      - "8080:8080"   # reverse-proxy at the SAME host as Immich (e.g. /family-sync/)
+# networks:
+#   immich_default:
+#     external: true

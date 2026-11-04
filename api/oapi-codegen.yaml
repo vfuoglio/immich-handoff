@@ -1,0 +1,23 @@
+# Generates a typed Immich client from the pinned OpenAPI spec.
+# Only the operations this app uses are generated, so a spec bump that changes
+# one of them shows up as a compile error (the failure that silently broke the old script).
+package: immich
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  include-operation-ids:
+    - getMyUser
+    - getAllTags
+    - upsertTags
+    - tagAssets
+    - untagAssets
+    - searchAssets
+    - getAssetInfo
+    - deleteAssets
+    - uploadAsset
+    - downloadAsset
+    - getServerVersion
+    - getWorkflowTriggers
+    - searchWorkflows
