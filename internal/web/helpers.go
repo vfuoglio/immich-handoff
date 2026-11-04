@@ -129,3 +129,17 @@ func memberSuffix(state string) string {
 	}
 	return ""
 }
+
+func valsInvite(service, invite string) string {
+	m := map[string]string{"service": service}
+	if invite != "" {
+		m["invite"] = invite
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func visVals(service, visibility string) string {
+	b, _ := json.Marshal(map[string]string{"service": service, "visibility": visibility})
+	return string(b)
+}

@@ -999,3 +999,89 @@ func TestLinkHealth(t *testing.T) {
 	must(post(t, port, "/reconnect", owner, url.Values{"service": {"pause"}}), 204, "reconnect")
 	eventually(t, "photos flow again after reconnecting", 90*time.Second, func() bool { return trashed(three) && inbox() == base+3 })
 }
+
+// TestInvitations: an invitation-only service is invisible in the directory, reachable only through the
+// owner's link, and a new link makes the old one useless.
+func TestInvitations(t *testing.T) {
+	_, bob, _, _ := bootstrap(t) // alice owns the service, bob is invited
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 5)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, guest := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	status := func(path, cookie string) (int, string) {
+		req, _ := http.NewRequest("GET", "http://localhost:"+port+path, nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	want := func(res *http.Response, code int, what string) {
+		t.Helper()
+		if res.StatusCode != code {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, code)
+		}
+	}
+	token := func() string {
+		_, body := status("/", owner)
+		m := regexp.MustCompile(`data-invite="([0-9a-f]{32})"`).FindStringSubmatch(body)
+		if m == nil {
+			t.Fatalf("the owner's page must show an invitation link: %.500s", body)
+		}
+		return m[1]
+	}
+
+	want(post(t, port, "/services", owner, url.Values{"name": {"club"}, "tag": {"club-tag"}, "policy": {"approval"}, "visibility": {"invite"}}), 204, "create")
+	if _, body := status("/", guest); strings.Contains(body, ">club<") {
+		t.Fatalf("an invitation-only service must not be in the directory: %.400s", body)
+	}
+	want(post(t, port, "/ask", guest, url.Values{"service": {"club"}}), 409, "asking by name without the link")
+
+	link := token()
+	if code, _ := status("/invite/not-a-real-token", guest); code != 404 {
+		t.Errorf("a wrong link: HTTP %d", code)
+	}
+	code, body := status("/invite/"+link, guest)
+	if code != 200 || !strings.Contains(body, "You are invited") || !strings.Contains(body, "Ask to join") {
+		t.Fatalf("the link must lead to the service: %d %.500s", code, body)
+	}
+	want(post(t, port, "/ask", guest, url.Values{"service": {"club"}, "invite": {link}}), 204, "asking with the link")
+
+	_, ownerPage := status("/", owner)
+	m := regexp.MustCompile(`request(?:"|&#34;|&quot;):(?:"|&#34;|&quot;)([0-9a-f-]{36})`).FindStringSubmatch(ownerPage)
+	if m == nil {
+		t.Fatalf("the owner should see the request: %.500s", ownerPage)
+	}
+	want(post(t, port, "/decide", owner, url.Values{"service": {"club"}, "request": {m[1]}, "decision": {"approve"}}), 204, "approve")
+
+	want(post(t, port, "/services/invite", guest, url.Values{"service": {"club"}}), 409, "a guest making links")
+	want(post(t, port, "/services/invite", owner, url.Values{"service": {"club"}}), 204, "new link")
+	if fresh := token(); fresh == link {
+		t.Error("a new link must differ from the old one")
+	}
+	if code, _ := status("/invite/"+link, loginCookie(t, "admin@e2e.test")); code != 404 {
+		t.Errorf("the old link must stop working: HTTP %d", code)
+	}
+
+	// approval already given: no link needed to activate
+	want(post(t, port, "/join", guest, url.Values{"service": {"club"}}), 204, "activate")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: club" {
+				return true
+			}
+		}
+		return false
+	})
+	id, _ := upload(t, bob, "club.jpg", jpegBytes(110))
+	tagAsset(t, bob, "club-tag", id)
+	eventually(t, "the invited sender hands over", 90*time.Second, func() bool {
+		x, code := getAsset(t, bob, id)
+		return code == 200 && x.IsTrashed
+	})
+}

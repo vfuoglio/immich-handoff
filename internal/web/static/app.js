@@ -15,3 +15,18 @@ document.addEventListener("htmx:beforeSwap", (e) => {
   es.onopen = () => indicator && indicator.classList.remove("off");
   es.onerror = () => indicator && indicator.classList.add("off");
 })();
+
+// Invitation links: show the full address (it depends on where this page is served) and let people copy it.
+function fillInvites(root) {
+  root.querySelectorAll("input.invite[data-invite]").forEach((el) => {
+    el.value = new URL("invite/" + el.dataset.invite, document.baseURI).href;
+  });
+}
+document.addEventListener("DOMContentLoaded", () => fillInvites(document));
+document.addEventListener("htmx:afterSwap", (e) => fillInvites(e.target));
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button.copy");
+  if (!btn) return;
+  const input = btn.parentElement.querySelector("input.invite");
+  if (input && navigator.clipboard) navigator.clipboard.writeText(input.value).then(() => { btn.textContent = "Copied"; });
+});

@@ -199,7 +199,7 @@ func TestJoinCreatesKeyWorkflowAndMembership(t *testing.T) {
 	if j := e.h.Joinable(bobID); len(j) != 1 {
 		t.Fatalf("bob should be offered the service: %v", j)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(e.f.keys) != 1 || len(e.f.deletedKeys) != 0 {
@@ -221,7 +221,7 @@ func TestJoinCreatesKeyWorkflowAndMembership(t *testing.T) {
 	if j := e.h.Joinable(bobID); len(j) != 0 {
 		t.Errorf("bob must no longer be offered the service")
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family"); !errors.Is(err, hub.ErrAlready) {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); !errors.Is(err, hub.ErrAlready) {
 		t.Errorf("joining twice: %v", err)
 	}
 }
@@ -231,7 +231,7 @@ func TestJoinKeepsMembershipWhenTheWorkflowIsNotReadyYet(t *testing.T) {
 	retried := make(chan struct{}, 1)
 	e.h.Retry = func() { retried <- struct{}{} }
 	e.f.failWorkflows = true // Immich has not finished loading its plugins
-	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
 		t.Fatalf("joining must still succeed: %v", err)
 	}
 	if len(e.f.keys) != 1 || len(e.f.deletedKeys) != 0 || senders(e) != 1 {
@@ -247,7 +247,7 @@ func TestJoinKeepsMembershipWhenTheWorkflowIsNotReadyYet(t *testing.T) {
 func TestJoinRollsBackWhenTheNewKeyDoesNotWork(t *testing.T) {
 	e, ctx := setup(t, true), context.Background()
 	other := immich.User{ID: uuid.New(), Name: "Someone else", Email: "o@x.test"} // the new key belongs to bob, not to this user
-	if err := e.h.Join(ctx, e.sess, other, "family"); err == nil {
+	if err := e.h.Join(ctx, e.sess, other, "family", ""); err == nil {
 		t.Fatal("expected an error")
 	}
 	if len(e.f.keys) != 0 || len(e.f.deletedKeys) != 1 {
@@ -260,15 +260,15 @@ func TestJoinRollsBackWhenTheNewKeyDoesNotWork(t *testing.T) {
 
 func TestJoinRefusals(t *testing.T) {
 	ctx := context.Background()
-	if err := setup(t, false).h.Join(ctx, setup(t, false).sess, bob, "family"); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := setup(t, false).h.Join(ctx, setup(t, false).sess, bob, "family", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("closed service: %v", err)
 	}
 	e := setup(t, true)
-	if err := e.h.Join(ctx, e.sess, bob, "nope"); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := e.h.Join(ctx, e.sess, bob, "nope", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("unknown service: %v", err)
 	}
 	familyUser := immich.User{ID: familyID, Name: "Family", Email: "f@x.test"}
-	if err := e.h.Join(ctx, e.sess, familyUser, "family"); !errors.Is(err, hub.ErrAlready) {
+	if err := e.h.Join(ctx, e.sess, familyUser, "family", ""); !errors.Is(err, hub.ErrAlready) {
 		t.Errorf("a receiver must not also join as sender: %v", err)
 	}
 	if len(e.f.keys) != 0 {
@@ -281,7 +281,7 @@ func TestLeaveRemovesWorkflowKeyAndMembership(t *testing.T) {
 	if err := e.h.Leave(ctx, e.sess, bob, "family"); !errors.Is(err, hub.ErrNotJoined) {
 		t.Errorf("leaving without joining: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.h.Leave(ctx, e.sess, bob, "family"); err != nil {
@@ -303,7 +303,7 @@ func TestLeaveRemovesWorkflowKeyAndMembership(t *testing.T) {
 
 func TestReloadKeepsMembersAcrossARestart(t *testing.T) {
 	e, ctx := setup(t, true), context.Background()
-	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
 		t.Fatal(err)
 	}
 	fresh := &hub.Hub{Static: e.h.Static, Store: e.st, Connect: e.h.Connect, Log: e.h.Log}
@@ -326,7 +326,7 @@ func service(e *env, name string) *syncer.Service {
 
 func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval"); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", ""); err != nil {
 		t.Fatal(err)
 	}
 	svc := service(e, "holiday")
@@ -341,7 +341,7 @@ func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 		t.Errorf("owner view: %+v", owned)
 	}
 	for _, bad := range [][2]string{{"x", "t"}, {"ok name", "a/b"}, {"default", "t"}, {"family", "t"}, {"holiday", "t"}} {
-		if err := e.h.CreateService(ctx, e.ann, ann, bad[0], bad[1], "open"); err == nil {
+		if err := e.h.CreateService(ctx, e.ann, ann, bad[0], bad[1], "open", ""); err == nil {
 			t.Errorf("service %q with tag %q must be refused", bad[0], bad[1])
 		}
 	}
@@ -352,22 +352,22 @@ func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 
 func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval"); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", ""); err != nil {
 		t.Fatal(err)
 	}
 	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 || offers[0].State != "request" {
 		t.Fatalf("bob should be able to ask: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Fatalf("joining without approval: %v", err)
 	}
 	if len(e.f.keys) != 1 {
 		t.Fatalf("no sender key may be made before approval (keys=%d)", len(e.f.keys))
 	}
-	if err := e.h.Ask(ctx, bob, "holiday"); err != nil {
+	if err := e.h.Ask(ctx, bob, "holiday", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Ask(ctx, bob, "holiday"); err != nil {
+	if err := e.h.Ask(ctx, bob, "holiday", ""); err != nil {
 		t.Errorf("asking twice is harmless: %v", err)
 	}
 	owned, _ := e.h.Owned(ctx, annID)
@@ -377,7 +377,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	if err := e.h.Decide(ctx, bob, "holiday", owned[0].Requests[0].ID, true); !errors.Is(err, hub.ErrNotOwner) {
 		t.Errorf("a non-owner must not decide: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Errorf("still pending: %v", err)
 	}
 	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, true); err != nil {
@@ -386,7 +386,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "approved" {
 		t.Errorf("bob should be able to activate: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := service(e, "holiday").Senders; len(got) != 1 || got[0].UserID != bobID {
@@ -399,13 +399,13 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 
 func TestDeclinedRequestCannotActivate(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval")
-	e.h.Ask(ctx, bob, "holiday")
+	e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", "")
+	e.h.Ask(ctx, bob, "holiday", "")
 	owned, _ := e.h.Owned(ctx, annID)
 	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday"); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Errorf("declined: %v", err)
 	}
 	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "declined" {
@@ -415,21 +415,21 @@ func TestDeclinedRequestCannotActivate(t *testing.T) {
 
 func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
 	e, ctx := setup(t, true), context.Background() // the static "family" service is open and uses tag "share"
-	if err := e.h.CreateService(ctx, e.ann, ann, "everyone", "SHARE", "open"); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, "everyone", "SHARE", "open", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "everyone"); !errors.Is(err, hub.ErrTagInUse) {
+	if err := e.h.Join(ctx, e.sess, bob, "everyone", ""); !errors.Is(err, hub.ErrTagInUse) {
 		t.Errorf("bob already sends with the tag 'share' to another service: %v", err)
 	}
 }
 
 func TestDeletingAServiceLeavesMembersAbleToCleanUp(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
-	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.h.DeleteService(ctx, e.sess, bob, "party"); !errors.Is(err, hub.ErrNotOwner) {
@@ -473,8 +473,8 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	var told []string
 	e.h.Notify = func(m string) { told = append(told, m) }
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
-	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
 		t.Fatal(err)
 	}
 	e.h.CheckKeys(ctx)
@@ -512,7 +512,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
 		t.Fatalf("rejoining after clean up: %v", err)
 	}
 	if len(service(e, "party").Senders) != 1 {
@@ -522,8 +522,8 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 
 func TestDeletedReceiverKeyPausesTheServiceUntilTheOwnerReconnects(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
-	e.h.Join(ctx, e.sess, bob, "party")
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	e.h.Join(ctx, e.sess, bob, "party", "")
 
 	e.f.deleteKeyOf("ann")
 	e.h.CheckKeys(ctx)
@@ -558,5 +558,91 @@ func TestRejectedKeyFromTheConfigurationIsLeftToThePass(t *testing.T) {
 	e.h.KeyRejected(e.h.Static[0].Receivers[0]) // not one of the stored accounts: must not panic or change anything
 	if len(e.h.Services()) != 1 {
 		t.Error("services must be unchanged")
+	}
+}
+
+func TestInviteOnlyServiceIsHiddenAndReachedWithTheLink(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, "secret club", "club", "open", "invite"); err != nil {
+		t.Fatal(err)
+	}
+	svc := service(e, "secret club")
+	token := e.h.InviteOf(svc)
+	if token == "" || !svc.Unlisted {
+		t.Fatalf("an invite-only service needs a link: %+v", svc)
+	}
+	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 0 {
+		t.Errorf("it must not appear in the directory: %+v", offers)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", ""); !errors.Is(err, hub.ErrNotJoinable) {
+		t.Errorf("joining by name without the link: %v", err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", "wrong"); !errors.Is(err, hub.ErrNotJoinable) {
+		t.Errorf("a wrong link: %v", err)
+	}
+	if len(e.f.keys) != 1 {
+		t.Errorf("a refused join must not create a key, got %d", len(e.f.keys))
+	}
+	if o, err := e.h.InviteOffer(ctx, bobID, token); err != nil || o.Service.Label() != "secret club" || o.State != "join" {
+		t.Fatalf("the link leads to the service: %+v %v", o, err)
+	}
+	if _, err := e.h.InviteOffer(ctx, bobID, "wrong"); !errors.Is(err, hub.ErrNoInvite) {
+		t.Errorf("a wrong link: %v", err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", token); err != nil {
+		t.Fatalf("joining with the link: %v", err)
+	}
+	if _, err := e.h.InviteOffer(ctx, bobID, token); !errors.Is(err, hub.ErrAlready) {
+		t.Errorf("a member following the link again: %v", err)
+	}
+}
+
+func TestNewInviteRevokesTheOldLinkAndListingRemovesTheNeedForOne(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, "club", "club", "open", "invite")
+	old := e.h.InviteOf(service(e, "club"))
+	if err := e.h.NewInvite(ctx, bob, "club"); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("only the owner makes links: %v", err)
+	}
+	if err := e.h.NewInvite(ctx, ann, "club"); err != nil {
+		t.Fatal(err)
+	}
+	fresh := e.h.InviteOf(service(e, "club"))
+	if fresh == "" || fresh == old {
+		t.Fatalf("a new link is expected: %q vs %q", fresh, old)
+	}
+	if _, err := e.h.InviteOffer(ctx, bobID, old); !errors.Is(err, hub.ErrNoInvite) {
+		t.Errorf("the old link must stop working: %v", err)
+	}
+	if err := e.h.SetVisibility(ctx, ann, "club", "listed"); err != nil {
+		t.Fatal(err)
+	}
+	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 {
+		t.Errorf("a listed service appears in the directory: %+v", offers)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "club", ""); err != nil {
+		t.Errorf("a listed service needs no link: %v", err)
+	}
+}
+
+func TestInviteWithApprovalNeedsTheLinkOnlyToAsk(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, "club", "club", "approval", "invite")
+	token := e.h.InviteOf(service(e, "club"))
+	if err := e.h.Ask(ctx, bob, "club", ""); !errors.Is(err, hub.ErrNotJoinable) {
+		t.Errorf("asking without the link: %v", err)
+	}
+	if err := e.h.Ask(ctx, bob, "club", token); err != nil {
+		t.Fatal(err)
+	}
+	owned, _ := e.h.Owned(ctx, annID)
+	if err := e.h.Decide(ctx, ann, "club", owned[0].Requests[0].ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.NewInvite(ctx, ann, "club"); err != nil { // the link changes, the approval stays valid
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "club", ""); err != nil {
+		t.Errorf("an approved person activates without the link: %v", err)
 	}
 }

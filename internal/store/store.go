@@ -24,6 +24,9 @@ const (
 	StateOrphaned = "orphaned" // the service was removed by its owner; the member can still clean up
 	StateBroken   = "broken"   // Immich rejected the key (it was deleted or revoked)
 
+	VisListed = "listed" // shown to everyone signed in to Immich
+	VisInvite = "invite" // reachable only through the owner's invitation link
+
 	PolicyApproval = "approval"
 	PolicyOpen     = "open"
 
@@ -106,6 +109,8 @@ var migrations = []string{
 	   kind    TEXT NOT NULL,
 	   text    TEXT NOT NULL
 	 );`,
+	`ALTER TABLE services ADD COLUMN visibility TEXT NOT NULL DEFAULT 'listed';
+	 ALTER TABLE services ADD COLUMN invite TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -249,6 +254,7 @@ type Service struct {
 	Key                    string    // decrypted
 	Policy                 string
 	State, Note            string // healthy ("active") or why not
+	Visibility, Invite     string // who can see it; the invitation token (empty until one is made)
 	CreatedAt              time.Time
 }
 
@@ -262,6 +268,9 @@ type Request struct {
 }
 
 func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
+	if v.Visibility == "" {
+		v.Visibility = VisListed
+	}
 	v.ID = uuid.NewString()
 	v.CreatedAt = time.Now().UTC()
 	enc, err := s.vault.Seal([]byte(v.Key), v.ID)
@@ -269,9 +278,9 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 		return v, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.CreatedAt.Format(time.RFC3339Nano))
+		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, visibility, invite, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.Visibility, v.Invite, v.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		if isUnique(err) {
 			return v, ErrExists
@@ -283,7 +292,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 
 func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, created_at FROM services ORDER BY created_at, id`)
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, created_at FROM services ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +302,7 @@ func (s *Store) Services(ctx context.Context) ([]Service, error) {
 		var v Service
 		var owner, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &created); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &created); err != nil {
 			return nil, err
 		}
 		v.OwnerID, _ = uuid.Parse(owner)
@@ -447,4 +456,10 @@ func (s *Store) Events(ctx context.Context, limit int) ([]Event, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// SetServiceVisibility changes who can see a service and sets its invitation token.
+func (s *Store) SetServiceVisibility(ctx context.Context, id, visibility, invite string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE services SET visibility = ?, invite = ? WHERE id = ?`, visibility, invite, id)
+	return err
 }

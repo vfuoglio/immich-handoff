@@ -98,12 +98,14 @@ If someone joins while Immich is still starting up, they are added straight away
 
 ## Offering your own service (optional)
 
-With `HANDOFF_STORE_KEY` set, anyone signed in to Immich can also **offer a service** from the web page: a name, the tag senders will use, and who may send (**people I approve** or **anyone on this Immich server**). The person offering is the receiver: the photos land in their account.
+With `HANDOFF_STORE_KEY` set, anyone signed in to Immich can also **offer a service** from the web page: a name, the tag senders will use, who can **find** it (**everyone on this Immich server**, or **only people I send a link to**) and who may **send** (**people I approve** or **anyone on this Immich server**). The person offering is the receiver: the photos land in their account.
 
 1. The owner presses **Create service**. The app makes a receiver key in the owner's account and keeps it encrypted.
 2. Others see the service under **Services you can send to**. For a service that needs approval they press **Ask to join**; the owner sees the request and presses **Approve** or **Decline**.
 3. After approval the sender presses **Activate**. (The app can only create a key in your account while you are signed in, which is why the sender has the last step.) For an open service, senders just press **Join**.
 4. A sender may not use the same tag for two services.
+
+**Invitation-only services** do not appear in anyone's list. The owner's card shows an **invitation link**; whoever opens it (signed in to Immich) lands on a page for exactly that service, with the same Join or Ask to join button. **New link** makes a fresh link and the old one stops working at once; **List for everyone** or **Make invitation-only** switch a service between the two. People already approved or joined are not affected by a new link. The link is only as private as the way you share it.
 
 Neither side ever sees the other's key, or their own. Either side can end it: the sender with **Leave**, the owner with **Delete service**, or either by deleting the key named `handoff: ...` in Immich (Account Settings -> API Keys), which stops the hand-over. If an owner deletes a service, its senders see **Removed by its owner** and press **Clean up** to remove their own key and workflow.
 

@@ -2,6 +2,9 @@ package hub
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -21,6 +24,7 @@ var (
 	ErrTagInUse  = errors.New("you already use this tag for another service you send to")
 	ErrNotOwner  = errors.New("only the owner of a service can do that")
 	ErrNoRequest = errors.New("there is no such request")
+	ErrNoInvite  = errors.New("this invitation is not valid any more")
 )
 
 var (
@@ -45,7 +49,7 @@ func (h *Hub) tagFree(user uuid.UUID, joining *syncer.Service) error {
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
 // created in their account through their own session and kept encrypted; nobody ever sees it.
-func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.User, name, tag, policy string) error {
+func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.User, name, tag, policy, visibility string) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
@@ -58,6 +62,12 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	}
 	if policy != store.PolicyOpen && policy != store.PolicyApproval {
 		policy = store.PolicyApproval
+	}
+	invite := ""
+	if visibility == store.VisInvite {
+		invite = newToken()
+	} else {
+		visibility = store.VisListed
 	}
 	for _, s := range h.Services() {
 		if strings.EqualFold(s.Label(), name) {
@@ -83,6 +93,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if _, err := h.Store.AddService(ctx, store.Service{
 		Name: name, Tag: tag, InboxTag: h.Options.InboxTag, Refused: h.Options.RefusedTag, ExpiryDays: h.Options.ExpiryDays,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
+		Visibility: visibility, Invite: invite,
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -139,12 +150,12 @@ func (h *Hub) request(ctx context.Context, service string, user uuid.UUID) (*sto
 }
 
 // Ask records that the person wants to send to a service that needs the owner's approval.
-func (h *Hub) Ask(ctx context.Context, user immich.User, service string) error {
+func (h *Hub) Ask(ctx context.Context, user immich.User, service, invite string) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
 	svc := h.service(service)
-	if svc == nil || !svc.NeedsApproval {
+	if svc == nil || !svc.NeedsApproval || !invited(svc, invite) {
 		return ErrNotJoinable
 	}
 	if Takes(svc, user.ID) {
@@ -201,7 +212,7 @@ func (h *Hub) Offers(ctx context.Context, user uuid.UUID) ([]Offer, error) {
 	}
 	var out []Offer
 	for _, svc := range h.Services() {
-		if Takes(svc, user) || svc.OwnerID == user {
+		if Takes(svc, user) || svc.OwnerID == user || svc.Unlisted {
 			continue
 		}
 		switch {
@@ -272,10 +283,105 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite} {
 		if errors.Is(err, e) {
 			return true
 		}
 	}
 	return false
+}
+
+// invited reports whether the service may be reached with this token: listed services need none.
+func invited(svc *syncer.Service, token string) bool {
+	return !svc.Unlisted || (token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(svc.Invite)) == 1)
+}
+
+func newToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err) // the system random source failing is not recoverable
+	}
+	return hex.EncodeToString(b)
+}
+
+// SetVisibility lists a service for everyone or makes it invitation-only (making a link on first use).
+func (h *Hub) SetVisibility(ctx context.Context, owner immich.User, service, visibility string) error {
+	v, err := h.ownedService(ctx, owner, service)
+	if err != nil {
+		return err
+	}
+	invite := v.Invite
+	if visibility == store.VisInvite {
+		if invite == "" {
+			invite = newToken()
+		}
+	} else {
+		visibility = store.VisListed
+	}
+	if err := h.Store.SetServiceVisibility(ctx, v.ID, visibility, invite); err != nil {
+		return err
+	}
+	return h.Reload(ctx)
+}
+
+// NewInvite replaces the invitation link; the old one stops working at once.
+func (h *Hub) NewInvite(ctx context.Context, owner immich.User, service string) error {
+	v, err := h.ownedService(ctx, owner, service)
+	if err != nil {
+		return err
+	}
+	if err := h.Store.SetServiceVisibility(ctx, v.ID, store.VisInvite, newToken()); err != nil {
+		return err
+	}
+	h.event(ctx, service, owner.ID, "invite", owner.Name+" made a new invitation link for "+service)
+	return h.Reload(ctx)
+}
+
+func (h *Hub) ownedService(ctx context.Context, owner immich.User, name string) (*store.Service, error) {
+	if !h.SelfService() {
+		return nil, ErrNotJoinable
+	}
+	stored, err := h.Store.Services(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range stored {
+		if stored[i].Name == name && stored[i].OwnerID == owner.ID {
+			return &stored[i], nil
+		}
+	}
+	return nil, ErrNotOwner
+}
+
+// InviteOffer is what an invitation leads to.
+func (h *Hub) InviteOffer(ctx context.Context, user uuid.UUID, token string) (*Offer, error) {
+	if !h.SelfService() || token == "" {
+		return nil, ErrNoInvite
+	}
+	for _, svc := range h.Services() {
+		if svc.Unlisted && invited(svc, token) {
+			if Takes(svc, user) || svc.OwnerID == user {
+				return nil, ErrAlready
+			}
+			state := "join"
+			if svc.NeedsApproval {
+				state = "request"
+				if r, err := h.request(ctx, svc.Label(), user); err != nil {
+					return nil, err
+				} else if r != nil {
+					state = r.Status
+				}
+			}
+			return &Offer{Service: svc, State: state}, nil
+		}
+	}
+	return nil, ErrNoInvite
+}
+
+// InviteOf returns the owner's invitation token for a service they own (empty if it is listed).
+func (h *Hub) InviteOf(svc *syncer.Service) string {
+	if svc.Unlisted {
+		return svc.Invite
+	}
+	return ""
 }

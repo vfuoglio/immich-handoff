@@ -21,8 +21,9 @@ type ServiceView struct {
 type OfferView struct {
 	Name  string
 	Tag   string
-	Owner string // empty for services from the configuration
-	State string // join | request | pending | approved | declined
+	Owner  string // empty for services from the configuration
+	State  string // join | request | pending | approved | declined
+	Invite string // the invitation token the person arrived with, if any
 }
 
 // RequestView is someone waiting for the owner's decision.
@@ -33,6 +34,7 @@ type RequestView struct {
 // OwnedView is a service the signed-in person created.
 type OwnedView struct {
 	Name, Tag, Policy string
+	Invite            string // invitation token; empty when the service is listed for everyone
 	Broken            string // why the receiver key stopped working, if it did
 	Requests          []RequestView
 	Members           []MemberView
@@ -60,7 +62,8 @@ type DashboardData struct {
 	Services []ServiceView
 	Offers   []OfferView
 	Owned    []OwnedView
-	Orphaned []string // services the person joined that their owner has since removed
+	Invited  *OfferView // the service an invitation link leads to
+	Orphaned []string   // services the person joined that their owner has since removed
 	Broken   []BrokenView
 	Activity []ActivityView
 	CanOffer bool     // people may create services on this install
@@ -106,6 +109,10 @@ templ Layout(title, user string) {
 templ Dashboard(d DashboardData) {
 	@Layout("Immich Handoff", d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		if d.Invited != nil {
+			<h2>You are invited</h2>
+			@OfferCard(*d.Invited)
+		}
 		<h1>Your services</h1>
 		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
 		if len(d.Services) == 0 {
@@ -242,7 +249,7 @@ templ OfferCard(o OfferView) {
 		<p class="row">
 			switch o.State {
 				case "join", "approved":
-					<button class="primary" hx-post="join" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag) }>
+					<button class="primary" hx-post="join" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag) }>
 						if o.State == "approved" {
 							Activate
 						} else {
@@ -250,7 +257,7 @@ templ OfferCard(o OfferView) {
 						}
 					</button>
 				case "request":
-					<button class="primary" hx-post="ask" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
+					<button class="primary" hx-post="ask" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
 			}
 		</p>
 	</article>
@@ -286,6 +293,19 @@ templ OwnedCard(o OwnedView) {
 				<button hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "decline") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Decline</button>
 			</div>
 		}
+		if o.Invite != "" {
+			<div class="field">
+				<label for={ "inv-" + o.Name }>Invitation link (only people with it can find this service)</label>
+				<div class="row">
+					<input id={ "inv-" + o.Name } class="invite" readonly data-invite={ o.Invite }/>
+					<button type="button" class="copy">Copy</button>
+					<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="The current link will stop working. Continue?">New link</button>
+				</div>
+			</div>
+			<p class="row"><button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">List for everyone</button></p>
+		} else {
+			<p class="row"><button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Make invitation-only</button></p>
+		}
 		<p class="row">
 			<button hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Delete " + o.Name + "? Its receiver key is removed from your Immich account and senders stop handing photos to you." }>Delete service</button>
 		</p>
@@ -315,6 +335,13 @@ templ OfferForm() {
 		<div class="field">
 			<label for="svc-tag">Tag senders add</label>
 			<input id="svc-tag" name="tag" required maxlength="64" placeholder="holiday"/>
+		</div>
+		<div class="field">
+			<label for="svc-vis">Who can find it</label>
+			<select id="svc-vis" name="visibility">
+				<option value="listed">Everyone on this Immich server</option>
+				<option value="invite">Only people I send a link to</option>
+			</select>
 		</div>
 		<div class="field">
 			<label for="svc-policy">Who may send</label>

@@ -145,6 +145,15 @@ func TestHealthStatesKeyReplacementAndEvents(t *testing.T) {
 	if links[0].State != StateBroken || links[0].Note != "key deleted" || svcs[0].State != StateBroken {
 		t.Fatalf("states not stored: %+v %+v", links[0], svcs[0])
 	}
+	if svcs[0].Visibility != VisListed || svcs[0].Invite != "" {
+		t.Errorf("services are listed by default: %+v", svcs[0])
+	}
+	if err := s.SetServiceVisibility(ctx, svc.ID, VisInvite, "tok"); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Services(ctx); again[0].Visibility != VisInvite || again[0].Invite != "tok" {
+		t.Errorf("visibility not stored: %+v", again[0])
+	}
 	newKey := uuid.New()
 	if err := s.ReplaceServiceKey(ctx, svc.ID, newKey, "new-key"); err != nil {
 		t.Fatal(err)

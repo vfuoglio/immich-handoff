@@ -116,6 +116,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
+			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {
@@ -191,7 +192,7 @@ func keyName(service string) string { return "handoff: " + service }
 // If the key or the membership cannot be created, everything already done is undone, so no orphan
 // key or record is left behind. If only the workflow cannot be created yet (Immich is still loading
 // its plugins), the person is a member anyway and the workflow is retried in the background.
-func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service string) error {
+func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service, invite string) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
@@ -214,6 +215,8 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 		if approval == nil || approval.Status != store.StatusApproved {
 			return ErrNeedsApproval
 		}
+	} else if !invited(svc, invite) { // an approved person already got in through the invitation
+		return ErrNotJoinable
 	}
 
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), immich.SenderPermissions)

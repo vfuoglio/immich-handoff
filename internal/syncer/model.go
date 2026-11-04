@@ -29,6 +29,8 @@ type Service struct {
 
 	NeedsApproval bool      // people may ask to send; the owner decides, then the sender activates
 	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
+	Unlisted      bool      // hidden from the directory; reachable only through Invite
+	Invite        string    // the owner's invitation token (only used by the hub)
 	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
 }
 

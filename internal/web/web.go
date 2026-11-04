@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -42,6 +43,9 @@ func (w *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
 	mux.HandleFunc("GET /{$}", w.dashboard)
+	mux.HandleFunc("GET /invite/{token}", w.invite)
+	mux.HandleFunc("POST /services/visibility", w.setVisibility)
+	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
@@ -157,7 +161,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
 		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken}
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service)}
 			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 				for _, m := range members {
 					ov.Members = append(ov.Members, MemberView{Name: m.Name, State: m.State})
@@ -191,6 +195,36 @@ func ownerName(s *syncer.Service) string {
 		return s.Receivers[0].Name
 	}
 	return ""
+}
+
+// invite is the landing page of an invitation link: the dashboard with that one service on top.
+func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
+	me, code, _ := w.authenticate(r)
+	if me == nil {
+		rw.WriteHeader(code)
+		Notice("Sign in to Immich first",
+			"This invitation needs your Immich login. Sign in to Immich in this browser, then open the link again.", false).Render(r.Context(), rw)
+		return
+	}
+	token := r.PathValue("token")
+	var offer *hub.Offer
+	err := hub.ErrNoInvite
+	if w.Hub != nil {
+		offer, err = w.Hub.InviteOffer(r.Context(), me.user.ID, token)
+	}
+	if err != nil {
+		text := "This invitation is not valid any more. Ask the person who sent it for a new link."
+		if errors.Is(err, hub.ErrAlready) {
+			text = "You already take part in this service."
+		}
+		rw.WriteHeader(http.StatusNotFound)
+		Notice("Invitation", text, true).Render(r.Context(), rw)
+		return
+	}
+	d := w.dashboardData(r.Context(), me)
+	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token}
+	rw.Header().Set("Cache-Control", "no-store")
+	Dashboard(d).Render(r.Context(), rw)
 }
 
 func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
@@ -329,7 +363,7 @@ func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) join(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "joined", func(ctx context.Context, me *member, service string) error {
-		return w.Hub.Join(ctx, me.sess, me.user, service)
+		return w.Hub.Join(ctx, me.sess, me.user, service, r.PostFormValue("invite"))
 	})
 }
 
@@ -367,7 +401,7 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 
 func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "created", func(ctx context.Context, me *member, _ string) error {
-		return w.Hub.CreateService(ctx, me.sess, me.user, r.PostFormValue("name"), r.PostFormValue("tag"), r.PostFormValue("policy"))
+		return w.Hub.CreateService(ctx, me.sess, me.user, r.PostFormValue("name"), r.PostFormValue("tag"), r.PostFormValue("policy"), r.PostFormValue("visibility"))
 	})
 }
 
@@ -379,7 +413,7 @@ func (w *Server) deleteService(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) ask(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "asked", func(ctx context.Context, me *member, service string) error {
-		return w.Hub.Ask(ctx, me.user, service)
+		return w.Hub.Ask(ctx, me.user, service, r.PostFormValue("invite"))
 	})
 }
 
@@ -392,5 +426,17 @@ func (w *Server) decide(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) reconnect(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "reconnected", func(ctx context.Context, me *member, service string) error {
 		return w.Hub.ReconnectService(ctx, me.sess, me.user, service)
+	})
+}
+
+func (w *Server) setVisibility(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "changed", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.SetVisibility(ctx, me.user, service, r.PostFormValue("visibility"))
+	})
+}
+
+func (w *Server) newInvite(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "changed", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.NewInvite(ctx, me.user, service)
 	})
 }
