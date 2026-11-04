@@ -84,9 +84,11 @@ A plain install is one service: everyone's `share` photos go to one family accou
 
 With several receivers on one service, the original is removed only after **every** receiver holds a verified copy. If one receiver refuses (its trash holds that photo) or fails, the original stays and nothing is lost. An account that sends in one service and receives in another needs both permission lists from the table above. Each service gets its own workflow in the sender's account, named `immich-handoff: <service>`.
 
-## Status page (optional)
+## The web page
 
-`http://<host>:8080/` shows who is signed in, how many photos are waiting, and the result of the last run, plus a **Sync now** button. It uses your Immich login, so it only works when it is served on the **same hostname** as Immich. The usual way is a reverse proxy that forwards a path such as `/handoff/` on your Immich address to port 8080. Only the sending and family accounts are let in.
+Open `http://<host>:8080/` to see the services you take part in, how many photos are waiting (if you send) or sit in your inbox (if you receive), and the result of the last run. It updates by itself when a run finishes, and has a **Sync now** button. It works on a phone and follows your device's light or dark setting.
+
+It uses your Immich login, so it only works when it is served on the **same hostname** as Immich (any port). The usual way is a reverse proxy that forwards a path such as `/handoff/` on your Immich address to port 8080; keep the trailing slash in the address. Only accounts that take part in a service are let in.
 
 ## Settings
 

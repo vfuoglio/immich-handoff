@@ -361,6 +361,42 @@ func TestEndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("the dashboard opens with a real Immich login cookie", func(t *testing.T) {
+		cookieFor := func(email string) string {
+			body, _ := json.Marshal(map[string]string{"email": email, "password": "Passw0rd!x"})
+			res, err := http.Post(baseURL+"/api/auth/login", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			var parts []string
+			for _, c := range res.Cookies() {
+				parts = append(parts, c.Name+"="+c.Value)
+			}
+			return strings.Join(parts, "; ")
+		}
+		get := func(cookie string) (int, string) {
+			req, _ := http.NewRequest("GET", "http://localhost:"+appPort+"/", nil)
+			req.Header.Set("Cookie", cookie)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return res.StatusCode, string(b)
+		}
+		if code, body := get(cookieFor("alice@e2e.test")); code != 200 || !strings.Contains(body, "You send") {
+			t.Errorf("sender dashboard: %d %.200s", code, body)
+		}
+		if code, body := get(cookieFor("family@e2e.test")); code != 200 || !strings.Contains(body, "You receive") {
+			t.Errorf("receiver dashboard: %d %.200s", code, body)
+		}
+		if code, _ := get(cookieFor("admin@e2e.test")); code != 403 {
+			t.Errorf("an account outside the service must be refused, got %d", code)
+		}
+	})
+
 	imgA := jpegBytes(1)
 	var aliceOrig string
 

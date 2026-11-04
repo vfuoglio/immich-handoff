@@ -1,0 +1,133 @@
+package web
+
+import (
+	"fmt"
+
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
+)
+
+// ServiceView is one service as the signed-in user takes part in it.
+type ServiceView struct {
+	Name string
+	Role string // sender | receiver
+	Tag  string // the tag the user adds (sender) or looks for (receiver)
+	From int    // number of senders
+	To   int    // number of receivers
+}
+
+templ Layout(title, user string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			<script src="static/htmx.min.js" defer></script>
+			<script src="static/app.js" defer></script>
+		</head>
+		<body hx-headers='{"X-Requested-With": "immich-handoff"}'>
+			<div class="wrap">
+				<header class="bar">
+					<div class="brand">
+						<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"></rect><path d="M8 17h13l-4-4M24 15H11l4 4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+						Immich Handoff
+					</div>
+					if user != "" {
+						<div class="who">
+							<span id="live" class="live off" title="Live updates" role="img" aria-label="Live updates"></span>
+							<span class="avatar" aria-hidden="true">{ initial(user) }</span>
+							<span>{ user }</span>
+						</div>
+					}
+				</header>
+				<main>
+					{ children... }
+				</main>
+				<footer>Photos you tag in Immich are handed over automatically.</footer>
+			</div>
+		</body>
+	</html>
+}
+
+templ Dashboard(user string, services []ServiceView, last *syncer.RunInfo) {
+	@Layout("Immich Handoff", user) {
+		<h1>Your services</h1>
+		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
+		if len(services) == 0 {
+			<div class="card empty">You do not take part in any service yet.</div>
+		}
+		for _, s := range services {
+			@ServiceCard(s)
+		}
+		<h2>Activity</h2>
+		@LastRun(last)
+		<p class="row">
+			<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">Sync now</button>
+			<span id="synctoast" class="toast" aria-live="polite"></span>
+		</p>
+	}
+}
+
+templ ServiceCard(s ServiceView) {
+	<article class="card">
+		<header>
+			<h3>{ s.Name }</h3>
+			<span class={ "chip", roleClass(s.Role) }>{ roleLabel(s.Role) }</span>
+		</header>
+		<p class="meta">
+			if s.Role == "sender" {
+				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it.
+			} else {
+				Photos arrive tagged <code class="tag">{ s.Tag }</code>.
+			}
+			{ fmt.Sprintf(" %d %s, %d %s.", s.From, plural(s.From, "sender", "senders"), s.To, plural(s.To, "receiver", "receivers")) }
+		</p>
+		<div class="stats">
+			<div class="stat" hx-get={ "fragments/count?service=" + s.Name + "&role=" + s.Role } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
+				<span class="skeleton"></span>
+				<small>{ countLabel(s.Role) }</small>
+			</div>
+		</div>
+	</article>
+}
+
+templ Count(n int, role string) {
+	{ fmt.Sprint(n) }
+	<small>{ countLabel(role) }</small>
+}
+
+templ LastRun(info *syncer.RunInfo) {
+	<section id="lastrun" class="card" hx-get="fragments/lastrun" hx-trigger="handoff:run from:body" hx-swap="outerHTML" aria-live="polite">
+		if info == nil {
+			<p class="meta">No run yet since the app started.</p>
+		} else {
+			<header>
+				<h3>Last run</h3>
+				<span class="meta">{ info.Finished.Format("2006-01-02 15:04:05") } · { info.Reason }</span>
+			</header>
+			<div class="row">
+				<span class="chip ok">{ fmt.Sprint(info.Counts.Imported) } handed over</span>
+				<span class="chip">{ fmt.Sprint(info.Counts.Duplicate) } already there</span>
+				<span class={ "chip", warnIf(info.Counts.Refused > 0) }>{ fmt.Sprint(info.Counts.Refused) } refused</span>
+				<span class={ "chip", badIf(info.Counts.Errors > 0) }>{ fmt.Sprint(info.Counts.Errors) } errors</span>
+				if info.Counts.DryRun > 0 {
+					<span class="chip">{ fmt.Sprint(info.Counts.DryRun) } dry-run</span>
+				}
+			</div>
+			if info.Error != "" {
+				<p class="meta">{ info.Error }</p>
+			}
+		}
+	</section>
+}
+
+templ Notice(title, text string, bad bool) {
+	@Layout(title, "") {
+		<div class={ "card", "notice", badClass(bad) }>
+			<h1>{ title }</h1>
+			<p class="lead">{ text }</p>
+		</div>
+	}
+}

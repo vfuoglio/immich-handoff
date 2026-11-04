@@ -55,6 +55,37 @@ type Syncer struct {
 	retryQueued atomic.Bool
 	rerun       atomic.Bool
 	last        atomic.Pointer[RunInfo]
+
+	subMu sync.Mutex
+	subs  map[chan struct{}]struct{}
+}
+
+// Subscribe returns a channel that receives a signal whenever a pass finishes, and a function that
+// ends the subscription. Signals are not queued: a slow reader just sees the latest state.
+func (s *Syncer) Subscribe() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	s.subMu.Lock()
+	if s.subs == nil {
+		s.subs = map[chan struct{}]struct{}{}
+	}
+	s.subs[ch] = struct{}{}
+	s.subMu.Unlock()
+	return ch, func() {
+		s.subMu.Lock()
+		delete(s.subs, ch)
+		s.subMu.Unlock()
+	}
+}
+
+func (s *Syncer) publish() {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	for ch := range s.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (s *Syncer) Last() *RunInfo { return s.last.Load() }
@@ -144,6 +175,7 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
+		s.publish()
 		s.Log.Info("pass finished", "reason", reason, "counts", info.Counts, "untagged", info.Untagged, "error", info.Error)
 		if reason == "daily sweep" && info.Counts.Imported+info.Counts.Duplicate+info.Counts.Refused > 0 {
 			// Photos reached the daily sweep untouched: the tag events never arrived. The usual cause is

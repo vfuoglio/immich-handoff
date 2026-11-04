@@ -6,11 +6,14 @@ package web
 import (
 	"context"
 	"crypto/subtle"
-	_ "embed"
+	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -18,8 +21,8 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
-//go:embed index.html
-var indexHTML []byte
+//go:embed static
+var staticFS embed.FS
 
 type Server struct {
 	S             *syncer.Syncer
@@ -54,15 +57,23 @@ func (w *Server) Init(ctx context.Context) error {
 
 func (w *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	static, _ := fs.Sub(staticFS, "static")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(http.FileServerFS(static), time.Hour)))
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
-	mux.HandleFunc("GET /api/status", w.status)
-	mux.HandleFunc("POST /api/sync", w.syncNow)
-	mux.HandleFunc("GET /{$}", func(rw http.ResponseWriter, _ *http.Request) {
-		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-		rw.Write(indexHTML)
-	})
+	mux.HandleFunc("GET /{$}", w.dashboard)
+	mux.HandleFunc("GET /fragments/count", w.countFragment)
+	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
+	mux.HandleFunc("GET /events", w.events)
+	mux.HandleFunc("POST /sync", w.syncNow)
 	return mux
+}
+
+func cacheFor(h http.Handler, d time.Duration) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(d.Seconds())))
+		h.ServeHTTP(rw, r)
+	})
 }
 
 // The payload is deliberately not trusted: the webhook only wakes the importer, and the asset id it
@@ -114,33 +125,100 @@ func (w *Server) authenticate(r *http.Request) (*member, int, string) {
 	return &member{user: u, acct: acct}, 0, ""
 }
 
-type serviceStatus struct {
-	Name    string `json:"name"`
-	Role    string `json:"role"` // sender | receiver
-	Tag     string `json:"tag"`
-	Waiting int    `json:"waiting"`
-}
-
-func (w *Server) status(rw http.ResponseWriter, r *http.Request) {
-	me, code, msg := w.authenticate(r)
-	if me == nil {
-		writeJSON(rw, code, map[string]string{"detail": msg})
-		return
-	}
-	var services []serviceStatus
+// servicesFor lists the services the member takes part in (a member can both send and receive).
+func (w *Server) servicesFor(me *member) []ServiceView {
+	var out []ServiceView
 	for _, svc := range w.S.Services {
 		for _, a := range svc.Senders {
 			if a == me.acct {
-				services = append(services, serviceStatus{svc.Label(), "sender", svc.Tag, w.count(r.Context(), a, svc.Tag)})
+				out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers)})
 			}
 		}
 		for _, a := range svc.Receivers {
 			if a == me.acct {
-				services = append(services, serviceStatus{svc.Label(), "receiver", svc.InboxTag, w.count(r.Context(), a, svc.InboxTag)})
+				out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers)})
 			}
 		}
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"user": me.user.Name, "services": services, "lastRun": w.S.Last()})
+	return out
+}
+
+func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		title := "Sign in to Immich first"
+		text := "This page uses your Immich login. Sign in to Immich in this browser, then reload this page."
+		if code == http.StatusForbidden {
+			title, text = "Not part of any service", msg
+		}
+		rw.WriteHeader(code)
+		Notice(title, text, code != http.StatusUnauthorized).Render(r.Context(), rw)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	Dashboard(me.user.Name, w.servicesFor(me), w.S.Last()).Render(r.Context(), rw)
+}
+
+// countFragment is how many photos wait (sender) or sit in the inbox (receiver) for one service.
+func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	name, role := r.URL.Query().Get("service"), r.URL.Query().Get("role")
+	for _, sv := range w.servicesFor(me) {
+		if sv.Name != name || sv.Role != role {
+			continue
+		}
+		n := w.count(r.Context(), me.acct, sv.Tag)
+		rw.Header().Set("Cache-Control", "no-store")
+		Count(n, role).Render(r.Context(), rw)
+		return
+	}
+	http.Error(rw, "no such service for you", http.StatusNotFound)
+}
+
+func (w *Server) lastRunFragment(rw http.ResponseWriter, r *http.Request) {
+	if me, code, msg := w.authenticate(r); me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	LastRun(w.S.Last()).Render(r.Context(), rw)
+}
+
+// events tells the open page when a pass has finished, so it can refresh its cards.
+func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
+	if me, code, msg := w.authenticate(r); me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	fl, ok := rw.(http.Flusher)
+	if !ok {
+		http.Error(rw, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	rw.Header().Set("Content-Type", "text/event-stream")
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("X-Accel-Buffering", "no") // do not let a reverse proxy hold the stream back
+	ch, cancel := w.S.Subscribe()
+	defer cancel()
+	fmt.Fprint(rw, ": connected\n\n")
+	fl.Flush()
+	keepalive := time.NewTicker(25 * time.Second)
+	defer keepalive.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ch:
+			fmt.Fprint(rw, "event: run\ndata: 1\n\n")
+		case <-keepalive.C:
+			fmt.Fprint(rw, ": keepalive\n\n")
+		}
+		fl.Flush()
+	}
 }
 
 // count is how many photos carry the tag in the account (the app's own key does the looking).
@@ -169,10 +247,5 @@ func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 	}
 	go w.S.Run(w.BackgroundCtx, "manual: "+me.user.Email, false)
 	rw.WriteHeader(http.StatusAccepted)
-}
-
-func writeJSON(rw http.ResponseWriter, code int, v any) {
-	rw.Header().Set("Content-Type", "application/json")
-	rw.WriteHeader(code)
-	json.NewEncoder(rw).Encode(v)
+	rw.Write([]byte("Sync started"))
 }
