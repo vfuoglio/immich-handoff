@@ -53,7 +53,6 @@ type CreateParams struct {
 	Name, Tag  string
 	Policy     string // approval (default) | open
 	Visibility string // listed (default) | invite
-	Mode       string // copy (default) | move
 	InboxTag   string
 	ExpiryDays int
 }
@@ -78,10 +77,6 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	visibility, invite := store.VisListed, ""
 	if p.Visibility == store.VisInvite {
 		visibility, invite = store.VisInvite, newToken()
-	}
-	mode := syncer.ModeCopy // keeping the sender's originals is the safe default
-	if p.Mode == syncer.ModeMove {
-		mode = syncer.ModeMove
 	}
 	inboxTag := strings.TrimSpace(p.InboxTag)
 	if inboxTag == "" {
@@ -117,7 +112,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 		return fmt.Errorf("the new key does not work for your account: %v", err)
 	}
 	if _, err := h.Store.AddService(ctx, store.Service{
-		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, Mode: mode, SentTag: h.Options.SentTag,
+		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
 		Visibility: visibility, Invite: invite,
 	}); err != nil {

@@ -54,6 +54,7 @@ type Link struct {
 	Key          string    // decrypted; never stored in clear
 	State        string
 	Note         string // why the link is not active
+	Mode         string // "copy" keeps the sender's originals, "move" trashes them; chosen by the sender
 	CreatedAt    time.Time
 }
 
@@ -113,6 +114,10 @@ var migrations = []string{
 	 ALTER TABLE services ADD COLUMN invite TEXT NOT NULL DEFAULT '';`,
 	`ALTER TABLE services ADD COLUMN mode TEXT NOT NULL DEFAULT 'move';
 	 ALTER TABLE services ADD COLUMN sent_tag TEXT NOT NULL DEFAULT '';`,
+	// The sender, not the service owner, decides what happens to their originals. Existing members keep
+	// what they had: the mode of their service, or move for services from the configuration.
+	`ALTER TABLE links ADD COLUMN mode TEXT NOT NULL DEFAULT 'move';
+	 UPDATE links SET mode = COALESCE((SELECT mode FROM services WHERE services.name = links.service), 'move');`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -187,6 +192,9 @@ func (s *Store) checkKey() error {
 }
 
 func (s *Store) AddLink(ctx context.Context, l Link) (Link, error) {
+	if l.Mode == "" {
+		l.Mode = "copy"
+	}
 	l.ID = uuid.NewString()
 	l.State = StateActive
 	l.CreatedAt = time.Now().UTC()
@@ -195,9 +203,9 @@ func (s *Store) AddLink(ctx context.Context, l Link) (Link, error) {
 		return l, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO links (id, service, role, immich_user_id, name, email, key_id, key_enc, state, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		l.ID, l.Service, l.Role, l.ImmichUserID.String(), l.Name, l.Email, l.KeyID.String(), enc, l.State, l.CreatedAt.Format(time.RFC3339Nano))
+		`INSERT INTO links (id, service, role, immich_user_id, name, email, key_id, key_enc, state, mode, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		l.ID, l.Service, l.Role, l.ImmichUserID.String(), l.Name, l.Email, l.KeyID.String(), enc, l.State, l.Mode, l.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		if isUnique(err) {
 			return l, ErrExists
@@ -215,7 +223,7 @@ func (s *Store) RemoveLink(ctx context.Context, id string) error {
 // Links returns every membership with its key decrypted.
 func (s *Store) Links(ctx context.Context) ([]Link, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, created_at FROM links ORDER BY created_at, id`)
+		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, mode, created_at FROM links ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +233,7 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 		var l Link
 		var user, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &created); err != nil {
+		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &l.Mode, &created); err != nil {
 			return nil, err
 		}
 		l.ImmichUserID, _ = uuid.Parse(user)
@@ -273,9 +281,6 @@ type Request struct {
 func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 	if v.Visibility == "" {
 		v.Visibility = VisListed
-	}
-	if v.Mode == "" {
-		v.Mode = "copy"
 	}
 	v.ID = uuid.NewString()
 	v.CreatedAt = time.Now().UTC()

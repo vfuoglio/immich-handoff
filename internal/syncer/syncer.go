@@ -359,7 +359,7 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			outcome = "imported"
 		}
 	}
-	if svc.Copies() {
+	if svc.CopiesFor(snd) {
 		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
 			return "", fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
 		}

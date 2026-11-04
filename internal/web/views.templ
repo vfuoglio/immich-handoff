@@ -15,7 +15,7 @@ type ServiceView struct {
 	To   int    // number of receivers
 	CanLeave bool // the person joined from this page, so can leave from it
 	Paused   string // why the service cannot work right now, if so
-	Copy     bool   // originals are kept (copy mode) instead of moved to the trash
+	Copy     bool   // the signed-in sender chose to keep their originals (otherwise they are moved to their trash)
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -25,7 +25,6 @@ type OfferView struct {
 	Owner  string // empty for services from the configuration
 	State  string // join | request | pending | approved | declined
 	Invite string // the invitation token the person arrived with, if any
-	Copy   bool
 }
 
 // RequestView is someone waiting for the owner's decision.
@@ -37,7 +36,6 @@ type RequestView struct {
 type OwnedView struct {
 	Name, Tag, Policy string
 	Invite            string // invitation token; empty when the service is listed for everyone
-	Copy              bool
 	Broken            string // why the receiver key stopped working, if it did
 	Requests          []RequestView
 	Members           []MemberView
@@ -47,6 +45,7 @@ type OwnedView struct {
 type MemberView struct {
 	Name  string
 	State string // active | broken
+	Copy  bool   // their originals are kept (otherwise moved to their trash)
 }
 
 // BrokenView is a connection of the person that Immich rejected.
@@ -252,7 +251,7 @@ templ OfferCard(o OfferView) {
 			<span class={ "chip", offerChip(o.State) }>{ offerLabel(o.State) }</span>
 		</header>
 		<p class="meta">
-			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich. { originalsNote(o.Copy) }
+			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich.
 			if o.Owner != "" {
 				{ " Offered by " + o.Owner + "." }
 			}
@@ -260,15 +259,15 @@ templ OfferCard(o OfferView) {
 		<p class="row">
 			switch o.State {
 				case "join", "approved":
-					<button class="primary" hx-post="join" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, o.Copy) }>
-						if o.State == "approved" {
-							Activate
-						} else {
-							Join
-						}
+					<span class="meta">What should happen to your originals?</span>
+					<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, true) }>
+						{ joinLabel(o.State, true) }
+					</button>
+					<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, false) }>
+						{ joinLabel(o.State, false) }
 					</button>
 				case "request":
-					<button class="primary" hx-post="ask" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
+					<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
 			}
 		</p>
 	</article>
@@ -280,7 +279,7 @@ templ OwnedCard(o OwnedView) {
 			<h3>{ o.Name }</h3>
 			<span class="chip">{ policyLabel(o.Policy) }</span>
 		</header>
-		<p class="meta">{ modeLabel(o.Copy) }. You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
+		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
 		if o.Broken != "" {
 			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
 			<p class="row">
@@ -290,7 +289,7 @@ templ OwnedCard(o OwnedView) {
 		if len(o.Members) > 0 {
 			<p class="meta">Senders:
 				for _, m := range o.Members {
-					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State) }</span>
+					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State, m.Copy) }</span>
 				}
 			</p>
 		}
@@ -338,7 +337,7 @@ templ OrphanCard(name string) {
 
 templ OfferForm() {
 	<form class="card" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm="Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.">
-		<p class="meta">Others can then send you photos by tagging them. You decide who may send.</p>
+		<p class="meta">Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.</p>
 		<div class="field">
 			<label for="svc-name">Service name</label>
 			<input id="svc-name" name="name" required minlength="2" maxlength="40" placeholder="Holiday 2026"/>
@@ -352,13 +351,6 @@ templ OfferForm() {
 			<select id="svc-vis" name="visibility">
 				<option value="listed">Everyone on this Immich server</option>
 				<option value="invite">Only people I send a link to</option>
-			</select>
-		</div>
-		<div class="field">
-			<label for="svc-mode">What happens to the sender's originals</label>
-			<select id="svc-mode" name="mode">
-				<option value="copy">Kept by the sender (a copy is made)</option>
-				<option value="move">Moved to the sender's trash after they reach you</option>
 			</select>
 		</div>
 		<details>

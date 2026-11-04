@@ -162,7 +162,7 @@ func (h *Hub) BrokenFor(ctx context.Context, user uuid.UUID) ([]BrokenLink, erro
 }
 
 // Member is a sender of a service the person owns, with the state of their connection.
-type Member struct{ Name, State string }
+type Member struct{ Name, State, Mode string }
 
 func (h *Hub) MembersOf(ctx context.Context, service string) ([]Member, error) {
 	links, err := h.Store.Links(ctx)
@@ -172,7 +172,7 @@ func (h *Hub) MembersOf(ctx context.Context, service string) ([]Member, error) {
 	var out []Member
 	for _, l := range links {
 		if l.Service == service && l.Role == store.RoleSender && l.State != store.StateOrphaned {
-			out = append(out, Member{l.Name, l.State})
+			out = append(out, Member{l.Name, l.State, l.Mode})
 		}
 	}
 	return out, nil

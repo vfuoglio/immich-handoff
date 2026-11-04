@@ -787,7 +787,7 @@ services:
 		if !strings.Contains(string(b), "Services you can send to") || !strings.Contains(string(b), "open") {
 			t.Fatalf("join offer missing: %.300s", b)
 		}
-		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}}); res.StatusCode != 204 {
+		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}, "mode": {"move"}}); res.StatusCode != 204 {
 			t.Fatalf("join: HTTP %d", res.StatusCode)
 		}
 		if names := keyNames(t, bob); !hasName(names, "handoff: open") {
@@ -889,7 +889,7 @@ func TestHubServices(t *testing.T) {
 			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
 		}
 	}
-	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"hol"}, "policy": {"approval"}, "mode": {"move"}}), 204, "create service")
+	expect(post(t, port, "/services", ownerCookie, url.Values{"name": {"holiday"}, "tag": {"hol"}, "policy": {"approval"}}), 204, "create service")
 	if names := keyNames(t, alice); !hasName(names, "handoff: holiday (receiving)") {
 		t.Fatalf("the receiver key must be made in the owner's account, keys: %v", names)
 	}
@@ -915,7 +915,7 @@ func TestHubServices(t *testing.T) {
 	if body := page(t, port, senderCookie); !strings.Contains(body, "Activate") {
 		t.Fatalf("bob should be able to activate: %.400s", body)
 	}
-	expect(post(t, port, "/join", senderCookie, url.Values{"service": {"holiday"}}), 204, "activate")
+	expect(post(t, port, "/join", senderCookie, url.Values{"service": {"holiday"}, "mode": {"move"}}), 204, "activate")
 	if names := keyNames(t, bob); !hasName(names, "handoff: holiday") {
 		t.Errorf("bob's sender key must exist, keys: %v", names)
 	}
@@ -970,8 +970,8 @@ func TestLinkHealth(t *testing.T) {
 			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
 		}
 	}
-	must(post(t, port, "/services", owner, url.Values{"name": {"pause"}, "tag": {"pause-tag"}, "policy": {"open"}, "mode": {"move"}}), 204, "create")
-	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}}), 204, "join")
+	must(post(t, port, "/services", owner, url.Values{"name": {"pause"}, "tag": {"pause-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}, "mode": {"move"}}), 204, "join")
 	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
 		var wfs []struct{ Name string }
 		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
@@ -1008,7 +1008,7 @@ func TestLinkHealth(t *testing.T) {
 		t.Errorf("the owner must see that bob is disconnected: %.500s", body)
 	}
 	must(post(t, port, "/leave", sender, url.Values{"service": {"pause"}}), 204, "clean up")
-	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}}), 204, "join again")
+	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}, "mode": {"move"}}), 204, "join again")
 	eventually(t, "the waiting photo is handed over after rejoining", 90*time.Second, func() bool { return trashed(two) && inbox() == base+2 })
 
 	// --- the owner deletes the receiver key ---
@@ -1059,7 +1059,7 @@ func TestInvitations(t *testing.T) {
 		return m[1]
 	}
 
-	want(post(t, port, "/services", owner, url.Values{"name": {"club"}, "tag": {"club-tag"}, "policy": {"approval"}, "visibility": {"invite"}, "mode": {"move"}}), 204, "create")
+	want(post(t, port, "/services", owner, url.Values{"name": {"club"}, "tag": {"club-tag"}, "policy": {"approval"}, "visibility": {"invite"}}), 204, "create")
 	if _, body := status("/", guest); strings.Contains(body, ">club<") {
 		t.Fatalf("an invitation-only service must not be in the directory: %.400s", body)
 	}
@@ -1092,7 +1092,7 @@ func TestInvitations(t *testing.T) {
 	}
 
 	// approval already given: no link needed to activate
-	want(post(t, port, "/join", guest, url.Values{"service": {"club"}}), 204, "activate")
+	want(post(t, port, "/join", guest, url.Values{"service": {"club"}, "mode": {"move"}}), 204, "activate")
 	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
 		var wfs []struct{ Name string }
 		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
@@ -1125,11 +1125,11 @@ func TestCopyMode(t *testing.T) {
 			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
 		}
 	}
-	must(post(t, port, "/services", owner, url.Values{"name": {"keep"}, "tag": {"keep-tag"}, "policy": {"open"}, "mode": {"copy"}}), 204, "create")
-	if body := page(t, port, sender); !strings.Contains(body, "Your originals are kept.") {
-		t.Errorf("the offer must say originals are kept: %.400s", body)
+	must(post(t, port, "/services", owner, url.Values{"name": {"keep"}, "tag": {"keep-tag"}, "policy": {"open"}}), 204, "create")
+	if body := page(t, port, sender); !strings.Contains(body, "Join and keep my originals") || !strings.Contains(body, "Join and move my originals to my trash") {
+		t.Errorf("the sender must be offered both choices: %.400s", body)
 	}
-	must(post(t, port, "/join", sender, url.Values{"service": {"keep"}}), 204, "join")
+	must(post(t, port, "/join", sender, url.Values{"service": {"keep"}, "mode": {"copy"}}), 204, "join")
 
 	var keys []struct {
 		Name        string

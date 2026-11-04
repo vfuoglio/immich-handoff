@@ -76,14 +76,18 @@ func originalsNote(copyMode bool) string {
 	if copyMode {
 		return "Your originals are kept."
 	}
-	return "Your originals go to the trash once handed over."
+	return "Your originals go to your trash once handed over."
 }
 
-func modeLabel(copyMode bool) string {
-	if copyMode {
-		return "Senders keep their originals"
+func joinLabel(state string, copyMode bool) string {
+	verb := "Join"
+	if state == "approved" {
+		verb = "Activate"
 	}
-	return "Senders' originals are moved to their trash"
+	if copyMode {
+		return verb + " and keep my originals"
+	}
+	return verb + " and move my originals to my trash"
 }
 
 // vals builds the JSON for hx-vals.
@@ -139,17 +143,23 @@ func memberChip(state string) string {
 	return "ok"
 }
 
-func memberSuffix(state string) string {
+func memberSuffix(state string, copyMode bool) string {
 	if state == "broken" {
 		return " (disconnected)"
 	}
-	return ""
+	if copyMode {
+		return " (keeps originals)"
+	}
+	return " (moves originals)"
 }
 
-func valsInvite(service, invite string) string {
+func valsJoin(service, invite, mode string) string {
 	m := map[string]string{"service": service}
 	if invite != "" {
 		m["invite"] = invite
+	}
+	if mode != "" {
+		m["mode"] = mode
 	}
 	b, _ := json.Marshal(m)
 	return string(b)

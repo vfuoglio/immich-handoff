@@ -201,7 +201,7 @@ func TestJoinCreatesKeyWorkflowAndMembership(t *testing.T) {
 	if j := e.h.Joinable(bobID); len(j) != 1 {
 		t.Fatalf("bob should be offered the service: %v", j)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(e.f.keys) != 1 || len(e.f.deletedKeys) != 0 {
@@ -223,7 +223,7 @@ func TestJoinCreatesKeyWorkflowAndMembership(t *testing.T) {
 	if j := e.h.Joinable(bobID); len(j) != 0 {
 		t.Errorf("bob must no longer be offered the service")
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); !errors.Is(err, hub.ErrAlready) {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); !errors.Is(err, hub.ErrAlready) {
 		t.Errorf("joining twice: %v", err)
 	}
 }
@@ -233,7 +233,7 @@ func TestJoinKeepsMembershipWhenTheWorkflowIsNotReadyYet(t *testing.T) {
 	retried := make(chan struct{}, 1)
 	e.h.Retry = func() { retried <- struct{}{} }
 	e.f.failWorkflows = true // Immich has not finished loading its plugins
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
 		t.Fatalf("joining must still succeed: %v", err)
 	}
 	if len(e.f.keys) != 1 || len(e.f.deletedKeys) != 0 || senders(e) != 1 {
@@ -249,7 +249,7 @@ func TestJoinKeepsMembershipWhenTheWorkflowIsNotReadyYet(t *testing.T) {
 func TestJoinRollsBackWhenTheNewKeyDoesNotWork(t *testing.T) {
 	e, ctx := setup(t, true), context.Background()
 	other := immich.User{ID: uuid.New(), Name: "Someone else", Email: "o@x.test"} // the new key belongs to bob, not to this user
-	if err := e.h.Join(ctx, e.sess, other, "family", ""); err == nil {
+	if err := e.h.Join(ctx, e.sess, other, "family", "", ""); err == nil {
 		t.Fatal("expected an error")
 	}
 	if len(e.f.keys) != 0 || len(e.f.deletedKeys) != 1 {
@@ -262,15 +262,15 @@ func TestJoinRollsBackWhenTheNewKeyDoesNotWork(t *testing.T) {
 
 func TestJoinRefusals(t *testing.T) {
 	ctx := context.Background()
-	if err := setup(t, false).h.Join(ctx, setup(t, false).sess, bob, "family", ""); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := setup(t, false).h.Join(ctx, setup(t, false).sess, bob, "family", "", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("closed service: %v", err)
 	}
 	e := setup(t, true)
-	if err := e.h.Join(ctx, e.sess, bob, "nope", ""); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := e.h.Join(ctx, e.sess, bob, "nope", "", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("unknown service: %v", err)
 	}
 	familyUser := immich.User{ID: familyID, Name: "Family", Email: "f@x.test"}
-	if err := e.h.Join(ctx, e.sess, familyUser, "family", ""); !errors.Is(err, hub.ErrAlready) {
+	if err := e.h.Join(ctx, e.sess, familyUser, "family", "", ""); !errors.Is(err, hub.ErrAlready) {
 		t.Errorf("a receiver must not also join as sender: %v", err)
 	}
 	if len(e.f.keys) != 0 {
@@ -283,7 +283,7 @@ func TestLeaveRemovesWorkflowKeyAndMembership(t *testing.T) {
 	if err := e.h.Leave(ctx, e.sess, bob, "family"); !errors.Is(err, hub.ErrNotJoined) {
 		t.Errorf("leaving without joining: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.h.Leave(ctx, e.sess, bob, "family"); err != nil {
@@ -305,7 +305,7 @@ func TestLeaveRemovesWorkflowKeyAndMembership(t *testing.T) {
 
 func TestReloadKeepsMembersAcrossARestart(t *testing.T) {
 	e, ctx := setup(t, true), context.Background()
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	fresh := &hub.Hub{Static: e.h.Static, Store: e.st, Connect: e.h.Connect, Log: e.h.Log}
@@ -360,7 +360,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 || offers[0].State != "request" {
 		t.Fatalf("bob should be able to ask: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", "", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Fatalf("joining without approval: %v", err)
 	}
 	if len(e.f.keys) != 1 {
@@ -379,7 +379,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	if err := e.h.Decide(ctx, bob, "holiday", owned[0].Requests[0].ID, true); !errors.Is(err, hub.ErrNotOwner) {
 		t.Errorf("a non-owner must not decide: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", "", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Errorf("still pending: %v", err)
 	}
 	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, true); err != nil {
@@ -388,7 +388,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "approved" {
 		t.Errorf("bob should be able to activate: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := service(e, "holiday").Senders; len(got) != 1 || got[0].UserID != bobID {
@@ -407,7 +407,7 @@ func TestDeclinedRequestCannotActivate(t *testing.T) {
 	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "holiday", ""); !errors.Is(err, hub.ErrNeedsApproval) {
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", "", ""); !errors.Is(err, hub.ErrNeedsApproval) {
 		t.Errorf("declined: %v", err)
 	}
 	if offers, _ := e.h.Offers(ctx, bobID); offers[0].State != "declined" {
@@ -420,10 +420,10 @@ func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
 	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "everyone", Tag: "SHARE", Policy: "open", Visibility: ""}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "everyone", ""); !errors.Is(err, hub.ErrTagInUse) {
+	if err := e.h.Join(ctx, e.sess, bob, "everyone", "", ""); !errors.Is(err, hub.ErrTagInUse) {
 		t.Errorf("bob already sends with the tag 'share' to another service: %v", err)
 	}
 }
@@ -431,7 +431,7 @@ func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
 func TestDeletingAServiceLeavesMembersAbleToCleanUp(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
-	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.h.DeleteService(ctx, e.sess, bob, "party"); !errors.Is(err, hub.ErrNotOwner) {
@@ -476,7 +476,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	var told []string
 	e.h.Notify = func(m string) { told = append(told, m) }
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
-	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	e.h.CheckKeys(ctx)
@@ -514,7 +514,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatalf("rejoining after clean up: %v", err)
 	}
 	if len(service(e, "party").Senders) != 1 {
@@ -525,7 +525,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 func TestDeletedReceiverKeyPausesTheServiceUntilTheOwnerReconnects(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
-	e.h.Join(ctx, e.sess, bob, "party", "")
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
 
 	e.f.deleteKeyOf("ann")
 	e.h.CheckKeys(ctx)
@@ -576,10 +576,10 @@ func TestInviteOnlyServiceIsHiddenAndReachedWithTheLink(t *testing.T) {
 	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 0 {
 		t.Errorf("it must not appear in the directory: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "secret club", ""); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", "", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("joining by name without the link: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "secret club", "wrong"); !errors.Is(err, hub.ErrNotJoinable) {
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", "wrong", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("a wrong link: %v", err)
 	}
 	if len(e.f.keys) != 1 {
@@ -591,7 +591,7 @@ func TestInviteOnlyServiceIsHiddenAndReachedWithTheLink(t *testing.T) {
 	if _, err := e.h.InviteOffer(ctx, bobID, "wrong"); !errors.Is(err, hub.ErrNoInvite) {
 		t.Errorf("a wrong link: %v", err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "secret club", token); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "secret club", token, ""); err != nil {
 		t.Fatalf("joining with the link: %v", err)
 	}
 	if _, err := e.h.InviteOffer(ctx, bobID, token); !errors.Is(err, hub.ErrAlready) {
@@ -622,7 +622,7 @@ func TestNewInviteRevokesTheOldLinkAndListingRemovesTheNeedForOne(t *testing.T) 
 	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 {
 		t.Errorf("a listed service appears in the directory: %+v", offers)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "club", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "club", "", ""); err != nil {
 		t.Errorf("a listed service needs no link: %v", err)
 	}
 }
@@ -644,7 +644,7 @@ func TestInviteWithApprovalNeedsTheLinkOnlyToAsk(t *testing.T) {
 	if err := e.h.NewInvite(ctx, ann, "club"); err != nil { // the link changes, the approval stays valid
 		t.Fatal(err)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "club", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "club", "", ""); err != nil {
 		t.Errorf("an approved person activates without the link: %v", err)
 	}
 }
@@ -658,28 +658,50 @@ func has(list []string, want string) bool {
 	return false
 }
 
-func TestCopyModeSenderKeyCannotDeleteAndMoveModeCan(t *testing.T) {
+func TestTheSenderChoosesWhatHappensToTheirOriginals(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "keeps", Tag: "keeps", Policy: "open", Mode: "copy"}); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"first", "second", "third"} {
+		if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: name, Tag: name, Policy: "open"}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moves", Tag: "moves", Policy: "open", Mode: "move"}); err != nil {
-		t.Fatal(err)
-	}
-	if !service(e, "keeps").Copies() || service(e, "moves").Copies() {
-		t.Fatal("modes not applied")
-	}
-	if err := e.h.Join(ctx, e.sess, bob, "keeps", ""); err != nil {
+	// no choice made: originals are kept, and the key has no delete permission at all
+	if err := e.h.Join(ctx, e.sess, bob, "first", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if has(e.f.lastPerms, "asset.delete") || !has(e.f.lastPerms, "asset.download") {
-		t.Errorf("a copy-mode sender key must have no delete permission: %v", e.f.lastPerms)
+		t.Errorf("the default must keep originals, key permissions: %v", e.f.lastPerms)
 	}
-	if err := e.h.Join(ctx, e.sess, bob, "moves", ""); err != nil {
+	if err := e.h.Join(ctx, e.sess, bob, "second", "", "copy"); err != nil {
+		t.Fatal(err)
+	}
+	if has(e.f.lastPerms, "asset.delete") {
+		t.Errorf("an explicit copy has no delete permission: %v", e.f.lastPerms)
+	}
+	// the same person can choose differently for another service
+	if err := e.h.Join(ctx, e.sess, bob, "third", "", "move"); err != nil {
 		t.Fatal(err)
 	}
 	if !has(e.f.lastPerms, "asset.delete") {
-		t.Errorf("a move-mode sender key needs delete: %v", e.f.lastPerms)
+		t.Errorf("moving needs the delete permission: %v", e.f.lastPerms)
+	}
+	for name, copies := range map[string]bool{"first": true, "second": true, "third": false} {
+		svc := service(e, name)
+		if len(svc.Senders) != 1 || svc.CopiesFor(svc.Senders[0]) != copies {
+			t.Errorf("%s: the sender's choice must apply to their originals (want copy=%v)", name, copies)
+		}
+	}
+	members, _ := e.h.MembersOf(ctx, "third")
+	if len(members) != 1 || members[0].Mode != "move" {
+		t.Errorf("the owner sees the sender's choice: %+v", members)
+	}
+}
+
+func TestTheOwnerHasNoSayOverTheSendersOriginals(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "plain", Tag: "plain", Policy: "open"})
+	if svc := service(e, "plain"); svc.Mode != "" {
+		t.Errorf("a service created on the page carries no mode of its own: %q", svc.Mode)
 	}
 }
 
@@ -696,17 +718,5 @@ func TestCreateOptionsAreValidated(t *testing.T) {
 	}
 	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bad2", Tag: "t", ExpiryDays: 99999}); !errors.Is(err, hub.ErrBadExpiry) {
 		t.Errorf("bad expiry: %v", err)
-	}
-}
-
-func TestNewServicesKeepOriginalsUnlessTheOwnerAsksForMove(t *testing.T) {
-	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "plain", Tag: "plain", Policy: "open"})
-	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moving", Tag: "moving", Policy: "open", Mode: "move"})
-	if !service(e, "plain").Copies() {
-		t.Error("a new service must keep the sender's originals by default")
-	}
-	if service(e, "moving").Copies() {
-		t.Error("an owner can ask for move")
 	}
 }

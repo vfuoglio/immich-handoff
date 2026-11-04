@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -168,5 +170,56 @@ func TestHealthStatesKeyReplacementAndEvents(t *testing.T) {
 	evs, _ := s.Events(ctx, 1000)
 	if len(evs) > maxEvents+1 || len(evs) < maxEvents {
 		t.Errorf("the log must stay bounded, got %d", len(evs))
+	}
+}
+
+// Members who joined before senders could choose keep what they had: the mode of their service, or move
+// for services from the configuration (their keys were made with delete permission).
+func TestMigrationKeepsExistingMembersBehaviour(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "handoff.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range migrations[:5] {
+		if _, err := db.Exec(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Exec(`PRAGMA user_version = 5`)
+	now := time.Now().Format(time.RFC3339Nano)
+	must := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"keepers", "movers"} {
+		mode := map[string]string{"keepers": "copy", "movers": "move"}[name]
+		must(`INSERT INTO services (id,name,tag,inbox_tag,refused_tag,expiry_days,owner_id,owner_name,owner_email,key_id,key_enc,policy,created_at,mode)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, name, name, "t", "i", "r", 1, "o", "o", "o", "k", []byte("x"), "open", now, mode)
+	}
+	for id, svc := range map[string]string{"a": "keepers", "b": "movers", "c": "configured-service"} {
+		must(`INSERT INTO links (id,service,role,immich_user_id,name,email,key_id,key_enc,state,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			id, svc, "sender", id, id, id, "k", []byte("x"), "active", now)
+	}
+	db.Close()
+
+	v, _ := vault.New("first-secret-value-1234")
+	s, err := Open(path, v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got := map[string]string{}
+	rows, _ := s.db.Query(`SELECT id, mode FROM links`)
+	for rows.Next() {
+		var id, mode string
+		rows.Scan(&id, &mode)
+		got[id] = mode
+	}
+	if got["a"] != "copy" || got["b"] != "move" || got["c"] != "move" {
+		t.Errorf("existing members must keep their behaviour: %v", got)
 	}
 }

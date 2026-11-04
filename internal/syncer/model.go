@@ -13,6 +13,7 @@ type Account struct {
 	Name   string
 	API    *immich.API
 	UserID uuid.UUID // the Immich user behind the key; set by ResolveUsers or when a person joins
+	Mode   string    // what happens to this sender's originals (ModeMove / ModeCopy); empty: the service's setting
 }
 
 const (
@@ -42,8 +43,17 @@ type Service struct {
 }
 
 // Label is the name used in logs and on the status page.
-// Copies reports whether originals are kept.
+// Copies reports whether the service keeps originals by its own setting.
 func (s *Service) Copies() bool { return s.Mode == ModeCopy }
+
+// CopiesFor reports whether this sender's originals are kept. A person who joined chose for themselves
+// when they agreed to take part; accounts set up by an admin follow the service's setting.
+func (s *Service) CopiesFor(a *Account) bool {
+	if a != nil && a.Mode != "" {
+		return a.Mode == ModeCopy
+	}
+	return s.Copies()
+}
 
 func (s *Service) Label() string {
 	if s.Name == "" {

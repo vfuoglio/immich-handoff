@@ -77,7 +77,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 	if h.accounts == nil {
 		h.accounts = map[string]*syncer.Account{}
 	}
-	account := func(id, name string, user uuid.UUID, key string) *syncer.Account {
+	account := func(id, name string, user uuid.UUID, key, mode string) *syncer.Account {
 		if a, ok := h.accounts[id]; ok {
 			return a
 		}
@@ -86,7 +86,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			h.Log.Error("cannot use stored key", "id", id, "err", err)
 			return nil
 		}
-		a := &syncer.Account{Name: name, API: api, UserID: user}
+		a := &syncer.Account{Name: name, API: api, UserID: user, Mode: mode}
 		h.accounts[id] = a
 		return a
 	}
@@ -97,7 +97,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			continue
 		}
 		live[l.ID] = true
-		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key); a != nil {
+		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key, l.Mode); a != nil {
 			extra[l.Service] = append(extra[l.Service], a)
 		}
 	}
@@ -109,14 +109,14 @@ func (h *Hub) Reload(ctx context.Context) error {
 	}
 	for _, v := range owned {
 		live[v.ID] = true
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key)
+		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "")
 		if rcv == nil {
 			continue
 		}
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
-			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, Mode: v.Mode, SentTag: v.SentTag,
+			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {
@@ -192,7 +192,7 @@ func keyName(service string) string { return "handoff: " + service }
 // If the key or the membership cannot be created, everything already done is undone, so no orphan
 // key or record is left behind. If only the workflow cannot be created yet (Immich is still loading
 // its plugins), the person is a member anyway and the workflow is retried in the background.
-func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service, invite string) error {
+func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service, invite, mode string) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
@@ -219,9 +219,14 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 		return ErrNotJoinable
 	}
 
+	// What happens to the sender's originals is the sender's own choice, made here. Keeping them is the
+	// default, and then the key gets no delete permission at all.
+	if mode != syncer.ModeMove {
+		mode = syncer.ModeCopy
+	}
 	perms := immich.SenderPermissions
-	if svc.Copies() {
-		perms = immich.SenderPermissionsCopy // originals are kept, so the key gets no delete permission at all
+	if mode == syncer.ModeCopy {
+		perms = immich.SenderPermissionsCopy
 	}
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), perms)
 	if err != nil {
@@ -243,7 +248,7 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 		return fmt.Errorf("the new key does not work for your account: %v", err)
 	}
 	link, err := h.Store.AddLink(ctx, store.Link{
-		Service: service, Role: store.RoleSender, ImmichUserID: user.ID, Name: user.Name, Email: user.Email, KeyID: keyID, Key: secret,
+		Service: service, Role: store.RoleSender, ImmichUserID: user.ID, Name: user.Name, Email: user.Email, KeyID: keyID, Key: secret, Mode: mode,
 	})
 	if err != nil {
 		undoKey()
@@ -269,7 +274,7 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 	if approval != nil {
 		h.Store.RemoveRequest(ctx, approval.ID) // the approval is used up; the link is the record now
 	}
-	h.event(ctx, service, user.ID, "joined", user.Name+" started sending to "+service)
+	h.event(ctx, service, user.ID, "joined", user.Name+" started sending to "+service+" ("+modeWords(mode)+")")
 	h.Log.Info("joined", "service", service, "user", user.Email)
 	if h.Wake != nil {
 		h.Wake("joined: " + user.Email)
@@ -332,4 +337,11 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	h.event(ctx, service, user.ID, "left", user.Name+" stopped sending to "+service)
 	h.Log.Info("left", "service", service, "user", user.Email)
 	return h.Reload(ctx)
+}
+
+func modeWords(mode string) string {
+	if mode == syncer.ModeMove {
+		return "originals are moved to their trash"
+	}
+	return "originals are kept"
 }
