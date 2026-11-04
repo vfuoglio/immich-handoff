@@ -53,7 +53,11 @@ func (f *fakeImmich) person(r *http.Request) string {
 	if c := r.Header.Get("Cookie"); strings.HasPrefix(c, "sess=") {
 		return strings.TrimPrefix(c, "sess=")
 	}
-	return f.owners[r.Header.Get("x-api-key")]
+	key := r.Header.Get("x-api-key")
+	if _, alive := f.keys[key]; !alive {
+		return "" // a deleted key is no longer accepted
+	}
+	return f.owners[key]
 }
 
 func (f *fakeImmich) handler() http.Handler {
@@ -72,6 +76,16 @@ func (f *fakeImmich) handler() http.Handler {
 			return
 		}
 		http.Error(w, "no", 401)
+	})
+	mux.HandleFunc("GET /api/api-keys/me", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		_, alive := f.keys[r.Header.Get("x-api-key")]
+		f.mu.Unlock()
+		if !alive {
+			http.Error(w, "no", 401)
+			return
+		}
+		j(w, 200, map[string]any{"id": uuid.NewString(), "name": "k", "permissions": []string{"asset.read"}, "createdAt": ts, "updatedAt": ts})
 	})
 	mux.HandleFunc("POST /api/api-keys", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -441,5 +455,108 @@ func TestDeletingAServiceLeavesMembersAbleToCleanUp(t *testing.T) {
 	}
 	if o, _ := e.h.Orphaned(ctx, bobID); len(o) != 0 {
 		t.Errorf("nothing left to clean up: %v", o)
+	}
+}
+
+// deleteKeyOf simulates a person deleting their handoff key in Immich.
+func (f *fakeImmich) deleteKeyOf(person string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for secret, who := range f.owners {
+		if who == person {
+			delete(f.keys, secret)
+		}
+	}
+}
+
+func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
+	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatal(err)
+	}
+	e.h.CheckKeys(ctx)
+	if senders := len(service(e, "party").Senders); senders != 1 {
+		t.Fatalf("healthy keys must not be touched, senders=%d", senders)
+	}
+
+	e.f.deleteKeyOf("bob") // bob deletes his key in Immich (his session still works; only the key is gone)
+	e.h.CheckKeys(ctx)
+	if got := service(e, "party").Senders; len(got) != 0 {
+		t.Errorf("a broken link must stop being used: %d senders left", len(got))
+	}
+	if b, _ := e.h.BrokenFor(ctx, bobID); len(b) != 1 || b[0].Service != "party" {
+		t.Errorf("bob must be told: %+v", b)
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "Bob") {
+		t.Errorf("an admin notification is expected: %v", told)
+	}
+	for _, who := range []uuid.UUID{bobID, annID} {
+		acts, _ := e.h.Activity(ctx, who, 10)
+		if len(acts) == 0 || !strings.Contains(acts[0].Text, "cut") {
+			t.Errorf("both sides see it in the activity (%s): %+v", who, acts)
+		}
+	}
+	members, _ := e.h.MembersOf(ctx, "party")
+	if len(members) != 1 || members[0].State != "broken" {
+		t.Errorf("the owner sees bob as disconnected: %+v", members)
+	}
+	// nothing more is attempted, and checking again changes nothing
+	e.h.CheckKeys(ctx)
+	if len(told) != 1 {
+		t.Errorf("a broken link must not be reported over and over: %v", told)
+	}
+	// bob cleans up and can join again
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("rejoining after clean up: %v", err)
+	}
+	if len(service(e, "party").Senders) != 1 {
+		t.Error("bob is a sender again")
+	}
+}
+
+func TestDeletedReceiverKeyPausesTheServiceUntilTheOwnerReconnects(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open")
+	e.h.Join(ctx, e.sess, bob, "party")
+
+	e.f.deleteKeyOf("ann")
+	e.h.CheckKeys(ctx)
+	svc := service(e, "party")
+	if svc.Broken == "" || len(svc.Receivers) != 0 {
+		t.Fatalf("the service must be paused with no receiver: %+v", svc)
+	}
+	if len(svc.Senders) != 1 {
+		t.Errorf("senders stay members while the service is paused")
+	}
+	if offers, _ := e.h.Offers(ctx, annID); len(offers) != 0 {
+		t.Errorf("the owner must not be offered their own paused service: %+v", offers)
+	}
+	if err := e.h.ReconnectService(ctx, e.sess, bob, "party"); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("only the owner reconnects: %v", err)
+	}
+	woken := len(e.woken)
+	if err := e.h.ReconnectService(ctx, e.ann, ann, "party"); err != nil {
+		t.Fatal(err)
+	}
+	svc = service(e, "party")
+	if svc.Broken != "" || len(svc.Receivers) != 1 || len(svc.Senders) != 1 {
+		t.Errorf("after reconnecting the service works again: %+v", svc)
+	}
+	if len(e.woken) != woken+1 {
+		t.Errorf("a pass must run right after reconnecting")
+	}
+}
+
+func TestRejectedKeyFromTheConfigurationIsLeftToThePass(t *testing.T) {
+	e := setup(t, false)
+	e.h.KeyRejected(e.h.Static[0].Receivers[0]) // not one of the stored accounts: must not panic or change anything
+	if len(e.h.Services()) != 1 {
+		t.Error("services must be unchanged")
 	}
 }

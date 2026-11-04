@@ -916,3 +916,86 @@ func TestHubServices(t *testing.T) {
 		t.Errorf("bob's key must be deleted after cleaning up, keys: %v", names)
 	}
 }
+
+// deleteKeyNamed deletes one of the user's Immich API keys by name, like a person would in Immich's settings.
+func deleteKeyNamed(t *testing.T, u user, name string) {
+	t.Helper()
+	var keys []struct{ ID, Name string }
+	call(t, "GET", "/api-keys", keyAuth(u), nil, &keys)
+	for _, k := range keys {
+		if k.Name == name {
+			mustOK(t, call(t, "DELETE", "/api-keys/"+k.ID, keyAuth(u), nil, nil), "delete key "+name)
+			return
+		}
+	}
+	t.Fatalf("no key named %q in %v", name, keys)
+}
+
+// TestLinkHealth: when either side deletes its key in Immich the connection pauses, both sides are
+// told, no photo is touched, and everything resumes after clean up / reconnect.
+func TestLinkHealth(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 4)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"pause"}, "tag": {"pause-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}}), 204, "join")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: pause" {
+				return true
+			}
+		}
+		return false
+	})
+
+	send := func(label string, seed int) string {
+		id, _ := upload(t, bob, label, jpegBytes(seed))
+		tagAsset(t, bob, "pause-tag", id)
+		return id
+	}
+	trashed := func(id string) bool { x, code := getAsset(t, bob, id); return code == 200 && x.IsTrashed }
+	inbox := func() int { return len(searchTag(t, alice, "inbox", false)) }
+
+	base := inbox()
+	one := send("one.jpg", 100)
+	eventually(t, "a healthy link hands over", 90*time.Second, func() bool { return trashed(one) && inbox() == base+1 })
+
+	// --- the sender deletes their key ---
+	deleteKeyNamed(t, bob, "handoff: pause")
+	two := send("two.jpg", 101)
+	eventually(t, "bob is told the connection was lost", 90*time.Second, func() bool {
+		return strings.Contains(page(t, port, sender), "Connection lost")
+	})
+	if trashed(two) {
+		t.Fatal("a photo must never be removed while the connection is broken")
+	}
+	if body := page(t, port, owner); !strings.Contains(body, "disconnected") {
+		t.Errorf("the owner must see that bob is disconnected: %.500s", body)
+	}
+	must(post(t, port, "/leave", sender, url.Values{"service": {"pause"}}), 204, "clean up")
+	must(post(t, port, "/join", sender, url.Values{"service": {"pause"}}), 204, "join again")
+	eventually(t, "the waiting photo is handed over after rejoining", 90*time.Second, func() bool { return trashed(two) && inbox() == base+2 })
+
+	// --- the owner deletes the receiver key ---
+	deleteKeyNamed(t, alice, "handoff: pause (receiving)")
+	three := send("three.jpg", 102)
+	eventually(t, "the owner is offered a reconnect and the sender sees a pause", 90*time.Second, func() bool {
+		return strings.Contains(page(t, port, owner), "Reconnect") && strings.Contains(page(t, port, sender), "Paused")
+	})
+	if trashed(three) {
+		t.Fatal("a photo must never be removed while the service has no receiver")
+	}
+	must(post(t, port, "/reconnect", sender, url.Values{"service": {"pause"}}), 409, "a sender cannot reconnect")
+	must(post(t, port, "/reconnect", owner, url.Values{"service": {"pause"}}), 204, "reconnect")
+	eventually(t, "photos flow again after reconnecting", 90*time.Second, func() bool { return trashed(three) && inbox() == base+3 })
+}

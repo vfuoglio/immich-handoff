@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -52,12 +53,27 @@ func New(baseURL string, a Auth, hc *http.Client) (*API, error) {
 	return &API{c: c, PageSize: 250}, nil
 }
 
+// HTTPError is a refusal from Immich, so callers can tell a rejected key from a network fault.
+type HTTPError struct {
+	Op   string
+	Code int
+	Body string
+}
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("%s: HTTP %d %s", e.Op, e.Code, e.Body) }
+
 func statusErr(op string, code int, body []byte) error {
 	b := string(body)
 	if len(b) > 300 {
 		b = b[:300]
 	}
-	return fmt.Errorf("%s: HTTP %d %s", op, code, b)
+	return &HTTPError{Op: op, Code: code, Body: b}
+}
+
+// IsAuthError reports whether Immich rejected the credentials themselves (for example a deleted API key).
+func IsAuthError(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && he.Code == http.StatusUnauthorized
 }
 
 type User struct {

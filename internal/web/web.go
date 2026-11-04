@@ -51,6 +51,7 @@ func (w *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /services", w.createService)
 	mux.HandleFunc("POST /services/delete", w.deleteService)
 	mux.HandleFunc("POST /ask", w.ask)
+	mux.HandleFunc("POST /reconnect", w.reconnect)
 	mux.HandleFunc("POST /decide", w.decide)
 	return mux
 }
@@ -130,10 +131,10 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	var out []ServiceView
 	for _, svc := range w.S.Current() {
 		if m.account(svc, "sender") != nil {
-			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()]})
+			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken})
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false})
+			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken})
 		}
 	}
 	return out
@@ -156,7 +157,12 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
 		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval"}
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken}
+			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
+				for _, m := range members {
+					ov.Members = append(ov.Members, MemberView{Name: m.Name, State: m.State})
+				}
+			}
 			if o.Service.AllowJoin {
 				ov.Policy = "open"
 			}
@@ -167,6 +173,16 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 		}
 	}
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
+	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
+		for _, b := range broken {
+			d.Broken = append(d.Broken, BrokenView{b.Service, b.Note})
+		}
+	}
+	if acts, err := w.Hub.Activity(ctx, me.user.ID, 12); err == nil {
+		for _, a := range acts {
+			d.Activity = append(d.Activity, ActivityView{a.At.Local().Format("2 Jan 15:04"), a.Text})
+		}
+	}
 	return d
 }
 
@@ -370,5 +386,11 @@ func (w *Server) ask(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) decide(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "decided", func(ctx context.Context, me *member, service string) error {
 		return w.Hub.Decide(ctx, me.user, service, r.PostFormValue("request"), r.PostFormValue("decision") == "approve")
+	})
+}
+
+func (w *Server) reconnect(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "reconnected", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.ReconnectService(ctx, me.sess, me.user, service)
 	})
 }

@@ -122,6 +122,7 @@ func run(log *slog.Logger) error {
 	go func() {
 		reason := "startup"
 		for {
+			h.CheckKeys(ctx)       // finds keys deleted in Immich even when nothing was tagged
 			s.Provision(ctx, hook) // heals a deleted or edited workflow; no-op when already correct
 			s.Run(ctx, reason, true)
 			reason = "daily sweep"

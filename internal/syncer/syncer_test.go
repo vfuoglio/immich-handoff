@@ -249,3 +249,19 @@ func TestOneToManyKeepsOriginalWhenOneReceiverFails(t *testing.T) {
 		t.Errorf("counts=%+v deleted=%v", c, a.deleted)
 	}
 }
+
+// A paused service has no receivers. Running it must never delete an original with no copy anywhere.
+func TestServiceWithoutAHealthyReceiverTouchesNothing(t *testing.T) {
+	for _, broken := range []string{"", "receiver key deleted"} {
+		f := &fakeImmich{uploadStatus: "created"}
+		srv := httptest.NewServer(f.handler())
+		svc := service([]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}}, nil)
+		svc.Broken = broken
+		s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+		s.Run(context.Background(), "test", false)
+		srv.Close()
+		if len(f.deleted) != 0 || len(f.uploaded) != 0 {
+			t.Errorf("broken=%q: deleted=%v uploaded=%v", broken, f.deleted, f.uploaded)
+		}
+	}
+}

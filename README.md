@@ -107,6 +107,8 @@ With `HANDOFF_STORE_KEY` set, anyone signed in to Immich can also **offer a serv
 
 Neither side ever sees the other's key, or their own. Either side can end it: the sender with **Leave**, the owner with **Delete service**, or either by deleting the key named `handoff: ...` in Immich (Account Settings -> API Keys), which stops the hand-over. If an owner deletes a service, its senders see **Removed by its owner** and press **Clean up** to remove their own key and workflow.
 
+**If a key is deleted in Immich** (by the sender, or by the owner), the app notices on the next tagged photo or at the daily check, pauses that connection and stops using it, tells both sides on the web page (and through `NOTIFY_URL` if set), and does not touch any photo: originals stay where they are until the connection works again. A sender whose key was deleted sees **Connection lost** and presses **Clean up**, then joins again; photos they tagged meanwhile are handed over once they have. An owner whose receiver key was deleted sees **Disconnected** and presses **Reconnect**, which makes a new receiver key; senders resume by themselves. The page also lists recent events (joined, left, asked, approved, connection lost, reconnected) for the services you take part in.
+
 A plain `.env` install needs no service in the configuration for this: with only `HANDOFF_STORE_KEY` set and no keys, everything is created from the web page.
 
 ## The web page
@@ -157,6 +159,7 @@ Start with the app's log: `docker compose logs --tail 100`. Then find your sympt
 | A photo is tagged `share-duplicate` | See "Day to day" above. |
 | The original is still in the sender's account after tagging | The hand-over failed or could not be verified, so the original was kept on purpose. The log has an `ERROR` line saying why; fix the cause, and the photo is retried at the next run. |
 | A tag you just added is gone | Immich occasionally drops a tag that is added in the first moments after a photo was uploaded, while it is still processing the photo. This happens inside Immich (we saw about 1 in 50 in tests with this app switched off). Add the tag again. |
+| The page says "Connection lost" or "Paused" | An API key named `handoff: ...` was deleted in Immich. Follow the button on the page (Clean up for a sender, Reconnect for an owner). |
 | Status page says "Sign in to Immich first" | Serve it on the same hostname as Immich (see the status page section). |
 
 ## Architecture

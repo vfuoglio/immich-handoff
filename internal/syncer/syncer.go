@@ -213,10 +213,17 @@ type receiver struct {
 
 func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
 	log := s.Log.With("service", svc.Label())
+	// Never run without a healthy receiver: with none, an original would be deleted with no copy anywhere.
+	if svc.Broken != "" || len(svc.Receivers) == 0 {
+		return
+	}
 	var rs []receiver
 	for _, r := range svc.Receivers {
 		me, err := r.API.Me(ctx)
 		if err != nil {
+			if immich.IsAuthError(err) {
+				s.rejected(r)
+			}
 			log.Error("cannot authenticate receiver", "receiver", r.Name, "err", err)
 			c.Errors++
 			return
@@ -243,6 +250,9 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 	log = log.With("sender", snd.Name)
 	me, err := snd.API.Me(ctx)
 	if err != nil {
+		if immich.IsAuthError(err) {
+			s.rejected(snd)
+		}
 		log.Error("cannot authenticate sender", "err", err)
 		c.Errors++
 		return
@@ -476,4 +486,11 @@ func (s *Syncer) markRefused(ctx context.Context, svc *Service, src *immich.API,
 		return err
 	}
 	return src.UntagAssets(ctx, shareTag, []uuid.UUID{id})
+}
+
+// rejected tells the provider that Immich no longer accepts an account's key.
+func (s *Syncer) rejected(a *Account) {
+	if w, ok := s.Provider.(Watcher); ok {
+		w.KeyRejected(a)
+	}
 }

@@ -29,6 +29,7 @@ type Service struct {
 
 	NeedsApproval bool      // people may ask to send; the owner decides, then the sender activates
 	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
+	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
 }
 
 // Label is the name used in logs and on the status page.
@@ -51,6 +52,11 @@ func (s *Service) WorkflowName() string {
 // Provider supplies the current services when they can change while the app runs.
 type Provider interface {
 	Services() []*Service
+}
+
+// Watcher is implemented by a Provider that wants to know when Immich rejects an account's key.
+type Watcher interface {
+	KeyRejected(acct *Account)
 }
 
 // Current returns the services to work on right now.

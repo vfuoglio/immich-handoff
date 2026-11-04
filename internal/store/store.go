@@ -22,6 +22,7 @@ const (
 
 	StateActive   = "active"
 	StateOrphaned = "orphaned" // the service was removed by its owner; the member can still clean up
+	StateBroken   = "broken"   // Immich rejected the key (it was deleted or revoked)
 
 	PolicyApproval = "approval"
 	PolicyOpen     = "open"
@@ -49,6 +50,7 @@ type Link struct {
 	KeyID        uuid.UUID // the key's id in Immich, so it can be deleted later
 	Key          string    // decrypted; never stored in clear
 	State        string
+	Note         string // why the link is not active
 	CreatedAt    time.Time
 }
 
@@ -92,6 +94,17 @@ var migrations = []string{
 	   status     TEXT NOT NULL CHECK (status IN ('pending','approved','declined')),
 	   created_at TEXT NOT NULL,
 	   UNIQUE (service, user_id)
+	 );`,
+	`ALTER TABLE links ADD COLUMN note TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE services ADD COLUMN state TEXT NOT NULL DEFAULT 'active';
+	 ALTER TABLE services ADD COLUMN note TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE events (
+	   id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	   at      TEXT NOT NULL,
+	   service TEXT NOT NULL,
+	   user_id TEXT NOT NULL,
+	   kind    TEXT NOT NULL,
+	   text    TEXT NOT NULL
 	 );`,
 }
 
@@ -195,7 +208,7 @@ func (s *Store) RemoveLink(ctx context.Context, id string) error {
 // Links returns every membership with its key decrypted.
 func (s *Store) Links(ctx context.Context) ([]Link, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, created_at FROM links ORDER BY created_at, id`)
+		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, created_at FROM links ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +218,7 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 		var l Link
 		var user, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &created); err != nil {
+		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &created); err != nil {
 			return nil, err
 		}
 		l.ImmichUserID, _ = uuid.Parse(user)
@@ -235,6 +248,7 @@ type Service struct {
 	KeyID                  uuid.UUID // the receiver key's id in Immich
 	Key                    string    // decrypted
 	Policy                 string
+	State, Note            string // healthy ("active") or why not
 	CreatedAt              time.Time
 }
 
@@ -269,7 +283,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 
 func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, created_at FROM services ORDER BY created_at, id`)
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, created_at FROM services ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +293,7 @@ func (s *Store) Services(ctx context.Context) ([]Service, error) {
 		var v Service
 		var owner, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &created); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &created); err != nil {
 			return nil, err
 		}
 		v.OwnerID, _ = uuid.Parse(owner)
@@ -362,3 +376,75 @@ func (s *Store) RemoveRequest(ctx context.Context, id string) error {
 
 // AllLinks returns memberships in every state (Links is the same; kept for readability at call sites).
 func (s *Store) AllLinks(ctx context.Context) ([]Link, error) { return s.Links(ctx) }
+
+// SetLinkState records a link's health. It reports whether a link with that id exists.
+func (s *Store) SetLinkState(ctx context.Context, id, state, note string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE links SET state = ?, note = ? WHERE id = ?`, state, note, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetServiceState records a service's health. It reports whether a service with that id exists.
+func (s *Store) SetServiceState(ctx context.Context, id, state, note string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE services SET state = ?, note = ? WHERE id = ?`, state, note, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ReplaceServiceKey swaps in a new receiver key and marks the service healthy again.
+func (s *Store) ReplaceServiceKey(ctx context.Context, id string, keyID uuid.UUID, key string) error {
+	enc, err := s.vault.Seal([]byte(key), id)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE services SET key_id = ?, key_enc = ?, state = 'active', note = '' WHERE id = ?`, keyID.String(), enc, id)
+	return err
+}
+
+// Event is one line of the activity log.
+type Event struct {
+	At      time.Time
+	Service string
+	UserID  uuid.UUID // who it is about
+	Kind    string
+	Text    string
+}
+
+const maxEvents = 500
+
+// AddEvent appends to the activity log, which keeps only the most recent entries.
+func (s *Store) AddEvent(ctx context.Context, e Event) error {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO events (at, service, user_id, kind, text) VALUES (?,?,?,?,?)`,
+		time.Now().UTC().Format(time.RFC3339Nano), e.Service, e.UserID.String(), e.Kind, e.Text); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id <= (SELECT MAX(id) FROM events) - ?`, maxEvents)
+	return err
+}
+
+// Events returns the most recent entries, newest first.
+func (s *Store) Events(ctx context.Context, limit int) ([]Event, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT at, service, user_id, kind, text FROM events ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		var at, user string
+		if err := rows.Scan(&at, &e.Service, &user, &e.Kind, &e.Text); err != nil {
+			return nil, err
+		}
+		e.At, _ = time.Parse(time.RFC3339Nano, at)
+		e.UserID, _ = uuid.Parse(user)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}

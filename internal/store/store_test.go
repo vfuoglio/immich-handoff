@@ -119,3 +119,45 @@ func TestServicesRequestsAndOrphaning(t *testing.T) {
 		t.Errorf("the member's link must be kept but orphaned so they can clean up: %+v", links)
 	}
 }
+
+func TestHealthStatesKeyReplacementAndEvents(t *testing.T) {
+	ctx := context.Background()
+	s, err := open(t, t.TempDir(), "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	owner := uuid.New()
+	svc, _ := s.AddService(ctx, Service{Name: "x", Tag: "t", InboxTag: "i", Refused: "r", ExpiryDays: 1, OwnerID: owner, KeyID: uuid.New(), Key: "old", Policy: PolicyOpen})
+	link, _ := s.AddLink(ctx, Link{Service: "x", Role: RoleSender, ImmichUserID: uuid.New(), KeyID: uuid.New(), Key: "k"})
+
+	if ok, err := s.SetLinkState(ctx, link.ID, StateBroken, "key deleted"); !ok || err != nil {
+		t.Fatalf("link state: %v %v", ok, err)
+	}
+	if ok, _ := s.SetLinkState(ctx, "nope", StateBroken, ""); ok {
+		t.Error("an unknown link must report not found")
+	}
+	if ok, _ := s.SetServiceState(ctx, svc.ID, StateBroken, "receiver key deleted"); !ok {
+		t.Fatal("service state")
+	}
+	links, _ := s.Links(ctx)
+	svcs, _ := s.Services(ctx)
+	if links[0].State != StateBroken || links[0].Note != "key deleted" || svcs[0].State != StateBroken {
+		t.Fatalf("states not stored: %+v %+v", links[0], svcs[0])
+	}
+	newKey := uuid.New()
+	if err := s.ReplaceServiceKey(ctx, svc.ID, newKey, "new-key"); err != nil {
+		t.Fatal(err)
+	}
+	svcs, _ = s.Services(ctx)
+	if svcs[0].Key != "new-key" || svcs[0].KeyID != newKey || svcs[0].State != StateActive || svcs[0].Note != "" {
+		t.Errorf("replace: %+v", svcs[0])
+	}
+	for i := 0; i < maxEvents+20; i++ {
+		s.AddEvent(ctx, Event{Service: "x", UserID: owner, Kind: "test", Text: "e"})
+	}
+	evs, _ := s.Events(ctx, 1000)
+	if len(evs) > maxEvents+1 || len(evs) < maxEvents {
+		t.Errorf("the log must stay bounded, got %d", len(evs))
+	}
+}

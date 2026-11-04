@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// Tell sends a message to the configured notification URL, if any.
+func (s *Syncer) Tell(msg string) { s.notify(msg) }
+
 func (s *Syncer) notify(msg string) {
 	if s.Cfg.NotifyURL == "" {
 		return

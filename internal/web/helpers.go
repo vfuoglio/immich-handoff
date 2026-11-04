@@ -115,3 +115,17 @@ func policyLabel(p string) string {
 	}
 	return "You approve senders"
 }
+
+func memberChip(state string) string {
+	if state == "broken" {
+		return "bad"
+	}
+	return "ok"
+}
+
+func memberSuffix(state string) string {
+	if state == "broken" {
+		return " (disconnected)"
+	}
+	return ""
+}

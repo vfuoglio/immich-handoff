@@ -93,6 +93,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
+	h.event(ctx, name, owner.ID, "created", owner.Name+" started offering "+name)
 	h.Log.Info("service created", "service", name, "owner", owner.Email, "policy", policy)
 	return nil
 }
@@ -118,6 +119,7 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 	if err := h.Store.RemoveService(ctx, name); err != nil {
 		return err
 	}
+	h.event(ctx, name, owner.ID, "deleted", owner.Name+" removed the service "+name)
 	h.Log.Info("service deleted", "service", name, "owner", owner.Email)
 	return h.Reload(ctx)
 }
@@ -157,6 +159,7 @@ func (h *Hub) Ask(ctx context.Context, user immich.User, service string) error {
 		}
 		return err
 	}
+	h.event(ctx, service, user.ID, "asked", user.Name+" asked to send to "+service)
 	h.Log.Info("join requested", "service", service, "user", user.Email)
 	return nil
 }
@@ -177,6 +180,7 @@ func (h *Hub) Decide(ctx context.Context, owner immich.User, service, requestID 
 			if approve {
 				status = store.StatusApproved
 			}
+			h.event(ctx, service, r.UserID, "decided", "The owner "+status+" "+r.Name+" for "+service)
 			h.Log.Info("join request decided", "service", service, "user", r.Email, "status", status)
 			return h.Store.SetRequestStatus(ctx, r.ID, status)
 		}
@@ -197,7 +201,7 @@ func (h *Hub) Offers(ctx context.Context, user uuid.UUID) ([]Offer, error) {
 	}
 	var out []Offer
 	for _, svc := range h.Services() {
-		if Takes(svc, user) {
+		if Takes(svc, user) || svc.OwnerID == user {
 			continue
 		}
 		switch {

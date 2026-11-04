@@ -14,6 +14,7 @@ type ServiceView struct {
 	From int    // number of senders
 	To   int    // number of receivers
 	CanLeave bool // the person joined from this page, so can leave from it
+	Paused   string // why the service cannot work right now, if so
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -32,7 +33,25 @@ type RequestView struct {
 // OwnedView is a service the signed-in person created.
 type OwnedView struct {
 	Name, Tag, Policy string
+	Broken            string // why the receiver key stopped working, if it did
 	Requests          []RequestView
+	Members           []MemberView
+}
+
+// MemberView is a sender of a service the person owns.
+type MemberView struct {
+	Name  string
+	State string // active | broken
+}
+
+// BrokenView is a connection of the person that Immich rejected.
+type BrokenView struct {
+	Service, Note string
+}
+
+// ActivityView is one line of the activity log.
+type ActivityView struct {
+	When, Text string
 }
 
 // DashboardData is everything the main page shows.
@@ -42,6 +61,8 @@ type DashboardData struct {
 	Offers   []OfferView
 	Owned    []OwnedView
 	Orphaned []string // services the person joined that their owner has since removed
+	Broken   []BrokenView
+	Activity []ActivityView
 	CanOffer bool     // people may create services on this install
 	Last     *syncer.RunInfo
 }
@@ -93,6 +114,9 @@ templ Dashboard(d DashboardData) {
 		for _, s := range d.Services {
 			@ServiceCard(s)
 		}
+		for _, b := range d.Broken {
+			@BrokenCard(b)
+		}
 		for _, name := range d.Orphaned {
 			@OrphanCard(name)
 		}
@@ -112,6 +136,16 @@ templ Dashboard(d DashboardData) {
 			<h2>Offer a service</h2>
 			@OfferForm()
 		}
+		if len(d.Activity) > 0 {
+			<h2>Recent events</h2>
+			<section class="card" aria-label="Recent events">
+				<ul class="events">
+					for _, a := range d.Activity {
+						<li><span class="meta">{ a.When }</span> { a.Text }</li>
+					}
+				</ul>
+			</section>
+		}
 		if len(d.Services) > 0 {
 			<h2>Activity</h2>
 			@LastRun(d.Last)
@@ -129,6 +163,9 @@ templ ServiceCard(s ServiceView) {
 			<h3>{ s.Name }</h3>
 			<span class={ "chip", roleClass(s.Role) }>{ roleLabel(s.Role) }</span>
 		</header>
+		if s.Paused != "" {
+			<p class="meta"><span class="chip warn">Paused</span> { s.Paused } Photos stay where they are until it is fixed.</p>
+		}
 		<p class="meta">
 			if s.Role == "sender" {
 				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it.
@@ -226,6 +263,19 @@ templ OwnedCard(o OwnedView) {
 			<span class="chip">{ policyLabel(o.Policy) }</span>
 		</header>
 		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
+		if o.Broken != "" {
+			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
+			<p class="row">
+				<button class="primary" hx-post="reconnect" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="Reconnecting creates a new receiver key in your Immich account.">Reconnect</button>
+			</p>
+		}
+		if len(o.Members) > 0 {
+			<p class="meta">Senders:
+				for _, m := range o.Members {
+					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State) }</span>
+				}
+			</p>
+		}
 		if len(o.Requests) == 0 {
 			<p class="meta">No requests waiting.</p>
 		}
@@ -275,4 +325,17 @@ templ OfferForm() {
 		</div>
 		<p class="row"><button class="primary" type="submit">Create service</button></p>
 	</form>
+}
+
+templ BrokenCard(b BrokenView) {
+	<article class="card notice bad">
+		<header>
+			<h3>{ b.Service }</h3>
+			<span class="chip bad">Connection lost</span>
+		</header>
+		<p class="meta">{ b.Note } Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.</p>
+		<p class="row">
+			<button class="primary" hx-post="leave" hx-vals={ vals("service", b.Service) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
+		</p>
+	</article>
 }

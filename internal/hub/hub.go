@@ -36,7 +36,8 @@ type Hub struct {
 	Connect func(key string) (*immich.API, error)
 	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
 	Wake    func(reason string)
-	Retry   func() // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Retry   func()               // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Notify  func(message string) // tells an admin something needs attention (optional)
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 
@@ -112,11 +113,15 @@ func (h *Hub) Reload(ctx context.Context) error {
 		if rcv == nil {
 			continue
 		}
-		merged = append(merged, &syncer.Service{
+		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
-		})
+		}
+		if v.State == store.StateBroken {
+			svc.Broken, svc.Receivers = v.Note, nil // nothing may run until the owner reconnects
+		}
+		merged = append(merged, svc)
 	}
 	for id := range h.accounts {
 		if !live[id] {
@@ -257,6 +262,7 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 	if approval != nil {
 		h.Store.RemoveRequest(ctx, approval.ID) // the approval is used up; the link is the record now
 	}
+	h.event(ctx, service, user.ID, "joined", user.Name+" started sending to "+service)
 	h.Log.Info("joined", "service", service, "user", user.Email)
 	if h.Wake != nil {
 		h.Wake("joined: " + user.Email)
@@ -316,6 +322,7 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	if err := h.Store.RemoveLink(ctx, link.ID); err != nil {
 		return err
 	}
+	h.event(ctx, service, user.ID, "left", user.Name+" stopped sending to "+service)
 	h.Log.Info("left", "service", service, "user", user.Email)
 	return h.Reload(ctx)
 }
