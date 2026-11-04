@@ -59,6 +59,22 @@ type Syncer struct {
 
 	subMu sync.Mutex
 	subs  map[chan struct{}]struct{}
+
+	totMu  sync.Mutex
+	totals Totals
+}
+
+// Totals are cumulative since the app started (kept in memory only).
+type Totals struct {
+	Passes int
+	Counts Counts
+}
+
+// Totals returns a snapshot of the cumulative counters.
+func (s *Syncer) Totals() Totals {
+	s.totMu.Lock()
+	defer s.totMu.Unlock()
+	return s.totals
 }
 
 // Subscribe returns a channel that receives a signal whenever a pass finishes, and a function that
@@ -176,6 +192,10 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
+		s.totMu.Lock()
+		s.totals.Passes++
+		s.totals.Counts.add(info.Counts)
+		s.totMu.Unlock()
 		s.publish()
 		s.Log.Info("pass finished", "reason", reason, "counts", info.Counts, "untagged", info.Untagged, "error", info.Error)
 		if reason == "daily sweep" && info.Counts.Imported+info.Counts.Duplicate+info.Counts.Refused > 0 {

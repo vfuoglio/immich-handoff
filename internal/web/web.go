@@ -14,8 +14,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,14 +38,26 @@ type Server struct {
 	WebhookSecret string
 	Log           *slog.Logger
 	BackgroundCtx context.Context
+
+	// PublicImmichURL is the address of Immich as the browser sees it. Optional: with it the page shows
+	// thumbnails of photos that are waiting to be handed over.
+	PublicImmichURL string
+	Version         string
+
+	limiter limiter
 }
 
 func (w *Server) Handler() http.Handler {
+	return w.secure(w.routes())
+}
+
+func (w *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(staticFS, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(http.FileServerFS(static), time.Hour)))
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
+	mux.HandleFunc("GET /metrics", w.metrics)
 	mux.HandleFunc("GET /{$}", w.dashboard)
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
@@ -60,6 +74,77 @@ func (w *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /reconnect", w.reconnect)
 	mux.HandleFunc("POST /decide", w.decide)
 	return mux
+}
+
+// secure adds the headers that keep the page from being framed, sniffed or fed scripts from elsewhere,
+// and bounds the size of what the page itself may post.
+func (w *Server) secure(next http.Handler) http.Handler {
+	img := "'self' data:"
+	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
+		img += " " + u.Scheme + "://" + u.Host
+	}
+	csp := "default-src 'none'; script-src 'self'; style-src 'self'; img-src " + img +
+		"; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		h := rw.Header()
+		h.Set("Content-Security-Policy", csp)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		if r.Method == http.MethodPost {
+			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
+		}
+		next.ServeHTTP(rw, r)
+	})
+}
+
+// limiter allows each person a limited number of changes per minute.
+type limiter struct {
+	mu   sync.Mutex
+	seen map[uuid.UUID][]time.Time
+}
+
+const changesPerMinute = 30
+
+func (l *limiter) allow(user uuid.UUID) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.seen == nil {
+		l.seen = map[uuid.UUID][]time.Time{}
+	}
+	now, keep := time.Now(), time.Now().Add(-time.Minute)
+	recent := l.seen[user][:0]
+	for _, t := range l.seen[user] {
+		if t.After(keep) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= changesPerMinute {
+		l.seen[user] = recent
+		return false
+	}
+	l.seen[user] = append(recent, now)
+	return true
+}
+
+// metrics is a small Prometheus-style text page. It needs the webhook secret, since it is not meant for browsers.
+func (w *Server) metrics(rw http.ResponseWriter, r *http.Request) {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get(w.WebhookHeader)), []byte(w.WebhookSecret)) != 1 {
+		http.Error(rw, "bad secret", http.StatusUnauthorized)
+		return
+	}
+	t := w.S.Totals()
+	rw.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprintf(rw, "# TYPE handoff_passes_total counter\nhandoff_passes_total %d\n", t.Passes)
+	fmt.Fprint(rw, "# TYPE handoff_photos_total counter\n")
+	for _, c := range []struct {
+		result string
+		n      int
+	}{{"imported", t.Counts.Imported}, {"duplicate", t.Counts.Duplicate}, {"refused", t.Counts.Refused}, {"error", t.Counts.Errors}} {
+		fmt.Fprintf(rw, "handoff_photos_total{result=%q} %d\n", c.result, c.n)
+	}
+	fmt.Fprintf(rw, "# TYPE handoff_services gauge\nhandoff_services %d\n", len(w.S.Current()))
+	fmt.Fprintf(rw, "# TYPE handoff_build_info gauge\nhandoff_build_info{version=%q} 1\n", w.Version)
 }
 
 func cacheFor(h http.Handler, d time.Duration) http.Handler {
@@ -275,7 +360,14 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 			tag = svc.InboxTag
 		}
 		rw.Header().Set("Cache-Control", "no-store")
-		Count(w.count(r.Context(), acct, tag), role).Render(r.Context(), rw)
+		ids := w.tagged(r.Context(), acct, tag)
+		var thumbs []string
+		if role == "sender" && w.PublicImmichURL != "" {
+			for _, id := range ids[:min(len(ids), 6)] {
+				thumbs = append(thumbs, strings.TrimRight(w.PublicImmichURL, "/")+"/api/assets/"+id+"/thumbnail?size=thumbnail")
+			}
+		}
+		Count(len(ids), role, thumbs).Render(r.Context(), rw)
 		return
 	}
 	http.Error(rw, "no such service for you", http.StatusNotFound)
@@ -321,17 +413,21 @@ func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// count is how many photos carry the tag in the account (the app's own key does the looking).
-func (w *Server) count(ctx context.Context, a *syncer.Account, tag string) int {
+// tagged lists the photos that carry the tag in the account (the app's own key does the looking).
+func (w *Server) tagged(ctx context.Context, a *syncer.Account, tag string) []string {
 	id, err := a.API.FindTag(ctx, tag, false)
 	if err != nil || id == nil {
-		return 0
+		return nil
 	}
 	assets, err := a.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*id}})
 	if err != nil {
-		return 0
+		return nil
 	}
-	return len(assets)
+	ids := make([]string, 0, len(assets))
+	for _, x := range assets {
+		ids = append(ids, x.Id.String())
+	}
+	return ids
 }
 
 // guarded runs an action that changes something: it needs the cross-site header and a sign-in.
@@ -344,6 +440,10 @@ func (w *Server) guarded(rw http.ResponseWriter, r *http.Request) *member {
 	me, code, msg := w.authenticate(r)
 	if me == nil {
 		http.Error(rw, msg, code)
+		return nil
+	}
+	if !w.limiter.allow(me.user.ID) {
+		http.Error(rw, "too many changes in a minute; try again shortly", http.StatusTooManyRequests)
 		return nil
 	}
 	return me

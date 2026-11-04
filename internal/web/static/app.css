@@ -106,3 +106,7 @@ input, select {
 
 ul.events { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
 ul.events li { font-size: .95rem; }
+
+.thumbs { display: flex; gap: .35rem; margin-top: .6rem; flex-wrap: wrap; }
+.thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
+.htmx-request { opacity: .7; }

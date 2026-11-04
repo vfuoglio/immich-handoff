@@ -79,6 +79,7 @@ templ Layout(title, user string) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="htmx-config" content='{"includeIndicatorStyles": false}'/>
 			<title>{ title }</title>
 			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
 			<link rel="stylesheet" href="static/app.css"/>
@@ -198,9 +199,16 @@ templ ServiceCard(s ServiceView) {
 	</article>
 }
 
-templ Count(n int, role string) {
+templ Count(n int, role string, thumbs []string) {
 	{ fmt.Sprint(n) }
 	<small>{ countLabel(role) }</small>
+	if len(thumbs) > 0 {
+		<span class="thumbs">
+			for _, t := range thumbs {
+				<img src={ templ.SafeURL(t) } alt="" loading="lazy" width="56" height="56"/>
+			}
+		</span>
+	}
 }
 
 templ LastRun(info *syncer.RunInfo) {

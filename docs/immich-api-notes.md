@@ -12,6 +12,9 @@ Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `I
 - `GET /api/api-keys/me` works with any key (no permission needed) and returns the key's own permissions, which makes it a cheap health check.
 - Once a key is deleted, every call that uses it returns 401.
 
+- `GET /api/api-keys` returns each key's name and permissions, which is how the tests confirm a copy-mode sender key has no `asset.delete`.
+- Removing a tag from a photo (`DELETE /api/tags/{id}/assets`) works with `tag.asset` alone; `tag.delete` is not needed.
+
 ## Workflows
 - A user can hold several workflows at once (two created with different names both listed).
 - Workflow step config is stored in the owner's account; the webhook step sends `{type, trigger, data:{asset:{id, ownerId, ...}}}`.
@@ -21,5 +24,5 @@ Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `I
 
 ## Search and tags
 - Search pages with `page` and `nextPage`; `nextCursor` is never returned in 3.2.0.
-- A tag applied in the first moments after an upload is occasionally dropped by Immich itself (about 1 in 50 in tests with no handoff app running).
+- A tag applied in the first moments after an upload is occasionally dropped by Immich itself (about 1 in 50 in tests with no handoff app running). The same happens to a tag added and another removed on one photo within milliseconds, so the app adds the new tag, checks it, and only then removes the old one.
 - Immich is "healthy" about 30 seconds before its workflow plugins are loaded; creating a workflow earlier fails with `Unknown method`.

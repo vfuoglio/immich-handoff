@@ -21,6 +21,9 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
+
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
@@ -72,7 +75,7 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	log.Info("connected to Immich", "major", major, "minor", minor, "services", len(services))
+	log.Info("connected to Immich", "major", major, "minor", minor, "services", len(services), "version", version)
 	if major < 3 || (major == 3 && minor < 2) {
 		log.Warn("Immich < 3.2: the tag workflow trigger is not available; only the startup and daily passes will hand photos over")
 	}
@@ -114,7 +117,8 @@ func run(log *slog.Logger) error {
 	s.Provider = h
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx}
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx,
+		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 

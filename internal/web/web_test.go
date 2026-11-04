@@ -62,7 +62,7 @@ func fakeImmich() http.Handler {
 	return mux
 }
 
-func setup(t *testing.T) (*httptest.Server, *syncer.Syncer) {
+func setup(t *testing.T, opts ...func(*web.Server)) (*httptest.Server, *syncer.Syncer) {
 	t.Helper()
 	im := httptest.NewServer(fakeImmich())
 	t.Cleanup(im.Close)
@@ -78,6 +78,9 @@ func setup(t *testing.T) (*httptest.Server, *syncer.Syncer) {
 	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Cfg: syncer.Config{DryRun: true}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	syncer.ResolveUsers(context.Background(), s.Services)
 	srv := &web.Server{S: s, BaseURL: im.URL, WebhookHeader: "X-Webhook-Secret", WebhookSecret: "s3cret", Log: s.Log, BackgroundCtx: context.Background()}
+	for _, o := range opts {
+		o(srv)
+	}
 	app := httptest.NewServer(srv.Handler())
 	t.Cleanup(app.Close)
 	return app, s
@@ -232,5 +235,75 @@ func TestJoinAndLeaveAreOffWithoutSelfService(t *testing.T) {
 	}
 	if code, _ := do(t, "POST", app.URL+"/join", "sess=other", nil); code != 400 {
 		t.Errorf("join without the CSRF header: %d", code)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	app, _ := setup(t, func(s *web.Server) { s.PublicImmichURL = "https://photos.example.com/immich" })
+	for _, path := range []string{"/", "/static/app.css", "/healthz"} {
+		res, err := http.Get(app.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		csp := res.Header.Get("Content-Security-Policy")
+		for _, want := range []string{"frame-ancestors 'none'", "script-src 'self'", "img-src 'self' data: https://photos.example.com"} {
+			if !strings.Contains(csp, want) {
+				t.Errorf("%s: CSP %q lacks %q", path, csp, want)
+			}
+		}
+		if res.Header.Get("X-Content-Type-Options") != "nosniff" || res.Header.Get("X-Frame-Options") != "DENY" {
+			t.Errorf("%s: missing hardening headers: %v", path, res.Header)
+		}
+	}
+}
+
+func TestMetricsNeedTheSecret(t *testing.T) {
+	app, s := setup(t)
+	s.Run(context.Background(), "test", false)
+	if code, _ := do(t, "GET", app.URL+"/metrics", "", nil); code != 401 {
+		t.Errorf("metrics without the secret: %d", code)
+	}
+	code, body := do(t, "GET", app.URL+"/metrics", "", map[string]string{"X-Webhook-Secret": "s3cret"})
+	if code != 200 || !strings.Contains(body, "handoff_passes_total 1") || !strings.Contains(body, `handoff_photos_total{result="imported"}`) {
+		t.Errorf("metrics: %d %q", code, body)
+	}
+}
+
+func TestChangesAreRateLimitedPerPerson(t *testing.T) {
+	app, _ := setup(t)
+	h := map[string]string{"X-Requested-With": "immich-handoff"}
+	got429 := false
+	for i := 0; i < 40; i++ {
+		if code, _ := do(t, "POST", app.URL+"/sync", "sess=alice", h); code == 429 {
+			got429 = true
+			if i < 30 {
+				t.Fatalf("limited too early, after %d changes", i)
+			}
+			break
+		}
+	}
+	if !got429 {
+		t.Error("a person flooding changes must be limited")
+	}
+	if code, _ := do(t, "POST", app.URL+"/sync", "sess=family", h); code == 429 {
+		t.Error("the limit is per person, not global")
+	}
+}
+
+func TestThumbnailsOnlyWhenTheImmichAddressIsKnown(t *testing.T) {
+	without, _ := setup(t)
+	_, body := do(t, "GET", without.URL+"/fragments/count?service=family&role=sender", "sess=alice", nil)
+	if strings.Contains(body, "<img") {
+		t.Errorf("no thumbnails without PUBLIC_IMMICH_URL: %q", body)
+	}
+	with, _ := setup(t, func(s *web.Server) { s.PublicImmichURL = "https://photos.example.com/" })
+	_, body = do(t, "GET", with.URL+"/fragments/count?service=family&role=sender", "sess=alice", nil)
+	if !strings.Contains(body, "https://photos.example.com/api/assets/11111111-1111-1111-1111-111111111111/thumbnail?size=thumbnail") {
+		t.Errorf("thumbnails expected: %q", body)
+	}
+	_, body = do(t, "GET", with.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
+	if strings.Contains(body, "<img") {
+		t.Errorf("receivers see counts only: %q", body)
 	}
 }
