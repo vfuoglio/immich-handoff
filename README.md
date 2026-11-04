@@ -38,14 +38,14 @@ Serve the app on the **same host as Immich** through the Synology reverse proxy 
 
 1. Copy `.env.example` to `.env` and fill it in (API keys as in immich_family_sync; pick a long random `WEBHOOK_SECRET`).
 2. `docker compose up -d --build` (or `go run ./cmd/sync-console` with the variables exported). Join Immich's compose network (see `docker-compose.yml`) so the app can reach `immich-server`.
-3. In **each source account** create a workflow: trigger *asset tagged*, filter *tag is `share`*, action *Trigger Webhook* to `http://<app>:8080/webhook/immich` (POST), header name `X-Webhook-Secret`, value = `WEBHOOK_SECRET`. Enable tags under Account Settings → Features.
+3. Set `PUBLIC_WEBHOOK_URL` to the address Immich can reach the app at (for example `http://immich-sync-console:8080/webhook/immich`). On startup the app creates the `share` tag and a workflow named `immich-sync-console` in every source account (trigger *asset tagged*, filter *tag is share*, action *Trigger Webhook* with the secret header). It is idempotent and repairs the workflow if the URL or secret changes. Source API keys need `workflow.create`, `workflow.read`, `workflow.update`, `tag.create`, `tag.read` on top of the permissions in immich_family_sync. Enable tags under Account Settings -> Features. Without `PUBLIC_WEBHOOK_URL` nothing is provisioned and only the startup/daily passes import.
 4. Try `DRY_RUN=true` first. Tag one photo and watch `docker logs`.
 
 ## Open questions
 
 Verify on your server before relying on this:
 
-- Exact name of the tag trigger (`GET /api/workflows/triggers`) and whether workflows are per-user or admin-only.
+- Workflow provisioning follows the v3.2.0 spec and source (trigger `AssetTagged`, methods `immich-plugin-core#assetTagFilter` and `#webhook`) but has only run against a fake server. Check the logs for `workflow ready`, and the workflow in the Immich UI.
 - Webhook host restrictions: the plugin manifest allows any host, but check that the container is reachable from Immich.
 - Whether the tag trigger fires for tags added from the mobile app.
 - Name of Immich's session cookie and whether `/api/users/me` accepts it (the app forwards all cookies, so the name should not matter).

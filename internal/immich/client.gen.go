@@ -1250,6 +1250,25 @@ type UserResponseDto struct {
 // UserStatus User status
 type UserStatus string
 
+// WorkflowCreateDto defines model for WorkflowCreateDto.
+type WorkflowCreateDto struct {
+	// Description Workflow description
+	Description *string `json:"description,omitempty"`
+
+	// Enabled Workflow enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Logging Workflow logs run results
+	Logging *bool `json:"logging,omitempty"`
+
+	// Name Workflow name
+	Name  *string            `json:"name,omitempty"`
+	Steps *[]WorkflowStepDto `json:"steps,omitempty"`
+
+	// Trigger Plugin trigger type
+	Trigger WorkflowTrigger `json:"trigger"`
+}
+
 // WorkflowResponseDto defines model for WorkflowResponseDto.
 type WorkflowResponseDto struct {
 	// CreatedAt Creation date
@@ -1306,6 +1325,25 @@ type WorkflowTriggerResponseDto struct {
 
 // WorkflowType Workflow type
 type WorkflowType string
+
+// WorkflowUpdateDto defines model for WorkflowUpdateDto.
+type WorkflowUpdateDto struct {
+	// Description Workflow description
+	Description *string `json:"description,omitempty"`
+
+	// Enabled Workflow enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Logging Workflow logs run results
+	Logging *bool `json:"logging,omitempty"`
+
+	// Name Workflow name
+	Name  *string            `json:"name,omitempty"`
+	Steps *[]WorkflowStepDto `json:"steps,omitempty"`
+
+	// Trigger Plugin trigger type
+	Trigger *WorkflowTrigger `json:"trigger,omitempty"`
+}
 
 // UploadAssetParams defines parameters for UploadAsset.
 type UploadAssetParams struct {
@@ -1374,6 +1412,14 @@ type UntagAssetsJSONRequestBody = BulkIdsDto
 
 // TagAssetsJSONRequestBody defines body for TagAssets for application/json ContentType.
 type TagAssetsJSONRequestBody = BulkIdsDto
+
+// CreateWorkflowJSONRequestBody defines body for CreateWorkflow for application/json ContentType.
+type CreateWorkflowJSONRequestBody = WorkflowCreateDto
+
+// UpdateWorkflowJSONRequestBody defines body for UpdateWorkflow for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateWorkflowJSONRequestBody = WorkflowUpdateDto
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -1590,12 +1636,52 @@ type ClientInterface interface {
 	// Corresponds with GET /workflows (the `SearchWorkflows` operationId).
 	SearchWorkflows(ctx context.Context, params *SearchWorkflowsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CreateWorkflowWithBody Create a workflow
+	//
+	// Create a new workflow, the workflow can also be created with empty filters and actions.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+	CreateWorkflowWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateWorkflow Create a workflow
+	//
+	// Create a new workflow, the workflow can also be created with empty filters and actions.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+	CreateWorkflow(ctx context.Context, body CreateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetWorkflowTriggers List all workflow triggers
 	//
 	// Retrieve a list of all available workflow triggers.
 	//
 	// Corresponds with GET /workflows/triggers (the `GetWorkflowTriggers` operationId).
 	GetWorkflowTriggers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateWorkflowWithBody Update a workflow
+	//
+	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateWorkflowWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateWorkflow Update a workflow
+	//
+	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // DeleteAssetsWithBody Delete assets
@@ -1909,6 +1995,44 @@ func (c *Client) SearchWorkflows(ctx context.Context, params *SearchWorkflowsPar
 	return c.Client.Do(req)
 }
 
+// CreateWorkflowWithBody Create a workflow
+//
+// Create a new workflow, the workflow can also be created with empty filters and actions.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+func (c *Client) CreateWorkflowWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWorkflowRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateWorkflow Create a workflow
+//
+// Create a new workflow, the workflow can also be created with empty filters and actions.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+func (c *Client) CreateWorkflow(ctx context.Context, body CreateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWorkflowRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // GetWorkflowTriggers List all workflow triggers
 //
 // Retrieve a list of all available workflow triggers.
@@ -1916,6 +2040,46 @@ func (c *Client) SearchWorkflows(ctx context.Context, params *SearchWorkflowsPar
 // Corresponds with GET /workflows/triggers (the `GetWorkflowTriggers` operationId).
 func (c *Client) GetWorkflowTriggers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetWorkflowTriggersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateWorkflowWithBody Update a workflow
+//
+// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateWorkflowWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateWorkflowRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateWorkflow Update a workflow
+//
+// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateWorkflowRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2615,6 +2779,46 @@ func NewSearchWorkflowsRequest(server string, params *SearchWorkflowsParams) (*h
 	return req, nil
 }
 
+// NewCreateWorkflowRequest calls the generic CreateWorkflow builder with application/json body
+func NewCreateWorkflowRequest(server string, body CreateWorkflowJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateWorkflowRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateWorkflowRequestWithBody constructs an http.Request for the CreateWorkflow method, with any body, and a specified content type
+func NewCreateWorkflowRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/workflows")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetWorkflowTriggersRequest constructs an http.Request for the GetWorkflowTriggers method
 func NewGetWorkflowTriggersRequest(server string) (*http.Request, error) {
 	var err error
@@ -2638,6 +2842,53 @@ func NewGetWorkflowTriggersRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewUpdateWorkflowRequest calls the generic UpdateWorkflow builder with application/json body
+func NewUpdateWorkflowRequest(server string, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateWorkflowRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateWorkflowRequestWithBody constructs an http.Request for the UpdateWorkflow method, with any body, and a specified content type
+func NewUpdateWorkflowRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/workflows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2839,6 +3090,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /workflows (the `SearchWorkflows` operationId).
 	SearchWorkflowsWithResponse(ctx context.Context, params *SearchWorkflowsParams, reqEditors ...RequestEditorFn) (*SearchWorkflowsResponse, error)
 
+	// CreateWorkflowWithBodyWithResponse Create a workflow
+	//
+	// Create a new workflow, the workflow can also be created with empty filters and actions.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+	CreateWorkflowWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWorkflowResponse, error)
+
+	// CreateWorkflowWithResponse Create a workflow
+	//
+	// Create a new workflow, the workflow can also be created with empty filters and actions.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+	CreateWorkflowWithResponse(ctx context.Context, body CreateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWorkflowResponse, error)
+
 	// GetWorkflowTriggersWithResponse List all workflow triggers
 	//
 	// Retrieve a list of all available workflow triggers.
@@ -2847,6 +3116,28 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /workflows/triggers (the `GetWorkflowTriggers` operationId).
 	GetWorkflowTriggersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetWorkflowTriggersResponse, error)
+
+	// UpdateWorkflowWithBodyWithResponse Update a workflow
+	//
+	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateWorkflowWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error)
+
+	// UpdateWorkflowWithResponse Update a workflow
+	//
+	// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error)
 }
 
 type DeleteAssetsResponse struct {
@@ -3334,6 +3625,47 @@ func (r SearchWorkflowsResponse) ContentType() string {
 	return ""
 }
 
+type CreateWorkflowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *WorkflowResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateWorkflowResponse) GetJSON201() *WorkflowResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateWorkflowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateWorkflowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateWorkflowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateWorkflowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetWorkflowTriggersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3369,6 +3701,47 @@ func (r GetWorkflowTriggersResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetWorkflowTriggersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateWorkflowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WorkflowResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateWorkflowResponse) GetJSON200() *WorkflowResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateWorkflowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateWorkflowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateWorkflowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateWorkflowResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -3630,6 +4003,36 @@ func (c *ClientWithResponses) SearchWorkflowsWithResponse(ctx context.Context, p
 	return ParseSearchWorkflowsResponse(rsp)
 }
 
+// CreateWorkflowWithBodyWithResponse Create a workflow
+//
+// Create a new workflow, the workflow can also be created with empty filters and actions.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+func (c *ClientWithResponses) CreateWorkflowWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWorkflowResponse, error) {
+	rsp, err := c.CreateWorkflowWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWorkflowResponse(rsp)
+}
+
+// CreateWorkflowWithResponse Create a workflow
+//
+// Create a new workflow, the workflow can also be created with empty filters and actions.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /workflows (the `CreateWorkflow` operationId).
+func (c *ClientWithResponses) CreateWorkflowWithResponse(ctx context.Context, body CreateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWorkflowResponse, error) {
+	rsp, err := c.CreateWorkflow(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWorkflowResponse(rsp)
+}
+
 // GetWorkflowTriggersWithResponse List all workflow triggers
 //
 // Retrieve a list of all available workflow triggers.
@@ -3643,6 +4046,39 @@ func (c *ClientWithResponses) GetWorkflowTriggersWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetWorkflowTriggersResponse(rsp)
+}
+
+// UpdateWorkflowWithBodyWithResponse Update a workflow
+//
+// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateWorkflowWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error) {
+	rsp, err := c.UpdateWorkflowWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateWorkflowResponse(rsp)
+}
+
+// UpdateWorkflowWithResponse Update a workflow
+//
+// Update the information of a specific workflow by its ID. This endpoint can be used to update the workflow name, description, trigger type, filters and actions order, etc.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /workflows/{id} (the `UpdateWorkflow` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error) {
+	rsp, err := c.UpdateWorkflow(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateWorkflowResponse(rsp)
 }
 
 // ParseDeleteAssetsResponse parses an HTTP response from a DeleteAssetsWithResponse call
@@ -3944,6 +4380,32 @@ func ParseSearchWorkflowsResponse(rsp *http.Response) (*SearchWorkflowsResponse,
 	return response, nil
 }
 
+// ParseCreateWorkflowResponse parses an HTTP response from a CreateWorkflowWithResponse call
+func ParseCreateWorkflowResponse(rsp *http.Response) (*CreateWorkflowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateWorkflowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest WorkflowResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetWorkflowTriggersResponse parses an HTTP response from a GetWorkflowTriggersWithResponse call
 func ParseGetWorkflowTriggersResponse(rsp *http.Response) (*GetWorkflowTriggersResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3960,6 +4422,32 @@ func ParseGetWorkflowTriggersResponse(rsp *http.Response) (*GetWorkflowTriggersR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []WorkflowTriggerResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateWorkflowResponse parses an HTTP response from a UpdateWorkflowWithResponse call
+func ParseUpdateWorkflowResponse(rsp *http.Response) (*UpdateWorkflowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateWorkflowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkflowResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

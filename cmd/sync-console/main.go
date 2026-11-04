@@ -85,6 +85,8 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	s.Provision(ctx, syncer.Webhook{URL: os.Getenv("PUBLIC_WEBHOOK_URL"), Header: w.WebhookHeader, Secret: secret})
+
 	// Startup catch-up and a slow daily sweep (also expires the inbox tag). This is a safety net, not polling.
 	go func() {
 		for {
