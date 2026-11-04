@@ -169,3 +169,20 @@ func visVals(service, visibility string) string {
 	b, _ := json.Marshal(map[string]string{"service": service, "visibility": visibility})
 	return string(b)
 }
+
+// reasonLabel turns the internal reason a pass ran into words for people.
+func reasonLabel(reason string) string {
+	switch {
+	case reason == "webhook", strings.HasPrefix(reason, "retry"), reason == "coalesced event":
+		return "a photo was tagged"
+	case reason == "startup":
+		return "the app started"
+	case reason == "daily sweep":
+		return "daily check"
+	case strings.HasPrefix(reason, "manual"):
+		return "Sync now"
+	case strings.HasPrefix(reason, "joined"), strings.HasPrefix(reason, "reconnected"), strings.HasPrefix(reason, "workflows ready"):
+		return "setup finished"
+	}
+	return reason
+}

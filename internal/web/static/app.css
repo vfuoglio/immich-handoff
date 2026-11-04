@@ -110,3 +110,15 @@ ul.events li { font-size: .95rem; }
 .thumbs { display: flex; gap: .35rem; margin-top: .6rem; flex-wrap: wrap; }
 .thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
 .htmx-request { opacity: .7; }
+
+details.offer { margin: 1.25rem 0 .75rem; }
+details.offer > summary {
+  cursor: pointer; font-weight: 600; padding: .85rem 1.1rem; border-radius: var(--radius); list-style: none;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--primary);
+}
+details.offer > summary::-webkit-details-marker { display: none; }
+details.offer > summary::before { content: "+"; display: inline-block; width: 1.2rem; font-weight: 700; }
+details.offer[open] > summary::before { content: "\2212"; }
+details.offer[open] > summary { margin-bottom: .6rem; }
+
+.q { flex-basis: 100%; margin: 0; }

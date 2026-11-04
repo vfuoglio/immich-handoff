@@ -720,3 +720,15 @@ func TestCreateOptionsAreValidated(t *testing.T) {
 		t.Errorf("bad expiry: %v", err)
 	}
 }
+
+func TestEachCreatedServiceGetsItsOwnInboxTag(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "Holiday 2026", Tag: "holiday", Policy: "open"})
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "Photo club", Tag: "club", Policy: "open", InboxTag: "club-inbox"})
+	if got := service(e, "Holiday 2026").InboxTag; got != "inbox/Holiday 2026" {
+		t.Errorf("default inbox tag = %q", got)
+	}
+	if got := service(e, "Photo club").InboxTag; got != "club-inbox" {
+		t.Errorf("an owner's choice wins: %q", got)
+	}
+}

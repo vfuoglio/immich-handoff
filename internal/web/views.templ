@@ -8,20 +8,20 @@ import (
 
 // ServiceView is one service as the signed-in user takes part in it.
 type ServiceView struct {
-	Name string
-	Role string // sender | receiver
-	Tag  string // the tag the user adds (sender) or looks for (receiver)
-	From int    // number of senders
-	To   int    // number of receivers
-	CanLeave bool // the person joined from this page, so can leave from it
+	Name     string
+	Role     string // sender | receiver
+	Tag      string // the tag the user adds (sender) or looks for (receiver)
+	From     int    // number of senders
+	To       int    // number of receivers
+	CanLeave bool   // the person joined from this page, so can leave from it
 	Paused   string // why the service cannot work right now, if so
 	Copy     bool   // the signed-in sender chose to keep their originals (otherwise they are moved to their trash)
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
 type OfferView struct {
-	Name  string
-	Tag   string
+	Name   string
+	Tag    string
 	Owner  string // empty for services from the configuration
 	State  string // join | request | pending | approved | declined
 	Invite string // the invitation token the person arrived with, if any
@@ -68,7 +68,7 @@ type DashboardData struct {
 	Orphaned []string   // services the person joined that their owner has since removed
 	Broken   []BrokenView
 	Activity []ActivityView
-	CanOffer bool     // people may create services on this install
+	CanOffer bool // people may create services on this install
 	Last     *syncer.RunInfo
 }
 
@@ -143,8 +143,10 @@ templ Dashboard(d DashboardData) {
 			}
 		}
 		if d.CanOffer {
-			<h2>Offer a service</h2>
-			@OfferForm()
+			<details class="offer">
+				<summary>Offer a service of your own</summary>
+				@OfferForm()
+			</details>
 		}
 		if len(d.Activity) > 0 {
 			<h2>Recent events</h2>
@@ -217,7 +219,7 @@ templ LastRun(info *syncer.RunInfo) {
 		} else {
 			<header>
 				<h3>Last run</h3>
-				<span class="meta">{ info.Finished.Format("2006-01-02 15:04:05") } · { info.Reason }</span>
+				<span class="meta">{ info.Finished.Format("2 Jan 15:04:05") } · { reasonLabel(info.Reason) }</span>
 			</header>
 			<div class="row">
 				<span class="chip ok">{ fmt.Sprint(info.Counts.Imported) } handed over</span>
@@ -256,20 +258,22 @@ templ OfferCard(o OfferView) {
 				{ " Offered by " + o.Owner + "." }
 			}
 		</p>
-		<p class="row">
-			switch o.State {
-				case "join", "approved":
-					<span class="meta">What should happen to your originals?</span>
-					<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, true) }>
-						{ joinLabel(o.State, true) }
-					</button>
-					<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, false) }>
-						{ joinLabel(o.State, false) }
-					</button>
-				case "request":
-					<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
-			}
-		</p>
+		if o.State == "join" || o.State == "approved" || o.State == "request" {
+			<p class="row">
+				switch o.State {
+					case "join", "approved":
+						<span class="meta q">What should happen to your originals?</span>
+						<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, true) }>
+							{ joinLabel(o.State, true) }
+						</button>
+						<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, false) }>
+							{ joinLabel(o.State, false) }
+						</button>
+					case "request":
+						<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
+				}
+			</p>
+		}
 	</article>
 }
 
@@ -287,7 +291,8 @@ templ OwnedCard(o OwnedView) {
 			</p>
 		}
 		if len(o.Members) > 0 {
-			<p class="meta">Senders:
+			<p class="meta">
+				Senders:
 				for _, m := range o.Members {
 					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State, m.Copy) }</span>
 				}
@@ -312,11 +317,13 @@ templ OwnedCard(o OwnedView) {
 					<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="The current link will stop working. Continue?">New link</button>
 				</div>
 			</div>
-			<p class="row"><button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">List for everyone</button></p>
-		} else {
-			<p class="row"><button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Make invitation-only</button></p>
 		}
 		<p class="row">
+			if o.Invite != "" {
+				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">List for everyone</button>
+			} else {
+				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Make invitation-only</button>
+			}
 			<button hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Delete " + o.Name + "? Its receiver key is removed from your Immich account and senders stop handing photos to you." }>Delete service</button>
 		</p>
 	</article>

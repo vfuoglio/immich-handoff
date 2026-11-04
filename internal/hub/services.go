@@ -78,9 +78,11 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if p.Visibility == store.VisInvite {
 		visibility, invite = store.VisInvite, newToken()
 	}
+	// Each service gets its own nested inbox tag ("inbox/Holiday 2026") so an owner with several services
+	// sees what arrived through which; Immich shows it as a child of "inbox".
 	inboxTag := strings.TrimSpace(p.InboxTag)
 	if inboxTag == "" {
-		inboxTag = h.Options.InboxTag
+		inboxTag = h.Options.InboxTag + "/" + name
 	} else if !tagRe.MatchString(inboxTag) {
 		return ErrBadTag
 	}

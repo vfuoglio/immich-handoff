@@ -259,11 +259,11 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 // search returns the ids of assets with a tag, optionally including trashed ones.
 func searchTag(t *testing.T, u user, tag string, withTrashed bool) []string {
 	t.Helper()
-	var tags []struct{ ID, Name string }
+	var tags []struct{ ID, Name, Value string }
 	call(t, "GET", "/tags", keyAuth(u), nil, &tags)
 	var tid string
 	for _, x := range tags {
-		if x.Name == tag {
+		if x.Name == tag || x.Value == tag {
 			tid = x.ID
 		}
 	}
@@ -920,12 +920,12 @@ func TestHubServices(t *testing.T) {
 		t.Errorf("bob's sender key must exist, keys: %v", names)
 	}
 
-	before := len(searchTag(t, alice, "inbox", false))
+	before := len(searchTag(t, alice, "inbox/holiday", false))
 	id, _ := upload(t, bob, "holiday.jpg", jpegBytes(90))
 	tagAsset(t, bob, "hol", id)
 	eventually(t, "photo reaches the owner and the original is removed", 90*time.Second, func() bool {
 		x, code := getAsset(t, bob, id)
-		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox", false)) == before+1
+		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox/holiday", false)) == before+1
 	})
 
 	expect(post(t, port, "/services/delete", senderCookie, url.Values{"service": {"holiday"}}), 409, "a non-owner deleting")
@@ -989,7 +989,7 @@ func TestLinkHealth(t *testing.T) {
 		return id
 	}
 	trashed := func(id string) bool { x, code := getAsset(t, bob, id); return code == 200 && x.IsTrashed }
-	inbox := func() int { return len(searchTag(t, alice, "inbox", false)) }
+	inbox := func() int { return len(searchTag(t, alice, "inbox/pause", false)) }
 
 	base := inbox()
 	one := send("one.jpg", 100)
@@ -1161,11 +1161,11 @@ func TestCopyMode(t *testing.T) {
 		return false
 	})
 
-	before := len(searchTag(t, alice, "inbox", false))
+	before := len(searchTag(t, alice, "inbox/keep", false))
 	id, _ := upload(t, bob, "keeper.jpg", jpegBytes(120))
 	tagAsset(t, bob, "keep-tag", id)
 	eventually(t, "the receiver gets a tagged copy", 90*time.Second, func() bool {
-		return len(searchTag(t, alice, "inbox", false)) == before+1
+		return len(searchTag(t, alice, "inbox/keep", false)) == before+1
 	})
 	var names map[string]bool
 	eventually(t, "the original is marked as handed over", 60*time.Second, func() bool {
@@ -1180,7 +1180,7 @@ func TestCopyMode(t *testing.T) {
 		t.Errorf("the original must stay (code %d, trashed %v)", code, x.IsTrashed)
 	}
 	time.Sleep(8 * time.Second)
-	if n := len(searchTag(t, alice, "inbox", false)); n != before+1 {
+	if n := len(searchTag(t, alice, "inbox/keep", false)); n != before+1 {
 		t.Errorf("a copied photo must not be handed over again, inbox grew to %d", n-before)
 	}
 }
