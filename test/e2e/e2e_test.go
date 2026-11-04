@@ -254,6 +254,21 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 	}
 }
 
+// tagLikeThePhone tags the way the Immich mobile app does: look the tag up (creating it), then add it to
+// the photos with the bulk call (PUT /tags/assets), which is a different endpoint from tagAsset's.
+func tagLikeThePhone(t *testing.T, u user, tag string, ids ...string) {
+	t.Helper()
+	var tags []struct{ ID string }
+	mustOK(t, call(t, "PUT", "/tags", keyAuth(u), map[string]any{"tags": []string{tag}}, &tags), "upsert tag")
+	var out struct {
+		Count int `json:"count"`
+	}
+	mustOK(t, call(t, "PUT", "/tags/assets", keyAuth(u), map[string]any{"assetIds": ids, "tagIds": []string{tags[0].ID}}, &out), "bulk tag")
+	if out.Count != len(ids) {
+		t.Fatalf("bulk tagging reported %d of %d", out.Count, len(ids))
+	}
+}
+
 // search returns the ids of assets with a tag, optionally including trashed ones.
 func searchTag(t *testing.T, u user, tag string, withTrashed bool) []string {
 	t.Helper()
@@ -1161,7 +1176,7 @@ func TestCopyMode(t *testing.T) {
 
 	before := len(searchTag(t, alice, "inbox/keep", false))
 	id, _ := upload(t, bob, "keeper.jpg", jpegBytes(120))
-	tagAsset(t, bob, "keep-tag", id)
+	tagLikeThePhone(t, bob, "keep-tag", id) // the endpoint the mobile app uses
 	eventually(t, "the receiver gets a tagged copy", 90*time.Second, func() bool {
 		return len(searchTag(t, alice, "inbox/keep", false)) == before+1
 	})

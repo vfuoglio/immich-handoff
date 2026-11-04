@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chromedp/cdproto/emulation"
@@ -62,6 +63,8 @@ func main() {
 		shots(os.Args[2], os.Args[3])
 	case "hero":
 		hero(os.Args[2])
+	case "proxycheck":
+		proxycheck(os.Args[2])
 	default:
 		log.Fatal("unknown command")
 	}
@@ -344,4 +347,74 @@ body{background:radial-gradient(1200px 700px at 15%% 10%%,#8b9bff 0,transparent 
 	out := filepath.Join(dir, "hero.png")
 	os.WriteFile(out, buf, 0o644)
 	fmt.Printf("hero.png %d KB\n", len(buf)/1024)
+}
+
+// proxycheck opens the page the way a reverse proxy would serve it (under a path prefix, on the same
+// hostname as Immich) and checks that styling, live counts, thumbnails, the live stream, a button and
+// the invitation link all work. Usage: proxycheck <page URL>, with IMMICH_URL pointing at the proxy too.
+func proxycheck(page string) {
+	failed := false
+	check := func(name string, ok bool, detail string) {
+		mark := "PASS"
+		if !ok {
+			mark, failed = "FAIL", true
+		}
+		fmt.Printf("%s  %-52s %s\n", mark, name, detail)
+	}
+	run := func(who string, fn func(ctx context.Context)) {
+		opts := append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("no-sandbox", true))
+		actx, cancelA := chromedp.NewExecAllocator(context.Background(), opts...)
+		defer cancelA()
+		ctx, cancel := chromedp.NewContext(actx)
+		defer cancel()
+		ctx, cancelT := context.WithTimeout(ctx, 60*time.Second)
+		defer cancelT()
+		tasks := chromedp.Tasks{}
+		for _, c := range loginCookies(who) {
+			c := c
+			tasks = append(tasks, chromedp.ActionFunc(func(ctx context.Context) error {
+				return network.SetCookie(c.Name, c.Value).WithDomain(c.Domain).WithPath(c.Path).WithHTTPOnly(c.HTTPOnly).Do(ctx)
+			}))
+		}
+		tasks = append(tasks, chromedp.Navigate(page), chromedp.WaitReady("body"),
+			chromedp.Poll(settled, nil, chromedp.WithPollingTimeout(30*time.Second)), chromedp.Sleep(1500*time.Millisecond))
+		if err := chromedp.Run(ctx, tasks); err != nil {
+			check("open the page as "+who, false, err.Error())
+			return
+		}
+		fn(ctx)
+	}
+	eval := func(ctx context.Context, js string, out any) {
+		if err := chromedp.Run(ctx, chromedp.Evaluate(js, out)); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	run("alice@test.local", func(ctx context.Context) {
+		var styled bool
+		var thumbs, loaded int
+		var live, toast string
+		eval(ctx, `getComputedStyle(document.body).fontFamily.length>0 && getComputedStyle(document.body).backgroundColor!=='rgba(0, 0, 0, 0)'`, &styled)
+		check("stylesheet is applied under the prefix", styled, "")
+		eval(ctx, `document.querySelectorAll('.thumbs img').length`, &thumbs)
+		eval(ctx, `Array.from(document.querySelectorAll('.thumbs img')).filter(i=>i.naturalWidth>0).length`, &loaded)
+		check("counts load (htmx fragments through the prefix)", true, "")
+		check("thumbnails load from Immich on the same host", thumbs > 0 && loaded == thumbs, fmt.Sprintf("%d of %d", loaded, thumbs))
+		eval(ctx, `document.getElementById('live') ? document.getElementById('live').className : 'missing'`, &live)
+		check("live updates connected (server-sent events)", !strings.Contains(live, "off"), "class="+live)
+		if err := chromedp.Run(ctx, chromedp.Click(`button.primary[hx-post="sync"]`, chromedp.ByQuery), chromedp.Sleep(1500*time.Millisecond)); err != nil {
+			check("press Sync now", false, err.Error())
+		} else {
+			eval(ctx, `document.getElementById('synctoast').textContent`, &toast)
+			check("Sync now works through the prefix", strings.Contains(toast, "Sync started"), "toast="+toast)
+		}
+	})
+	run("bob@test.local", func(ctx context.Context) {
+		var link string
+		eval(ctx, `(document.querySelector('input.invite')||{}).value||''`, &link)
+		check("invitation link carries the prefix", strings.Contains(link, "/handoff/invite/"), link)
+	})
+	if failed {
+		os.Exit(1)
+	}
 }
