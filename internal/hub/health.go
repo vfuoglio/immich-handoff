@@ -42,7 +42,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 		return // a key from the configuration: the pass already reports it
 	}
 	ctx := context.Background()
-	note := "Immich rejected the API key (it was deleted or revoked) on " + time.Now().UTC().Format("2006-01-02")
+	note := "Immich rejected the API key (it was deleted or revoked) on " + time.Now().UTC().Format("2006-01-02") + "."
 	if ok, _ := h.Store.SetLinkState(ctx, id, store.StateBroken, note); ok {
 		links, _ := h.Store.Links(ctx)
 		for _, l := range links {
