@@ -63,11 +63,27 @@ func badClass(b bool) string {
 }
 
 // joinConfirm tells the person exactly what joining does before they agree.
-func joinConfirm(name, tag string) string {
-	return "This creates an API key named \"handoff: " + name + "\" in your Immich account. " +
-		"Immich Handoff uses it to read and download the photos you tag \"" + tag + "\" and to delete the originals " +
-		"after they have been handed over. Nobody else can see the key. You can stop at any time with Leave, " +
-		"or by deleting that key in Immich."
+func joinConfirm(name, tag string, copyMode bool) string {
+	what := "to read and download the photos you tag \"" + tag + "\" and to delete the originals after they have been handed over."
+	if copyMode {
+		what = "to read and download the photos you tag \"" + tag + "\". Your originals are kept: the key has no permission to delete anything."
+	}
+	return "This creates an API key named \"handoff: " + name + "\" in your Immich account. Immich Handoff uses it " + what +
+		" Nobody else can see the key. You can stop at any time with Leave, or by deleting that key in Immich."
+}
+
+func originalsNote(copyMode bool) string {
+	if copyMode {
+		return "Your originals are kept."
+	}
+	return "Your originals go to the trash once handed over."
+}
+
+func modeLabel(copyMode bool) string {
+	if copyMode {
+		return "Senders keep their originals"
+	}
+	return "Senders' originals are moved to their trash"
 }
 
 // vals builds the JSON for hx-vals.

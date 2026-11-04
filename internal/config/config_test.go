@@ -30,6 +30,8 @@ services:
     receivers: [grandma, family]
     inbox_tag: from-alice
     inbox_expiry_days: 7
+    mode: copy
+    sent_tag: given
 `
 
 var goodEnv = map[string]string{"ALICE": "a", "BOB": "b", "FAMILY": "f", "GRANDMA": "g"}
@@ -45,8 +47,11 @@ func TestRoutesFile(t *testing.T) {
 	if svcs[0].InboxTag != "inbox" || svcs[0].ExpiryDays != 30 || svcs[0].RefusedTag != "share-duplicate" {
 		t.Errorf("defaults not applied: %+v", svcs[0])
 	}
-	if svcs[1].InboxTag != "from-alice" || svcs[1].ExpiryDays != 7 {
+	if svcs[1].InboxTag != "from-alice" || svcs[1].ExpiryDays != 7 || !svcs[1].Copies() || svcs[1].SentTag != "given" {
 		t.Errorf("overrides not applied: %+v", svcs[1])
+	}
+	if svcs[0].Copies() || svcs[0].Mode != "move" || svcs[0].SentTag != "handed-over" {
+		t.Errorf("move is the default: %+v", svcs[0])
 	}
 	if svcs[0].WorkflowName() != "immich-handoff: family" {
 		t.Errorf("workflow name = %q", svcs[0].WorkflowName())
@@ -63,6 +68,7 @@ func TestRoutesProblems(t *testing.T) {
 		"same sender tag":  {strings.Replace(good, "tag: for-grandma", "tag: share", 1), `sender alice already uses tag "share"`, goodEnv},
 		"sender=receiver":  {strings.Replace(good, "senders: [alice]", "senders: [grandma]", 1), "cannot be both sender and receiver", goodEnv},
 		"no services":      {"accounts: {a: {key: x}}\n", "no services defined", goodEnv},
+		"bad mode":         {strings.Replace(good, "mode: copy", "mode: keep", 1), "mode must be move or copy", goodEnv},
 		"unknown yaml key": {good + "bogus: 1\n", "field bogus not found", goodEnv},
 	}
 	for name, c := range cases {

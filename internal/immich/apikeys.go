@@ -11,6 +11,11 @@ import (
 var SenderPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset",
 	"asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update")
 
+// SenderPermissionsCopy is what a sender's key needs when originals are kept: no delete permission at all,
+// so the app cannot remove a photo even by mistake.
+var SenderPermissionsCopy = perms("user.read", "tag.read", "tag.create", "tag.asset",
+	"asset.read", "asset.download", "workflow.read", "workflow.create", "workflow.update")
+
 // ReceiverPermissions is everything a receiver's key needs.
 var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload")
 

@@ -339,7 +339,11 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			outcome = "imported"
 		}
 	}
-	if err := snd.API.DeleteAsset(ctx, a.Id, s.Cfg.DeleteForce); err != nil {
+	if svc.Copies() {
+		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
+			return "", fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
+		}
+	} else if err := snd.API.DeleteAsset(ctx, a.Id, s.Cfg.DeleteForce); err != nil {
 		return "", fmt.Errorf("copies verified but original not removed: %w", err)
 	}
 	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
@@ -471,6 +475,69 @@ func hasTag(a *immich.AssetResponseDto, name string) bool {
 	return false
 }
 
+// rejected tells the provider that Immich no longer accepts an account's key.
+func (s *Syncer) rejected(a *Account) {
+	if w, ok := s.Provider.(Watcher); ok {
+		w.KeyRejected(a)
+	}
+}
+
+// markSent is what ends a hand-over in copy mode: the original keeps existing, gets the sent tag so its
+// owner can see it was handed over, and only then loses the service tag so it is not found again.
+func (s *Syncer) markSent(ctx context.Context, svc *Service, src *immich.API, id, shareTag uuid.UUID) error {
+	if svc.SentTag != "" {
+		if err := s.addTagVerified(ctx, src, svc.SentTag, id); err != nil {
+			return err
+		}
+	}
+	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
+}
+
+// SettleDelay is how long to wait before checking that a tag change took effect.
+var SettleDelay = 400 * time.Millisecond
+
+// addTagVerified adds a tag and makes sure it is really there afterwards. Immich occasionally drops a
+// tag change made right after another change to the same photo (its own metadata and sidecar jobs race
+// with the API), so a single "success" answer is not trusted.
+func (s *Syncer) addTagVerified(ctx context.Context, api *immich.API, name string, asset uuid.UUID) error {
+	tag, err := api.FindTag(ctx, name, true)
+	if err != nil || tag == nil {
+		return fmt.Errorf("ensure tag %q: %v", name, err)
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		if err := api.TagAssets(ctx, *tag, asset); err != nil {
+			return err
+		}
+		time.Sleep(SettleDelay)
+		a, err := api.Asset(ctx, asset)
+		if err != nil {
+			return err
+		}
+		if hasTag(a, name) {
+			return nil
+		}
+	}
+	return fmt.Errorf("tag %q did not stick on %s", name, asset)
+}
+
+// removeTagVerified removes a tag and makes sure it is really gone afterwards (see addTagVerified).
+func (s *Syncer) removeTagVerified(ctx context.Context, api *immich.API, name string, tagID, asset uuid.UUID) error {
+	for attempt := 0; attempt < 5; attempt++ {
+		if err := api.UntagAssets(ctx, tagID, []uuid.UUID{asset}); err != nil {
+			return err
+		}
+		time.Sleep(SettleDelay)
+		a, err := api.Asset(ctx, asset)
+		if err != nil {
+			return err
+		}
+		if !hasTag(a, name) {
+			return nil
+		}
+	}
+	return fmt.Errorf("tag %q could not be removed from %s", name, asset)
+}
+
 // markRefused swaps the service tag for the refused tag on the sender's original, so the refusal is
 // visible to its owner in the Immich app and the photo is not retried (and not reported) on every pass.
 // Re-adding the service tag after the receiver clears its trash retries it.
@@ -478,19 +545,8 @@ func (s *Syncer) markRefused(ctx context.Context, svc *Service, src *immich.API,
 	if svc.RefusedTag == "" {
 		return nil
 	}
-	tag, err := src.FindTag(ctx, svc.RefusedTag, true)
-	if err != nil || tag == nil {
-		return fmt.Errorf("ensure tag %q: %v", svc.RefusedTag, err)
-	}
-	if err := src.TagAssets(ctx, *tag, id); err != nil {
+	if err := s.addTagVerified(ctx, src, svc.RefusedTag, id); err != nil {
 		return err
 	}
-	return src.UntagAssets(ctx, shareTag, []uuid.UUID{id})
-}
-
-// rejected tells the provider that Immich no longer accepts an account's key.
-func (s *Syncer) rejected(a *Account) {
-	if w, ok := s.Provider.(Watcher); ok {
-		w.KeyRejected(a)
-	}
+	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
 }

@@ -26,8 +26,8 @@ var (
 
 // Options are the defaults for services created on the web page.
 type Options struct {
-	InboxTag, RefusedTag string
-	ExpiryDays           int
+	InboxTag, RefusedTag, SentTag string
+	ExpiryDays                    int
 }
 
 type Hub struct {
@@ -116,7 +116,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
-			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite,
+			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, Mode: v.Mode, SentTag: v.SentTag,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {
@@ -219,7 +219,11 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 		return ErrNotJoinable
 	}
 
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), immich.SenderPermissions)
+	perms := immich.SenderPermissions
+	if svc.Copies() {
+		perms = immich.SenderPermissionsCopy // originals are kept, so the key gets no delete permission at all
+	}
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), perms)
 	if err != nil {
 		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
 	}

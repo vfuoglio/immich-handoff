@@ -14,6 +14,8 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,10 +137,10 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	var out []ServiceView
 	for _, svc := range w.S.Current() {
 		if m.account(svc, "sender") != nil {
-			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken})
+			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.Copies()})
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken})
+			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies()})
 		}
 	}
 	return out
@@ -156,12 +158,12 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			if o.Service.OwnerID != uuid.Nil {
 				owner = ownerName(o.Service)
 			}
-			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State})
+			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State, Copy: o.Service.Copies()})
 		}
 	}
 	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
 		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service)}
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Copy: o.Service.Copies()}
 			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 				for _, m := range members {
 					ov.Members = append(ov.Members, MemberView{Name: m.Name, State: m.State})
@@ -222,7 +224,7 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
-	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token}
+	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token, Copy: offer.Service.Copies()}
 	rw.Header().Set("Cache-Control", "no-store")
 	Dashboard(d).Render(r.Context(), rw)
 }
@@ -401,7 +403,11 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 
 func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "created", func(ctx context.Context, me *member, _ string) error {
-		return w.Hub.CreateService(ctx, me.sess, me.user, r.PostFormValue("name"), r.PostFormValue("tag"), r.PostFormValue("policy"), r.PostFormValue("visibility"))
+		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("expiry")))
+		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
+			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
+			Visibility: r.PostFormValue("visibility"), Mode: r.PostFormValue("mode"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days,
+		})
 	})
 }
 

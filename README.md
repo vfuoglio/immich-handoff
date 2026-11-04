@@ -76,7 +76,7 @@ By default originals go to the sender's **trash**, not into oblivion, so a mista
 
 ## Several services and receivers (optional)
 
-A plain install is one service: everyone's `share` photos go to one family account. To run more than one, or to send the same photo to several accounts, describe them in a routes file:
+A plain install is one service: everyone's `share` photos go to one family account. To run more than one, or to send the same photo to several accounts, describe them in a routes file (each service can also set `mode: copy` to keep the senders' originals):
 
 1. Copy `routes.example.yaml` to `routes.yaml` and edit it. It names your accounts (keys come from `.env` variables, so no secret is written in the file) and lists services. Each service has a **tag**, the **senders** who use it and the **receivers** who get the photos.
 2. In `.env` set `ROUTES_FILE=/routes.yaml` and add the key variables the file refers to (for example `ALICE_KEY=...`).
@@ -104,6 +104,8 @@ With `HANDOFF_STORE_KEY` set, anyone signed in to Immich can also **offer a serv
 2. Others see the service under **Services you can send to**. For a service that needs approval they press **Ask to join**; the owner sees the request and presses **Approve** or **Decline**.
 3. After approval the sender presses **Activate**. (The app can only create a key in your account while you are signed in, which is why the sender has the last step.) For an open service, senders just press **Join**.
 4. A sender may not use the same tag for two services.
+
+**Move or copy.** The owner chooses what happens to the sender's originals when the service is created. **Move** (the default) sends them to the sender's trash once every receiver has a verified copy. **Copy** keeps them: the original loses the service tag and gets the tag `handed-over` (`SENT_TAG`) instead, so its owner can see it was shared and it is not sent twice, and the key the app makes for such a sender has **no permission to delete anything**. The page tells a sender which one applies before they join, and a service's mode cannot be changed later. The create form also lets the owner choose the inbox tag and how many days an unfiled photo keeps it.
 
 **Invitation-only services** do not appear in anyone's list. The owner's card shows an **invitation link**; whoever opens it (signed in to Immich) lands on a page for exactly that service, with the same Join or Ask to join button. **New link** makes a fresh link and the old one stops working at once; **List for everyone** or **Make invitation-only** switch a service between the two. People already approved or joined are not affected by a new link. The link is only as private as the way you share it.
 
@@ -139,6 +141,8 @@ Everything is set in `.env`. The keys and `WEBHOOK_SECRET` are required; the res
 | `INBOX_TAG` | `inbox` | Tag on new photos in the family account |
 | `REFUSED_TAG` | `share-duplicate` | Tag put on an original that could not be handed over |
 | `INBOX_EXPIRY_DAYS` | `30` | Days before an unfiled photo loses the `inbox` tag |
+| `HANDOFF_MODE` | `move` | Default for services from `.env`/the routes file: `copy` keeps the senders' originals |
+| `SENT_TAG` | `handed-over` | Copy mode: tag put on an original after it was handed over |
 | `DELETE_FORCE` | `false` | `true` deletes originals permanently instead of trashing them |
 | `NOTIFY_URL` | | ntfy-style URL that gets a message when something needs attention |
 | `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs |

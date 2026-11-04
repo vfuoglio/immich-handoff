@@ -19,4 +19,5 @@ services:
     tag: for-grandma
     senders: [alice]
     receivers: [grandma, family]
-    # optional per service: inbox_tag, refused_tag, inbox_expiry_days
+    # optional per service: inbox_tag, refused_tag, inbox_expiry_days, sent_tag,
+    # mode: copy (keep the senders' originals; default is move), allow_join: true

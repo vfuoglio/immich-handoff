@@ -25,6 +25,7 @@ var (
 	ErrNotOwner  = errors.New("only the owner of a service can do that")
 	ErrNoRequest = errors.New("there is no such request")
 	ErrNoInvite  = errors.New("this invitation is not valid any more")
+	ErrBadExpiry = errors.New("the number of days must be between 1 and 3650")
 )
 
 var (
@@ -47,27 +48,52 @@ func (h *Hub) tagFree(user uuid.UUID, joining *syncer.Service) error {
 	return nil
 }
 
+// CreateParams describe a new service. Zero values mean the defaults.
+type CreateParams struct {
+	Name, Tag  string
+	Policy     string // approval (default) | open
+	Visibility string // listed (default) | invite
+	Mode       string // move (default) | copy
+	InboxTag   string
+	ExpiryDays int
+}
+
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
 // created in their account through their own session and kept encrypted; nobody ever sees it.
-func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.User, name, tag, policy, visibility string) error {
+func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.User, p CreateParams) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
-	name, tag = strings.TrimSpace(name), strings.TrimSpace(tag)
+	name, tag := strings.TrimSpace(p.Name), strings.TrimSpace(p.Tag)
 	if !nameRe.MatchString(name) || strings.EqualFold(name, "default") {
 		return ErrBadName
 	}
 	if !tagRe.MatchString(tag) {
 		return ErrBadTag
 	}
+	policy := p.Policy
 	if policy != store.PolicyOpen && policy != store.PolicyApproval {
 		policy = store.PolicyApproval
 	}
-	invite := ""
-	if visibility == store.VisInvite {
-		invite = newToken()
-	} else {
-		visibility = store.VisListed
+	visibility, invite := store.VisListed, ""
+	if p.Visibility == store.VisInvite {
+		visibility, invite = store.VisInvite, newToken()
+	}
+	mode := syncer.ModeMove
+	if p.Mode == syncer.ModeCopy {
+		mode = syncer.ModeCopy
+	}
+	inboxTag := strings.TrimSpace(p.InboxTag)
+	if inboxTag == "" {
+		inboxTag = h.Options.InboxTag
+	} else if !tagRe.MatchString(inboxTag) {
+		return ErrBadTag
+	}
+	expiry := p.ExpiryDays
+	if expiry <= 0 {
+		expiry = h.Options.ExpiryDays
+	} else if expiry > 3650 {
+		return ErrBadExpiry
 	}
 	for _, s := range h.Services() {
 		if strings.EqualFold(s.Label(), name) {
@@ -91,7 +117,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 		return fmt.Errorf("the new key does not work for your account: %v", err)
 	}
 	if _, err := h.Store.AddService(ctx, store.Service{
-		Name: name, Tag: tag, InboxTag: h.Options.InboxTag, Refused: h.Options.RefusedTag, ExpiryDays: h.Options.ExpiryDays,
+		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, Mode: mode, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
 		Visibility: visibility, Invite: invite,
 	}); err != nil {
@@ -283,7 +309,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry} {
 		if errors.Is(err, e) {
 			return true
 		}

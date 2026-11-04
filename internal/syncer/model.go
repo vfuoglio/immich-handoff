@@ -15,6 +15,11 @@ type Account struct {
 	UserID uuid.UUID // the Immich user behind the key; set by ResolveUsers or when a person joins
 }
 
+const (
+	ModeMove = "move" // the original goes to the sender's trash once every receiver has a verified copy
+	ModeCopy = "copy" // the original stays; it loses the service tag and gets the sent tag so it is not handed over again
+)
+
 // Service says: photos that a sender tags with Tag are handed to every receiver.
 // The original is removed only after all receivers hold a verified copy.
 type Service struct {
@@ -22,6 +27,8 @@ type Service struct {
 	Tag        string // tag a sender adds
 	InboxTag   string // tag put on new copies in each receiver
 	RefusedTag string // replaces Tag on an original that a receiver refused
+	Mode       string // ModeMove (default) or ModeCopy
+	SentTag    string // copy mode: put on an original after it was handed over
 	ExpiryDays int    // unfiled copies lose InboxTag after this many days
 	Senders    []*Account
 	Receivers  []*Account
@@ -35,6 +42,9 @@ type Service struct {
 }
 
 // Label is the name used in logs and on the status page.
+// Copies reports whether originals are kept.
+func (s *Service) Copies() bool { return s.Mode == ModeCopy }
+
 func (s *Service) Label() string {
 	if s.Name == "" {
 		return "default"

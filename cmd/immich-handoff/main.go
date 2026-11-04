@@ -87,7 +87,7 @@ func run(log *slog.Logger) error {
 	// Self-service joining needs a place to keep keys, protected by a key of its own.
 	defaults := config.DefaultsFrom(os.Getenv)
 	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log,
-		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, ExpiryDays: defaults.ExpiryDays},
+		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) }}
 	if storeKey, err := readStoreKey(); err != nil {

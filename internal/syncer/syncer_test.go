@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -96,6 +97,20 @@ func (f *fakeImmich) handler() http.Handler {
 		f.uploaded = append(f.uploaded, dstAsset)
 		j(w, 201, map[string]any{"id": dstAsset, "status": f.uploadStatus})
 	})
+	mux.HandleFunc("GET /api/assets/"+srcAsset, func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		a := asset(srcAsset, false, good)
+		var tags []any
+		if len(f.refusedTagged) > 0 { // after a mark the original carries the sent / refused tag...
+			tags = append(tags, tag("77777777-7777-7777-7777-777777777777", "handed-over"), tag("88888888-8888-8888-8888-888888888888", "share-duplicate"))
+		}
+		if len(f.untaggedShare) == 0 { // ...until the service tag is removed
+			tags = append(tags, tag(shareTag, "share"))
+		}
+		a["tags"] = tags
+		j(w, 200, a)
+	})
 	mux.HandleFunc("GET /api/assets/"+dstAsset, func(w http.ResponseWriter, r *http.Request) {
 		cs := f.storedChecksum
 		if cs == "" {
@@ -135,6 +150,8 @@ func (f *fakeImmich) handler() http.Handler {
 	return mux
 }
 
+func init() { syncer.SettleDelay = 0 }
+
 func newAPI(t *testing.T, url, key string) *immich.API {
 	t.Helper()
 	a, err := immich.New(url, immich.Auth{APIKey: key}, nil)
@@ -144,7 +161,12 @@ func newAPI(t *testing.T, url, key string) *immich.API {
 	return a
 }
 
-func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func quiet() *slog.Logger {
+	if os.Getenv("TEST_LOG") != "" {
+		return slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func service(snd, rcv []*syncer.Account) *syncer.Service {
 	return &syncer.Service{Tag: "share", InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30, Senders: snd, Receivers: rcv}
@@ -263,5 +285,30 @@ func TestServiceWithoutAHealthyReceiverTouchesNothing(t *testing.T) {
 		if len(f.deleted) != 0 || len(f.uploaded) != 0 {
 			t.Errorf("broken=%q: deleted=%v uploaded=%v", broken, f.deleted, f.uploaded)
 		}
+	}
+}
+
+func TestCopyModeKeepsTheOriginalAndMarksItHandedOver(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created"}
+	srv := httptest.NewServer(f.handler())
+	defer srv.Close()
+	svc := service(
+		[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
+		[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	svc.Mode, svc.SentTag = syncer.ModeCopy, "handed-over"
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	s.Run(context.Background(), "test", false)
+	c := s.Last().Counts
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts = %+v", c)
+	}
+	if len(f.deleted) != 0 {
+		t.Errorf("copy mode must never delete the original: %v", f.deleted)
+	}
+	if len(f.uploaded) != 1 || len(f.tagged) != 1 {
+		t.Errorf("the receiver still gets a tagged copy: %v %v", f.uploaded, f.tagged)
+	}
+	if len(f.refusedTagged) != 1 || len(f.untaggedShare) != 1 {
+		t.Errorf("the original must lose the service tag and get the sent tag: sent=%v untagged=%v", f.refusedTagged, f.untaggedShare)
 	}
 }

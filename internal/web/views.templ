@@ -15,6 +15,7 @@ type ServiceView struct {
 	To   int    // number of receivers
 	CanLeave bool // the person joined from this page, so can leave from it
 	Paused   string // why the service cannot work right now, if so
+	Copy     bool   // originals are kept (copy mode) instead of moved to the trash
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -24,6 +25,7 @@ type OfferView struct {
 	Owner  string // empty for services from the configuration
 	State  string // join | request | pending | approved | declined
 	Invite string // the invitation token the person arrived with, if any
+	Copy   bool
 }
 
 // RequestView is someone waiting for the owner's decision.
@@ -35,6 +37,7 @@ type RequestView struct {
 type OwnedView struct {
 	Name, Tag, Policy string
 	Invite            string // invitation token; empty when the service is listed for everyone
+	Copy              bool
 	Broken            string // why the receiver key stopped working, if it did
 	Requests          []RequestView
 	Members           []MemberView
@@ -175,7 +178,7 @@ templ ServiceCard(s ServiceView) {
 		}
 		<p class="meta">
 			if s.Role == "sender" {
-				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it.
+				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it. { originalsNote(s.Copy) }
 			} else {
 				Photos arrive tagged <code class="tag">{ s.Tag }</code>.
 			}
@@ -241,7 +244,7 @@ templ OfferCard(o OfferView) {
 			<span class={ "chip", offerChip(o.State) }>{ offerLabel(o.State) }</span>
 		</header>
 		<p class="meta">
-			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich.
+			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich. { originalsNote(o.Copy) }
 			if o.Owner != "" {
 				{ " Offered by " + o.Owner + "." }
 			}
@@ -249,7 +252,7 @@ templ OfferCard(o OfferView) {
 		<p class="row">
 			switch o.State {
 				case "join", "approved":
-					<button class="primary" hx-post="join" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag) }>
+					<button class="primary" hx-post="join" hx-vals={ valsInvite(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, o.Copy) }>
 						if o.State == "approved" {
 							Activate
 						} else {
@@ -269,7 +272,7 @@ templ OwnedCard(o OwnedView) {
 			<h3>{ o.Name }</h3>
 			<span class="chip">{ policyLabel(o.Policy) }</span>
 		</header>
-		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
+		<p class="meta">{ modeLabel(o.Copy) }. You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
 		if o.Broken != "" {
 			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
 			<p class="row">
@@ -343,6 +346,24 @@ templ OfferForm() {
 				<option value="invite">Only people I send a link to</option>
 			</select>
 		</div>
+		<div class="field">
+			<label for="svc-mode">What happens to the sender's originals</label>
+			<select id="svc-mode" name="mode">
+				<option value="move">Moved to the sender's trash after they reach you</option>
+				<option value="copy">Kept by the sender (a copy is made)</option>
+			</select>
+		</div>
+		<details>
+			<summary class="meta">More options</summary>
+			<div class="field">
+				<label for="svc-inbox">Tag put on what arrives (default: inbox)</label>
+				<input id="svc-inbox" name="inbox" maxlength="64" placeholder="inbox"/>
+			</div>
+			<div class="field">
+				<label for="svc-expiry">Days before an unfiled photo loses that tag (default: 30)</label>
+				<input id="svc-expiry" name="expiry" type="number" min="1" max="3650" placeholder="30"/>
+			</div>
+		</details>
 		<div class="field">
 			<label for="svc-policy">Who may send</label>
 			<select id="svc-policy" name="policy">

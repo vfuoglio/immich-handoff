@@ -1085,3 +1085,77 @@ func TestInvitations(t *testing.T) {
 		return code == 200 && x.IsTrashed
 	})
 }
+
+// TestCopyMode: with a copy service the sender keeps the original (marked as handed over), the receiver
+// still gets a tagged copy, and the sender's key has no delete permission at all.
+func TestCopyMode(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 6)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"keep"}, "tag": {"keep-tag"}, "policy": {"open"}, "mode": {"copy"}}), 204, "create")
+	if body := page(t, port, sender); !strings.Contains(body, "Your originals are kept.") {
+		t.Errorf("the offer must say originals are kept: %.400s", body)
+	}
+	must(post(t, port, "/join", sender, url.Values{"service": {"keep"}}), 204, "join")
+
+	var keys []struct {
+		Name        string
+		Permissions []string
+	}
+	call(t, "GET", "/api-keys", keyAuth(bob), nil, &keys)
+	found := false
+	for _, k := range keys {
+		if k.Name == "handoff: keep" {
+			found = true
+			for _, p := range k.Permissions {
+				if p == "asset.delete" || p == "all" {
+					t.Errorf("a copy-mode sender key must not be able to delete, has %v", k.Permissions)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("bob's key is missing: %v", keys)
+	}
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: keep" {
+				return true
+			}
+		}
+		return false
+	})
+
+	before := len(searchTag(t, alice, "inbox", false))
+	id, _ := upload(t, bob, "keeper.jpg", jpegBytes(120))
+	tagAsset(t, bob, "keep-tag", id)
+	eventually(t, "the receiver gets a tagged copy", 90*time.Second, func() bool {
+		return len(searchTag(t, alice, "inbox", false)) == before+1
+	})
+	var names map[string]bool
+	eventually(t, "the original is marked as handed over", 60*time.Second, func() bool {
+		x, _ := getAsset(t, bob, id)
+		names = map[string]bool{}
+		for _, tg := range x.Tags {
+			names[tg.Name] = true
+		}
+		return names["handed-over"] && !names["keep-tag"]
+	})
+	if x, code := getAsset(t, bob, id); code != 200 || x.IsTrashed {
+		t.Errorf("the original must stay (code %d, trashed %v)", code, x.IsTrashed)
+	}
+	time.Sleep(8 * time.Second)
+	if n := len(searchTag(t, alice, "inbox", false)); n != before+1 {
+		t.Errorf("a copied photo must not be handed over again, inbox grew to %d", n-before)
+	}
+}

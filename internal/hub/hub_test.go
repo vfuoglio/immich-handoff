@@ -45,6 +45,7 @@ type fakeImmich struct {
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
+	lastPerms     []string // permissions of the most recent key created
 }
 
 // person is who a request is from: a session cookie ("sess=bob") or one of the keys created for them.
@@ -95,6 +96,7 @@ func (f *fakeImmich) handler() http.Handler {
 			Permissions []string `json:"permissions"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
+		f.lastPerms = body.Permissions
 		id, secret := uuid.NewString(), "secret-"+uuid.NewString()
 		f.keys[secret] = id
 		f.owners[secret] = f.person(r)
@@ -178,7 +180,7 @@ func setup(t *testing.T, allowJoin bool) *env {
 		Receivers: []*syncer.Account{{Name: "family", API: family, UserID: familyID}}}
 	e := &env{f: f, sess: sess, ann: annSess, st: st}
 	e.h = &hub.Hub{Static: []*syncer.Service{svc}, Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Options: hub.Options{InboxTag: "inbox", RefusedTag: "share-duplicate", ExpiryDays: 30},
+		Options: hub.Options{InboxTag: "inbox", RefusedTag: "share-duplicate", SentTag: "handed-over", ExpiryDays: 30},
 		Hook:    syncer.Webhook{URL: "http://app/webhook/immich", Header: "X-Webhook-Secret", Secret: "s"},
 		Wake:    func(reason string) { e.woken = append(e.woken, reason) }}
 	if err := e.h.Reload(context.Background()); err != nil {
@@ -326,7 +328,7 @@ func service(e *env, name string) *syncer.Service {
 
 func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", ""); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "holiday", Tag: "hol", Policy: "approval", Visibility: ""}); err != nil {
 		t.Fatal(err)
 	}
 	svc := service(e, "holiday")
@@ -341,7 +343,7 @@ func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 		t.Errorf("owner view: %+v", owned)
 	}
 	for _, bad := range [][2]string{{"x", "t"}, {"ok name", "a/b"}, {"default", "t"}, {"family", "t"}, {"holiday", "t"}} {
-		if err := e.h.CreateService(ctx, e.ann, ann, bad[0], bad[1], "open", ""); err == nil {
+		if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: bad[0], Tag: bad[1], Policy: "open", Visibility: ""}); err == nil {
 			t.Errorf("service %q with tag %q must be refused", bad[0], bad[1])
 		}
 	}
@@ -352,7 +354,7 @@ func TestOwnerCreatesAServiceAndReceiverKeyStaysHidden(t *testing.T) {
 
 func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", ""); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "holiday", Tag: "hol", Policy: "approval", Visibility: ""}); err != nil {
 		t.Fatal(err)
 	}
 	if offers, _ := e.h.Offers(ctx, bobID); len(offers) != 1 || offers[0].State != "request" {
@@ -399,7 +401,7 @@ func TestApprovalFlowBeforeASenderCanActivate(t *testing.T) {
 
 func TestDeclinedRequestCannotActivate(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "holiday", "hol", "approval", "")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "holiday", Tag: "hol", Policy: "approval", Visibility: ""})
 	e.h.Ask(ctx, bob, "holiday", "")
 	owned, _ := e.h.Owned(ctx, annID)
 	if err := e.h.Decide(ctx, ann, "holiday", owned[0].Requests[0].ID, false); err != nil {
@@ -415,7 +417,7 @@ func TestDeclinedRequestCannotActivate(t *testing.T) {
 
 func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
 	e, ctx := setup(t, true), context.Background() // the static "family" service is open and uses tag "share"
-	if err := e.h.CreateService(ctx, e.ann, ann, "everyone", "SHARE", "open", ""); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "everyone", Tag: "SHARE", Policy: "open", Visibility: ""}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.h.Join(ctx, e.sess, bob, "family", ""); err != nil {
@@ -428,7 +430,7 @@ func TestOpenServiceNeedsNoApprovalAndSameTagIsRefused(t *testing.T) {
 
 func TestDeletingAServiceLeavesMembersAbleToCleanUp(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +475,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	var told []string
 	e.h.Notify = func(m string) { told = append(told, m) }
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	if err := e.h.Join(ctx, e.sess, bob, "party", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +524,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 
 func TestDeletedReceiverKeyPausesTheServiceUntilTheOwnerReconnects(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "party", "party", "open", "")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	e.h.Join(ctx, e.sess, bob, "party", "")
 
 	e.f.deleteKeyOf("ann")
@@ -563,7 +565,7 @@ func TestRejectedKeyFromTheConfigurationIsLeftToThePass(t *testing.T) {
 
 func TestInviteOnlyServiceIsHiddenAndReachedWithTheLink(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	if err := e.h.CreateService(ctx, e.ann, ann, "secret club", "club", "open", "invite"); err != nil {
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "secret club", Tag: "club", Policy: "open", Visibility: "invite"}); err != nil {
 		t.Fatal(err)
 	}
 	svc := service(e, "secret club")
@@ -599,7 +601,7 @@ func TestInviteOnlyServiceIsHiddenAndReachedWithTheLink(t *testing.T) {
 
 func TestNewInviteRevokesTheOldLinkAndListingRemovesTheNeedForOne(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "club", "club", "open", "invite")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "club", Tag: "club", Policy: "open", Visibility: "invite"})
 	old := e.h.InviteOf(service(e, "club"))
 	if err := e.h.NewInvite(ctx, bob, "club"); !errors.Is(err, hub.ErrNotOwner) {
 		t.Errorf("only the owner makes links: %v", err)
@@ -627,7 +629,7 @@ func TestNewInviteRevokesTheOldLinkAndListingRemovesTheNeedForOne(t *testing.T) 
 
 func TestInviteWithApprovalNeedsTheLinkOnlyToAsk(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
-	e.h.CreateService(ctx, e.ann, ann, "club", "club", "approval", "invite")
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "club", Tag: "club", Policy: "approval", Visibility: "invite"})
 	token := e.h.InviteOf(service(e, "club"))
 	if err := e.h.Ask(ctx, bob, "club", ""); !errors.Is(err, hub.ErrNotJoinable) {
 		t.Errorf("asking without the link: %v", err)
@@ -644,5 +646,55 @@ func TestInviteWithApprovalNeedsTheLinkOnlyToAsk(t *testing.T) {
 	}
 	if err := e.h.Join(ctx, e.sess, bob, "club", ""); err != nil {
 		t.Errorf("an approved person activates without the link: %v", err)
+	}
+}
+
+func has(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCopyModeSenderKeyCannotDeleteAndMoveModeCan(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "keeps", Tag: "keeps", Policy: "open", Mode: "copy"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "moves", Tag: "moves", Policy: "open"}); err != nil {
+		t.Fatal(err)
+	}
+	if !service(e, "keeps").Copies() || service(e, "moves").Copies() {
+		t.Fatal("modes not applied")
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "keeps", ""); err != nil {
+		t.Fatal(err)
+	}
+	if has(e.f.lastPerms, "asset.delete") || !has(e.f.lastPerms, "asset.download") {
+		t.Errorf("a copy-mode sender key must have no delete permission: %v", e.f.lastPerms)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "moves", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !has(e.f.lastPerms, "asset.delete") {
+		t.Errorf("a move-mode sender key needs delete: %v", e.f.lastPerms)
+	}
+}
+
+func TestCreateOptionsAreValidated(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "opts", Tag: "opts", InboxTag: "from-opts", ExpiryDays: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if v := service(e, "opts"); v.InboxTag != "from-opts" || v.ExpiryDays != 7 || v.SentTag != "handed-over" {
+		t.Errorf("options: %+v", v)
+	}
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bad1", Tag: "t", InboxTag: "a/b"}); !errors.Is(err, hub.ErrBadTag) {
+		t.Errorf("bad inbox tag: %v", err)
+	}
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bad2", Tag: "t", ExpiryDays: 99999}); !errors.Is(err, hub.ErrBadExpiry) {
+		t.Errorf("bad expiry: %v", err)
 	}
 }
