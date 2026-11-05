@@ -16,7 +16,7 @@ Start with the app's log: `docker compose logs --tail 100`. Then find your sympt
 
 | Symptom | Likely cause and fix |
 |---|---|
-| A person cannot add tags, or cannot see the inbox tag | **Tags** is switched off for their Immich account. Each person turns it on for themselves: Account Settings -> Features -> Tags, then reload the page or restart the app. Photos are still handed over without it; the person just cannot see or use the tags. |
+| A person cannot add tags, or cannot see the inbox tag | **Tags** is switched off for their Immich account. Each person turns it on for themselves: Account Settings -> Features -> Tags. Saving is not enough: they must also refresh the Immich tab or window (on the phone, close and reopen the app). If Tags is already on and the options are still missing, this refresh is the usual cause. Photos are still handed over without it; the person just cannot see or use the tags. |
 | Tagged a photo, nothing happens | In Immich open that account's workflow named `immich-handoff` (or `immich-handoff: <service>`) and look at its runs. **No runs:** the tag was not the service's tag, or Tags are not switched on for the account. **Failed runs:** Immich cannot reach `PUBLIC_WEBHOOK_URL`; it must be an address the Immich *server* container can reach. |
 | The log says photos were found "by the daily sweep instead of by webhook" | Same as above: Immich's notices are not arriving. The photos still move, but only once a day. |
 | A tag you just added is gone | Immich occasionally drops a tag that is added in the first moments after a photo was uploaded, while it is still processing the photo. This happens inside Immich (about 1 in 50 in tests with this app switched off). Add the tag again. |
