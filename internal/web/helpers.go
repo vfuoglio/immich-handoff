@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 )
@@ -185,4 +186,12 @@ func reasonLabel(reason string) string {
 		return "setup finished"
 	}
 	return reason
+}
+
+type baseKey struct{}
+
+// baseHref is the <base> the page needs so its relative links reach the app root ("" = none needed).
+func baseHref(ctx context.Context) string {
+	b, _ := ctx.Value(baseKey{}).(string)
+	return b
 }

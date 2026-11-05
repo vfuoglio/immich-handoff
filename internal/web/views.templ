@@ -79,6 +79,9 @@ templ Layout(title, user string) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="htmx-config" content='{"includeIndicatorStyles": false}'/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
 			<title>{ title }</title>
 			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
 			<link rel="stylesheet" href="static/app.css"/>

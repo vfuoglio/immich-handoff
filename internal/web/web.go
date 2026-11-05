@@ -94,6 +94,11 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
+		// Pages use relative links so they work under a path prefix; the invitation page is one level
+		// deeper than the others, so it points them back at the root.
+		if strings.HasPrefix(r.URL.Path, "/invite/") {
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
 		next.ServeHTTP(rw, r)
 	})
 }

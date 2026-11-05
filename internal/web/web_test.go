@@ -307,3 +307,16 @@ func TestThumbnailsOnlyWhenTheImmichAddressIsKnown(t *testing.T) {
 		t.Errorf("receivers see counts only: %q", body)
 	}
 }
+
+// The invitation page lives one level down (/invite/<token>); its relative links to the stylesheet,
+// scripts and actions must still resolve to the app root, also behind a path prefix.
+func TestInvitePageLinksPointAtTheRoot(t *testing.T) {
+	app, _ := setup(t)
+	_, body := do(t, "GET", app.URL+"/invite/abc", "sess=alice", nil)
+	if !strings.Contains(body, `<base href="../"`) || !strings.Contains(body, `href="static/app.css"`) {
+		t.Errorf("invite page must point relative links at the root: %.400s", body)
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "<base") {
+		t.Errorf("the dashboard needs no base: %.200s", body)
+	}
+}
