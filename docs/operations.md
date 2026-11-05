@@ -8,7 +8,7 @@ The page signs people in with their **Immich login**: their browser sends Immich
 
 Two ways that work:
 
-**1. Same hostname, different port.** Immich at `https://photos.example.com` and the page at `https://photos.example.com:8443`, or on a home network `http://nas.local:2283` and `http://nas.local:8080`. Tested: signing in to Immich is enough, nothing else to set up.
+**1. Same hostname, different port.** Immich at `https://photos.example.com` and the page at `https://photos.example.com:8443`, or on a home network `http://server.local:2283` and `http://server.local:8080`. Tested: signing in to Immich is enough, nothing else to set up.
 
 **2. A path on the same address.** The page at `https://photos.example.com/handoff/` with Immich at `/`. Tested with nginx (below): styling, live counts, thumbnails, the live-update stream, the Sync button and invitation links all work under the prefix. Keep the trailing slash in the address you share.
 
@@ -40,7 +40,7 @@ server {
 
 With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for example `https://photos.example.com`) so thumbnails load from Immich.
 
-**Synology DSM.** DSM's built-in reverse proxy routes by hostname and port rather than by URL path, which fits option 1 (a second external port on the same hostname). I have not tested DSM itself. For option 2 you would run a small proxy container such as the nginx above in front of both.
+**Which one fits your proxy.** A proxy that routes only by hostname and port (many web interfaces do) fits option 1: give the page a second external port on the same hostname. Option 2 needs a proxy that can route by URL path, such as the nginx above.
 
 **HTTPS.** Put the page behind HTTPS if it is reachable from outside your home network, the same as Immich.
 
@@ -70,7 +70,7 @@ The data format upgrades itself when the app starts. Going back to an older vers
 
 The image comes from GitHub's container registry: `docker-compose.yml` names `ghcr.io/vfuoglio/immich-handoff:1.1`, which follows the 1.1.x fixes. `git pull` brings a new tag name when there is a new minor version; the versions that exist are listed on the repository's Packages page and under Releases, each with its changelog. Images are built for amd64 and arm64. To build from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
-**Building elsewhere and moving the image.** The build is slow on a small NAS, so you can build on a faster machine and copy the result: `docker buildx build --platform linux/amd64 -t immich-handoff:<tag> --load .` (use `linux/arm64` for an ARM NAS; `uname -m` on the NAS shows which), then `docker save immich-handoff:<tag> | gzip > immich-handoff.tar.gz`, copy the file over and run `gunzip -c immich-handoff.tar.gz | docker load` there. Use a new tag each time so you can roll back.
+**Building elsewhere and moving the image.** The build can be slow on a small device, so you can build on a faster machine and copy the result: `docker buildx build --platform linux/amd64 -t immich-handoff:<tag> --load .` (use `linux/arm64` for an ARM machine; `uname -m` on the machine that will run it shows which), then `docker save immich-handoff:<tag> | gzip > immich-handoff.tar.gz`, copy the file to the machine that will run it and run `gunzip -c immich-handoff.tar.gz | docker load` there. Use a new tag each time so you can roll back.
 
 **An untagged image of a gigabyte or more after building.** The `Dockerfile` has two stages: one with the Go toolchain and the source, and the 15 MB image you run. Some Docker setups (the classic builder, `DOCKER_BUILDKIT=0`) keep the first stage as an image shown as `<none>:<none>`. It is only the leftover of the build and nothing uses it. Remove it with `docker image prune`, which deletes every untagged image on that machine, so check `docker images -f dangling=true` first. `docker builder prune` also clears the build cache.
 
