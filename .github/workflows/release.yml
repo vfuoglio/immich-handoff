@@ -40,6 +40,7 @@ jobs:
             echo "::error::'$raw' is not a version like 1.2.3 or 1.2.3-rc1"; exit 1
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "minor=$(echo "${v%%-*}" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
           # only a tag push of a final version (no -rc, -test) becomes "latest"
           if [ "${{ github.event_name }}" = push ] && [[ "$v" != *-* ]]; then echo "latest=true" >> "$GITHUB_OUTPUT"; else echo "latest=false" >> "$GITHUB_OUTPUT"; fi
 
@@ -85,7 +86,7 @@ jobs:
             ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.v.outputs.version }}
-            type=raw,value={{major}}.{{minor}},enable=${{ steps.v.outputs.latest == 'true' }}
+            type=raw,value=${{ steps.v.outputs.minor }},enable=${{ steps.v.outputs.latest == 'true' || github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable=${{ steps.v.outputs.latest == 'true' }}
 
       - name: Publish the multi-architecture image
