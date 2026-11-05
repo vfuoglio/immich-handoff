@@ -9,7 +9,14 @@ For the maintainer. A release is a git tag; everything else is done by the relea
 
 ## One-time setup
 
-The workflow needs two repository secrets (Settings, Secrets and variables, Actions): `DOCKERHUB_USERNAME` (the Docker Hub account or organisation that owns the image) and `DOCKERHUB_TOKEN` (an access token created in Docker Hub under Account settings, Personal access tokens, with read and write permission on the repository). Without them the release fails at the Docker Hub login, before anything is published. The first push creates the Docker Hub repository; check on Docker Hub that it is public. GitHub's registry needs no secret.
+The workflow needs two repository secrets. Docker's and GitHub's menus change from time to time, so look for the names rather than the exact path.
+
+1. **On Docker Hub,** open Settings and choose **Personal access tokens**. Create a new token with **Read & Write** access, give it a name such as `immich-handoff release`, and copy it. It is shown only once.
+2. **On GitHub,** open the repository's Settings, then **Secrets and variables**, then **Actions**, and add two repository secrets:
+   - `DOCKERHUB_USERNAME`: the Docker Hub account or organisation that owns the image (`vfuoglio`)
+   - `DOCKERHUB_TOKEN`: the token you just copied
+
+Without them the release fails at the Docker Hub login, before anything is published. The first push creates the Docker Hub repository; check on Docker Hub that it is public. GitHub's registry needs no secret.
 
 ## Versions
 
