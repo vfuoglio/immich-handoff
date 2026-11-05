@@ -50,3 +50,7 @@ If any check fails nothing is published.
 ## A bad release
 
 Do not move or delete a tag people may have pulled. Fix forward: release the next patch. If a published image is dangerous, delete that version from the package page, and say so in the changelog.
+
+## Badges
+
+The README badges for the release, the Docker image and the license update themselves. The **Immich 3.2.0+** badge is fixed text: change it, and the requirement in `docs/install.md`, when you have tested against a different minimum Immich version.

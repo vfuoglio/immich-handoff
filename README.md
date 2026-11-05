@@ -7,6 +7,10 @@
 **Hand photos from one Immich account to another, just by tagging them.**
 
 [![CI](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml/badge.svg)](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/vfuoglio/immich-handoff)](https://github.com/vfuoglio/immich-handoff/releases/latest)
+[![Docker image](https://img.shields.io/docker/v/vfuoglio/immich-handoff?sort=semver&label=docker&logo=docker&logoColor=white)](https://hub.docker.com/r/vfuoglio/immich-handoff)
+[![Immich 3.2.0+](https://img.shields.io/badge/Immich-3.2.0%2B-4250af)](docs/install.md#before-you-start)
+[![License: MIT](https://img.shields.io/github/license/vfuoglio/immich-handoff)](LICENSE)
 
 Immich keeps every photo in the account that uploaded it. There is no built-in way to hand one to someone else's library: shared albums leave ownership with the person who uploaded, and partner sharing is read-only. **immich-handoff adds the missing step.** You tag a photo in the Immich app, and a few seconds later it is in another account, checked and ready to file.
 
