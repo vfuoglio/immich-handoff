@@ -69,6 +69,10 @@ The data format upgrades itself when the app starts. Going back to an older vers
 
 To use a prebuilt image instead of building, replace `build: .` in `docker-compose.yml` with `image: ghcr.io/vfuoglio/immich-handoff:<version>`; the versions that exist are listed on the repository's Packages page. Images are built for amd64 and arm64.
 
+**Building elsewhere and moving the image.** The build is slow on a small NAS, so you can build on a faster machine and copy the result: `docker buildx build --platform linux/amd64 -t immich-handoff:<tag> --load .` (use `linux/arm64` for an ARM NAS; `uname -m` on the NAS shows which), then `docker save immich-handoff:<tag> | gzip > immich-handoff.tar.gz`, copy the file over and run `gunzip -c immich-handoff.tar.gz | docker load` there. Use a new tag each time so you can roll back.
+
+**An untagged image of a gigabyte or more after building.** The `Dockerfile` has two stages: one with the Go toolchain and the source, and the 15 MB image you run. Some Docker setups (the classic builder, `DOCKER_BUILDKIT=0`) keep the first stage as an image shown as `<none>:<none>`. It is only the leftover of the build and nothing uses it. Remove it with `docker image prune`, which deletes every untagged image on that machine, so check `docker images -f dangling=true` first. `docker builder prune` also clears the build cache.
+
 Before you upgrade **Immich** itself, you can run this project's whole test suite against the new Immich: `IMMICH_VERSION=<tag> test/run.sh` (see [Architecture](architecture.md#testing)).
 
 ## Monitoring
