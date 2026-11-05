@@ -593,6 +593,8 @@ func TestEndToEnd(t *testing.T) {
 	})
 
 	t.Run("the timer cleans the inbox tag soon after a photo is filed, without a restart", func(t *testing.T) {
+		// the app started by the previous subtest stopped with it, so run one for this subtest
+		startApp(t, bin, alice, bob, family)
 		cID, _ := upload(t, alice, "alice-4.jpg", jpegBytes(4))
 		tagAsset(t, alice, "share", cID)
 		var famID string
