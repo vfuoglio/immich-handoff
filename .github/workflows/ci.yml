@@ -1,5 +1,8 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_call:   # the release workflow runs the same checks first
 jobs:
   test:
     runs-on: ubuntu-latest

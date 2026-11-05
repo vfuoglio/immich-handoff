@@ -1,44 +1,98 @@
 name: release
-# Builds and publishes the container image when a version tag such as v1.0.0 is pushed.
+# Publishes the container image (and, for a version tag, a GitHub Release).
+#   - push a tag such as v1.2.3: tests, build, smoke test, publish 1.2.3, 1.2 and latest, create the release
+#   - run by hand from the Actions tab with a version such as 0.0.0-test: the same checks, but only that one
+#     image tag is published and no release is created. Use it to try the workflow out.
 on:
   push:
     tags: ["v*"]
-  # GitHub starts no tag-triggered run when more than three tags are pushed at once, so a release can
-  # also be started by hand from the Actions tab.
   workflow_dispatch:
     inputs:
       version:
-        description: "Image tag to publish (for example 1.0.0)"
+        description: "Image tag to publish (for example 0.0.0-test)"
         required: true
 permissions:
   contents: read
   packages: write
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   image:
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to create the GitHub Release
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: v
+        run: |
+          raw="${{ inputs.version || github.ref_name }}"
+          v="${raw#v}"
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$raw' is not a version like 1.2.3 or 1.2.3-rc1"; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # only a tag push of a final version (no -rc, -test) becomes "latest"
+          if [ "${{ github.event_name }}" = push ] && [[ "$v" != *-* ]]; then echo "latest=true" >> "$GITHUB_OUTPUT"; else echo "latest=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: The changelog describes this version
+        if: github.event_name == 'push'
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          awk -v v="$v" '$0 ~ "^## "v"( |$)" {f=1; next} /^## / {f=0} f' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then echo "::error::CHANGELOG.md has no '## $v' section with content"; exit 1; fi
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
+
+      - name: Build each architecture and smoke-test it
+        run: |
+          v="${{ steps.v.outputs.version }}"
+          for arch in amd64 arm64; do
+            docker buildx build --platform linux/$arch --build-arg VERSION="$v" -t smoke:$arch --load .
+            got="$(docker run --rm --platform linux/$arch smoke:$arch --version)"
+            [ "$got" = "$v" ] || { echo "::error::$arch reports version '$got', expected '$v'"; exit 1; }
+            # with no configuration it must refuse to start and say why; this proves the binary runs as the
+            # unprivileged user on that architecture
+            set +e; out="$(docker run --rm --platform linux/$arch smoke:$arch 2>&1)"; code=$?; set -e
+            [ "$code" -ne 0 ] && grep -q WEBHOOK_SECRET <<<"$out" || { echo "::error::$arch did not fail cleanly without configuration: $out"; exit 1; }
+          done
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           tags: |
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
-            type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=raw,value=latest
-      - uses: docker/build-push-action@v6
+            type=raw,value=${{ steps.v.outputs.version }}
+            type=raw,value={{major}}.{{minor}},enable=${{ steps.v.outputs.latest == 'true' }}
+            type=raw,value=latest,enable=${{ steps.v.outputs.latest == 'true' }}
+
+      - name: Publish the multi-architecture image
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ inputs.version || github.ref_name }}
+          build-args: VERSION=${{ steps.v.outputs.version }}
+
+      - name: Create the GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""; [[ "${{ steps.v.outputs.version }}" == *-* ]] && pre="--prerelease"
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes-file notes.md $pre

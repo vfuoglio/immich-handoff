@@ -1,6 +1,6 @@
 services:
   immich-handoff:
-    build: .
+    image: ghcr.io/vfuoglio/immich-handoff:1.1   # prebuilt; to build from source see docker-compose.build.yml
     restart: unless-stopped
     env_file: .env
     volumes:

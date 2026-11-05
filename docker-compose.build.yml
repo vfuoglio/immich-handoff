@@ -1,0 +1,5 @@
+# Builds the image from this folder instead of using the published one:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  immich-handoff:
+    build: .

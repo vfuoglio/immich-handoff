@@ -62,12 +62,13 @@ Back up as above, then:
 
 ```
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 The data format upgrades itself when the app starts. Going back to an older version afterwards is not supported: an older version refuses to open a newer database. Read [the changelog](../CHANGELOG.md) first for anything that changes behaviour.
 
-To use a prebuilt image instead of building, replace `build: .` in `docker-compose.yml` with `image: ghcr.io/vfuoglio/immich-handoff:<version>`; the versions that exist are listed on the repository's Packages page. Images are built for amd64 and arm64.
+The image comes from GitHub's container registry: `docker-compose.yml` names `ghcr.io/vfuoglio/immich-handoff:1.1`, which follows the 1.1.x fixes. `git pull` brings a new tag name when there is a new minor version; the versions that exist are listed on the repository's Packages page and under Releases, each with its changelog. Images are built for amd64 and arm64. To build from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 **Building elsewhere and moving the image.** The build is slow on a small NAS, so you can build on a faster machine and copy the result: `docker buildx build --platform linux/amd64 -t immich-handoff:<tag> --load .` (use `linux/arm64` for an ARM NAS; `uname -m` on the NAS shows which), then `docker save immich-handoff:<tag> | gzip > immich-handoff.tar.gz`, copy the file over and run `gunzip -c immich-handoff.tar.gz | docker load` there. Use a new tag each time so you can roll back.
 

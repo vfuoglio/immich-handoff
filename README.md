@@ -46,7 +46,7 @@ You need Immich 3.2.0 or newer and Docker.
 git clone https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 # edit .env: set WEBHOOK_SECRET and HANDOFF_STORE_KEY to long random text (openssl rand -hex 24)
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then open `http://<your-host>:8080/`, sign in to Immich, and offer your first service. The [install guide](docs/install.md) walks through it, including what to put in `.env`.

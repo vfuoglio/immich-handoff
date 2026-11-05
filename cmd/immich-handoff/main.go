@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -32,6 +33,11 @@ func env(k, def string) string {
 }
 
 func main() {
+	// Lets a release check what it built without needing Immich: `immich-handoff --version`.
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
 	level := slog.LevelInfo
 	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
 		level = slog.LevelDebug

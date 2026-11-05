@@ -23,7 +23,7 @@ IMMICH_DEST_API_KEY=key_for_the_receiving_account
 WEBHOOK_SECRET=...          # as in the install guide
 ```
 
-(`HANDOFF_STORE_KEY` is only needed if you also let people join from the page.) Then `docker compose up -d --build`. Within about a minute the log shows `workflow ready` for every sender: the app creates the `share` tag and the Immich workflow that notifies it, in each sending account, by itself.
+(`HANDOFF_STORE_KEY` is only needed if you also let people join from the page.) Then `docker compose up -d`. Within about a minute the log shows `workflow ready` for every sender: the app creates the `share` tag and the Immich workflow that notifies it, in each sending account, by itself.
 
 Tag a photo `share` on a sending account; it appears in the receiving account tagged `inbox`.
 

@@ -30,8 +30,10 @@ The rest works as it is when Immich runs on that network under its standard serv
 
 ## 3. Start it
 
+This downloads the published image for your machine (amd64 or arm64). To build it from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+
 ```
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f
 ```
 

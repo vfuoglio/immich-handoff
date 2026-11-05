@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+
+## 1.1.0
+- **Prebuilt images:** each release publishes a multi-architecture image (amd64, arm64) to `ghcr.io/vfuoglio/immich-handoff` and a GitHub Release. The release workflow runs the full test suite first and smoke-tests the image on both architectures. `immich-handoff --version` prints the version. See [Releasing](docs/releasing.md).
+- **Tags must be switched on in Immich by every person who takes part, and Immich must be refreshed afterwards.** The documentation now says so everywhere it matters.
 - **Photos filed in an album lose their inbox tag within minutes**, not up to a day later. Immich sends no event for albums, so a small timer does the check (`CLEANUP_INTERVAL_MINUTES`, default 15; `0` = daily only). The docs explain the limitation.
 - Fix: the invitation page lost its styling and buttons behind a path prefix, and accepting an invitation ended on an error page.
 - **The sender decides what happens to their originals**, when they join: keep them (the default) or move them to their trash. The owner of a service no longer sets this. The key made for a sender who keeps their originals has no delete permission. Existing members keep the behaviour they had.

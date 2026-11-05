@@ -60,4 +60,4 @@ Generated code (`go generate ./...`: the Immich client and the templates) is com
 
 ## Releasing
 
-Pushing a version tag such as `v1.2.3` starts the release workflow, which builds and publishes the container image (amd64 and arm64) to GitHub's container registry. GitHub starts no tag-triggered run when more than three tags are pushed at once, so a release can also be started by hand from the repository's Actions tab (**release -> Run workflow**).
+The steps, with a checklist, are in [Releasing](releasing.md). In short: pushing a version tag such as `v1.2.3` runs the tests, builds and smoke-tests the image for amd64 and arm64, publishes it to GitHub's container registry and creates a GitHub Release from the changelog.
