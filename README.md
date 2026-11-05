@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/social-preview.png" alt="immich-handoff: hand photos from one Immich account to another, just by tagging them" width="900">
+  <img src="docs/images/banner.png" alt="immich-handoff: hand photos from one Immich account to another, just by tagging them" width="900">
 </p>
 
 <p align="center">
