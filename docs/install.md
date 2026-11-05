@@ -10,8 +10,10 @@ About ten minutes. You run one small container next to Immich; everyone else use
 
 ## 1. Get the files
 
+Use a release, not `main`. `main` is where the next version is being built; it can be unstable and can be ahead of the published image. The latest release is **v1.1.0**; newer ones, with what changed in each, are on the [releases page](https://github.com/vfuoglio/immich-handoff/releases). Without git, download that release's "Source code" archive from the same page instead of cloning.
+
 ```
-git clone https://github.com/vfuoglio/immich-handoff.git
+git clone --branch v1.1.0 https://github.com/vfuoglio/immich-handoff.git
 cd immich-handoff
 cp .env.example .env
 ```

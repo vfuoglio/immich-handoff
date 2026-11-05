@@ -58,17 +58,20 @@ To restore, extract the archive into an empty volume the same way (`tar xzf`) be
 
 ## Upgrading
 
-Back up as above, then:
+Back up as above, read the changelog for the release you are moving to, then switch to it. A copy cloned at a release is not on `main`, so `git pull` does nothing; check out the new release instead (`v1.2.0` here is an example, see the [releases page](https://github.com/vfuoglio/immich-handoff/releases) for the real one):
 
 ```
-git pull
+git fetch --tags
+git checkout v1.2.0
 docker compose pull
 docker compose up -d
 ```
 
+Stay on releases rather than `main`: `main` can be unstable and can describe features the published image does not have yet.
+
 The data format upgrades itself when the app starts. Going back to an older version afterwards is not supported: an older version refuses to open a newer database. Read [the changelog](../CHANGELOG.md) first for anything that changes behaviour.
 
-The image comes from Docker Hub: `docker-compose.yml` names `vfuoglio/immich-handoff:1.1`, which follows the 1.1.x fixes. The same tags are also published to GitHub's registry, as `ghcr.io/vfuoglio/immich-handoff`, if you prefer that one or Docker Hub's pull limits get in your way. `git pull` brings a new tag name when there is a new minor version; the versions that exist are listed on the repository's Packages page and under Releases, each with its changelog. Images are built for amd64 and arm64. To build from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+The image comes from Docker Hub: `docker-compose.yml` names `vfuoglio/immich-handoff:1.1`, which follows the 1.1.x fixes. The same tags are also published to GitHub's registry, as `ghcr.io/vfuoglio/immich-handoff`, if you prefer that one or Docker Hub's pull limits get in your way. Checking out a new release brings a compose file that names the matching image tag; the versions that exist are listed on the repository's Packages page and under Releases, each with its changelog. Images are built for amd64 and arm64. To build from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 **Building elsewhere and moving the image.** The build can be slow on a small device, so you can build on a faster machine and copy the result: `docker buildx build --platform linux/amd64 -t immich-handoff:<tag> --load .` (use `linux/arm64` for an ARM machine; `uname -m` on the machine that will run it shows which), then `docker save immich-handoff:<tag> | gzip > immich-handoff.tar.gz`, copy the file to the machine that will run it and run `gunzip -c immich-handoff.tar.gz | docker load` there. Use a new tag each time so you can roll back.
 

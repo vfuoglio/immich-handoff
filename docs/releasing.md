@@ -37,6 +37,7 @@ Without them the release fails at the Docker Hub login, before anything is publi
 6. **Watch the run.** Steps: tests, version check, changelog check, build and smoke test for both architectures, publish, create the release.
 7. **First release only: check both images are public.** On Docker Hub the repository must be Public. On GitHub, open the repository's Packages, `immich-handoff`, Package settings, and check the visibility is Public (a package that a workflow creates may start private) and that it is linked to the repository.
 8. **Check it from outside.** From a machine that is not logged in to either registry: `docker run --rm vfuoglio/immich-handoff:X.Y.Z --version` and the same with `ghcr.io/vfuoglio/immich-handoff:X.Y.Z` both print `X.Y.Z`.
+9. **Point the documentation at the new release.** After the release exists, change the version in the clone command in `README.md` and `docs/install.md` (`git clone --branch vX.Y.Z`, and the "latest release is" wording). People are told to start from a release and never from `main`, so these must name a tag that exists. Do this in a small change after tagging, not before.
 
 ## What the workflow checks before it publishes
 
