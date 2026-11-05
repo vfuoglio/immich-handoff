@@ -6,7 +6,7 @@ This page is for the people who send and receive photos. Everything happens on t
 
 | Word | Meaning |
 |---|---|
-| **Service** | A named place photos can be handed to, with one tag. "Family" with the tag `share` is a service. |
+| **Service** | A named place photos can be handed to, with one tag. "Holiday 2026" with the tag `share` is a service. |
 | **Receiver** (or **owner**) | The person whose library the photos land in. They create the service and decide who may send. |
 | **Sender** | Someone who tags photos to hand them to a service. |
 | **Tag** | The label you add to a photo in Immich to send it. Each service has its own. |

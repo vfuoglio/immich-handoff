@@ -4,7 +4,7 @@ Start with the page that matches what you are doing.
 
 | I want to... | Read |
 |---|---|
-| **Run it** for my family or friends | [Install](install.md), then [Operations](operations.md) |
+| **Run it** so people can hand photos to each other | [Install](install.md), then [Operations](operations.md) |
 | **Send or receive photos** (I use the page) | [Using it](using.md) |
 | Set up the accounts and keys myself, or run several fixed services | [Fixed accounts](fixed-accounts.md) |
 | Look up a setting | [Settings](settings.md) |

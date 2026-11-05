@@ -43,11 +43,11 @@ You should see a line saying self-service joining is on. If the app stops with a
 
 Open `http://<your-host>:8080/` in a browser **on the same hostname you use for Immich** (the page uses your Immich login; see [Operations](operations.md#putting-the-page-behind-your-reverse-proxy) for HTTPS and reverse proxies). Sign in to Immich first if you are asked to.
 
-The person who should **receive** the photos, for example whoever looks after the family library, opens the page and chooses **Offer a service of your own**:
+Whoever should **receive** photos (anyone can; there is no special role) opens the page and chooses **Offer a service of your own**:
 
 ![The form for offering a service](images/offer-form.png)
 
-Give it a name (say "Family"), the tag senders will use (say `share`), who can find it, and who may send. Create it.
+Give it a name (say "Holiday 2026"), the tag senders will use (say `share`), who can find it, and who may send. Create it.
 
 Everyone else now opens the same page. They see the service and **join** it, choosing for themselves what happens to their original photos:
 

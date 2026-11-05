@@ -100,7 +100,7 @@ func fromEnv(env Env, d Defaults, connect Connect, selfService bool) ([]*syncer.
 	if err != nil {
 		return nil, err
 	}
-	svc.Receivers = []*syncer.Account{{Name: "family", API: api}}
+	svc.Receivers = []*syncer.Account{{Name: "receiver", API: api}}
 	return []*syncer.Service{svc}, nil
 }
 
