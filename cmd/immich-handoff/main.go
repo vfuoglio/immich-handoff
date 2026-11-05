@@ -50,6 +50,7 @@ func run(log *slog.Logger) error {
 		return errors.New("WEBHOOK_SECRET is required and must be at least 16 characters (openssl rand -hex 24 makes a good one)")
 	}
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
+	tidyMin, _ := strconv.ParseFloat(env("CLEANUP_INTERVAL_MINUTES", "15"), 64)
 
 	connect := func(key string) (*immich.API, error) { return immich.New(base, immich.Auth{APIKey: key}, nil) }
 	services, err := config.Load(os.Getenv, connect)
@@ -137,6 +138,22 @@ func run(log *slog.Logger) error {
 			}
 		}
 	}()
+
+	// Immich sends no event when a photo is added to an album, so filed photos lose their inbox tag on a short timer.
+	if tidyMin > 0 {
+		go func() {
+			t := time.NewTicker(time.Duration(tidyMin * float64(time.Minute)))
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					s.Tidy(ctx)
+				}
+			}
+		}()
+	}
 
 	srv := &http.Server{Addr: env("LISTEN_ADDR", ":8080"), Handler: w.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

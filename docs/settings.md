@@ -13,7 +13,8 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. |
 | `NOTIFY_URL` | | ntfy-style URL that receives a message when something needs attention. |
-| `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs. |
+| `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs (catch-up, key and workflow checks, inbox tidy-up). |
+| `CLEANUP_INTERVAL_MINUTES` | `15` | How often photos filed in an album or past their expiry lose the inbox tag. `0` leaves that to the daily check. See [why a timer](using.md#when-the-inbox-tag-goes-away). |
 | `LOG_LEVEL` | `info` | `debug` also logs incoming events. |
 | `DRY_RUN` | `false` | Log what would happen and change nothing. |
 

@@ -221,6 +221,19 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 	}
 }
 
+// Tidy only removes inbox tags from photos that are filed or expired. Immich sends no event when a photo
+// is added to an album, so this is called on a short timer. It skips a round when a pass is running (the
+// next tick will catch up) and, unlike a pass, leaves the "last run" record alone.
+func (s *Syncer) Tidy(ctx context.Context) {
+	if !s.mu.TryLock() {
+		return
+	}
+	defer s.mu.Unlock()
+	if n, errs := s.cleanupAll(ctx); n > 0 || errs > 0 {
+		s.Log.Info("tidy finished", "untagged", n, "errors", errs)
+	}
+}
+
 func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]time.Time) {
 	info := &RunInfo{Started: time.Now(), Reason: reason, PerService: map[string]Counts{}}
 	defer func() {

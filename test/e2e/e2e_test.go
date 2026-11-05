@@ -326,6 +326,7 @@ func startApp(t *testing.T, bin string, alice, bob, family user) *app {
 		"LISTEN_ADDR=:"+appPort,
 		"LOG_LEVEL=debug",
 		"HANDOFF_MODE=move", "SWEEP_INTERVAL_HOURS=1", // so anything imported after startup arrived through the webhook
+		"CLEANUP_INTERVAL_MINUTES=0.05", // the inbox tidy-up runs every few seconds
 	)
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
@@ -584,6 +585,27 @@ func TestEndToEnd(t *testing.T) {
 		a.stop()
 		startApp(t, bin, alice, bob, family)
 		eventually(t, "inbox tag removed after filing", 60*time.Second, func() bool {
+			return len(searchTag(t, family, "inbox", false)) == 0
+		})
+		if x, code := getAsset(t, family, famID); code != 200 || x.IsTrashed {
+			t.Errorf("filed photo must be kept (code %d)", code)
+		}
+	})
+
+	t.Run("the timer cleans the inbox tag soon after a photo is filed, without a restart", func(t *testing.T) {
+		cID, _ := upload(t, alice, "alice-4.jpg", jpegBytes(4))
+		tagAsset(t, alice, "share", cID)
+		var famID string
+		eventually(t, "fourth photo imported", 90*time.Second, func() bool {
+			ids := searchTag(t, family, "inbox", false)
+			if len(ids) == 0 {
+				return false
+			}
+			famID = ids[0]
+			return true
+		})
+		mustOK(t, call(t, "POST", "/albums", keyAuth(family), map[string]any{"albumName": "Filed later", "assetIds": []string{famID}}, nil), "create album")
+		eventually(t, "inbox tag removed by the timer", 30*time.Second, func() bool {
 			return len(searchTag(t, family, "inbox", false)) == 0
 		})
 		if x, code := getAsset(t, family, famID); code != 200 || x.IsTrashed {

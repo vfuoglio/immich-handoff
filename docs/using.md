@@ -48,7 +48,7 @@ Under **Offer a service of your own**, choose:
 
 ![The form for offering a service](images/offer-form.png)
 
-Each service gets its own inbox tag by default, for example `inbox/Holiday 2026`, which Immich shows nested under `inbox`. Filter by it in Immich to see what arrived through that service. The inbox tag removes itself once a photo is in an album, or after 30 days; photos are never deleted by that.
+Each service gets its own inbox tag by default, for example `inbox/Holiday 2026`, which Immich shows nested under `inbox`. Filter by it in Immich to see what arrived through that service. The inbox tag removes itself once a photo is in an album, or after 30 days; photos are never deleted by that. [When exactly](#when-the-inbox-tag-goes-away) is explained below.
 
 ### Approving senders and sharing a link
 
@@ -84,3 +84,12 @@ The page also lists recent events (joined, asked, approved, connection lost, rec
 - **A tag you just added is gone.** Immich occasionally drops a tag added in the first moments after a photo was uploaded. Add it again.
 
 Something not working? See [Troubleshooting](troubleshooting.md).
+
+## When the inbox tag goes away
+
+- **Filed in an album:** the tag is removed within about 15 minutes, not instantly.
+- **Not in any album:** the tag is removed once the photo has gone unchanged for the service's expiry (30 days by default). The clock is Immich's "last updated" date, so editing the photo (a rating, a description) restarts it.
+
+**Why a delay, and not an instant removal?** The app learns about new photos because Immich tells it: a workflow fires when a tag is added and calls the app. Immich 3.2.0 offers no such event for albums. The only workflow triggers are an asset being created, its metadata being extracted and a tag being added, so the app cannot be told "this photo was just put in an album". The only way to notice is to look. So the app checks on a timer, and the check is deliberately small: one search for photos carrying the inbox tag per receiver, and nothing more when that is empty.
+
+**If you want it faster or slower,** change `CLEANUP_INTERVAL_MINUTES` ([Settings](settings.md)). Shorter means more (small) requests to Immich and a shorter wait; `0` turns the timer off and leaves it to the daily check. If Immich adds an album event in a future version, this can become instant.
