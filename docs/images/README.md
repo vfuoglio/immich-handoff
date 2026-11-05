@@ -7,7 +7,7 @@ Screenshots for the documentation are made by `tools/screenshots` (see its READM
 | `icon.svg` | The icon, full drawing. Use at 48 px and larger. |
 | `icon-small.svg` | The same icon, simplified and bolder. Use at 32 px and smaller (favicon, browser tab). |
 | `icon-512.png` | The full icon as a 512 px PNG with a transparent background, for places that need a raster image (registry listings, the Docker Hub icon). |
-| `banner.png` | 1800 x 640 banner at the top of the README (shown at 900 px wide). The same artwork as the social preview on a wider canvas. |
+| `banner.png` | 1800 x 320 banner at the top of the README (shown at 900 px wide, so 900 x 160). The icon, the name and the tagline on a wide twilight canvas. |
 | `social-preview.png` | 1280 x 640 image for the repository's social preview (Settings, General, Social preview) and for link cards. |
 
 The icon is two photo frames with an arrow passing from the back one to the front one, on a twilight gradient. Do not stretch or recolour it; if it is needed at a size between the two drawings, prefer `icon-small.svg` below 40 px.
