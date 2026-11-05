@@ -88,7 +88,7 @@ Something not working? See [Troubleshooting](troubleshooting.md).
 ## When the inbox tag goes away
 
 - **Filed in an album:** the tag is removed within about 15 minutes, not instantly.
-- **Not in any album:** the tag is removed once the photo has gone unchanged for the service's expiry (30 days by default). The clock is Immich's "last updated" date, so editing the photo (a rating, a description) restarts it.
+- **Not in any album:** the tag is removed once the photo has been in the receiver's library for the service's expiry (30 days by default). The clock starts when the photo was uploaded to Immich by the hand-over, not when it was taken, and editing or re-tagging the photo does not restart it.
 
 **Why a delay, and not an instant removal?** The app learns about new photos because Immich tells it: a workflow fires when a tag is added and calls the app. Immich 3.2.0 offers no such event for albums. The only workflow triggers are an asset being created, its metadata being extracted and a tag being added, so the app cannot be told "this photo was just put in an album". The only way to notice is to look. So the app checks on a timer, and the check is deliberately small: one search for photos carrying the inbox tag per receiver, and nothing more when that is empty.
 

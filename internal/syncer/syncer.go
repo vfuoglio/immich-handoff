@@ -478,7 +478,7 @@ func (s *Syncer) cleanup(ctx context.Context, rcv *Account, inboxTag string, exp
 		return 0, err
 	}
 	cutoff := time.Now().AddDate(0, 0, -expiryDays)
-	expired, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, UpdatedBefore: &cutoff})
+	expired, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, CreatedBefore: &cutoff})
 	if err != nil {
 		return 0, err
 	}
