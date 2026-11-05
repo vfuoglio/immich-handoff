@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml/badge.svg)](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/vfuoglio/immich-handoff)](https://github.com/vfuoglio/immich-handoff/releases/latest)
-[![Docker image](https://img.shields.io/docker/v/vfuoglio/immich-handoff?sort=semver&label=docker&logo=docker&logoColor=white)](https://hub.docker.com/r/vfuoglio/immich-handoff)
+[![Docker image](https://img.shields.io/docker/image-size/vfuoglio/immich-handoff/latest?label=docker%20image&logo=docker&logoColor=white)](https://hub.docker.com/r/vfuoglio/immich-handoff)
 [![Immich 3.2.0+](https://img.shields.io/badge/Immich-3.2.0%2B-4250af)](docs/install.md#before-you-start)
 [![License: MIT](https://img.shields.io/github/license/vfuoglio/immich-handoff)](LICENSE)
 
