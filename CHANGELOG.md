@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **The image is also published on Docker Hub** as `vfuoglio/immich-handoff`, so `image: vfuoglio/immich-handoff:1.1` in a compose file is enough to pull it. The same tags stay available on `ghcr.io/vfuoglio/immich-handoff`.
 
 ## 1.1.0
 - **Prebuilt images:** each release publishes a multi-architecture image (amd64, arm64) to `ghcr.io/vfuoglio/immich-handoff` and a GitHub Release. The release workflow runs the full test suite first and smoke-tests the image on both architectures. `immich-handoff --version` prints the version. See [Releasing](docs/releasing.md).

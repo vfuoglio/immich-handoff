@@ -4,8 +4,12 @@ For the maintainer. A release is a git tag; everything else is done by the relea
 
 ## What a release produces
 
-- the container image `ghcr.io/vfuoglio/immich-handoff`, for amd64 and arm64, tagged `1.2.3`, `1.2` and `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag and is not `latest`)
+- the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag and is not `latest`)
 - a GitHub Release named after the tag, whose text is that version's section of `CHANGELOG.md`
+
+## One-time setup
+
+The workflow needs two repository secrets (Settings, Secrets and variables, Actions): `DOCKERHUB_USERNAME` (the Docker Hub account or organisation that owns the image) and `DOCKERHUB_TOKEN` (an access token created in Docker Hub under Account settings, Personal access tokens, with read and write permission on the repository). Without them the release fails at the Docker Hub login, before anything is published. The first push creates the Docker Hub repository; check on Docker Hub that it is public. GitHub's registry needs no secret.
 
 ## Versions
 
@@ -24,8 +28,8 @@ For the maintainer. A release is a git tag; everything else is done by the relea
    ```
    GitHub starts no tag-triggered run when more than three tags are pushed at once; use the manual run with the version in that case (it publishes the image but not the GitHub Release).
 6. **Watch the run.** Steps: tests, version check, changelog check, build and smoke test for both architectures, publish, create the release.
-7. **First release only: make the package public.** A package that a workflow creates starts private. On GitHub open the repository's Packages, `immich-handoff`, Package settings, and set the visibility to Public, so `docker pull` works without logging in. Check the package is linked to the repository.
-8. **Check it from outside.** From a machine that is not logged in to ghcr.io: `docker run --rm ghcr.io/vfuoglio/immich-handoff:X.Y.Z --version` prints `X.Y.Z`, and `docker pull` works for the architecture you use.
+7. **First release only: check both images are public.** On Docker Hub the repository must be Public. On GitHub, open the repository's Packages, `immich-handoff`, Package settings, and check the visibility is Public (a package that a workflow creates may start private) and that it is linked to the repository.
+8. **Check it from outside.** From a machine that is not logged in to either registry: `docker run --rm vfuoglio/immich-handoff:X.Y.Z --version` and the same with `ghcr.io/vfuoglio/immich-handoff:X.Y.Z` both print `X.Y.Z`.
 
 ## What the workflow checks before it publishes
 

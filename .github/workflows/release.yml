@@ -1,5 +1,5 @@
 name: release
-# Publishes the container image (and, for a version tag, a GitHub Release).
+# Publishes the container image to Docker Hub and GitHub's registry (and, for a version tag, a GitHub Release).
 #   - push a tag such as v1.2.3: tests, build, smoke test, publish 1.2.3, 1.2 and latest, create the release
 #   - run by hand from the Actions tab with a version such as 0.0.0-test: the same checks, but only that one
 #     image tag is published and no release is created. Use it to try the workflow out.
@@ -25,7 +25,9 @@ jobs:
       contents: write   # to create the GitHub Release
       packages: write
     env:
-      IMAGE: ghcr.io/${{ github.repository }}
+      # the same image and tags go to both registries; Docker Hub is the one the documentation names
+      DOCKERHUB_IMAGE: vfuoglio/immich-handoff
+      GHCR_IMAGE: ghcr.io/${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,10 +72,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.v.outputs.version }}
             type=raw,value={{major}}.{{minor}},enable=${{ steps.v.outputs.latest == 'true' }}
