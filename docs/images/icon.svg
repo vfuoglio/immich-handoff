@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><filter id="bl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.4"/></filter><linearGradient id="bgw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#241a66"/><stop offset=".42" stop-color="#5a2ea3"/><stop offset=".76" stop-color="#d04a8c"/><stop offset="1" stop-color="#ffb54a"/></linearGradient>
+<radialGradient id="glw" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffc86a" stop-opacity=".6"/><stop offset="1" stop-color="#ffc86a" stop-opacity="0"/></radialGradient>
+<linearGradient id="gsw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".30"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="skw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#352a92"/><stop offset=".55" stop-color="#d24e92"/><stop offset="1" stop-color="#ffc978"/></linearGradient>
+<radialGradient id="snw" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff5d6" stop-opacity=".9"/><stop offset="1" stop-color="#fff5d6" stop-opacity="0"/></radialGradient>
+<clipPath id="rcw"><rect width="64" height="64" rx="14"/></clipPath>
+<clipPath id="cpw"><rect x="26" y="26" width="30" height="26" rx="5"/></clipPath></defs><rect width="64" height="64" rx="14" fill="url(#bgw)"/><g clip-path="url(#rcw)"><circle cx="52" cy="56" r="28" fill="url(#glw)"/><rect width="64" height="36" fill="url(#gsw)"/></g>
+<rect x="8" y="12" width="30" height="26" rx="5" fill="#fff" fill-opacity=".14" stroke="#fff" stroke-opacity=".7" stroke-width="1.8"/>
+<rect x="27" y="29" width="30" height="26" rx="5" fill="#0b0620" fill-opacity=".34" filter="url(#bl)"/>
+<g clip-path="url(#cpw)"><rect x="26" y="26" width="30" height="26" fill="url(#skw)"/><circle cx="40" cy="36" r="8" fill="url(#snw)"/><circle cx="40" cy="36.5" r="2.8" fill="#fff5d6"/>
+<path d="M26 46L35 38.5L40 43L47 36.5L56 45V52H26Z" fill="#823199" fill-opacity=".9"/><path d="M26 50L33 44L39 49L45 44.5L56 51V52H26Z" fill="#2b1b63"/></g>
+<rect x="26" y="26" width="30" height="26" rx="5" fill="none" stroke="#fff" stroke-width="2.2"/>
+<g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"><path d="M34 11C46 10 54 14 55 24M50.5 18.5L55 25L59.5 18.5"/></g></svg>

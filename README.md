@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/images/icon.svg" alt="immich-handoff icon" width="96">
+</p>
+
+<p align="center">
   <img src="docs/images/hero.png" alt="The immich-handoff page on a desktop and a phone: photos waiting to be handed over, and the services you can send to" width="900">
 </p>
 
