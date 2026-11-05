@@ -1,6 +1,7 @@
 name: ci
 on:
   push:
+    branches: [main, develop]   # other branches are checked through their pull request
   pull_request:
   workflow_call:   # the release workflow runs the same checks first
 jobs:
