@@ -304,13 +304,17 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 	if w.Hub != nil {
 		offer, err = w.Hub.InviteOffer(r.Context(), me.user.ID, token)
 	}
+	if errors.Is(err, hub.ErrAlready) {
+		// Joining refreshes this very page, so the page must lead to the dashboard rather than an error.
+		// The link is relative so it also works behind a path prefix.
+		// (http.Redirect would turn it into an absolute path and lose the prefix, so set the header directly.)
+		rw.Header().Set("Location", "../")
+		rw.WriteHeader(http.StatusSeeOther)
+		return
+	}
 	if err != nil {
-		text := "This invitation is not valid any more. Ask the person who sent it for a new link."
-		if errors.Is(err, hub.ErrAlready) {
-			text = "You already take part in this service."
-		}
 		rw.WriteHeader(http.StatusNotFound)
-		Notice("Invitation", text, true).Render(r.Context(), rw)
+		Notice("Invitation", "This invitation is not valid any more. Ask the person who sent it for a new link.", true).Render(r.Context(), rw)
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
