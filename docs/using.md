@@ -12,6 +12,8 @@ This page is for the people who send and receive photos. Everything happens on t
 | **Tag** | The label you add to a photo in Immich to send it. Each service has its own. |
 | **Inbox** | A tag on everything that just arrived, so the receiver can find what is new. |
 
+> **Before you start: switch Tags on in Immich.** In Immich open Account Settings, then Features, and turn on **Tags**. It is off by default and each person must do it for their own account. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Reload the web page or restart the phone app afterwards.
+
 ## Sending photos
 
 Open the page. It shows your services and what is waiting:

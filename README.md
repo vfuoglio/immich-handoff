@@ -40,6 +40,8 @@ Everyone's phone keeps backing up to their own account. A family keeps one libra
 
 You need Immich 3.2.0 or newer and Docker.
 
+> **Everyone who takes part must switch Tags on in Immich, by hand.** It is off by default, per person: Immich, then Account Settings, Features, **Tags**. Senders need it to add tags to photos, and receivers need it to see the inbox tag on what arrives. Without it, tags can be set by the app but people cannot see or use them in Immich.
+
 ```
 git clone https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
