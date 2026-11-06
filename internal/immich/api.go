@@ -23,6 +23,9 @@ import (
 // (or, for the status page, to one browser session cookie).
 type API struct {
 	c *ClientWithResponses
+	// bulk moves whole files. It has no limit on the total time of a request, because a large video can take
+	// longer than any fixed limit to stream; Transfer gives up on a stalled transfer instead (see StallTimeout).
+	bulk *ClientWithResponses
 	// PageSize is the search page size (default 250); tests lower it to exercise pagination.
 	PageSize int
 }
@@ -32,9 +35,26 @@ type Auth struct {
 	Cookie string // forwarded browser cookie (status page)
 }
 
+// apiTimeout limits an ordinary call to Immich, from connecting to the last byte of the answer.
+// It is a variable so tests can shorten it.
+var apiTimeout = 2 * time.Minute
+
+// StallTimeout is how long a file transfer may go without a single byte moving before it is given up.
+// A transfer that keeps moving is never cut off, however long it takes. A variable so tests can shorten it.
+var StallTimeout = 3 * time.Minute
+
+// ErrStalled is why a transfer was given up: no data moved for StallTimeout.
+var ErrStalled = errors.New("no data moved for too long")
+
 func New(baseURL string, a Auth, hc *http.Client) (*API, error) {
+	bulkHC := hc
 	if hc == nil {
-		hc = &http.Client{Timeout: 2 * time.Minute}
+		hc = &http.Client{Timeout: apiTimeout}
+		// no total limit for files: connecting, and Immich answering once it has the whole file (it checks
+		// it first), are limited; the streaming in between is watched for stalls by Transfer
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.ResponseHeaderTimeout = 5 * time.Minute
+		bulkHC = &http.Client{Transport: tr}
 	}
 	edit := func(_ context.Context, r *http.Request) error {
 		if a.APIKey != "" {
@@ -46,11 +66,16 @@ func New(baseURL string, a Auth, hc *http.Client) (*API, error) {
 		r.Header.Set("Accept", "application/json")
 		return nil
 	}
-	c, err := NewClientWithResponses(strings.TrimRight(baseURL, "/")+"/api", WithHTTPClient(hc), WithRequestEditorFn(edit))
+	root := strings.TrimRight(baseURL, "/") + "/api"
+	c, err := NewClientWithResponses(root, WithHTTPClient(hc), WithRequestEditorFn(edit))
 	if err != nil {
 		return nil, err
 	}
-	return &API{c: c, PageSize: 250}, nil
+	bulk, err := NewClientWithResponses(root, WithHTTPClient(bulkHC), WithRequestEditorFn(edit))
+	if err != nil {
+		return nil, err
+	}
+	return &API{c: c, bulk: bulk, PageSize: 250}, nil
 }
 
 // HTTPError is a refusal from Immich, so callers can tell a rejected key from a network fault.
@@ -370,9 +395,11 @@ func (a *API) DeleteAsset(ctx context.Context, id openapi_types.UUID, force bool
 // disk or buffering the file. It returns the uploaded asset and the SHA-1 of the bytes that
 // actually flowed through, so the caller can verify the stored copy before deleting anything.
 func Transfer(ctx context.Context, src, dst *API, a AssetResponseDto) (*AssetMediaResponseDto, hash.Hash, error) {
-	dl, err := src.c.DownloadAsset(ctx, a.Id, nil)
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	dl, err := src.bulk.DownloadAsset(ctx, a.Id, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, stalled(ctx, err)
 	}
 	defer dl.Body.Close()
 	if dl.StatusCode != http.StatusOK {
@@ -380,18 +407,24 @@ func Transfer(ctx context.Context, src, dst *API, a AssetResponseDto) (*AssetMed
 		return nil, nil, statusErr("downloadAsset", dl.StatusCode, b)
 	}
 
+	// The stream is watched, not timed: it may take as long as it likes while bytes keep moving. If the
+	// upload side stops reading, the pipe blocks, the download stops being read, and this fires too.
+	watch := time.AfterFunc(StallTimeout, func() { cancel(ErrStalled) })
+	defer watch.Stop()
+	body := &progressReader{r: dl.Body, onRead: func() { watch.Reset(StallTimeout) }, onEOF: func() { watch.Stop() }}
+
 	h := sha1.New()
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		pw.CloseWithError(writeUpload(mw, io.TeeReader(dl.Body, h), a))
+		pw.CloseWithError(writeUpload(mw, io.TeeReader(body, h), a))
 	}()
 
 	// No x-immich-checksum header: the hash is only known after the stream has been read.
-	r, err := dst.c.UploadAssetWithBodyWithResponse(ctx, nil, mw.FormDataContentType(), pr)
+	r, err := dst.bulk.UploadAssetWithBodyWithResponse(ctx, nil, mw.FormDataContentType(), pr)
 	pr.CloseWithError(err) // unblock the writer goroutine if the request failed early
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, stalled(ctx, err)
 	}
 	switch {
 	case r.JSON201 != nil:
@@ -430,4 +463,30 @@ func writeUpload(mw *multipart.Writer, file io.Reader, a AssetResponseDto) error
 func ChecksumMatches(stored string, h hash.Hash) bool {
 	sum := h.Sum(nil)
 	return stored == base64.StdEncoding.EncodeToString(sum) || strings.EqualFold(stored, hex.EncodeToString(sum))
+}
+
+// progressReader tells onRead that bytes moved, and onEOF when the stream ended.
+type progressReader struct {
+	r      io.Reader
+	onRead func()
+	onEOF  func()
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.onRead()
+	}
+	if err == io.EOF {
+		p.onEOF()
+	}
+	return n, err
+}
+
+// stalled says so when a transfer was cut off because nothing moved, instead of the bare "context canceled".
+func stalled(ctx context.Context, err error) error {
+	if errors.Is(context.Cause(ctx), ErrStalled) {
+		return fmt.Errorf("transfer given up: %w for %s", ErrStalled, StallTimeout)
+	}
+	return err
 }

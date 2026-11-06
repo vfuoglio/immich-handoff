@@ -30,7 +30,7 @@ Everything below was checked against a real Immich 3.2.0 by `test/e2e/carryover_
 ## Not checked
 
 - **People.** The receiver's own Immich runs face recognition on the copy. Names the sender gave are not carried.
-- **Very large videos.** The app limits the whole transfer of one file to about two minutes, counting the time it takes to move the file. A big video on a slow connection may not finish in that time, fail, and be retried the same way. This follows from the code and could not be measured in the test, which runs on one fast machine. It is a known gap.
+- **Very large videos.** A transfer has no total time limit: it can take as long as it likes while data keeps moving, and is given up only after three minutes in which not a single byte moved (it is then retried at the next pass, and the original is kept). That was tested with a deliberately slow stream, not with a real multi-gigabyte file on a slow link.
 - **Sidecar files and photos in a locked folder** were not tried.
 
 Anything you need on the other side that is not in this list, such as a description, is best written inside the file before sending, or told to the receiver.

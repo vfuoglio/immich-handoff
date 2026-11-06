@@ -150,6 +150,22 @@ func TestWhatIsCarriedOver(t *testing.T) {
 	a := startApp(t, bin, alice, bob, family) // fixed accounts, originals moved to the trash
 	_ = a
 
+	// The copies this test makes sit in the receiver's inbox. Other tests count that inbox, so take the tag
+	// off them when this test is done: the photos stay, the shared state is left as it was found.
+	var copies []string
+	t.Cleanup(func() {
+		if len(copies) == 0 {
+			return
+		}
+		var tags []struct{ ID, Name string }
+		call(t, "GET", "/tags", keyAuth(family), nil, &tags)
+		for _, tg := range tags {
+			if tg.Name == "inbox" {
+				call(t, "DELETE", "/tags/"+tg.ID+"/assets", keyAuth(family), map[string]any{"ids": copies}, nil)
+			}
+		}
+	})
+
 	var report []string
 	row := func(item, sender, receiver string) {
 		report = append(report, fmt.Sprintf("  %-34s sender: %-28s receiver's copy: %s", item, sender, receiver))
@@ -192,6 +208,9 @@ func TestWhatIsCarriedOver(t *testing.T) {
 				}
 			}
 			time.Sleep(2 * time.Second)
+		}
+		if copyID != "" {
+			copies = append(copies, copyID)
 		}
 		return copyID
 	}
