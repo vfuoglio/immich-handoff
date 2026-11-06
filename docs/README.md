@@ -7,6 +7,7 @@ Start with the page that matches what you are doing.
 | **Run it** so people can hand photos to each other | [Install](install.md), then [Operations](operations.md) |
 | **Send or receive photos** (I use the page) | [Using it](using.md) |
 | Set up the accounts and keys myself, or run several fixed services | [Fixed accounts](fixed-accounts.md) |
+| Know what travels with a photo, and what does not | [What is carried over](what-is-carried-over.md) |
 | Look up a setting | [Settings](settings.md) |
 | Know what I am trusting, and what is stored | [Security and trust](security.md) |
 | Fix something that is not working | [Troubleshooting](troubleshooting.md) |
