@@ -98,7 +98,7 @@ templ Layout(title, user string) {
 			<div class="wrap">
 				<header class="bar">
 					<div class="brand">
-						<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"></rect><path d="M8 17h13l-4-4M24 15H11l4 4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						Immich Handoff
 					</div>
 					if user != "" {
@@ -197,11 +197,11 @@ templ WatchBox(s ServiceView) {
 	<div class="watch">
 		if s.Watch != "" {
 			<p class="meta">Everything in your album <strong>{ s.Watch }</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.</p>
-			<p class="row">
-				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Stop handing over this album</button>
-			</p>
 		}
 		<p class="row">
+			if s.Watch != "" {
+				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Stop handing over this album</button>
+			}
 			<button hx-get={ "fragments/albums?service=" + url.QueryEscape(s.Name) } hx-target="next .albumform" hx-swap="innerHTML" hx-disabled-elt="this">
 				if s.Watch != "" {
 					Link a different album

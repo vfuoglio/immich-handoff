@@ -225,6 +225,34 @@ func TestWebhookSecret(t *testing.T) {
 	}
 }
 
+func TestTheIconIsServedAsAnImageAndUsedInTheHeader(t *testing.T) {
+	app, _ := setup(t)
+	res, err := http.Get(app.URL + "/static/favicon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Errorf("with nosniff on, the icon must be served as an SVG image, not %q", ct)
+	}
+	if !strings.Contains(string(b), "linearGradient") {
+		t.Errorf("this is the new icon, not the old plain square: %.120s", b)
+	}
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	if !strings.Contains(page, `class="brand"`) || !strings.Contains(page, `<img src="static/favicon.svg"`) {
+		t.Errorf("the header must show the icon: %.500s", page)
+	}
+	if !strings.Contains(page, `rel="icon" href="static/favicon.svg"`) {
+		t.Errorf("and the browser tab must use it: %.500s", page)
+	}
+	// the invitation page is one level down: its icon link must resolve through the same <base> as its styling
+	_, invite := do(t, "GET", app.URL+"/invite/abc", "sess=alice", nil)
+	if !strings.Contains(invite, `<base href="../"`) || !strings.Contains(invite, `<img src="static/favicon.svg"`) {
+		t.Errorf("the invitation page must find the icon through the base: %.500s", invite)
+	}
+}
+
 func TestStaticAssets(t *testing.T) {
 	app, _ := setup(t)
 	for _, p := range []string{"app.css", "app.js", "htmx.min.js", "favicon.svg"} {

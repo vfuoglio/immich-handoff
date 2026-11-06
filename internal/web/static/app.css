@@ -46,7 +46,7 @@ header.bar {
   padding: 1rem 0; position: sticky; top: 0; background: var(--bg); z-index: 2;
 }
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 650; font-size: 1.1rem; }
-.brand svg { width: 28px; height: 28px; color: var(--primary); }
+.brand img { width: 28px; height: 28px; display: block; }
 .who { color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: .5rem; }
 .avatar {
   width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: var(--primary-text);
