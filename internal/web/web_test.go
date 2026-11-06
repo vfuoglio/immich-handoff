@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,9 @@ const (
 	otherID  = "aaaaaaaa-0000-0000-0000-000000000009"
 	ts       = "2025-01-02T03:04:05.000Z"
 )
+
+// albumsDenied makes the fake Immich refuse to list albums, as it does for a key without album.read.
+var albumsDenied atomic.Bool
 
 // fakeImmich answers just enough for sign-in checks, counts and a dry-run pass.
 func fakeImmich() http.Handler {
@@ -46,6 +51,49 @@ func fakeImmich() http.Handler {
 			return
 		}
 		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test"})
+	})
+	// Tags are off by default in Immich; the family account has them on, "sess=other" cannot be changed.
+	var prefMu sync.Mutex
+	tagsOn := map[string]bool{"sess=family": true}
+	cookie := func(r *http.Request) string { return strings.TrimSpace(r.Header.Get("Cookie")) }
+	prefs := func(on bool) map[string]any {
+		return map[string]any{"tags": map[string]any{"enabled": on, "sidebarWeb": on}}
+	}
+	mux.HandleFunc("GET /api/users/me/preferences", func(w http.ResponseWriter, r *http.Request) {
+		prefMu.Lock()
+		defer prefMu.Unlock()
+		j(w, prefs(tagsOn[cookie(r)]))
+	})
+	mux.HandleFunc("PUT /api/users/me/preferences", func(w http.ResponseWriter, r *http.Request) {
+		if cookie(r) == "sess=other" {
+			http.Error(w, "nope", http.StatusInternalServerError)
+			return
+		}
+		var body struct{ Tags struct{ Enabled bool } }
+		json.NewDecoder(r.Body).Decode(&body)
+		prefMu.Lock()
+		defer prefMu.Unlock()
+		tagsOn[cookie(r)] = body.Tags.Enabled
+		j(w, prefs(tagsOn[cookie(r)]))
+	})
+	// the receiver's albums: "Arrivals" exists with 7 photos, unless a test says the key may not read albums
+	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		if albumsDenied.Load() {
+			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
+			return
+		}
+		if r.URL.Query().Get("name") == "" && r.URL.Query().Get("isOwned") == "true" && strings.Contains(r.Header.Get("Cookie"), "sess=alice") {
+			j(w, []any{
+				map[string]any{"id": "99999999-9999-4999-8999-999999999991", "albumName": "To send", "assetCount": 3},
+				map[string]any{"id": "99999999-9999-4999-8999-999999999992", "albumName": "Trip", "assetCount": 1},
+			})
+			return
+		}
+		if r.URL.Query().Get("name") == "Arrivals" && r.URL.Query().Get("isOwned") == "true" {
+			j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999999", "albumName": "Arrivals", "assetCount": 7}})
+			return
+		}
+		j(w, []any{})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		tag := func(id, n string) map[string]any {
@@ -174,6 +222,34 @@ func TestWebhookSecret(t *testing.T) {
 	}
 	if code, _ := do(t, "POST", app.URL+"/webhook/immich", "", map[string]string{"X-Webhook-Secret": "s3cret"}); code != 202 {
 		t.Errorf("good secret: %d", code)
+	}
+}
+
+func TestTheIconIsServedAsAnImageAndUsedInTheHeader(t *testing.T) {
+	app, _ := setup(t)
+	res, err := http.Get(app.URL + "/static/favicon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Errorf("with nosniff on, the icon must be served as an SVG image, not %q", ct)
+	}
+	if !strings.Contains(string(b), "linearGradient") {
+		t.Errorf("this is the new icon, not the old plain square: %.120s", b)
+	}
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	if !strings.Contains(page, `class="brand"`) || !strings.Contains(page, `<img src="static/favicon.svg"`) {
+		t.Errorf("the header must show the icon: %.500s", page)
+	}
+	if !strings.Contains(page, `rel="icon" href="static/favicon.svg"`) {
+		t.Errorf("and the browser tab must use it: %.500s", page)
+	}
+	// the invitation page is one level down: its icon link must resolve through the same <base> as its styling
+	_, invite := do(t, "GET", app.URL+"/invite/abc", "sess=alice", nil)
+	if !strings.Contains(invite, `<base href="../"`) || !strings.Contains(invite, `<img src="static/favicon.svg"`) {
+		t.Errorf("the invitation page must find the icon through the base: %.500s", invite)
 	}
 }
 
@@ -318,5 +394,106 @@ func TestInvitePageLinksPointAtTheRoot(t *testing.T) {
 	}
 	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "<base") {
 		t.Errorf("the dashboard needs no base: %.200s", body)
+	}
+}
+
+func TestTagsNoticeAndSwitch(t *testing.T) {
+	app, _ := setup(t)
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); !strings.Contains(body, "Tags are switched off") ||
+		!strings.Contains(body, `id="gated"`) || !strings.Contains(body, "inert") {
+		t.Errorf("a person with Tags off must be told, and the rest of the page switched off: %.300s", body)
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=family", nil); strings.Contains(body, "Tags are switched off") || strings.Contains(body, "inert") {
+		t.Errorf("a person with Tags on must not be nagged or locked out: %.300s", body)
+	}
+	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "sess=alice", nil); code != 400 {
+		t.Errorf("switching Tags on needs the cross-site header, got %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "", hdr); code != 401 {
+		t.Errorf("switching Tags on needs a sign-in, got %d", code)
+	}
+	ok, _ := http.NewRequest("POST", app.URL+"/preferences/tags", nil)
+	ok.Header.Set("Cookie", "sess=alice")
+	ok.Header.Set("X-Requested-With", "immich-handoff")
+	res0, err := http.DefaultClient.Do(ok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b0, _ := io.ReadAll(res0.Body)
+	res0.Body.Close()
+	if res0.StatusCode != 200 || !strings.Contains(string(b0), "refresh the Immich tab") || res0.Header.Get("HX-Trigger") != "tags-on" {
+		t.Errorf("switching on: %d %q, trigger %q (the page unlocks itself on it)", res0.StatusCode, b0, res0.Header.Get("HX-Trigger"))
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "Tags are switched off") || strings.Contains(body, "inert") {
+		t.Errorf("the notice and the lock must go once Tags are on: %.300s", body)
+	}
+	// when Immich refuses, say so in the message line and keep the button
+	req, _ := http.NewRequest("POST", app.URL+"/preferences/tags", nil)
+	req.Header.Set("Cookie", "sess=other")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadGateway || res.Header.Get("HX-Retarget") != "#flash" {
+		t.Errorf("a refusal from Immich: %d, retarget %q", res.StatusCode, res.Header.Get("HX-Retarget"))
+	}
+}
+
+func TestAReceiverOfAnAlbumServiceSeesTheAlbum(t *testing.T) {
+	app, s := setup(t)
+	s.Services[0].Album = "Arrivals"
+	_, body := do(t, "GET", app.URL+"/", "sess=family", nil)
+	if !strings.Contains(body, "Photos arrive in the album") || !strings.Contains(body, "Arrivals") {
+		t.Errorf("the receiver's card must say where photos arrive: %.400s", body)
+	}
+	_, frag := do(t, "GET", app.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
+	if !strings.Contains(frag, "7") || !strings.Contains(frag, "in the album") {
+		t.Errorf("the count must be the album's: %q", frag)
+	}
+	// senders are not told about the receiver's album
+	_, sender := do(t, "GET", app.URL+"/fragments/count?service=family&role=sender", "sess=alice", nil)
+	if strings.Contains(sender, "in the album") {
+		t.Errorf("a sender's count is still what waits to be handed over: %q", sender)
+	}
+}
+
+func TestTheCountFallsBackToTheInboxWhenTheAlbumCannotBeRead(t *testing.T) {
+	app, s := setup(t)
+	s.Services[0].Album = "Arrivals"
+	albumsDenied.Store(true)
+	t.Cleanup(func() { albumsDenied.Store(false) })
+	_, frag := do(t, "GET", app.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
+	if strings.Contains(frag, "in the album") || !strings.Contains(frag, "in your inbox") {
+		t.Errorf("when the album cannot be read, arrivals are tagged inbox, so count those: %q", frag)
+	}
+}
+
+func TestASenderChoosesAnAlbumFromTheirOwnList(t *testing.T) {
+	app, _ := setup(t)
+	code, body := do(t, "GET", app.URL+"/fragments/albums?service=family", "sess=alice", nil)
+	if code != 200 || !strings.Contains(body, "To send (3 photos)") || !strings.Contains(body, "Trip (1 photo)") {
+		t.Fatalf("the sender's own albums, with their sizes: %d %.400s", code, body)
+	}
+	// this service moves originals (no mode set), so the confirmation says what happens to them
+	if !strings.Contains(body, "moved to your trash") {
+		t.Errorf("the question must say that originals go to the trash: %.600s", body)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/albums?service=family", "sess=family", nil); code != 404 {
+		t.Errorf("only a sender of the service can link an album to it, got %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/albums?service=family", "", nil); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	for _, path := range []string{"/services/album", "/services/album/stop"} {
+		if code, _ := do(t, "POST", app.URL+path, "sess=alice", nil); code != 400 {
+			t.Errorf("%s needs the cross-site header, got %d", path, code)
+		}
+		if code, _ := do(t, "POST", app.URL+path, "sess=alice", hdr); code != 404 {
+			t.Errorf("%s without self-service switched on, got %d", path, code)
+		}
 	}
 }

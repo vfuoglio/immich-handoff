@@ -13,4 +13,6 @@ COPY --from=build /out/immich-handoff /immich-handoff
 COPY --from=build --chown=nonroot:nonroot /data /data
 VOLUME /data
 EXPOSE 8080
+# The image has no shell or curl, so the binary checks itself: it asks its own /healthz (on LISTEN_ADDR).
+HEALTHCHECK --interval=30s --timeout=6s --start-period=40s --retries=3 CMD ["/immich-handoff", "--healthcheck"]
 ENTRYPOINT ["/immich-handoff"]

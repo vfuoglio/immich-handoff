@@ -24,5 +24,5 @@ Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `I
 
 ## Search and tags
 - Search pages with `page` and `nextPage`; `nextCursor` is never returned in 3.2.0.
-- A tag applied in the first moments after an upload is occasionally dropped by Immich itself (about 1 in 50 in tests with no handoff app running). The same happens to a tag added and another removed on one photo within milliseconds, so the app adds the new tag, checks it, and only then removes the old one.
+- A tag applied in the first moments after an upload is occasionally dropped by Immich itself (about 1 in 50 in tests with no handoff app running). The same happens to a tag added and another removed on one photo within milliseconds, so the app adds the new tag, checks it, and only then removes the old one. The end-to-end tests' tagging helpers (`tagAsset`, `tagLikeThePhone`) check that a tag stuck and apply it again when it did not, so a dropped tag does not fail a run; they log when they had to.
 - Immich is "healthy" about 30 seconds before its workflow plugins are loaded; creating a workflow earlier fails with `Unknown method`.

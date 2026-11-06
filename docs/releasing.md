@@ -4,7 +4,8 @@ For the maintainer. A release is a git tag; everything else is done by the relea
 
 ## What a release produces
 
-- the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag and is not `latest`)
+- the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and, if it is the highest version released so far, `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag, and not `X.Y` or `latest`)
+- a signature for each image, a software bill of materials and build provenance (see [Verifying an image](#verifying-an-image))
 - a GitHub Release named after the tag, whose text is that version's section of `CHANGELOG.md`
 
 ## One-time setup
@@ -46,7 +47,40 @@ Without them the release fails at the Docker Hub login, before anything is publi
 - (tag pushes) `CHANGELOG.md` has a non-empty section for it
 - for **each** architecture, the freshly built image reports the right version with `--version`, and with no configuration it refuses to start and says `WEBHOOK_SECRET` is missing. That proves the binary runs, as the unprivileged user, on that architecture; it does not start a real Immich (the end-to-end tests do that with the binary, not the image)
 
-If any check fails nothing is published.
+If any check fails nothing is published. After the publish step, one more check can still fail the release (and then the images are already out, so fix forward with a new patch): each image is signed, the signature is verified against this repository's release workflow, and an SBOM is found attached to it.
+
+## Verifying an image
+
+Every released image is signed with [cosign](https://github.com/sigstore/cosign), without a key of ours: the signature is tied to this repository's release workflow by GitHub's identity token. It also carries a software bill of materials (SBOM) and build provenance. To check one:
+
+```
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/vfuoglio/immich-handoff/\.github/workflows/release\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  vfuoglio/immich-handoff:1.2.0
+
+docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json .SBOM}}'
+docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json .Provenance}}'
+```
+
+`cosign verify` prints the signature's details and fails if the image was not signed by that workflow. The SBOM lists the Go modules the program was built from; the provenance says which commit and workflow run built the image. The same works for `ghcr.io/vfuoglio/immich-handoff`.
+
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens a pull request each Monday into `develop`, one for each kind: the GitHub Actions, the program's Go modules, the screenshot tool's modules, and the base images in the `Dockerfile`. The actions in `.github/workflows` are pinned by commit hash, with the version in a comment, so a changed action is always a change you see in a pull request; Dependabot updates the hash and the comment together. Read the notes in the pull request, check that CI is green, and merge it into `develop` like any other change. After a change to the release workflow, run the manual `0.0.0-test` release before the next real tag.
+
+## Patching an older version
+
+When 1.2.0 is out and 1.1 needs a fix, release `1.1.1` without disturbing what people on 1.2 get:
+
+```
+git switch -c release/1.1 v1.1.0
+git cherry-pick <the fix>
+# add a "## 1.1.1" section to CHANGELOG.md, commit
+git tag -a v1.1.1 -m "1.1.1" && git push origin release/1.1 v1.1.1
+```
+
+The release workflow runs on any tag, so this works from the branch. It moves the `1.1` tag to the fix, so people on `:1.1` receive it, and it leaves `latest` on the newest release, because `latest` goes only to the highest final version released so far (`.github/scripts/latest.sh` decides, and CI tests it). Merge the fix into `develop` as well, so it is not lost in the next minor version.
 
 ## A bad release
 

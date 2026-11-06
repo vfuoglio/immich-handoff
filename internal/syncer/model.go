@@ -14,6 +14,11 @@ type Account struct {
 	API    *immich.API
 	UserID uuid.UUID // the Immich user behind the key; set by ResolveUsers or when a person joins
 	Mode   string    // what happens to this sender's originals (ModeMove / ModeCopy); empty: the service's setting
+
+	// WatchAlbum is an album of this sender's whose photos are all handed over, now and later, without a tag.
+	// Zero: none. WatchAlbumName is its name, for messages. Set when the account is built, never changed after.
+	WatchAlbum     uuid.UUID
+	WatchAlbumName string
 }
 
 const (
@@ -26,7 +31,8 @@ const (
 type Service struct {
 	Name       string // "" is the single default service of a plain .env install
 	Tag        string // tag a sender adds
-	InboxTag   string // tag put on new copies in each receiver
+	InboxTag   string // tag put on new copies in each receiver (unless Album is set and works)
+	Album      string // optional: name of an album, in each receiver's account, that new copies are put in
 	RefusedTag string // replaces Tag on an original that a receiver refused
 	Mode       string // ModeMove (default) or ModeCopy
 	SentTag    string // copy mode: put on an original after it was handed over

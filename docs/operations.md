@@ -83,6 +83,7 @@ Before you upgrade **Immich** itself, you can run this project's whole test suit
 
 - **Log:** `docker compose logs`. Each pass logs what it found and did; errors are marked `ERROR`.
 - **Notifications:** set `NOTIFY_URL` to an ntfy-style address and the app posts a message when a hand-over fails, a photo is refused, or a connection breaks.
+- **Container health:** the image checks itself every 30 seconds, so `docker ps` and `docker compose ps` show `healthy` or `unhealthy`, and tools that read Docker's health status can show or alert on it. The check asks the app's own `/healthz` (on `LISTEN_ADDR`) and passes only on `ok`. The image has no shell or `curl`, so the check is built into the program: `docker compose exec immich-handoff /immich-handoff --healthcheck` runs it by hand and exits 0 when healthy. A service that should wait for it can use `depends_on: immich-handoff: condition: service_healthy`. It does not test the connection to Immich; the page and the log show that.
 - **Health and metrics:** `GET /healthz` answers `ok`. `GET /metrics` returns counters in Prometheus text format (passes, photos by result, services, version) and needs the `X-Webhook-Secret` header with your secret.
 
 ## Removing it

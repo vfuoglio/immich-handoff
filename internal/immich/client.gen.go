@@ -838,6 +838,15 @@ type AlbumResponseDto struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// AlbumUserCreateDto defines model for AlbumUserCreateDto.
+type AlbumUserCreateDto struct {
+	// Role Album user role
+	Role AlbumUserRole `json:"role"`
+
+	// UserId User ID
+	UserId openapi_types.UUID `json:"userId"`
+}
+
 // AlbumUserResponseDto defines model for AlbumUserResponseDto.
 type AlbumUserResponseDto struct {
 	// Role Album user role
@@ -847,6 +856,18 @@ type AlbumUserResponseDto struct {
 
 // AlbumUserRole Album user role
 type AlbumUserRole string
+
+// AlbumsResponse defines model for AlbumsResponse.
+type AlbumsResponse struct {
+	// DefaultAssetOrder Asset sort order
+	DefaultAssetOrder AssetOrder `json:"defaultAssetOrder"`
+}
+
+// AlbumsUpdate Album preferences
+type AlbumsUpdate struct {
+	// DefaultAssetOrder Asset sort order
+	DefaultAssetOrder *AssetOrder `json:"defaultAssetOrder,omitempty"`
+}
 
 // ApiKeyCreateDto defines model for ApiKeyCreateDto.
 type ApiKeyCreateDto struct {
@@ -904,6 +925,15 @@ type ApiKeyResponseDto struct {
 	//
 	// Example: 2024-01-01T00:00:00.000Z
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// ApiKeyUpdateDto defines model for ApiKeyUpdateDto.
+type ApiKeyUpdateDto struct {
+	// Name API key name
+	Name *string `json:"name,omitempty"`
+
+	// Permissions List of permissions
+	Permissions *[]Permission `json:"permissions,omitempty"`
 }
 
 // AssetBulkDeleteDto defines model for AssetBulkDeleteDto.
@@ -1085,6 +1115,12 @@ type AssetTypeEnum string
 // AssetVisibility Asset visibility
 type AssetVisibility string
 
+// AvatarUpdate defines model for AvatarUpdate.
+type AvatarUpdate struct {
+	// Color User avatar color
+	Color *UserAvatarColor `json:"color,omitempty"`
+}
+
 // BoolFilter defines model for BoolFilter.
 type BoolFilter struct {
 	Eq bool `json:"eq"`
@@ -1112,6 +1148,18 @@ type BulkIdsDto struct {
 	Ids []openapi_types.UUID `json:"ids"`
 }
 
+// CastResponse defines model for CastResponse.
+type CastResponse struct {
+	// GCastEnabled Whether Google Cast is enabled
+	GCastEnabled bool `json:"gCastEnabled"`
+}
+
+// CastUpdate defines model for CastUpdate.
+type CastUpdate struct {
+	// GCastEnabled Whether Google Cast is enabled
+	GCastEnabled *bool `json:"gCastEnabled,omitempty"`
+}
+
 // ContributorCountResponseDto defines model for ContributorCountResponseDto.
 type ContributorCountResponseDto struct {
 	// AssetCount Number of assets contributed
@@ -1119,6 +1167,21 @@ type ContributorCountResponseDto struct {
 
 	// UserId User ID
 	UserId openapi_types.UUID `json:"userId"`
+}
+
+// CreateAlbumDto defines model for CreateAlbumDto.
+type CreateAlbumDto struct {
+	// AlbumName Album name
+	AlbumName string `json:"albumName"`
+
+	// AlbumUsers Album users
+	AlbumUsers *[]AlbumUserCreateDto `json:"albumUsers,omitempty"`
+
+	// AssetIds Initial asset IDs
+	AssetIds *[]openapi_types.UUID `json:"assetIds,omitempty"`
+
+	// Description Album description
+	Description *string `json:"description,omitempty"`
 }
 
 // DateFilter defines model for DateFilter.
@@ -1161,6 +1224,48 @@ type DateFilterNullable struct {
 
 	// Ne Example: 2024-01-01T00:00:00.000Z
 	Ne *time.Time `json:"ne,omitempty"`
+}
+
+// DownloadResponse defines model for DownloadResponse.
+type DownloadResponse struct {
+	// ArchiveSize Maximum archive size in bytes
+	ArchiveSize int `json:"archiveSize"`
+
+	// IncludeEmbeddedVideos Whether to include embedded videos in downloads
+	IncludeEmbeddedVideos bool `json:"includeEmbeddedVideos"`
+}
+
+// DownloadUpdate defines model for DownloadUpdate.
+type DownloadUpdate struct {
+	// ArchiveSize Maximum archive size in bytes
+	ArchiveSize *int `json:"archiveSize,omitempty"`
+
+	// IncludeEmbeddedVideos Whether to include embedded videos in downloads
+	IncludeEmbeddedVideos *bool `json:"includeEmbeddedVideos,omitempty"`
+}
+
+// EmailNotificationsResponse defines model for EmailNotificationsResponse.
+type EmailNotificationsResponse struct {
+	// AlbumInvite Whether to receive email notifications for album invites
+	AlbumInvite bool `json:"albumInvite"`
+
+	// AlbumUpdate Whether to receive email notifications for album updates
+	AlbumUpdate bool `json:"albumUpdate"`
+
+	// Enabled Whether email notifications are enabled
+	Enabled bool `json:"enabled"`
+}
+
+// EmailNotificationsUpdate defines model for EmailNotificationsUpdate.
+type EmailNotificationsUpdate struct {
+	// AlbumInvite Whether to receive email notifications for album invites
+	AlbumInvite *bool `json:"albumInvite,omitempty"`
+
+	// AlbumUpdate Whether to receive email notifications for album updates
+	AlbumUpdate *bool `json:"albumUpdate,omitempty"`
+
+	// Enabled Whether email notifications are enabled
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // EnumFilterAssetType defines model for EnumFilterAssetType.
@@ -1254,6 +1359,24 @@ type ExifResponseDto struct {
 	TimeZone *string `json:"timeZone,omitempty"`
 }
 
+// FoldersResponse defines model for FoldersResponse.
+type FoldersResponse struct {
+	// Enabled Whether folders are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether folders appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// FoldersUpdate defines model for FoldersUpdate.
+type FoldersUpdate struct {
+	// Enabled Whether folders are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether folders appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // IdFilter defines model for IdFilter.
 type IdFilter struct {
 	Eq *openapi_types.UUID `json:"eq,omitempty"`
@@ -1271,6 +1394,30 @@ type IdsFilter struct {
 	All  *[]openapi_types.UUID `json:"all,omitempty"`
 	Any  *[]openapi_types.UUID `json:"any,omitempty"`
 	None *[]openapi_types.UUID `json:"none,omitempty"`
+}
+
+// MemoriesResponse defines model for MemoriesResponse.
+type MemoriesResponse struct {
+	// Duration Memory duration in seconds
+	Duration int `json:"duration"`
+
+	// Enabled Whether memories are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether memories appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// MemoriesUpdate defines model for MemoriesUpdate.
+type MemoriesUpdate struct {
+	// Duration Memory duration in seconds
+	Duration *int `json:"duration,omitempty"`
+
+	// Enabled Whether memories are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether memories appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // MetadataSearchDto defines model for MetadataSearchDto.
@@ -1482,6 +1629,30 @@ type NumberFilterNullable struct {
 	NotIn *[]float64 `json:"notIn,omitempty"`
 }
 
+// PeopleResponse defines model for PeopleResponse.
+type PeopleResponse struct {
+	// Enabled Whether people are enabled
+	Enabled bool `json:"enabled"`
+
+	// MinimumFaces People face threshold
+	MinimumFaces *int `json:"minimumFaces,omitempty"`
+
+	// SidebarWeb Whether people appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// PeopleUpdate defines model for PeopleUpdate.
+type PeopleUpdate struct {
+	// Enabled Whether people are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// MinimumFaces People face threshold
+	MinimumFaces *int `json:"minimumFaces,omitempty"`
+
+	// SidebarWeb Whether people appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // Permission List of permissions
 type Permission string
 
@@ -1510,6 +1681,48 @@ type PersonResponseDto struct {
 
 	// UpdatedAt Last update date
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+}
+
+// PurchaseResponse defines model for PurchaseResponse.
+type PurchaseResponse struct {
+	// HideBuyButtonUntil Date until which to hide buy button
+	HideBuyButtonUntil string `json:"hideBuyButtonUntil"`
+
+	// ShowSupportBadge Whether to show support badge
+	ShowSupportBadge bool `json:"showSupportBadge"`
+}
+
+// PurchaseUpdate defines model for PurchaseUpdate.
+type PurchaseUpdate struct {
+	// HideBuyButtonUntil Date until which to hide buy button
+	HideBuyButtonUntil *string `json:"hideBuyButtonUntil,omitempty"`
+
+	// ShowSupportBadge Whether to show support badge
+	ShowSupportBadge *bool `json:"showSupportBadge,omitempty"`
+}
+
+// RatingsResponse defines model for RatingsResponse.
+type RatingsResponse struct {
+	// Enabled Whether ratings are enabled
+	Enabled bool `json:"enabled"`
+}
+
+// RatingsUpdate defines model for RatingsUpdate.
+type RatingsUpdate struct {
+	// Enabled Whether ratings are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RecentlyAddedResponse defines model for RecentlyAddedResponse.
+type RecentlyAddedResponse struct {
+	// SidebarWeb Whether the recently added page appears in the web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// RecentlyAddedUpdate defines model for RecentlyAddedUpdate.
+type RecentlyAddedUpdate struct {
+	// SidebarWeb Whether the recently added page appears in the web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // SearchAlbumResponseDto defines model for SearchAlbumResponseDto.
@@ -1662,6 +1875,24 @@ type ServerVersionResponseDto struct {
 	Prerelease *int `json:"prerelease"`
 }
 
+// SharedLinksResponse defines model for SharedLinksResponse.
+type SharedLinksResponse struct {
+	// Enabled Whether shared links are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether shared links appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// SharedLinksUpdate defines model for SharedLinksUpdate.
+type SharedLinksUpdate struct {
+	// Enabled Whether shared links are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether shared links appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // StringFilter defines model for StringFilter.
 type StringFilter struct {
 	Eq    *string   `json:"eq,omitempty"`
@@ -1723,6 +1954,24 @@ type TagResponseDto struct {
 type TagUpsertDto struct {
 	// Tags Tag names to upsert
 	Tags []string `json:"tags"`
+}
+
+// TagsResponse defines model for TagsResponse.
+type TagsResponse struct {
+	// Enabled Whether tags are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether tags appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// TagsUpdate defines model for TagsUpdate.
+type TagsUpdate struct {
+	// Enabled Whether tags are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether tags appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // UserAdminResponseDto defines model for UserAdminResponseDto.
@@ -1801,6 +2050,40 @@ type UserLicense struct {
 
 	// LicenseKey License key (format: /^IM(SV|CL)(-[\dA-Za-z]{4}){8}$/)
 	LicenseKey string `json:"licenseKey"`
+}
+
+// UserPreferencesResponseDto defines model for UserPreferencesResponseDto.
+type UserPreferencesResponseDto struct {
+	Albums             AlbumsResponse             `json:"albums"`
+	Cast               CastResponse               `json:"cast"`
+	Download           DownloadResponse           `json:"download"`
+	EmailNotifications EmailNotificationsResponse `json:"emailNotifications"`
+	Folders            FoldersResponse            `json:"folders"`
+	Memories           MemoriesResponse           `json:"memories"`
+	People             PeopleResponse             `json:"people"`
+	Purchase           PurchaseResponse           `json:"purchase"`
+	Ratings            RatingsResponse            `json:"ratings"`
+	RecentlyAdded      RecentlyAddedResponse      `json:"recentlyAdded"`
+	SharedLinks        SharedLinksResponse        `json:"sharedLinks"`
+	Tags               TagsResponse               `json:"tags"`
+}
+
+// UserPreferencesUpdateDto defines model for UserPreferencesUpdateDto.
+type UserPreferencesUpdateDto struct {
+	// Albums Album preferences
+	Albums             *AlbumsUpdate             `json:"albums,omitempty"`
+	Avatar             *AvatarUpdate             `json:"avatar,omitempty"`
+	Cast               *CastUpdate               `json:"cast,omitempty"`
+	Download           *DownloadUpdate           `json:"download,omitempty"`
+	EmailNotifications *EmailNotificationsUpdate `json:"emailNotifications,omitempty"`
+	Folders            *FoldersUpdate            `json:"folders,omitempty"`
+	Memories           *MemoriesUpdate           `json:"memories,omitempty"`
+	People             *PeopleUpdate             `json:"people,omitempty"`
+	Purchase           *PurchaseUpdate           `json:"purchase,omitempty"`
+	Ratings            *RatingsUpdate            `json:"ratings,omitempty"`
+	RecentlyAdded      *RecentlyAddedUpdate      `json:"recentlyAdded,omitempty"`
+	SharedLinks        *SharedLinksUpdate        `json:"sharedLinks,omitempty"`
+	Tags               *TagsUpdate               `json:"tags,omitempty"`
 }
 
 // UserResponseDto defines model for UserResponseDto.
@@ -1922,6 +2205,24 @@ type WorkflowUpdateDto struct {
 	Trigger *WorkflowTrigger `json:"trigger,omitempty"`
 }
 
+// GetAllAlbumsParams defines parameters for GetAllAlbums.
+type GetAllAlbumsParams struct {
+	// AssetId Filter albums containing this asset ID (ignores other parameters)
+	AssetId *openapi_types.UUID `form:"assetId,omitempty" json:"assetId,omitempty"`
+
+	// Id Album ID
+	Id *openapi_types.UUID `form:"id,omitempty" json:"id,omitempty"`
+
+	// IsOwned Filter by ownership: true = only owned, false = only shared-with-me, undefined = no filter
+	IsOwned *bool `form:"isOwned,omitempty" json:"isOwned,omitempty"`
+
+	// IsShared Filter by shared status: true = only shared, false = not shared, undefined = no filter
+	IsShared *bool `form:"isShared,omitempty" json:"isShared,omitempty"`
+
+	// Name Album name (exact match)
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
+}
+
 // UploadAssetParams defines parameters for UploadAsset.
 type UploadAssetParams struct {
 	Key  *string `form:"key,omitempty" json:"key,omitempty"`
@@ -1972,8 +2273,19 @@ type SearchWorkflowsParams struct {
 	Trigger *WorkflowTrigger `form:"trigger,omitempty" json:"trigger,omitempty"`
 }
 
+// CreateAlbumJSONRequestBody defines body for CreateAlbum for application/json ContentType.
+type CreateAlbumJSONRequestBody = CreateAlbumDto
+
+// AddAssetsToAlbumJSONRequestBody defines body for AddAssetsToAlbum for application/json ContentType.
+type AddAssetsToAlbumJSONRequestBody = BulkIdsDto
+
 // CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
 type CreateApiKeyJSONRequestBody = ApiKeyCreateDto
+
+// UpdateApiKeyJSONRequestBody defines body for UpdateApiKey for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateApiKeyJSONRequestBody = ApiKeyUpdateDto
 
 // DeleteAssetsJSONRequestBody defines body for DeleteAssets for application/json ContentType.
 type DeleteAssetsJSONRequestBody = AssetBulkDeleteDto
@@ -1992,6 +2304,11 @@ type UntagAssetsJSONRequestBody = BulkIdsDto
 
 // TagAssetsJSONRequestBody defines body for TagAssets for application/json ContentType.
 type TagAssetsJSONRequestBody = BulkIdsDto
+
+// UpdateMyPreferencesJSONRequestBody defines body for UpdateMyPreferences for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateMyPreferencesJSONRequestBody = UserPreferencesUpdateDto
 
 // CreateWorkflowJSONRequestBody defines body for CreateWorkflow for application/json ContentType.
 type CreateWorkflowJSONRequestBody = WorkflowCreateDto
@@ -2075,6 +2392,49 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 
+	// GetAllAlbums List all albums
+	//
+	// Retrieve a list of albums available to the authenticated user.
+	//
+	// Corresponds with GET /albums (the `GetAllAlbums` operationId).
+	GetAllAlbums(ctx context.Context, params *GetAllAlbumsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAlbumWithBody Create an album
+	//
+	// Create a new album. The album can also be created with initial users and assets.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /albums (the `CreateAlbum` operationId).
+	CreateAlbumWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAlbum Create an album
+	//
+	// Create a new album. The album can also be created with initial users and assets.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /albums (the `CreateAlbum` operationId).
+	CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddAssetsToAlbumWithBody Add assets to an album
+	//
+	// Add multiple assets to a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+	AddAssetsToAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddAssetsToAlbum Add assets to an album
+	//
+	// Add multiple assets to a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+	AddAssetsToAlbum(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetApiKeys List all API keys
 	//
 	// Retrieve all API keys of the current user.
@@ -2113,6 +2473,35 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 	DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiKey Retrieve an API key
+	//
+	// Retrieve an API key by its ID. The current user must own this API key.
+	//
+	// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+	GetApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateApiKeyWithBody Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateApiKey Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKey(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteAssetsWithBody Delete assets
 	//
@@ -2248,6 +2637,35 @@ type ClientInterface interface {
 	// Corresponds with GET /users/me (the `GetMyUser` operationId).
 	GetMyUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMyPreferences Get my preferences
+	//
+	// Retrieve the preferences for the current user.
+	//
+	// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+	GetMyPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMyPreferencesWithBody Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMyPreferences Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferences(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SearchWorkflows List all workflows
 	//
 	// Retrieve a list of workflows available to the authenticated user.
@@ -2308,6 +2726,99 @@ type ClientInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetAllAlbums List all albums
+//
+// Retrieve a list of albums available to the authenticated user.
+//
+// Corresponds with GET /albums (the `GetAllAlbums` operationId).
+func (c *Client) GetAllAlbums(ctx context.Context, params *GetAllAlbumsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAllAlbumsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAlbumWithBody Create an album
+//
+// Create a new album. The album can also be created with initial users and assets.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /albums (the `CreateAlbum` operationId).
+func (c *Client) CreateAlbumWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlbumRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAlbum Create an album
+//
+// Create a new album. The album can also be created with initial users and assets.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /albums (the `CreateAlbum` operationId).
+func (c *Client) CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlbumRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddAssetsToAlbumWithBody Add assets to an album
+//
+// Add multiple assets to a specific album by its ID.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+func (c *Client) AddAssetsToAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddAssetsToAlbumRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddAssetsToAlbum Add assets to an album
+//
+// Add multiple assets to a specific album by its ID.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+func (c *Client) AddAssetsToAlbum(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddAssetsToAlbumRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 // GetApiKeys List all API keys
@@ -2389,6 +2900,63 @@ func (c *Client) GetMyApiKey(ctx context.Context, reqEditors ...RequestEditorFn)
 // Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 func (c *Client) DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiKey Retrieve an API key
+//
+// Retrieve an API key by its ID. The current user must own this API key.
+//
+// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+func (c *Client) GetApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApiKeyWithBody Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateApiKeyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApiKeyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApiKey Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateApiKey(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApiKeyRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2693,6 +3261,63 @@ func (c *Client) GetMyUser(ctx context.Context, reqEditors ...RequestEditorFn) (
 	return c.Client.Do(req)
 }
 
+// GetMyPreferences Get my preferences
+//
+// Retrieve the preferences for the current user.
+//
+// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+func (c *Client) GetMyPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMyPreferencesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateMyPreferencesWithBody Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateMyPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMyPreferencesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateMyPreferences Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateMyPreferences(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMyPreferencesRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SearchWorkflows List all workflows
 //
 // Retrieve a list of workflows available to the authenticated user.
@@ -2822,6 +3447,195 @@ func (c *Client) UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body
 	return c.Client.Do(req)
 }
 
+// NewGetAllAlbumsRequest constructs an http.Request for the GetAllAlbums method
+func NewGetAllAlbumsRequest(server string, params *GetAllAlbumsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.AssetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "assetId", *params.AssetId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Id != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "id", *params.Id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsOwned != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isOwned", *params.IsOwned, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsShared != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isShared", *params.IsShared, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Name != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "name", *params.Name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateAlbumRequest calls the generic CreateAlbum builder with application/json body
+func NewCreateAlbumRequest(server string, body CreateAlbumJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateAlbumRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateAlbumRequestWithBody constructs an http.Request for the CreateAlbum method, with any body, and a specified content type
+func NewCreateAlbumRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAddAssetsToAlbumRequest calls the generic AddAssetsToAlbum builder with application/json body
+func NewAddAssetsToAlbumRequest(server string, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddAssetsToAlbumRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAddAssetsToAlbumRequestWithBody constructs an http.Request for the AddAssetsToAlbum method, with any body, and a specified content type
+func NewAddAssetsToAlbumRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s/assets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetApiKeysRequest constructs an http.Request for the GetApiKeys method
 func NewGetApiKeysRequest(server string) (*http.Request, error) {
 	var err error
@@ -2946,6 +3760,87 @@ func NewDeleteApiKeyRequest(server string, id openapi_types.UUID) (*http.Request
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetApiKeyRequest constructs an http.Request for the GetApiKey method
+func NewGetApiKeyRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateApiKeyRequest calls the generic UpdateApiKey builder with application/json body
+func NewUpdateApiKeyRequest(server string, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateApiKeyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateApiKeyRequestWithBody constructs an http.Request for the UpdateApiKey method, with any body, and a specified content type
+func NewUpdateApiKeyRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3525,6 +4420,73 @@ func NewGetMyUserRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetMyPreferencesRequest constructs an http.Request for the GetMyPreferences method
+func NewGetMyPreferencesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users/me/preferences")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMyPreferencesRequest calls the generic UpdateMyPreferences builder with application/json body
+func NewUpdateMyPreferencesRequest(server string, body UpdateMyPreferencesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMyPreferencesRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateMyPreferencesRequestWithBody constructs an http.Request for the UpdateMyPreferences method, with any body, and a specified content type
+func NewUpdateMyPreferencesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users/me/preferences")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSearchWorkflowsRequest constructs an http.Request for the SearchWorkflows method
 func NewSearchWorkflowsRequest(server string, params *SearchWorkflowsParams) (*http.Request, error) {
 	var err error
@@ -3831,6 +4793,51 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 
+	// GetAllAlbumsWithResponse List all albums
+	//
+	// Retrieve a list of albums available to the authenticated user.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /albums (the `GetAllAlbums` operationId).
+	GetAllAlbumsWithResponse(ctx context.Context, params *GetAllAlbumsParams, reqEditors ...RequestEditorFn) (*GetAllAlbumsResponse, error)
+
+	// CreateAlbumWithBodyWithResponse Create an album
+	//
+	// Create a new album. The album can also be created with initial users and assets.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /albums (the `CreateAlbum` operationId).
+	CreateAlbumWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error)
+
+	// CreateAlbumWithResponse Create an album
+	//
+	// Create a new album. The album can also be created with initial users and assets.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /albums (the `CreateAlbum` operationId).
+	CreateAlbumWithResponse(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error)
+
+	// AddAssetsToAlbumWithBodyWithResponse Add assets to an album
+	//
+	// Add multiple assets to a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+	AddAssetsToAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddAssetsToAlbumResponse, error)
+
+	// AddAssetsToAlbumWithResponse Add assets to an album
+	//
+	// Add multiple assets to a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+	AddAssetsToAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*AddAssetsToAlbumResponse, error)
+
 	// GetApiKeysWithResponse List all API keys
 	//
 	// Retrieve all API keys of the current user.
@@ -3875,6 +4882,37 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 	DeleteApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiKeyResponse, error)
+
+	// GetApiKeyWithResponse Retrieve an API key
+	//
+	// Retrieve an API key by its ID. The current user must own this API key.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+	GetApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiKeyResponse, error)
+
+	// UpdateApiKeyWithBodyWithResponse Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error)
+
+	// UpdateApiKeyWithResponse Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error)
 
 	// DeleteAssetsWithBodyWithResponse Delete assets
 	//
@@ -4020,6 +5058,37 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /users/me (the `GetMyUser` operationId).
 	GetMyUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyUserResponse, error)
 
+	// GetMyPreferencesWithResponse Get my preferences
+	//
+	// Retrieve the preferences for the current user.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+	GetMyPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyPreferencesResponse, error)
+
+	// UpdateMyPreferencesWithBodyWithResponse Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error)
+
+	// UpdateMyPreferencesWithResponse Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithResponse(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error)
+
 	// SearchWorkflowsWithResponse List all workflows
 	//
 	// Retrieve a list of workflows available to the authenticated user.
@@ -4086,6 +5155,129 @@ type ClientWithResponsesInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error)
+}
+
+type GetAllAlbumsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]AlbumResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAllAlbumsResponse) GetJSON200() *[]AlbumResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAllAlbumsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAllAlbumsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAllAlbumsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAllAlbumsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *AlbumResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateAlbumResponse) GetJSON201() *AlbumResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AddAssetsToAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]BulkIdResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AddAssetsToAlbumResponse) GetJSON200() *[]BulkIdResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AddAssetsToAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AddAssetsToAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddAssetsToAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AddAssetsToAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type GetApiKeysResponse struct {
@@ -4239,6 +5431,88 @@ func (r DeleteApiKeyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DeleteApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiKeyResponse) GetJSON200() *ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateApiKeyResponse) GetJSON200() *ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateApiKeyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -4689,6 +5963,88 @@ func (r GetMyUserResponse) ContentType() string {
 	return ""
 }
 
+type GetMyPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserPreferencesResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetMyPreferencesResponse) GetJSON200() *UserPreferencesResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetMyPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMyPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMyPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetMyPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateMyPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserPreferencesResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateMyPreferencesResponse) GetJSON200() *UserPreferencesResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateMyPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMyPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMyPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateMyPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SearchWorkflowsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4887,6 +6243,81 @@ func (r UpdateWorkflowResponse) ContentType() string {
 	return ""
 }
 
+// GetAllAlbumsWithResponse List all albums
+//
+// Retrieve a list of albums available to the authenticated user.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /albums (the `GetAllAlbums` operationId).
+func (c *ClientWithResponses) GetAllAlbumsWithResponse(ctx context.Context, params *GetAllAlbumsParams, reqEditors ...RequestEditorFn) (*GetAllAlbumsResponse, error) {
+	rsp, err := c.GetAllAlbums(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAllAlbumsResponse(rsp)
+}
+
+// CreateAlbumWithBodyWithResponse Create an album
+//
+// Create a new album. The album can also be created with initial users and assets.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /albums (the `CreateAlbum` operationId).
+func (c *ClientWithResponses) CreateAlbumWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error) {
+	rsp, err := c.CreateAlbumWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlbumResponse(rsp)
+}
+
+// CreateAlbumWithResponse Create an album
+//
+// Create a new album. The album can also be created with initial users and assets.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /albums (the `CreateAlbum` operationId).
+func (c *ClientWithResponses) CreateAlbumWithResponse(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error) {
+	rsp, err := c.CreateAlbum(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlbumResponse(rsp)
+}
+
+// AddAssetsToAlbumWithBodyWithResponse Add assets to an album
+//
+// Add multiple assets to a specific album by its ID.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+func (c *ClientWithResponses) AddAssetsToAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddAssetsToAlbumResponse, error) {
+	rsp, err := c.AddAssetsToAlbumWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddAssetsToAlbumResponse(rsp)
+}
+
+// AddAssetsToAlbumWithResponse Add assets to an album
+//
+// Add multiple assets to a specific album by its ID.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
+func (c *ClientWithResponses) AddAssetsToAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*AddAssetsToAlbumResponse, error) {
+	rsp, err := c.AddAssetsToAlbum(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddAssetsToAlbumResponse(rsp)
+}
+
 // GetApiKeysWithResponse List all API keys
 //
 // Retrieve all API keys of the current user.
@@ -4960,6 +6391,54 @@ func (c *ClientWithResponses) DeleteApiKeyWithResponse(ctx context.Context, id o
 		return nil, err
 	}
 	return ParseDeleteApiKeyResponse(rsp)
+}
+
+// GetApiKeyWithResponse Retrieve an API key
+//
+// Retrieve an API key by its ID. The current user must own this API key.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+func (c *ClientWithResponses) GetApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiKeyResponse, error) {
+	rsp, err := c.GetApiKey(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiKeyResponse(rsp)
+}
+
+// UpdateApiKeyWithBodyWithResponse Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateApiKeyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error) {
+	rsp, err := c.UpdateApiKeyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApiKeyResponse(rsp)
+}
+
+// UpdateApiKeyWithResponse Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error) {
+	rsp, err := c.UpdateApiKey(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApiKeyResponse(rsp)
 }
 
 // DeleteAssetsWithBodyWithResponse Delete assets
@@ -5202,6 +6681,54 @@ func (c *ClientWithResponses) GetMyUserWithResponse(ctx context.Context, reqEdit
 	return ParseGetMyUserResponse(rsp)
 }
 
+// GetMyPreferencesWithResponse Get my preferences
+//
+// Retrieve the preferences for the current user.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+func (c *ClientWithResponses) GetMyPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyPreferencesResponse, error) {
+	rsp, err := c.GetMyPreferences(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMyPreferencesResponse(rsp)
+}
+
+// UpdateMyPreferencesWithBodyWithResponse Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateMyPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error) {
+	rsp, err := c.UpdateMyPreferencesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMyPreferencesResponse(rsp)
+}
+
+// UpdateMyPreferencesWithResponse Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateMyPreferencesWithResponse(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error) {
+	rsp, err := c.UpdateMyPreferences(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMyPreferencesResponse(rsp)
+}
+
 // SearchWorkflowsWithResponse List all workflows
 //
 // Retrieve a list of workflows available to the authenticated user.
@@ -5310,6 +6837,84 @@ func (c *ClientWithResponses) UpdateWorkflowWithResponse(ctx context.Context, id
 	return ParseUpdateWorkflowResponse(rsp)
 }
 
+// ParseGetAllAlbumsResponse parses an HTTP response from a GetAllAlbumsWithResponse call
+func ParseGetAllAlbumsResponse(rsp *http.Response) (*GetAllAlbumsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAllAlbumsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AlbumResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateAlbumResponse parses an HTTP response from a CreateAlbumWithResponse call
+func ParseCreateAlbumResponse(rsp *http.Response) (*CreateAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AlbumResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAddAssetsToAlbumResponse parses an HTTP response from a AddAssetsToAlbumWithResponse call
+func ParseAddAssetsToAlbumResponse(rsp *http.Response) (*AddAssetsToAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddAssetsToAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []BulkIdResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetApiKeysResponse parses an HTTP response from a GetApiKeysWithResponse call
 func ParseGetApiKeysResponse(rsp *http.Response) (*GetApiKeysResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5399,6 +7004,58 @@ func ParseDeleteApiKeyResponse(rsp *http.Response) (*DeleteApiKeyResponse, error
 	response := &DeleteApiKeyResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiKeyResponse parses an HTTP response from a GetApiKeyWithResponse call
+func ParseGetApiKeyResponse(rsp *http.Response) (*GetApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateApiKeyResponse parses an HTTP response from a UpdateApiKeyWithResponse call
+func ParseUpdateApiKeyResponse(rsp *http.Response) (*UpdateApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -5667,6 +7324,58 @@ func ParseGetMyUserResponse(rsp *http.Response) (*GetMyUserResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest UserAdminResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMyPreferencesResponse parses an HTTP response from a GetMyPreferencesWithResponse call
+func ParseGetMyPreferencesResponse(rsp *http.Response) (*GetMyPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMyPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserPreferencesResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMyPreferencesResponse parses an HTTP response from a UpdateMyPreferencesWithResponse call
+func ParseUpdateMyPreferencesResponse(rsp *http.Response) (*UpdateMyPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMyPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserPreferencesResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

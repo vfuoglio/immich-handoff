@@ -19,6 +19,11 @@ var SenderPermissionsCopy = perms("user.read", "tag.read", "tag.create", "tag.as
 // ReceiverPermissions is everything a receiver's key needs.
 var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload")
 
+// ReceiverPermissionsAlbum is what a receiver's key needs when handed-over photos are also put in an album:
+// ReceiverPermissions plus finding, creating and adding to albums. It cannot change or delete an album.
+var ReceiverPermissionsAlbum = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload",
+	"album.read", "album.create", "albumAsset.create")
+
 func perms(names ...string) []Permission {
 	out := make([]Permission, len(names))
 	for i, n := range names {

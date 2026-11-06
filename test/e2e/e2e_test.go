@@ -234,10 +234,20 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 		}
 	}
 	apply(ids)
-	// Immich itself occasionally drops a tag applied right after an upload (seen with no handoff app
-	// running at all), so, like a person would, make sure it stuck and add it again if it was lost.
-	// "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already
-	// handled carries a marker tag or is trashed, and must not have the tag put back on it.
+	keepTagged(t, u, ids, apply)
+}
+
+// keepTagged makes sure a tag that was just applied stuck, and applies it again when it did not.
+//
+// Immich itself occasionally drops a tag applied right after an upload (about 1 in 50, seen with no
+// handoff app running at all; see docs/immich-api-notes.md). A person would notice and tag again, so the
+// test helpers do the same, and the tests then measure this app and not that behaviour of Immich.
+//
+// "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already handled
+// carries a marker tag or is trashed, and must not have the tag put back on it. Both tagging helpers use
+// this, so a different way of tagging cannot reintroduce the flake.
+func keepTagged(t *testing.T, u user, ids []string, apply func(ids []string)) {
+	t.Helper()
 	for attempt := 0; attempt < 6; attempt++ {
 		time.Sleep(700 * time.Millisecond)
 		var missing []string
@@ -250,6 +260,7 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 		if len(missing) == 0 {
 			return
 		}
+		t.Logf("tag was dropped by Immich on %d photo(s); applying it again (attempt %d)", len(missing), attempt+1)
 		apply(missing)
 	}
 }
@@ -260,13 +271,17 @@ func tagLikeThePhone(t *testing.T, u user, tag string, ids ...string) {
 	t.Helper()
 	var tags []struct{ ID string }
 	mustOK(t, call(t, "PUT", "/tags", keyAuth(u), map[string]any{"tags": []string{tag}}, &tags), "upsert tag")
-	var out struct {
-		Count int `json:"count"`
+	apply := func(ids []string) {
+		var out struct {
+			Count int `json:"count"`
+		}
+		mustOK(t, call(t, "PUT", "/tags/assets", keyAuth(u), map[string]any{"assetIds": ids, "tagIds": []string{tags[0].ID}}, &out), "bulk tag")
+		if out.Count != len(ids) {
+			t.Fatalf("bulk tagging reported %d of %d", out.Count, len(ids))
+		}
 	}
-	mustOK(t, call(t, "PUT", "/tags/assets", keyAuth(u), map[string]any{"assetIds": ids, "tagIds": []string{tags[0].ID}}, &out), "bulk tag")
-	if out.Count != len(ids) {
-		t.Fatalf("bulk tagging reported %d of %d", out.Count, len(ids))
-	}
+	apply(ids)
+	keepTagged(t, u, ids, apply)
 }
 
 // search returns the ids of assets with a tag, optionally including trashed ones.
@@ -438,6 +453,58 @@ func TestEndToEnd(t *testing.T) {
 
 	imgA := jpegBytes(1)
 	var aliceOrig string
+
+	t.Run("a person with Tags off is offered the switch, and it works through a real Immich session", func(t *testing.T) {
+		cookie := loginCookie(t, "admin@e2e.test") // the setup switches Tags on for the other users, not for the admin
+		page := func() string {
+			req, _ := http.NewRequest("GET", "http://localhost:"+appPort+"/", nil)
+			req.Header.Set("Cookie", cookie)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return string(b)
+		}
+		if before := page(); !strings.Contains(before, "Tags are switched off") || !strings.Contains(before, "inert") {
+			t.Fatal("a person with Tags off must be told, offered the switch, and have the rest of the page switched off")
+		}
+		if res := post(t, appPort, "/preferences/tags", cookie, nil); res.StatusCode != 200 {
+			t.Fatalf("switching Tags on: status %d", res.StatusCode)
+		}
+		if after := page(); strings.Contains(after, "Tags are switched off") || strings.Contains(after, "inert") {
+			t.Error("the notice and the lock must go once Tags are on")
+		}
+		var prefs struct {
+			Tags struct{ Enabled, SidebarWeb bool } `json:"tags"`
+		}
+		req, _ := http.NewRequest("GET", baseURL+"/api/users/me/preferences", nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		json.NewDecoder(res.Body).Decode(&prefs)
+		if !prefs.Tags.Enabled || !prefs.Tags.SidebarWeb {
+			t.Errorf("Immich must now have Tags on and in the sidebar, has %+v", prefs.Tags)
+		}
+	})
+
+	t.Run("the built-in health check passes against the running app and fails when it is not there", func(t *testing.T) {
+		run := func(addr string) error {
+			cmd := exec.Command(bin, "--healthcheck")
+			cmd.Env = append(os.Environ(), "LISTEN_ADDR="+addr)
+			return cmd.Run()
+		}
+		if err := run(":" + appPort); err != nil {
+			t.Errorf("--healthcheck against the running app: %v", err)
+		}
+		if err := run(":" + fmt.Sprint(atoi(appPort)+5000)); err == nil {
+			t.Error("--healthcheck must fail when nothing listens")
+		}
+	})
 
 	t.Run("tagging share imports via webhook, tags inbox, trashes the original", func(t *testing.T) {
 		aliceOrig, _ = upload(t, alice, "alice-1.jpg", imgA)
@@ -616,6 +683,284 @@ func TestEndToEnd(t *testing.T) {
 	})
 }
 
+// TestAlbum runs fixed services that put arrivals in an album: a receiver whose key may use albums, and one
+// whose key may not (the photos must still arrive, tagged inbox).
+func TestAlbum(t *testing.T) {
+	alice, _, family, grandma := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 7)
+
+	// a receiver key with exactly the album permissions the app asks people for
+	var withAlbum struct {
+		Secret string `json:"secret"`
+	}
+	albumPerms := append(append([]string{}, destPermissions...), "album.read", "album.create", "albumAsset.create")
+	mustOK(t, call(t, "POST", "/api-keys", map[string]string{"Authorization": "Bearer " + family.token},
+		map[string]any{"name": "e2e-album-" + fmt.Sprint(time.Now().UnixNano()), "permissions": albumPerms}, &withAlbum), "album key")
+
+	routes := filepath.Join(t.TempDir(), "routes.yaml")
+	if err := os.WriteFile(routes, []byte(`
+accounts:
+  alice:   { key: ${E2E_ALICE} }
+  family:  { key: ${E2E_FAMILY} }
+  grandma: { key: ${E2E_GRANDMA} }
+services:
+  - name: filed
+    tag: for-album
+    senders: [alice]
+    receivers: [family]
+    album: Arrivals
+  - name: nopermission
+    tag: for-noperm
+    senders: [alice]
+    receivers: [grandma]
+    album: Nope
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(),
+		"IMMICH_BASE_URL="+baseURL, "ROUTES_FILE="+routes,
+		"E2E_ALICE="+alice.appKey, "E2E_FAMILY="+withAlbum.Secret, "E2E_GRANDMA="+grandma.appKey, // grandma's key has no album permissions
+		"WEBHOOK_SECRET="+secret,
+		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+port+"/webhook/immich",
+		"LISTEN_ADDR=:"+port, "SWEEP_INTERVAL_HOURS=1",
+	)
+	var logs bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &logs, &logs
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+		if t.Failed() {
+			t.Logf("app log:\n%s", logs.String())
+		}
+	})
+	eventually(t, "both workflows exist in alice's account", 4*time.Minute, func() bool {
+		var wfs []struct {
+			Name    string `json:"name"`
+			Enabled bool   `json:"enabled"`
+		}
+		call(t, "GET", "/workflows", keyAuth(alice), nil, &wfs)
+		n := 0
+		for _, w := range wfs {
+			if (w.Name == "immich-handoff: filed" || w.Name == "immich-handoff: nopermission") && w.Enabled {
+				n++
+			}
+		}
+		return n == 2
+	})
+
+	type album struct {
+		ID         string `json:"id"`
+		AlbumName  string `json:"albumName"`
+		AssetCount int    `json:"assetCount"`
+	}
+	owned := func(u user, name string) []album {
+		var out []album
+		call(t, "GET", "/albums?isOwned=true&name="+url.QueryEscape(name), keyAuth(u), nil, &out)
+		return out
+	}
+	send := func(who user, tag, file string, seed int) {
+		id, _ := upload(t, who, file, jpegBytes(seed))
+		tagAsset(t, who, tag, id)
+	}
+
+	t.Run("a photo is put in a new album, and is not tagged inbox", func(t *testing.T) {
+		inboxBefore := len(searchTag(t, family, "inbox", false))
+		send(alice, "for-album", "album-1.jpg", 200)
+		eventually(t, "the album exists with the photo in it", 90*time.Second, func() bool {
+			al := owned(family, "Arrivals")
+			return len(al) == 1 && al[0].AssetCount == 1
+		})
+		if got := len(searchTag(t, family, "inbox", false)); got != inboxBefore {
+			t.Errorf("a photo that is in the album must not also be tagged inbox: %d -> %d", inboxBefore, got)
+		}
+	})
+
+	t.Run("the next photo goes to the same album, not a second one", func(t *testing.T) {
+		send(alice, "for-album", "album-2.jpg", 201)
+		eventually(t, "two photos in the one album", 90*time.Second, func() bool {
+			al := owned(family, "Arrivals")
+			return len(al) == 1 && al[0].AssetCount == 2
+		})
+	})
+
+	t.Run("an album the receiver deleted comes back at the next arrival", func(t *testing.T) {
+		al := owned(family, "Arrivals")
+		if len(al) != 1 {
+			t.Fatalf("albums: %+v", al)
+		}
+		mustOK(t, call(t, "DELETE", "/albums/"+al[0].ID, keyAuth(family), nil, nil), "delete album")
+		send(alice, "for-album", "album-3.jpg", 202)
+		eventually(t, "a new album holding the new photo", 90*time.Second, func() bool {
+			now := owned(family, "Arrivals")
+			return len(now) == 1 && now[0].ID != al[0].ID && now[0].AssetCount == 1
+		})
+	})
+
+	t.Run("when the key may not use albums the photo still arrives, tagged inbox", func(t *testing.T) {
+		before := len(searchTag(t, grandma, "inbox", false))
+		send(alice, "for-noperm", "album-4.jpg", 203)
+		eventually(t, "the copy is tagged inbox in grandma's account", 90*time.Second, func() bool {
+			return len(searchTag(t, grandma, "inbox", false)) == before+1
+		})
+		if len(owned(grandma, "Nope")) != 0 {
+			t.Error("no album could have been made with that key")
+		}
+		eventually(t, "the problem is in the log, once", 30*time.Second, func() bool {
+			return strings.Contains(logs.String(), "could not put the copy in the album")
+		})
+	})
+}
+
+// TestAlbumWatch links a sender's album to a service from the page: everything in it, now and later, is handed
+// over without a tag, once.
+func TestAlbumWatch(t *testing.T) {
+	_, bob, family, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 8)
+	dir := t.TempDir()
+	routes := filepath.Join(dir, "routes.yaml")
+	if err := os.WriteFile(routes, []byte(`
+accounts:
+  family: { key: ${E2E_FAMILY} }
+services:
+  - name: watch
+    tag: join-watch
+    receivers: [family]
+    allow_join: true
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin)
+	cmd.Env = append(os.Environ(),
+		"IMMICH_BASE_URL="+baseURL, "ROUTES_FILE="+routes, "E2E_FAMILY="+family.appKey,
+		"WEBHOOK_SECRET="+secret, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+dir,
+		"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+port+"/webhook/immich", "LISTEN_ADDR=:"+port,
+		"SWEEP_INTERVAL_HOURS=1", "ALBUM_CHECK_MINUTES=0.05") // look at linked albums every few seconds
+	var logs bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &logs, &logs
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Signal(os.Interrupt)
+		cmd.Wait()
+		if t.Failed() {
+			t.Logf("app log:\n%s", logs.String())
+		}
+	})
+	eventually(t, "app healthy", 30*time.Second, func() bool {
+		res, err := http.Get("http://localhost:" + port + "/healthz")
+		if err != nil {
+			return false
+		}
+		res.Body.Close()
+		return res.StatusCode == 200
+	})
+
+	cookie := loginCookie(t, "bob@e2e.test")
+	if res := post(t, port, "/join", cookie, url.Values{"service": {"watch"}, "mode": {"copy"}}); res.StatusCode != 204 {
+		t.Fatalf("join: HTTP %d", res.StatusCode)
+	}
+	var album struct {
+		ID string `json:"id"`
+	}
+	mustOK(t, call(t, "POST", "/albums", keyAuth(bob), map[string]any{"albumName": "To send"}, &album), "create album")
+	page := func(path string) string {
+		req, _ := http.NewRequest("GET", "http://localhost:"+port+path, nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	inbox := func() int { return len(searchTag(t, family, "inbox", false)) }
+	addToAlbum := func(name string, seed int) string {
+		id, _ := upload(t, bob, name, jpegBytes(seed))
+		mustOK(t, call(t, "PUT", "/albums/"+album.ID+"/assets", keyAuth(bob), map[string]any{"ids": []string{id}}, nil), "add to album")
+		return id
+	}
+	before := inbox()
+
+	t.Run("the page offers bob's albums, and linking one gives the key album.read", func(t *testing.T) {
+		if body := page("/fragments/albums?service=watch"); !strings.Contains(body, "To send") {
+			t.Fatalf("the album list: %.300s", body)
+		}
+		if res := post(t, port, "/services/album", cookie, url.Values{"service": {"watch"}, "album": {album.ID}}); res.StatusCode != 204 {
+			t.Fatalf("link: HTTP %d", res.StatusCode)
+		}
+		var keys []struct {
+			Name        string   `json:"name"`
+			Permissions []string `json:"permissions"`
+		}
+		call(t, "GET", "/api-keys", keyAuth(bob), nil, &keys)
+		ok := false
+		for _, k := range keys {
+			if k.Name == "handoff: watch" {
+				for _, p := range k.Permissions {
+					ok = ok || p == "album.read"
+				}
+			}
+		}
+		if !ok {
+			t.Errorf("the key must now be allowed to read albums: %+v", keys)
+		}
+		if body := page("/"); !strings.Contains(body, "Everything in your album") || !strings.Contains(body, "To send") {
+			t.Errorf("the card must say which album is linked: %.300s", body)
+		}
+	})
+
+	t.Run("a photo put in the album is handed over without a tag, and the original is kept and marked", func(t *testing.T) {
+		id := addToAlbum("watch-1.jpg", 210)
+		eventually(t, "the receiver has the copy", 90*time.Second, func() bool { return inbox() == before+1 })
+		eventually(t, "the original is marked as handed over", 30*time.Second, func() bool {
+			x, code := getAsset(t, bob, id)
+			if code != 200 || x.IsTrashed {
+				return false
+			}
+			for _, tg := range x.Tags {
+				if tg.Name == "handed-over" {
+					return true
+				}
+			}
+			return false
+		})
+	})
+
+	t.Run("it is not handed over again at the next checks", func(t *testing.T) {
+		time.Sleep(10 * time.Second) // several checks
+		if got := inbox(); got != before+1 {
+			t.Errorf("the receiver must still have exactly one copy: %d -> %d", before, got)
+		}
+	})
+
+	t.Run("a photo added later is handed over too, and the page reports it", func(t *testing.T) {
+		addToAlbum("watch-2.jpg", 211)
+		eventually(t, "the second copy", 90*time.Second, func() bool { return inbox() == before+2 })
+		eventually(t, "a line in recent events", 30*time.Second, func() bool {
+			return strings.Contains(page("/"), "from the album To send handed over to watch")
+		})
+	})
+
+	t.Run("after unlinking, new photos in the album stay where they are", func(t *testing.T) {
+		if res := post(t, port, "/services/album/stop", cookie, url.Values{"service": {"watch"}}); res.StatusCode != 204 {
+			t.Fatalf("unlink: HTTP %d", res.StatusCode)
+		}
+		addToAlbum("watch-3.jpg", 212)
+		time.Sleep(10 * time.Second)
+		if got := inbox(); got != before+2 {
+			t.Errorf("nothing may be handed over after unlinking: %d", got-before)
+		}
+	})
+}
+
 // TestRoutes runs a routes file with a one-to-many service: one tag, two receivers.
 func TestRoutes(t *testing.T) {
 	alice, _, family, grandma := bootstrap(t)
@@ -676,11 +1021,12 @@ services:
 	})
 
 	familyBefore := len(searchTag(t, family, "inbox", false))
+	grandmaBefore := len(searchTag(t, grandma, "inbox", false)) // other tests may have left copies there
 	id, _ := upload(t, alice, "to-both.jpg", jpegBytes(70))
 	tagAsset(t, alice, "for-grandma", id)
 
 	eventually(t, "both receivers hold a tagged copy", 90*time.Second, func() bool {
-		return len(searchTag(t, grandma, "inbox", false)) == 1 && len(searchTag(t, family, "inbox", false)) == familyBefore+1
+		return len(searchTag(t, grandma, "inbox", false)) == grandmaBefore+1 && len(searchTag(t, family, "inbox", false)) == familyBefore+1
 	})
 	eventually(t, "original removed from alice only after both copies exist", 30*time.Second, func() bool {
 		x, code := getAsset(t, alice, id)

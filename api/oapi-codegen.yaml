@@ -28,3 +28,10 @@ output-options:
     - deleteApiKey
     - getMyApiKey
     - getApiKeys
+    - getMyPreferences
+    - updateMyPreferences
+    - getAllAlbums
+    - createAlbum
+    - addAssetsToAlbum
+    - getApiKey
+    - updateApiKey

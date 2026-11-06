@@ -223,3 +223,70 @@ func TestMigrationKeepsExistingMembersBehaviour(t *testing.T) {
 		t.Errorf("existing members must keep their behaviour: %v", got)
 	}
 }
+
+func TestAServicesAlbumSurvivesARestart(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	s, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := uuid.New()
+	for _, v := range []Service{
+		{Name: "filed", Tag: "t1", InboxTag: "i1", Refused: "r", ExpiryDays: 30, OwnerID: owner, KeyID: uuid.New(), Key: "k1", Policy: PolicyOpen, Album: "Holiday 2026"},
+		{Name: "plain", Tag: "t2", InboxTag: "i2", Refused: "r", ExpiryDays: 30, OwnerID: owner, KeyID: uuid.New(), Key: "k2", Policy: PolicyOpen},
+	} {
+		if _, err := s.AddService(ctx, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+	s2, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	got, err := s2.Services(ctx)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("services: %v %v", got, err)
+	}
+	for _, v := range got {
+		want := map[string]string{"filed": "Holiday 2026", "plain": ""}[v.Name]
+		if v.Album != want {
+			t.Errorf("%s: album %q, want %q", v.Name, v.Album, want)
+		}
+	}
+}
+
+func TestALinkedAlbumIsStoredChangedAndCleared(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	s, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, album := uuid.New(), uuid.New()
+	l, err := s.AddLink(ctx, Link{Service: "holiday", Role: RoleSender, ImmichUserID: user, Name: "Bob", Email: "b@x", KeyID: uuid.New(), Key: "k"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetLinkAlbum(ctx, l.ID, album, "To send"); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s2, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	if links, _ := s2.Links(ctx); len(links) != 1 || links[0].AlbumID != album || links[0].AlbumName != "To send" {
+		t.Fatalf("the album must survive a restart: %+v", links)
+	}
+	if err := s2.SetLinkAlbum(ctx, l.ID, uuid.Nil, "ignored"); err != nil {
+		t.Fatal(err)
+	}
+	if links, _ := s2.Links(ctx); links[0].AlbumID != uuid.Nil || links[0].AlbumName != "" {
+		t.Errorf("unlinking clears both fields: %+v", links)
+	}
+	if err := s2.SetLinkAlbum(ctx, "no-such-link", album, "x"); err != ErrNotFound {
+		t.Errorf("a missing membership: %v", err)
+	}
+}

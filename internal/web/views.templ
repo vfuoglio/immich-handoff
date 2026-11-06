@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -16,6 +17,9 @@ type ServiceView struct {
 	CanLeave bool   // the person joined from this page, so can leave from it
 	Paused   string // why the service cannot work right now, if so
 	Copy     bool   // the signed-in sender chose to keep their originals (otherwise they are moved to their trash)
+	Album    string // receiver: the album arrivals are put in, if the service has one
+	CanWatch bool   // sender: joined from this page, so may link an album
+	Watch    string // sender: the album linked to this service, whose photos are all handed over
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -37,6 +41,7 @@ type OwnedView struct {
 	Name, Tag, Policy string
 	Invite            string // invitation token; empty when the service is listed for everyone
 	Broken            string // why the receiver key stopped working, if it did
+	Album             string // the album arrivals are put in, if the service has one
 	Requests          []RequestView
 	Members           []MemberView
 }
@@ -68,6 +73,7 @@ type DashboardData struct {
 	Orphaned []string   // services the person joined that their owner has since removed
 	Broken   []BrokenView
 	Activity []ActivityView
+	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
 	Last     *syncer.RunInfo
 }
@@ -92,7 +98,7 @@ templ Layout(title, user string) {
 			<div class="wrap">
 				<header class="bar">
 					<div class="brand">
-						<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"></rect><path d="M8 17h13l-4-4M24 15H11l4 4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						Immich Handoff
 					</div>
 					if user != "" {
@@ -112,9 +118,22 @@ templ Layout(title, user string) {
 	</html>
 }
 
+// TagsNotice offers to switch Tags on, which Immich has off by default and which everyone taking part needs.
+templ TagsNotice() {
+	<div class="card notice" id="tags-notice">
+		<h3>Tags are switched off in your Immich account</h3>
+		<p class="meta">Tags are how photos are handed over, and how you find what arrived. While they are off you cannot add tags in Immich or see them, so the rest of this page is switched off until you turn them on. Turning them on changes one setting in your Immich account, the same as Account Settings, Features, Tags.</p>
+		<p class="row"><button class="primary" hx-post="preferences/tags" hx-target="#tags-notice" hx-swap="innerHTML" hx-disabled-elt="this">Turn on Tags</button></p>
+	</div>
+}
+
 templ Dashboard(d DashboardData) {
 	@Layout("Immich Handoff", d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		if d.TagsOff {
+			@TagsNotice()
+		}
+		<div id="gated" { gate(d.TagsOff)... }>
 		if d.Invited != nil {
 			<h2>You are invited</h2>
 			@OfferCard(*d.Invited)
@@ -169,6 +188,50 @@ templ Dashboard(d DashboardData) {
 				<span id="synctoast" class="toast" aria-live="polite"></span>
 			</p>
 		}
+		</div>
+	}
+}
+
+// WatchBox is where a sender links one of their albums to a service, so everything in it is handed over.
+templ WatchBox(s ServiceView) {
+	<div class="watch">
+		if s.Watch != "" {
+			<p class="meta">Everything in your album <strong>{ s.Watch }</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.</p>
+		}
+		<p class="row">
+			if s.Watch != "" {
+				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Stop handing over this album</button>
+			}
+			<button hx-get={ "fragments/albums?service=" + url.QueryEscape(s.Name) } hx-target="next .albumform" hx-swap="innerHTML" hx-disabled-elt="this">
+				if s.Watch != "" {
+					Link a different album
+				} else {
+					Hand over a whole album
+				}
+			</button>
+		</p>
+		<div class="albumform"></div>
+	</div>
+}
+
+// AlbumChoice is the form that follows: the sender's own albums, and a button to link the chosen one.
+templ AlbumChoice(service string, albums []AlbumOption, copies bool) {
+	if len(albums) == 0 {
+		<p class="meta">You have no albums of your own yet. Make one in Immich, then come back.</p>
+	} else {
+		<form class="card" hx-post="services/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ albumConfirm(service, copies) }>
+			<input type="hidden" name="service" value={ service }/>
+			<div class="field">
+				<label for="watch-album">Album to hand over to { service }</label>
+				<select id="watch-album" name="album">
+					for _, a := range albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+			<p class="meta">Everything in it, and whatever you add later, goes to { service }. { originalsNote(copies) } Only photos you own are used.</p>
+			<p class="row"><button class="primary" type="submit">Hand over this album</button></p>
+		</form>
 	}
 }
 
@@ -184,11 +247,16 @@ templ ServiceCard(s ServiceView) {
 		<p class="meta">
 			if s.Role == "sender" {
 				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it. { originalsNote(s.Copy) }
+			} else if s.Album != "" {
+				Photos arrive in the album <strong>{ s.Album }</strong>.
 			} else {
 				Photos arrive tagged <code class="tag">{ s.Tag }</code>.
 			}
 			{ fmt.Sprintf(" %d %s, %d %s.", s.From, plural(s.From, "sender", "senders"), s.To, plural(s.To, "receiver", "receivers")) }
 		</p>
+		if s.Role == "sender" && s.CanWatch {
+			@WatchBox(s)
+		}
 		if s.CanLeave {
 			<p class="row">
 				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>
@@ -287,6 +355,9 @@ templ OwnedCard(o OwnedView) {
 			<span class="chip">{ policyLabel(o.Policy) }</span>
 		</header>
 		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
+		if o.Album != "" {
+			<p class="meta">What arrives is put in the album <strong>{ o.Album }</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.</p>
+		}
 		if o.Broken != "" {
 			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
 			<p class="row">
@@ -368,6 +439,11 @@ templ OfferForm() {
 			<div class="field">
 				<label for="svc-inbox">Tag put on what arrives (default: inbox)</label>
 				<input id="svc-inbox" name="inbox" maxlength="64" placeholder="inbox"/>
+			</div>
+			<div class="field">
+				<label for="svc-album">Put what arrives in this album (optional, instead of the inbox tag)</label>
+				<input id="svc-album" name="album" maxlength="100" placeholder="Holiday 2026"/>
+				<small class="meta">An album of yours with that name; it is made if you do not have one. The key the app uses then also gets permission to find, create and add to albums.</small>
 			</div>
 			<div class="field">
 				<label for="svc-expiry">Days before an unfiled photo loses that tag (default: 30)</label>

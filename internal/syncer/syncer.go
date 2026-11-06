@@ -65,6 +65,10 @@ type Syncer struct {
 
 	recentMu sync.Mutex
 	recent   map[uuid.UUID]time.Time // photos handled a moment ago
+
+	albumMu     sync.Mutex
+	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
+	lastPublish atomic.Int64    // when the open pages were last told something changed (see publishSoon)
 }
 
 // Totals are cumulative since the app started (kept in memory only).
@@ -276,6 +280,7 @@ type receiver struct {
 	acct   *Account
 	userID uuid.UUID
 	inbox  uuid.UUID
+	album  func(ctx context.Context) (uuid.UUID, error) // the service's album in this account, found or made when first needed; nil without one
 }
 
 func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
@@ -304,6 +309,9 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 		rc := receiver{acct: r, userID: me.ID}
 		if inbox != nil {
 			rc.inbox = *inbox
+		}
+		if svc.Album != "" && !s.Cfg.DryRun {
+			rc.album = s.albumFinder(r.API, svc.Album)
 		}
 		rs = append(rs, rc)
 	}
@@ -337,43 +345,88 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		c.Errors++
 		return
 	}
-	if tag == nil {
-		return
+	var shareTag uuid.UUID // the zero id: a photo that was not tagged (it came from the watched album)
+	var assets []immich.AssetResponseDto
+	if tag != nil {
+		shareTag = *tag
+		assets, err = snd.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
+		if err != nil {
+			log.Error("search failed", "err", err)
+			c.Errors++
+			return
+		}
+		assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	}
-	assets, err := snd.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
-	if err != nil {
-		log.Error("search failed", "err", err)
-		c.Errors++
-		return
-	}
-	assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	ids := make([]string, 0, len(assets))
 	for _, a := range assets {
 		ids = append(ids, a.Id.String())
 	}
-	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
+	if tag != nil {
+		log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
+	}
+	// Photos in the sender's linked album are handed over too, once, without a tag.
+	fromAlbum := map[uuid.UUID]bool{}
+	if snd.WatchAlbum != uuid.Nil {
+		if pending, err := AlbumPending(ctx, svc, snd, me.ID); err != nil {
+			s.watchProblem(log, svc, snd, err)
+		} else {
+			s.watchOK(svc, snd)
+			tagged := map[uuid.UUID]bool{}
+			for _, a := range assets {
+				tagged[a.Id] = true
+			}
+			for _, a := range pending {
+				if !tagged[a.Id] {
+					assets = append(assets, a)
+					fromAlbum[a.Id] = true
+				}
+			}
+			if len(pending) > 0 {
+				log.Info("photos in the linked album", "album", snd.WatchAlbumName, "count", len(pending))
+			}
+		}
+	}
+	var fromAlbumDone, fromAlbumRefused, fromAlbumFailed int
 	for _, a := range assets {
 		if s.justHandled(a.Id) {
 			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
 			continue
 		}
-		switch out, err := s.process(ctx, log, svc, snd, rs, a, *tag); {
+		tagID := shareTag
+		if fromAlbum[a.Id] {
+			tagID = uuid.Nil
+		}
+		switch out, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
 		case err != nil:
 			c.Errors++
+			if fromAlbum[a.Id] {
+				fromAlbumFailed++
+			}
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
 		case out == "imported":
 			c.Imported++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumDone++
+			}
 		case out == "duplicate":
 			c.Duplicate++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumDone++
+			}
 		case out == "refused":
 			c.Refused++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumRefused++
+			}
 		case out == "dryrun":
 			c.DryRun++
 		}
+		s.publishSoon() // the page's "waiting" counter counts down while a long hand-over runs
 	}
+	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
 	return
 }
 
@@ -410,8 +463,10 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			// Immich can drop a tag added before it has finished reading a new upload, so wait for that
 			// first, then add the tag and check it stuck (a copy without it would arrive unnoticed).
 			s.waitProcessed(ctx, r.acct.API, up.Id)
-			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
-				return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
+				if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
+					return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+				}
 			}
 			outcome = "imported"
 		}
@@ -425,6 +480,59 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 	}
 	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
 	return outcome, nil
+}
+
+// albumFinder returns a function that finds the account's own album with this name, or makes it, once, the
+// first time a photo needs it. Looking it up by name every pass means an album the person deleted or renamed
+// simply comes back under the configured name at the next arrival.
+func (s *Syncer) albumFinder(api *immich.API, name string) func(ctx context.Context) (uuid.UUID, error) {
+	var once sync.Once
+	var id uuid.UUID
+	var err error
+	return func(ctx context.Context) (uuid.UUID, error) {
+		once.Do(func() {
+			var found *uuid.UUID
+			if found, _, err = api.FindAlbum(ctx, name); err != nil {
+				return
+			}
+			if found != nil {
+				id = *found
+				return
+			}
+			id, err = api.CreateAlbum(ctx, name)
+		})
+		return id, err
+	}
+}
+
+// fileInAlbum puts a new copy in the service's album and reports whether it did. When the service has no
+// album it does nothing (false). When the album cannot be used, for example because the receiver's key may
+// not touch albums, it says so (once, until it works again) and returns false, so the copy still gets the
+// inbox tag and is not lost: a hand-over never fails because of the album.
+func (s *Syncer) fileInAlbum(ctx context.Context, log *slog.Logger, svc *Service, r receiver, asset uuid.UUID) bool {
+	if r.album == nil {
+		return false
+	}
+	album, err := r.album(ctx)
+	if err == nil {
+		err = r.acct.API.AddToAlbum(ctx, album, asset)
+	}
+	key := svc.Label() + "/" + r.acct.Name
+	s.albumMu.Lock()
+	defer s.albumMu.Unlock()
+	if err != nil {
+		log.Warn("could not put the copy in the album; tagging it inbox instead", "receiver", r.acct.Name, "album", svc.Album, "err", err)
+		if !s.albumBroken[key] {
+			if s.albumBroken == nil {
+				s.albumBroken = map[string]bool{}
+			}
+			s.albumBroken[key] = true
+			s.notify(fmt.Sprintf("immich-handoff: could not put photos in the album %q for %s (%v); they are tagged %s instead. The receiver's key needs album.read, album.create and albumAsset.create.", svc.Album, r.acct.Name, err, svc.InboxTag))
+		}
+		return false
+	}
+	delete(s.albumBroken, key)
+	return true
 }
 
 // cleanupAll removes the inbox tag from filed or expired copies in every receiver, once per
@@ -567,6 +675,9 @@ func (s *Syncer) markSent(ctx context.Context, svc *Service, src *immich.API, id
 			return err
 		}
 	}
+	if shareTag == uuid.Nil { // it came from the linked album and never had the service tag
+		return nil
+	}
 	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
 }
 
@@ -646,6 +757,9 @@ func (s *Syncer) markRefused(ctx context.Context, svc *Service, src *immich.API,
 	}
 	if err := s.addTagVerified(ctx, src, svc.RefusedTag, id); err != nil {
 		return err
+	}
+	if shareTag == uuid.Nil {
+		return nil
 	}
 	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -26,6 +27,7 @@ var (
 	ErrNoRequest = errors.New("there is no such request")
 	ErrNoInvite  = errors.New("this invitation is not valid any more")
 	ErrBadExpiry = errors.New("the number of days must be between 1 and 3650")
+	ErrBadAlbum  = errors.New("the album name must be at most 100 characters and have no line breaks")
 )
 
 var (
@@ -55,6 +57,7 @@ type CreateParams struct {
 	Visibility string // listed (default) | invite
 	InboxTag   string
 	ExpiryDays int
+	Album      string // optional: an album, in the owner's account, that handed-over photos are put in
 }
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
@@ -86,6 +89,10 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	} else if !tagRe.MatchString(inboxTag) {
 		return ErrBadTag
 	}
+	album := strings.TrimSpace(p.Album)
+	if utf8.RuneCountInString(album) > 100 || strings.ContainsAny(album, "\r\n\x00") {
+		return ErrBadAlbum
+	}
 	expiry := p.ExpiryDays
 	if expiry <= 0 {
 		expiry = h.Options.ExpiryDays
@@ -97,7 +104,12 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 			return ErrNameTaken
 		}
 	}
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", immich.ReceiverPermissions)
+	// The key only gets the right to touch albums when the service uses one.
+	keyPerms := immich.ReceiverPermissions
+	if album != "" {
+		keyPerms = immich.ReceiverPermissionsAlbum
+	}
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", keyPerms)
 	if err != nil {
 		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
 	}
@@ -116,7 +128,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if _, err := h.Store.AddService(ctx, store.Service{
 		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
-		Visibility: visibility, Invite: invite,
+		Visibility: visibility, Invite: invite, Album: album,
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -306,7 +318,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum} {
 		if errors.Is(err, e) {
 			return true
 		}

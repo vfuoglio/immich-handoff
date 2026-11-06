@@ -6,7 +6,9 @@ What you are agreeing to when you run this, or join a service. The short version
 
 An Immich API key cannot be limited to one tag or album. So a sender's key can read and download any photo in that account, and, if the sender chose **move**, delete any photo too. The app only ever acts on photos tagged for a service, and the key is never shown to anyone. If the sender chose **keep my originals** (the default), the key is created **without any permission to delete**.
 
-The receiver's key can upload photos, read the receiver's library and add tags. It cannot delete anything.
+A sender who links an album to a service ([Using it](using.md#handing-over-a-whole-album)) gives their own key one more permission, `album.read`, added with their own login. It lets the app list the photos in that album; it cannot change, share or delete albums. Photos that other people own are never handed over.
+
+The receiver's key can upload photos, read the receiver's library and add tags. It cannot delete anything. If the service puts arrivals in an album, the key can also find, create and add to albums (`album.read`, `album.create`, `albumAsset.create`); it still cannot rename, share, empty or delete an album, and the app only looks at albums the receiver owns, never at ones shared with them.
 
 Each key is named `handoff: <service>` in the owner's own Immich settings, so people can see exactly what exists and delete it whenever they like. Deleting it ends the connection at once: Immich refuses the key, the app notices and pauses, and no photo is touched.
 
@@ -34,6 +36,10 @@ Anyone signed in to Immich can open the page and sees the services that are **li
 - Pages are served with a strict content security policy, cannot be placed in a frame, and only load scripts and styles from the app itself.
 - The metrics page needs the same secret.
 - A photo is only removed after every receiver holds a verified copy (checked by checksum), and never while a connection is broken or a service has no healthy receiver.
+
+## The image you run
+
+The published image is built by GitHub Actions from a tag of this repository, for amd64 and arm64, on a base with no shell or package manager (distroless). Each release is **signed** (cosign, keyless, tied to the release workflow), carries a software bill of materials and build provenance, and is checked by CI before it is published. [Releasing](releasing.md#verifying-an-image) shows how to verify an image yourself. The workflows pin every action by commit hash, and Dependabot proposes updates to the actions, the Go modules and the base images each week.
 
 ## Reporting a problem
 

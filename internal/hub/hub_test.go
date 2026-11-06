@@ -45,7 +45,10 @@ type fakeImmich struct {
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
-	lastPerms     []string // permissions of the most recent key created
+	lastPerms     []string            // permissions of the most recent key created
+	keyPerms      map[string][]string // key id -> permissions
+	keyUpdates    int                 // how many times a key's permissions were changed
+	albums        []map[string]any    // bob's own albums
 }
 
 // person is who a request is from: a session cookie ("sess=bob") or one of the keys created for them.
@@ -98,10 +101,54 @@ func (f *fakeImmich) handler() http.Handler {
 		json.NewDecoder(r.Body).Decode(&body)
 		f.lastPerms = body.Permissions
 		id, secret := uuid.NewString(), "secret-"+uuid.NewString()
+		if f.keyPerms == nil {
+			f.keyPerms = map[string][]string{}
+		}
+		f.keyPerms[id] = body.Permissions
 		f.keys[secret] = id
 		f.owners[secret] = f.person(r)
 		j(w, 201, map[string]any{"id": id, "name": body.Name, "secret": secret, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
 			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("GET /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		id := r.PathValue("id")
+		perms, ok := f.keyPerms[id]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		j(w, 200, map[string]any{"id": id, "name": "k", "permissions": perms, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("PUT /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		var body struct {
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		id := r.PathValue("id")
+		if _, ok := f.keyPerms[id]; !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		f.keyPerms[id] = body.Permissions
+		f.keyUpdates++
+		j(w, 200, map[string]any{"id": id, "name": "k", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.person(r) != "bob" || r.URL.Query().Get("isOwned") != "true" {
+			j(w, 200, []any{})
+			return
+		}
+		out := f.albums
+		if out == nil {
+			out = []map[string]any{}
+		}
+		j(w, 200, out)
 	})
 	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -730,5 +777,158 @@ func TestEachCreatedServiceGetsItsOwnInboxTag(t *testing.T) {
 	}
 	if got := service(e, "Photo club").InboxTag; got != "club-inbox" {
 		t.Errorf("an owner's choice wins: %q", got)
+	}
+}
+
+func TestAServiceWithAnAlbumGetsAlbumPermissionsAndKeepsTheName(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "filed", Tag: "filed", Policy: "open", Album: "  Holiday 2026 "}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "filed").Album; got != "Holiday 2026" {
+		t.Errorf("album = %q", got)
+	}
+	has := func(name string) bool {
+		for _, p := range e.f.lastPerms {
+			if p == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []string{"album.read", "album.create", "albumAsset.create"} {
+		if !has(want) {
+			t.Errorf("a service with an album needs %s on its key: %v", want, e.f.lastPerms)
+		}
+	}
+	for _, never := range []string{"album.update", "album.delete", "albumAsset.delete", "album.share"} {
+		if has(never) {
+			t.Errorf("the key must not be able to change or delete albums (%s): %v", never, e.f.lastPerms)
+		}
+	}
+	// a replacement key made when reconnecting keeps the album permissions
+	if err := e.h.ReconnectService(ctx, e.ann, ann, "filed"); err != nil {
+		t.Fatal(err)
+	}
+	if !has("albumAsset.create") {
+		t.Errorf("a reconnected service still files into its album: %v", e.f.lastPerms)
+	}
+	// a service without one does not ask for them
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "plainer", Tag: "plainer", Policy: "open"}); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "plainer").Album != "" || has("album.read") || has("albumAsset.create") {
+		t.Errorf("no album, so no album permissions: %v", e.f.lastPerms)
+	}
+}
+
+func TestABadAlbumNameIsRefused(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	for _, name := range []string{strings.Repeat("x", 101), "two\nlines"} {
+		err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bada", Tag: "bada", Album: name})
+		if !errors.Is(err, hub.ErrBadAlbum) || !hub.IsUserError(err) {
+			t.Errorf("album %q: %v", name, err)
+		}
+	}
+}
+
+func TestLinkingAnAlbumGivesTheKeyAlbumReadAndTheSenderAWatch(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album := uuid.MustParse("dddddddd-0000-4000-8000-000000000001")
+	e.f.albums = []map[string]any{{"id": album.String(), "albumName": "To send", "assetCount": 3}}
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.h.Services()[0].Senders[0].WatchAlbum; got != uuid.Nil {
+		t.Fatalf("nothing is linked yet: %v", got)
+	}
+	before := len(e.f.keyPerms)
+	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", album); err != nil {
+		t.Fatal(err)
+	}
+	snd := e.h.Services()[0].Senders[0]
+	if snd.WatchAlbum != album || snd.WatchAlbumName != "To send" {
+		t.Errorf("the sender's account must carry the album: %v %q", snd.WatchAlbum, snd.WatchAlbumName)
+	}
+	links, _ := e.st.Links(ctx)
+	if len(links) != 1 || links[0].AlbumID != album || links[0].AlbumName != "To send" {
+		t.Errorf("the link must be stored: %+v", links)
+	}
+	perms := e.f.keyPerms[links[0].KeyID.String()]
+	has := func(name string) bool {
+		for _, p := range perms {
+			if p == name {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("album.read") || !has("tag.asset") || !has("asset.download") {
+		t.Errorf("the key keeps what it had and gains album.read: %v", perms)
+	}
+	if has("album.update") || has("album.delete") || has("albumAsset.delete") || has("album.create") {
+		t.Errorf("reading albums is all it needs: %v", perms)
+	}
+	if len(e.f.keyPerms) != before {
+		t.Error("no new key may be made: linking changes the one that exists")
+	}
+	// linking again changes nothing about the key
+	updates := e.f.keyUpdates
+	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", album); err != nil {
+		t.Fatal(err)
+	}
+	if e.f.keyUpdates != updates {
+		t.Errorf("the key already has album.read, so it must not be changed again")
+	}
+	if err := e.h.UnlinkAlbum(ctx, bob, "family"); err != nil {
+		t.Fatal(err)
+	}
+	if e.h.Services()[0].Senders[0].WatchAlbum != uuid.Nil {
+		t.Error("unlinking must stop the watch")
+	}
+	if links, _ := e.st.Links(ctx); links[0].AlbumID != uuid.Nil || links[0].AlbumName != "" {
+		t.Errorf("and clear it from the store: %+v", links)
+	}
+}
+
+func TestOnlyYourOwnAlbumAndOnlyAServiceYouJoinedCanBeLinked(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album := uuid.MustParse("dddddddd-0000-4000-8000-000000000001")
+	e.f.albums = []map[string]any{{"id": album.String(), "albumName": "Mine", "assetCount": 1}}
+	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", album); !errors.Is(err, hub.ErrNotJoined) {
+		t.Errorf("not a member: %v", err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	someoneElses := uuid.MustParse("dddddddd-0000-4000-8000-000000000002")
+	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", someoneElses); !errors.Is(err, hub.ErrNoAlbum) || !hub.IsUserError(err) {
+		t.Errorf("an album that is not in the person's own list: %v", err)
+	}
+	if links, _ := e.st.Links(ctx); links[0].AlbumID != uuid.Nil {
+		t.Errorf("nothing may be linked after a refusal: %+v", links)
+	}
+}
+
+func TestAHandOverFromTheAlbumLeavesALineInTheSendersRecentEvents(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album := uuid.MustParse("dddddddd-0000-4000-8000-000000000001")
+	e.f.albums = []map[string]any{{"id": album.String(), "albumName": "To send", "assetCount": 3}}
+	e.h.Join(ctx, e.sess, bob, "family", "", "")
+	e.h.LinkAlbum(ctx, e.sess, bob, "family", album)
+	snd := e.h.Services()[0].Senders[0]
+	e.h.AlbumHandedOver(e.h.Services()[0], snd, 12, 1, 0)
+	evs, err := e.st.Events(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, ev := range evs {
+		if ev.Kind == "album" && strings.Contains(ev.Text, "12 photos from the album To send handed over to family") && strings.Contains(ev.Text, "1 refused") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("recent events: %+v", evs)
 	}
 }

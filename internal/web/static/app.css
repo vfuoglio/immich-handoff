@@ -46,7 +46,7 @@ header.bar {
   padding: 1rem 0; position: sticky; top: 0; background: var(--bg); z-index: 2;
 }
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 650; font-size: 1.1rem; }
-.brand svg { width: 28px; height: 28px; color: var(--primary); }
+.brand img { width: 28px; height: 28px; display: block; }
 .who { color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: .5rem; }
 .avatar {
   width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: var(--primary-text);
@@ -89,6 +89,7 @@ button:disabled, button.htmx-request { opacity: .6; cursor: progress; }
 
 .notice { border-left: 4px solid var(--primary); }
 .notice.bad { border-left-color: var(--bad); }
+.gated { opacity: .38; filter: grayscale(1); pointer-events: none; user-select: none; transition: opacity .2s, filter .2s; }
 .toast { color: var(--ok); font-weight: 600; font-size: .9rem; }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .live { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok); margin-right: .35rem; }
@@ -122,3 +123,6 @@ details.offer[open] > summary::before { content: "\2212"; }
 details.offer[open] > summary { margin-bottom: .6rem; }
 
 .q { flex-basis: 100%; margin: 0; }
+.watch { margin-top: .5rem; }
+.watch .albumform:empty { display: none; }
+.watch .albumform .card { margin-top: .5rem; }

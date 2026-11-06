@@ -123,3 +123,21 @@ func TestPlainEnvMakesOneDefaultService(t *testing.T) {
 		t.Error("missing keys must be an error")
 	}
 }
+
+func TestAlbumInTheRoutesFileAndTheEnvironment(t *testing.T) {
+	routes := strings.Replace(good, "    receivers: [family]\n", "    receivers: [family]\n    album: Arrivals\n", 1)
+	svcs, err := parseRoutes([]byte(routes), env(goodEnv), DefaultsFrom(env(nil)), connect, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svcs[0].Album != "Arrivals" || svcs[1].Album != "" {
+		t.Errorf("album belongs to the service that names it: %q, %q", svcs[0].Album, svcs[1].Album)
+	}
+	long := strings.Replace(good, "    receivers: [family]\n", "    receivers: [family]\n    album: "+strings.Repeat("x", 101)+"\n", 1)
+	if _, err := parseRoutes([]byte(long), env(goodEnv), DefaultsFrom(env(nil)), connect, false); err == nil || !strings.Contains(err.Error(), "album") {
+		t.Errorf("a 101-character album name must be refused: %v", err)
+	}
+	if d := DefaultsFrom(env(map[string]string{"ALBUM": " Holiday "})); d.Album != "Holiday" {
+		t.Errorf("ALBUM = %q", d.Album)
+	}
+}

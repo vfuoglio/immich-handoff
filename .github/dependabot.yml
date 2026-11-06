@@ -1,0 +1,26 @@
+# Dependency updates arrive as pull requests into develop (where the work happens), not main, one group per
+# kind so a week's updates are one pull request to read. Each one runs the whole CI when it is opened.
+version: 2
+updates:
+  - package-ecosystem: github-actions    # the actions in .github/workflows, which are pinned by commit hash
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: gomod             # the program's Go modules
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      go-modules: { patterns: ["*"] }
+  - package-ecosystem: gomod             # the screenshot tool has a module of its own
+    directory: /tools/screenshots
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      screenshot-tool: { patterns: ["*"] }
+  - package-ecosystem: docker            # the base images in the Dockerfile
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }

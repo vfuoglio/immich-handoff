@@ -12,7 +12,7 @@ This page is for the people who send and receive photos. Everything happens on t
 | **Tag** | The label you add to a photo in Immich to send it. Each service has its own. |
 | **Inbox** | A tag on everything that just arrived, so the receiver can find what is new. |
 
-> **Before you start: switch Tags on in Immich.** In Immich open Account Settings, then Features, and turn on **Tags**. It is off by default and each person must do it for their own account. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Saving is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
+> **Before you start: Tags must be on in Immich.** It is off by default and each person has it for their own account. If it is off, this page shows a notice with a **Turn on Tags** button; you can also do it in Immich under Account Settings, then Features, **Tags**. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Switching it on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
 
 ## Sending photos
 
@@ -20,7 +20,7 @@ Open the page. It shows your services and what is waiting:
 
 ![The page for a sender, with photos waiting to be handed over](images/dashboard-sender.png)
 
-To send a photo, add the service's tag to it in the Immich app (select photos, **Add tags**). Within a few seconds the photo is copied into the receiver's library, and the page's **Waiting** count goes back to zero. The page also works on a phone, and follows its light or dark setting:
+What reaches the receiver is the photo's file, its name, its dates and the favourite mark. Things Immich keeps only in its own database, such as a description you typed in Immich, albums and edits, do not travel: see [What is carried over](what-is-carried-over.md). To send a photo, add the service's tag to it in the Immich app (select photos, **Add tags**). Within a few seconds the photo is copied into the receiver's library, and the page's **Waiting** count goes back to zero. The page also works on a phone, and follows its light or dark setting:
 
 <p align="center"><img src="images/dashboard-mobile-dark.png" alt="The page on a phone in dark mode" width="280"></p>
 
@@ -37,6 +37,21 @@ When you join, the app creates an API key named `handoff: <service>` in your own
 
 Some services need the owner's approval. You press **Ask to join**, the owner approves, and then you press **Activate**. (The app can only create a key in your account while you are signed in, which is why the last step is yours.)
 
+### Handing over a whole album
+
+Instead of tagging photos one by one, you can link one of your own albums to a service you joined from this page. On the service's card press **Hand over a whole album**, choose the album, and confirm. Everything in it is handed over to that service, **now and whatever you add to it later**, with no tag.
+
+- **Why not just tag the album?** Immich tags belong to single photos, not to albums, so there is no such thing as tagging an album. Linking is different: the app keeps looking at the album.
+- **It is checked on a timer.** Immich sends no event when a photo is added to an album (see [why the inbox tag takes minutes to go](#when-the-inbox-tag-goes-away)), so the app looks at linked albums every 15 minutes (`ALBUM_CHECK_MINUTES`). Tagging a photo is still instant.
+- **Each photo goes once.** With **keep my originals**, a handed-over photo stays in your album and is marked with the `handed-over` tag, which is how the app knows to leave it alone. With **move**, the original goes to your trash. A photo the receiver refused (they have it in their trash) is tagged `share-duplicate` and left alone until you remove that tag.
+- **Only your own photos.** An album can hold other people's photos (a shared album); those are never handed over.
+- **One album per service.** Linking another replaces the first. **Stop handing over this album** on the card unlinks it. Photos already handed over stay where they are.
+- **Move mode asks first,** because it sends every photo in the album to your trash once the other side has a copy.
+- **The key gets one more permission.** Linking adds `album.read` to your existing key, using your own login, so you do not have to join again. It can read albums and nothing more. See [Security](security.md#what-a-key-can-do).
+- **Progress.** The "waiting to be handed over" number on the card counts down photo by photo while a long hand-over runs. When photos from an album have been handed over, a line appears under **Recent events**, and a big one (20 photos or more) also sends a notification to `NOTIFY_URL` if the person running the app set one.
+- **If the album cannot be read** (you deleted it, or the key lost the permission), photos you tag are still handed over, and the problem is logged and notified once. Link another album to fix it.
+- Services defined in a routes file or `.env` cannot have a linked album; this is for services you joined from the page.
+
 ## Receiving photos
 
 ### Offering a service
@@ -46,11 +61,22 @@ Under **Offer a service of your own**, choose:
 - a **name** and the **tag** senders will use;
 - **who can find it**: everyone on this Immich server, or only people you send a link to;
 - **who may send**: people you approve, or anyone;
-- optionally (**More options**) the tag put on what arrives, and how many days an unfiled photo keeps it.
+- optionally (**More options**) the tag put on what arrives, how many days an unfiled photo keeps it, and an **album** to put arrivals in.
 
 ![The form for offering a service](images/offer-form.png)
 
 Each service gets its own inbox tag by default, for example `inbox/Holiday 2026`, which Immich shows nested under `inbox`. Filter by it in Immich to see what arrived through that service. The inbox tag removes itself once a photo is in an album, or after 30 days; photos are never deleted by that. [When exactly](#when-the-inbox-tag-goes-away) is explained below.
+
+### Putting arrivals in an album
+
+Give a service an album (for example "Holiday 2026") and every photo handed over to it is put in that album in your Immich account, so there is nothing to file by hand.
+
+- **Instead of the inbox tag.** A photo in the album does not also get the inbox tag. The album is where you look; the page counts its photos. (The inbox tag would be removed within minutes anyway, because the photo is in an album.)
+- **The album is yours.** The app uses an album you own with exactly that name, and makes one when the first photo arrives if you do not have it. It never uses an album that was only shared with you. If two of your albums have that name, it uses the first Immich lists.
+- **If you delete or rename it,** the next photo makes a new album under the configured name. Photos already in the old one stay with it.
+- **Photos you already had** (the same photo handed over again) are left where you put them; only new arrivals are filed.
+- **It cannot get in the way of a hand-over.** If the album cannot be used, for example because the key is missing the album permissions, the photo still arrives, tagged inbox as without an album, and the log and the notification say why.
+- **The key asks for more.** Creating a service with an album gives its key permission to find, create and add to albums, and nothing more. A service without an album does not. See [Security](security.md#what-a-key-can-do). The album is chosen when the service is created.
 
 ### Approving senders and sharing a link
 
