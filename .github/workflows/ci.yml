@@ -1,8 +1,14 @@
 name: ci
+# CI runs when something is merged toward main, not on every change in develop:
+#   - a pull request (develop into main) and pushes to main
+#   - by hand: Actions, ci, Run workflow, on any branch
+#   - from the release workflow, which runs the same checks first
 on:
   push:
+    branches: [main]
   pull_request:
-  workflow_call:   # the release workflow runs the same checks first
+  workflow_dispatch:
+  workflow_call:
 jobs:
   test:
     runs-on: ubuntu-latest
