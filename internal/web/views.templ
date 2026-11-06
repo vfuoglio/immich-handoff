@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -17,6 +18,8 @@ type ServiceView struct {
 	Paused   string // why the service cannot work right now, if so
 	Copy     bool   // the signed-in sender chose to keep their originals (otherwise they are moved to their trash)
 	Album    string // receiver: the album arrivals are put in, if the service has one
+	CanWatch bool   // sender: joined from this page, so may link an album
+	Watch    string // sender: the album linked to this service, whose photos are all handed over
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -189,6 +192,49 @@ templ Dashboard(d DashboardData) {
 	}
 }
 
+// WatchBox is where a sender links one of their albums to a service, so everything in it is handed over.
+templ WatchBox(s ServiceView) {
+	<div class="watch">
+		if s.Watch != "" {
+			<p class="meta">Everything in your album <strong>{ s.Watch }</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.</p>
+			<p class="row">
+				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Stop handing over this album</button>
+			</p>
+		}
+		<p class="row">
+			<button hx-get={ "fragments/albums?service=" + url.QueryEscape(s.Name) } hx-target="next .albumform" hx-swap="innerHTML" hx-disabled-elt="this">
+				if s.Watch != "" {
+					Link a different album
+				} else {
+					Hand over a whole album
+				}
+			</button>
+		</p>
+		<div class="albumform"></div>
+	</div>
+}
+
+// AlbumChoice is the form that follows: the sender's own albums, and a button to link the chosen one.
+templ AlbumChoice(service string, albums []AlbumOption, copies bool) {
+	if len(albums) == 0 {
+		<p class="meta">You have no albums of your own yet. Make one in Immich, then come back.</p>
+	} else {
+		<form class="card" hx-post="services/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ albumConfirm(service, copies) }>
+			<input type="hidden" name="service" value={ service }/>
+			<div class="field">
+				<label for="watch-album">Album to hand over to { service }</label>
+				<select id="watch-album" name="album">
+					for _, a := range albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+			<p class="meta">Everything in it, and whatever you add later, goes to { service }. { originalsNote(copies) } Only photos you own are used.</p>
+			<p class="row"><button class="primary" type="submit">Hand over this album</button></p>
+		</form>
+	}
+}
+
 templ ServiceCard(s ServiceView) {
 	<article class="card">
 		<header>
@@ -208,6 +254,9 @@ templ ServiceCard(s ServiceView) {
 			}
 			{ fmt.Sprintf(" %d %s, %d %s.", s.From, plural(s.From, "sender", "senders"), s.To, plural(s.To, "receiver", "receivers")) }
 		</p>
+		if s.Role == "sender" && s.CanWatch {
+			@WatchBox(s)
+		}
 		if s.CanLeave {
 			<p class="row">
 				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>

@@ -38,6 +38,9 @@ const (
 // ErrExists is returned when a person already holds that role in that service.
 var ErrExists = errors.New("store: already joined")
 
+// ErrNotFound is returned when the membership or service asked about does not exist.
+var ErrNotFound = errors.New("store: not found")
+
 type Store struct {
 	db    *sql.DB
 	vault *vault.Vault
@@ -53,8 +56,10 @@ type Link struct {
 	KeyID        uuid.UUID // the key's id in Immich, so it can be deleted later
 	Key          string    // decrypted; never stored in clear
 	State        string
-	Note         string // why the link is not active
-	Mode         string // "copy" keeps the sender's originals, "move" trashes them; chosen by the sender
+	Note         string    // why the link is not active
+	Mode         string    // "copy" keeps the sender's originals, "move" trashes them; chosen by the sender
+	AlbumID      uuid.UUID // an album of the sender's whose photos are all handed over; zero: none
+	AlbumName    string    // its name when it was linked, for display
 	CreatedAt    time.Time
 }
 
@@ -120,6 +125,9 @@ var migrations = []string{
 	 UPDATE links SET mode = COALESCE((SELECT mode FROM services WHERE services.name = links.service), 'move');`,
 	// A service may name an album that handed-over photos are put in.
 	`ALTER TABLE services ADD COLUMN album TEXT NOT NULL DEFAULT '';`,
+	// A sender may link one of their own albums to a service: everything in it is handed over.
+	`ALTER TABLE links ADD COLUMN album_id TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE links ADD COLUMN album_name TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -217,6 +225,24 @@ func (s *Store) AddLink(ctx context.Context, l Link) (Link, error) {
 	return l, nil
 }
 
+// SetLinkAlbum links an album of the sender's to this membership (the zero id unlinks it).
+func (s *Store) SetLinkAlbum(ctx context.Context, id string, album uuid.UUID, name string) error {
+	albumID := ""
+	if album != uuid.Nil {
+		albumID = album.String()
+	} else {
+		name = ""
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE links SET album_id = ?, album_name = ? WHERE id = ?`, albumID, name, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) RemoveLink(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM links WHERE id = ?`, id)
 	return err
@@ -225,7 +251,7 @@ func (s *Store) RemoveLink(ctx context.Context, id string) error {
 // Links returns every membership with its key decrypted.
 func (s *Store) Links(ctx context.Context) ([]Link, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, mode, created_at FROM links ORDER BY created_at, id`)
+		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, mode, album_id, album_name, created_at FROM links ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -233,11 +259,12 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 	var out []Link
 	for rows.Next() {
 		var l Link
-		var user, keyID, created string
+		var user, keyID, albumID, created string
 		var enc []byte
-		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &l.Mode, &created); err != nil {
+		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &l.Mode, &albumID, &l.AlbumName, &created); err != nil {
 			return nil, err
 		}
+		l.AlbumID, _ = uuid.Parse(albumID)
 		l.ImmichUserID, _ = uuid.Parse(user)
 		l.KeyID, _ = uuid.Parse(keyID)
 		l.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)

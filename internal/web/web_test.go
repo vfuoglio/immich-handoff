@@ -82,6 +82,13 @@ func fakeImmich() http.Handler {
 			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
 			return
 		}
+		if r.URL.Query().Get("name") == "" && r.URL.Query().Get("isOwned") == "true" && strings.Contains(r.Header.Get("Cookie"), "sess=alice") {
+			j(w, []any{
+				map[string]any{"id": "99999999-9999-4999-8999-999999999991", "albumName": "To send", "assetCount": 3},
+				map[string]any{"id": "99999999-9999-4999-8999-999999999992", "albumName": "Trip", "assetCount": 1},
+			})
+			return
+		}
 		if r.URL.Query().Get("name") == "Arrivals" && r.URL.Query().Get("isOwned") == "true" {
 			j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999999", "albumName": "Arrivals", "assetCount": 7}})
 			return
@@ -433,5 +440,32 @@ func TestTheCountFallsBackToTheInboxWhenTheAlbumCannotBeRead(t *testing.T) {
 	_, frag := do(t, "GET", app.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
 	if strings.Contains(frag, "in the album") || !strings.Contains(frag, "in your inbox") {
 		t.Errorf("when the album cannot be read, arrivals are tagged inbox, so count those: %q", frag)
+	}
+}
+
+func TestASenderChoosesAnAlbumFromTheirOwnList(t *testing.T) {
+	app, _ := setup(t)
+	code, body := do(t, "GET", app.URL+"/fragments/albums?service=family", "sess=alice", nil)
+	if code != 200 || !strings.Contains(body, "To send (3 photos)") || !strings.Contains(body, "Trip (1 photo)") {
+		t.Fatalf("the sender's own albums, with their sizes: %d %.400s", code, body)
+	}
+	// this service moves originals (no mode set), so the confirmation says what happens to them
+	if !strings.Contains(body, "moved to your trash") {
+		t.Errorf("the question must say that originals go to the trash: %.600s", body)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/albums?service=family", "sess=family", nil); code != 404 {
+		t.Errorf("only a sender of the service can link an album to it, got %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/albums?service=family", "", nil); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	for _, path := range []string{"/services/album", "/services/album/stop"} {
+		if code, _ := do(t, "POST", app.URL+path, "sess=alice", nil); code != 400 {
+			t.Errorf("%s needs the cross-site header, got %d", path, code)
+		}
+		if code, _ := do(t, "POST", app.URL+path, "sess=alice", hdr); code != 404 {
+			t.Errorf("%s without self-service switched on, got %d", path, code)
+		}
 	}
 }

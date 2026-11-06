@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/a-h/templ"
 	"strings"
 )
@@ -207,4 +208,23 @@ func gate(off bool) templ.Attributes {
 		return nil
 	}
 	return templ.Attributes{"class": "gated", "inert": true, "aria-disabled": "true"}
+}
+
+// AlbumOption is one album in the list a sender chooses from.
+type AlbumOption struct{ ID, Label string }
+
+func albumLabel(name string, count int) string {
+	if count == 1 {
+		return name + " (1 photo)"
+	}
+	return fmt.Sprintf("%s (%d photos)", name, count)
+}
+
+// albumConfirm is the question asked before an album is linked: in move mode this sends many originals to
+// the trash, so it says so.
+func albumConfirm(service string, copies bool) string {
+	if copies {
+		return "Hand over everything in this album to " + service + ", now and whatever you add later? Your originals stay where they are."
+	}
+	return "Hand over everything in this album to " + service + ", now and whatever you add later? Your originals are moved to your trash once the other side has a verified copy."
 }

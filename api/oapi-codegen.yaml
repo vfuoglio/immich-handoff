@@ -33,3 +33,5 @@ output-options:
     - getAllAlbums
     - createAlbum
     - addAssetsToAlbum
+    - getApiKey
+    - updateApiKey

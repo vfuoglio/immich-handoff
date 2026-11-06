@@ -132,6 +132,33 @@ func (a *API) ServerVersion(ctx context.Context) (major, minor int, err error) {
 	return r.JSON200.Major, r.JSON200.Minor, nil
 }
 
+// AddKeyPermission adds one permission to an API key, keeping the ones it has. It acts with the person's own
+// session (a key cannot change itself), which is why linking an album needs no new key.
+func (a *API) AddKeyPermission(ctx context.Context, key openapi_types.UUID, perm Permission) error {
+	r, err := a.c.GetApiKeyWithResponse(ctx, key)
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("getApiKey", r.StatusCode(), r.Body)
+	}
+	have := r.JSON200.Permissions
+	for _, p := range have {
+		if p == perm || p == "all" {
+			return nil
+		}
+	}
+	all := append(append([]Permission{}, have...), perm)
+	u, err := a.c.UpdateApiKeyWithResponse(ctx, key, UpdateApiKeyJSONRequestBody{Permissions: &all})
+	if err != nil {
+		return err
+	}
+	if u.JSON200 == nil {
+		return statusErr("updateApiKey", u.StatusCode(), u.Body)
+	}
+	return nil
+}
+
 // --- albums ---
 
 // FindAlbum returns an album this account owns with exactly this name, and how many photos it holds, or
@@ -153,6 +180,35 @@ func (a *API) FindAlbum(ctx context.Context, name string) (id *openapi_types.UUI
 		}
 	}
 	return nil, 0, nil
+}
+
+// AlbumInfo is an album the account owns, as the page lists them.
+type AlbumInfo struct {
+	ID    openapi_types.UUID
+	Name  string
+	Count int
+}
+
+// OwnedAlbums lists the albums this account owns (not ones shared with it).
+func (a *API) OwnedAlbums(ctx context.Context) ([]AlbumInfo, error) {
+	owned := true
+	r, err := a.c.GetAllAlbumsWithResponse(ctx, &GetAllAlbumsParams{IsOwned: &owned})
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getAllAlbums", r.StatusCode(), r.Body)
+	}
+	out := make([]AlbumInfo, 0, len(*r.JSON200))
+	for _, al := range *r.JSON200 {
+		out = append(out, AlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount})
+	}
+	return out, nil
+}
+
+// AlbumAssets lists the photos in an album (trashed ones are not included), all pages.
+func (a *API) AlbumAssets(ctx context.Context, album openapi_types.UUID) ([]AssetResponseDto, error) {
+	return a.Search(ctx, MetadataSearchDto{AlbumIds: &[]openapi_types.UUID{album}})
 }
 
 // CreateAlbum makes an empty album in this account.

@@ -77,8 +77,10 @@ func (h *Hub) Reload(ctx context.Context) error {
 	if h.accounts == nil {
 		h.accounts = map[string]*syncer.Account{}
 	}
-	account := func(id, name string, user uuid.UUID, key, mode string) *syncer.Account {
-		if a, ok := h.accounts[id]; ok {
+	account := func(id, name string, user uuid.UUID, key, mode string, album uuid.UUID, albumName string) *syncer.Account {
+		// the account is kept between reloads, unless the sender linked or unlinked an album since: an
+		// account's fields never change while the syncer may be reading them, so it is replaced instead
+		if a, ok := h.accounts[id]; ok && a.WatchAlbum == album {
 			return a
 		}
 		api, err := h.Connect(key)
@@ -86,7 +88,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			h.Log.Error("cannot use stored key", "id", id, "err", err)
 			return nil
 		}
-		a := &syncer.Account{Name: name, API: api, UserID: user, Mode: mode}
+		a := &syncer.Account{Name: name, API: api, UserID: user, Mode: mode, WatchAlbum: album, WatchAlbumName: albumName}
 		h.accounts[id] = a
 		return a
 	}
@@ -97,7 +99,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			continue
 		}
 		live[l.ID] = true
-		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key, l.Mode); a != nil {
+		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key, l.Mode, l.AlbumID, l.AlbumName); a != nil {
 			extra[l.Service] = append(extra[l.Service], a)
 		}
 	}
@@ -109,7 +111,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 	}
 	for _, v := range owned {
 		live[v.ID] = true
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "")
+		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "", uuid.Nil, "")
 		if rcv == nil {
 			continue
 		}

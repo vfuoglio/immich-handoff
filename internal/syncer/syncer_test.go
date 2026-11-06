@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -26,6 +28,7 @@ const (
 	inboxTag   = "44444444-4444-4444-4444-444444444444"
 	refusedTag = "66666666-6666-6666-6666-666666666666"
 	albumID    = "99999999-9999-4999-8999-999999999999"
+	sentTagID  = "77777777-7777-7777-7777-777777777777"
 	payload    = "pretend these are JPEG bytes"
 	ts         = "2025-01-02T03:04:05.000Z"
 )
@@ -50,6 +53,14 @@ type fakeImmich struct {
 	albumDenied   bool
 	albumCreated  []string
 	albumAdded    []string
+
+	// a sender's linked album: what the album search returns, whose photos they are, which photos already
+	// carry the "handed over" tag, and whether anything is tagged for the service at all
+	watchItems       []string // asset ids in the album
+	watchOwnerOther  bool     // the album's photos belong to somebody else
+	watchSearchFails bool     // the album cannot be read
+	sentTagged       []string // photos that already carry the sender's "handed over" tag
+	noTagged         bool     // nothing carries the service tag
 }
 
 func (f *fakeImmich) handler() http.Handler {
@@ -76,12 +87,50 @@ func (f *fakeImmich) handler() http.Handler {
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("x-api-key"), "dest") {
 			j(w, 200, []any{tag(inboxTag, "inbox")})
+		} else if len(f.sentTagged) > 0 {
+			j(w, 200, []any{tag(shareTag, "share"), tag(sentTagID, "handed-over")})
 		} else {
 			j(w, 200, []any{tag(shareTag, "share")})
 		}
 	})
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
-		j(w, 200, map[string]any{"assets": map[string]any{"items": []any{asset(srcAsset, false, good)}, "count": 1, "total": 1, "facets": []any{}}})
+		var body struct {
+			AlbumIds []string `json:"albumIds"`
+			TagIds   []string `json:"tagIds"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		page := func(items ...any) map[string]any {
+			return map[string]any{"assets": map[string]any{"items": items, "count": len(items), "total": len(items), "facets": []any{}}}
+		}
+		switch {
+		case len(body.AlbumIds) > 0:
+			if f.watchSearchFails {
+				j(w, 403, map[string]any{"message": "Missing required permission: album.read"})
+				return
+			}
+			srcSum := sha1.Sum([]byte("src")) // the same id GET /api/users/me gives the "src" key
+			owner := fmt.Sprintf("aaaaaaaa-0000-0000-0000-%012x", srcSum[:6])
+			if f.watchOwnerOther {
+				owner = "bbbbbbbb-0000-0000-0000-000000000001"
+			}
+			var items []any
+			for _, id := range f.watchItems {
+				a := asset(id, false, good)
+				a["ownerId"] = owner
+				items = append(items, a)
+			}
+			j(w, 200, page(items...))
+		case len(body.TagIds) > 0 && body.TagIds[0] == sentTagID:
+			var items []any
+			for _, id := range f.sentTagged {
+				items = append(items, asset(id, false, good))
+			}
+			j(w, 200, page(items...))
+		case f.noTagged:
+			j(w, 200, page())
+		default:
+			j(w, 200, page(asset(srcAsset, false, good)))
+		}
 	})
 	mux.HandleFunc("GET /api/assets/"+srcAsset+"/original", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, payload) })
 	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
@@ -496,5 +545,124 @@ func TestACopyThatNeverKeepsItsTagLeavesTheOriginalAlone(t *testing.T) {
 	c := run(t, f)
 	if c.Errors != 1 || len(f.deleted) != 0 {
 		t.Errorf("counts=%+v deleted=%v: if the tag cannot be made to stick the original must be kept", c, f.deleted)
+	}
+}
+
+// runWatch runs a service whose sender "alice" has an album linked.
+func runWatch(t *testing.T, f *fakeImmich, tune func(*syncer.Service), p ...syncer.Provider) (syncer.Counts, *syncer.Syncer) {
+	t.Helper()
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	alice := &syncer.Account{Name: "alice", API: newAPI(t, srv.URL, "src"), WatchAlbum: uuid.MustParse(albumID), WatchAlbumName: "To send"}
+	svc := service([]*syncer.Account{alice}, []*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	svc.SentTag = "handed-over"
+	if tune != nil {
+		tune(svc)
+	}
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	if len(p) > 0 {
+		s.Provider = p[0]
+	}
+	s.Run(context.Background(), "test", false)
+	return s.Last().Counts, s
+}
+
+func TestAPhotoInTheLinkedAlbumIsHandedOverWithoutATag(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", noTagged: true, watchItems: []string{srcAsset}}
+	c, _ := runWatch(t, f, nil)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts = %+v", c)
+	}
+	if len(f.deleted) != 1 || f.deleted[0] != srcAsset {
+		t.Errorf("move mode: the original goes to the trash once the copy is verified: %v", f.deleted)
+	}
+	if len(f.untaggedShare) != 0 {
+		t.Errorf("it never had the service tag, so none may be taken off: %v", f.untaggedShare)
+	}
+}
+
+func TestInCopyModeAnAlbumPhotoIsMarkedHandedOverAndKept(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", noTagged: true, watchItems: []string{srcAsset}}
+	c, _ := runWatch(t, f, func(s *syncer.Service) { s.Mode = syncer.ModeCopy })
+	if c.Imported != 1 || c.Errors != 0 || len(f.deleted) != 0 {
+		t.Fatalf("copy mode keeps the original: %+v deleted %v", c, f.deleted)
+	}
+	if len(f.refusedTagged) != 1 { // the fake records every tag it is asked to add to the original here
+		t.Errorf("the original must be marked as handed over so it is not handed over again: %v", f.refusedTagged)
+	}
+	if len(f.untaggedShare) != 0 {
+		t.Errorf("no service tag to take off: %v", f.untaggedShare)
+	}
+}
+
+func TestAPhotoThatCarriesTheHandedOverTagIsLeftAlone(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", noTagged: true, watchItems: []string{srcAsset}, sentTagged: []string{srcAsset}}
+	c, _ := runWatch(t, f, func(s *syncer.Service) { s.Mode = syncer.ModeCopy })
+	if c.Imported != 0 || len(f.uploaded) != 0 {
+		t.Errorf("a photo already handed over must not be handed over again: %+v uploaded %v", c, f.uploaded)
+	}
+}
+
+func TestOtherPeoplesPhotosInTheAlbumAreNotHandedOver(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", noTagged: true, watchItems: []string{srcAsset}, watchOwnerOther: true}
+	c, _ := runWatch(t, f, nil)
+	if c.Imported != 0 || len(f.uploaded) != 0 || len(f.deleted) != 0 {
+		t.Errorf("only the sender's own photos may be used: %+v uploaded %v deleted %v", c, f.uploaded, f.deleted)
+	}
+}
+
+func TestAPhotoBothTaggedAndInTheAlbumIsHandedOverOnce(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", watchItems: []string{srcAsset}} // the default search also returns it as tagged
+	c, _ := runWatch(t, f, func(s *syncer.Service) { s.Mode = syncer.ModeCopy })
+	if c.Imported != 1 || len(f.uploaded) != 1 {
+		t.Errorf("once: %+v uploaded %v", c, f.uploaded)
+	}
+	if len(f.untaggedShare) != 1 {
+		t.Errorf("being tagged, it loses the service tag as usual: %v", f.untaggedShare)
+	}
+}
+
+func TestAnUnreadableAlbumDoesNotStopTaggedPhotos(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", watchSearchFails: true} // the tagged photo comes from the default search
+	c, _ := runWatch(t, f, nil)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Errorf("tagged photos are still handed over and the album problem is not a hand-over error: %+v", c)
+	}
+}
+
+type reportingProvider struct {
+	svcs []*syncer.Service
+	got  [][3]int
+}
+
+func (p *reportingProvider) Services() []*syncer.Service { return p.svcs }
+func (p *reportingProvider) AlbumHandedOver(_ *syncer.Service, _ *syncer.Account, handed, refused, failed int) {
+	p.got = append(p.got, [3]int{handed, refused, failed})
+}
+
+func TestWhatWasHandedOverFromTheAlbumIsReported(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", noTagged: true, watchItems: []string{srcAsset}}
+	rp := &reportingProvider{}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	alice := &syncer.Account{Name: "alice", API: newAPI(t, srv.URL, "src"), WatchAlbum: uuid.MustParse(albumID), WatchAlbumName: "To send"}
+	rp.svcs = []*syncer.Service{service([]*syncer.Account{alice}, []*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})}
+	s := &syncer.Syncer{Provider: rp, Log: quiet()}
+	s.Run(context.Background(), "test", false)
+	if len(rp.got) != 1 || rp.got[0] != [3]int{1, 0, 0} {
+		t.Errorf("the pass must report one photo handed over from the album: %v", rp.got)
+	}
+	if !s.HasWatchers() {
+		t.Error("with an album linked the timer has something to look at")
+	}
+}
+
+func TestNoLinkedAlbumMeansNothingToWatch(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created"}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	svc := service([]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}}, []*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	if (&syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}).HasWatchers() {
+		t.Error("no album linked, nothing to watch")
 	}
 }

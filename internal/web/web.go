@@ -67,6 +67,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /events", w.events)
 	mux.HandleFunc("POST /sync", w.syncNow)
 	mux.HandleFunc("POST /preferences/tags", w.enableTags)
+	mux.HandleFunc("GET /fragments/albums", w.albumChoice)
+	mux.HandleFunc("POST /services/album", w.linkAlbum)
+	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
 	mux.HandleFunc("POST /leave", w.leave)
 	mux.HandleFunc("POST /services", w.createService)
@@ -228,10 +231,10 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	var out []ServiceView
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
-			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.CopiesFor(a), ""})
+			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.CopiesFor(a), "", joined[svc.Label()], a.WatchAlbumName})
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies(), svc.Album})
+			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies(), svc.Album, false, ""})
 		}
 	}
 	return out
@@ -385,6 +388,20 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 		}
 		rw.Header().Set("Cache-Control", "no-store")
 		ids := w.tagged(r.Context(), acct, tag)
+		if role == "sender" && acct.WatchAlbum != uuid.Nil {
+			// photos in the linked album wait too; count each once even if it is also tagged
+			seen := map[string]bool{}
+			for _, id := range ids {
+				seen[id] = true
+			}
+			if pending, err := syncer.AlbumPending(r.Context(), svc, acct, me.user.ID); err == nil {
+				for _, a := range pending {
+					if id := a.Id.String(); !seen[id] {
+						ids = append(ids, id)
+					}
+				}
+			}
+		}
 		var thumbs []string
 		if role == "sender" && w.PublicImmichURL != "" {
 			for _, id := range ids[:min(len(ids), 6)] {
@@ -485,6 +502,55 @@ func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 	go w.S.Run(w.BackgroundCtx, "manual: "+me.user.Email, false)
 	rw.WriteHeader(http.StatusAccepted)
 	rw.Write([]byte("Sync started"))
+}
+
+// albumChoice lists the person's own albums for linking one to a service they send to. It is loaded when they
+// ask, so the page does not list albums every time it opens.
+func (w *Server) albumChoice(rw http.ResponseWriter, r *http.Request) {
+	me := w.requireMember(rw, r)
+	if me == nil {
+		return
+	}
+	name := r.URL.Query().Get("service")
+	var svc *syncer.Service
+	for _, s := range w.S.Current() {
+		if s.Label() == name && me.account(s, "sender") != nil {
+			svc = s
+		}
+	}
+	if svc == nil {
+		http.Error(rw, "you do not send to that service", http.StatusNotFound)
+		return
+	}
+	albums, err := me.sess.OwnedAlbums(r.Context())
+	if err != nil {
+		w.Log.Warn("could not list albums", "user", me.user.Email, "err", err)
+		http.Error(rw, "could not list your albums: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	opts := make([]AlbumOption, 0, len(albums))
+	for _, a := range albums {
+		opts = append(opts, AlbumOption{ID: a.ID.String(), Label: albumLabel(a.Name, a.Count)})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	AlbumChoice(name, opts, svc.CopiesFor(me.account(svc, "sender"))).Render(r.Context(), rw)
+}
+
+// linkAlbum and unlinkAlbum answer like joining and leaving: the page reloads on success.
+func (w *Server) linkAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "linked an album", func(ctx context.Context, me *member, service string) error {
+		id, err := uuid.Parse(r.PostFormValue("album"))
+		if err != nil {
+			return hub.ErrNoAlbum
+		}
+		return w.Hub.LinkAlbum(ctx, me.sess, me.user, service, id)
+	})
+}
+
+func (w *Server) unlinkAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "unlinked an album", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.UnlinkAlbum(ctx, me.user, service)
+	})
 }
 
 // enableTags switches Tags on in the person's own Immich account, when they press the button for it. It

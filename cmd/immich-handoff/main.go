@@ -61,6 +61,7 @@ func run(log *slog.Logger) error {
 	}
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
 	tidyMin, _ := strconv.ParseFloat(env("CLEANUP_INTERVAL_MINUTES", "15"), 64)
+	albumMin, _ := strconv.ParseFloat(env("ALBUM_CHECK_MINUTES", "15"), 64)
 
 	connect := func(key string) (*immich.API, error) { return immich.New(base, immich.Auth{APIKey: key}, nil) }
 	services, err := config.Load(os.Getenv, connect)
@@ -160,6 +161,25 @@ func run(log *slog.Logger) error {
 					return
 				case <-t.C:
 					s.Tidy(ctx)
+				}
+			}
+		}()
+	}
+
+	// Immich sends no event when a photo is added to an album either, so albums that senders linked to a
+	// service are looked at on a timer too. The timer does nothing when no album is linked.
+	if albumMin > 0 {
+		go func() {
+			t := time.NewTicker(time.Duration(albumMin * float64(time.Minute)))
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					if s.HasWatchers() {
+						s.Run(ctx, "album check", false)
+					}
 				}
 			}
 		}()

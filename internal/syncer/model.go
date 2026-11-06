@@ -14,6 +14,11 @@ type Account struct {
 	API    *immich.API
 	UserID uuid.UUID // the Immich user behind the key; set by ResolveUsers or when a person joins
 	Mode   string    // what happens to this sender's originals (ModeMove / ModeCopy); empty: the service's setting
+
+	// WatchAlbum is an album of this sender's whose photos are all handed over, now and later, without a tag.
+	// Zero: none. WatchAlbumName is its name, for messages. Set when the account is built, never changed after.
+	WatchAlbum     uuid.UUID
+	WatchAlbumName string
 }
 
 const (

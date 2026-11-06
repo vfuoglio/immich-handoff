@@ -67,7 +67,8 @@ type Syncer struct {
 	recent   map[uuid.UUID]time.Time // photos handled a moment ago
 
 	albumMu     sync.Mutex
-	albumBroken map[string]bool // receivers whose album could not be used, so the problem is reported once, not every pass
+	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
+	lastPublish atomic.Int64    // when the open pages were last told something changed (see publishSoon)
 }
 
 // Totals are cumulative since the app started (kept in memory only).
@@ -344,43 +345,88 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		c.Errors++
 		return
 	}
-	if tag == nil {
-		return
+	var shareTag uuid.UUID // the zero id: a photo that was not tagged (it came from the watched album)
+	var assets []immich.AssetResponseDto
+	if tag != nil {
+		shareTag = *tag
+		assets, err = snd.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
+		if err != nil {
+			log.Error("search failed", "err", err)
+			c.Errors++
+			return
+		}
+		assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	}
-	assets, err := snd.API.Search(ctx, immich.MetadataSearchDto{TagIds: &[]uuid.UUID{*tag}})
-	if err != nil {
-		log.Error("search failed", "err", err)
-		c.Errors++
-		return
-	}
-	assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	ids := make([]string, 0, len(assets))
 	for _, a := range assets {
 		ids = append(ids, a.Id.String())
 	}
-	log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
+	if tag != nil {
+		log.Info("tagged assets found", "user", me.Email, "count", len(assets), "ids", ids)
+	}
+	// Photos in the sender's linked album are handed over too, once, without a tag.
+	fromAlbum := map[uuid.UUID]bool{}
+	if snd.WatchAlbum != uuid.Nil {
+		if pending, err := AlbumPending(ctx, svc, snd, me.ID); err != nil {
+			s.watchProblem(log, svc, snd, err)
+		} else {
+			s.watchOK(svc, snd)
+			tagged := map[uuid.UUID]bool{}
+			for _, a := range assets {
+				tagged[a.Id] = true
+			}
+			for _, a := range pending {
+				if !tagged[a.Id] {
+					assets = append(assets, a)
+					fromAlbum[a.Id] = true
+				}
+			}
+			if len(pending) > 0 {
+				log.Info("photos in the linked album", "album", snd.WatchAlbumName, "count", len(pending))
+			}
+		}
+	}
+	var fromAlbumDone, fromAlbumRefused, fromAlbumFailed int
 	for _, a := range assets {
 		if s.justHandled(a.Id) {
 			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
 			continue
 		}
-		switch out, err := s.process(ctx, log, svc, snd, rs, a, *tag); {
+		tagID := shareTag
+		if fromAlbum[a.Id] {
+			tagID = uuid.Nil
+		}
+		switch out, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
 		case err != nil:
 			c.Errors++
+			if fromAlbum[a.Id] {
+				fromAlbumFailed++
+			}
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
 		case out == "imported":
 			c.Imported++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumDone++
+			}
 		case out == "duplicate":
 			c.Duplicate++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumDone++
+			}
 		case out == "refused":
 			c.Refused++
 			s.markJustHandled(a.Id)
+			if fromAlbum[a.Id] {
+				fromAlbumRefused++
+			}
 		case out == "dryrun":
 			c.DryRun++
 		}
+		s.publishSoon() // the page's "waiting" counter counts down while a long hand-over runs
 	}
+	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
 	return
 }
 
@@ -629,6 +675,9 @@ func (s *Syncer) markSent(ctx context.Context, svc *Service, src *immich.API, id
 			return err
 		}
 	}
+	if shareTag == uuid.Nil { // it came from the linked album and never had the service tag
+		return nil
+	}
 	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
 }
 
@@ -708,6 +757,9 @@ func (s *Syncer) markRefused(ctx context.Context, svc *Service, src *immich.API,
 	}
 	if err := s.addTagVerified(ctx, src, svc.RefusedTag, id); err != nil {
 		return err
+	}
+	if shareTag == uuid.Nil {
+		return nil
 	}
 	return s.removeTagVerified(ctx, src, svc.Tag, shareTag, id)
 }

@@ -927,6 +927,15 @@ type ApiKeyResponseDto struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// ApiKeyUpdateDto defines model for ApiKeyUpdateDto.
+type ApiKeyUpdateDto struct {
+	// Name API key name
+	Name *string `json:"name,omitempty"`
+
+	// Permissions List of permissions
+	Permissions *[]Permission `json:"permissions,omitempty"`
+}
+
 // AssetBulkDeleteDto defines model for AssetBulkDeleteDto.
 type AssetBulkDeleteDto struct {
 	// Force Force delete even if in use
@@ -2273,6 +2282,11 @@ type AddAssetsToAlbumJSONRequestBody = BulkIdsDto
 // CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
 type CreateApiKeyJSONRequestBody = ApiKeyCreateDto
 
+// UpdateApiKeyJSONRequestBody defines body for UpdateApiKey for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateApiKeyJSONRequestBody = ApiKeyUpdateDto
+
 // DeleteAssetsJSONRequestBody defines body for DeleteAssets for application/json ContentType.
 type DeleteAssetsJSONRequestBody = AssetBulkDeleteDto
 
@@ -2459,6 +2473,35 @@ type ClientInterface interface {
 	//
 	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 	DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetApiKey Retrieve an API key
+	//
+	// Retrieve an API key by its ID. The current user must own this API key.
+	//
+	// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+	GetApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateApiKeyWithBody Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateApiKey Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKey(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteAssetsWithBody Delete assets
 	//
@@ -2857,6 +2900,63 @@ func (c *Client) GetMyApiKey(ctx context.Context, reqEditors ...RequestEditorFn)
 // Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 func (c *Client) DeleteApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteApiKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetApiKey Retrieve an API key
+//
+// Retrieve an API key by its ID. The current user must own this API key.
+//
+// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+func (c *Client) GetApiKey(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetApiKeyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApiKeyWithBody Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateApiKeyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApiKeyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateApiKey Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateApiKey(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateApiKeyRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3660,6 +3760,87 @@ func NewDeleteApiKeyRequest(server string, id openapi_types.UUID) (*http.Request
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetApiKeyRequest constructs an http.Request for the GetApiKey method
+func NewGetApiKeyRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateApiKeyRequest calls the generic UpdateApiKey builder with application/json body
+func NewUpdateApiKeyRequest(server string, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateApiKeyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateApiKeyRequestWithBody constructs an http.Request for the UpdateApiKey method, with any body, and a specified content type
+func NewUpdateApiKeyRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api-keys/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -4702,6 +4883,37 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with DELETE /api-keys/{id} (the `DeleteApiKey` operationId).
 	DeleteApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteApiKeyResponse, error)
 
+	// GetApiKeyWithResponse Retrieve an API key
+	//
+	// Retrieve an API key by its ID. The current user must own this API key.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+	GetApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiKeyResponse, error)
+
+	// UpdateApiKeyWithBodyWithResponse Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error)
+
+	// UpdateApiKeyWithResponse Update an API key
+	//
+	// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error)
+
 	// DeleteAssetsWithBodyWithResponse Delete assets
 	//
 	// Deletes multiple assets at the same time.
@@ -5219,6 +5431,88 @@ func (r DeleteApiKeyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DeleteApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetApiKeyResponse) GetJSON200() *ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetApiKeyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateApiKeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ApiKeyResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateApiKeyResponse) GetJSON200() *ApiKeyResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateApiKeyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateApiKeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateApiKeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateApiKeyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6099,6 +6393,54 @@ func (c *ClientWithResponses) DeleteApiKeyWithResponse(ctx context.Context, id o
 	return ParseDeleteApiKeyResponse(rsp)
 }
 
+// GetApiKeyWithResponse Retrieve an API key
+//
+// Retrieve an API key by its ID. The current user must own this API key.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api-keys/{id} (the `GetApiKey` operationId).
+func (c *ClientWithResponses) GetApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetApiKeyResponse, error) {
+	rsp, err := c.GetApiKey(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetApiKeyResponse(rsp)
+}
+
+// UpdateApiKeyWithBodyWithResponse Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateApiKeyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error) {
+	rsp, err := c.UpdateApiKeyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApiKeyResponse(rsp)
+}
+
+// UpdateApiKeyWithResponse Update an API key
+//
+// Updates the name and permissions of an API key by its ID. The current user must own this API key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api-keys/{id} (the `UpdateApiKey` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateApiKeyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateApiKeyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateApiKeyResponse, error) {
+	rsp, err := c.UpdateApiKey(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateApiKeyResponse(rsp)
+}
+
 // DeleteAssetsWithBodyWithResponse Delete assets
 //
 // Deletes multiple assets at the same time.
@@ -6662,6 +7004,58 @@ func ParseDeleteApiKeyResponse(rsp *http.Response) (*DeleteApiKeyResponse, error
 	response := &DeleteApiKeyResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetApiKeyResponse parses an HTTP response from a GetApiKeyWithResponse call
+func ParseGetApiKeyResponse(rsp *http.Response) (*GetApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateApiKeyResponse parses an HTTP response from a UpdateApiKeyWithResponse call
+func ParseUpdateApiKeyResponse(rsp *http.Response) (*UpdateApiKeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateApiKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ApiKeyResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil

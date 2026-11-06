@@ -256,3 +256,37 @@ func TestAServicesAlbumSurvivesARestart(t *testing.T) {
 		}
 	}
 }
+
+func TestALinkedAlbumIsStoredChangedAndCleared(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	s, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, album := uuid.New(), uuid.New()
+	l, err := s.AddLink(ctx, Link{Service: "holiday", Role: RoleSender, ImmichUserID: user, Name: "Bob", Email: "b@x", KeyID: uuid.New(), Key: "k"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetLinkAlbum(ctx, l.ID, album, "To send"); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s2, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	if links, _ := s2.Links(ctx); len(links) != 1 || links[0].AlbumID != album || links[0].AlbumName != "To send" {
+		t.Fatalf("the album must survive a restart: %+v", links)
+	}
+	if err := s2.SetLinkAlbum(ctx, l.ID, uuid.Nil, "ignored"); err != nil {
+		t.Fatal(err)
+	}
+	if links, _ := s2.Links(ctx); links[0].AlbumID != uuid.Nil || links[0].AlbumName != "" {
+		t.Errorf("unlinking clears both fields: %+v", links)
+	}
+	if err := s2.SetLinkAlbum(ctx, "no-such-link", album, "x"); err != ErrNotFound {
+		t.Errorf("a missing membership: %v", err)
+	}
+}

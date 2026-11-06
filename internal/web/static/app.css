@@ -123,3 +123,6 @@ details.offer[open] > summary::before { content: "\2212"; }
 details.offer[open] > summary { margin-bottom: .6rem; }
 
 .q { flex-basis: 100%; margin: 0; }
+.watch { margin-top: .5rem; }
+.watch .albumform:empty { display: none; }
+.watch .albumform .card { margin-top: .5rem; }
