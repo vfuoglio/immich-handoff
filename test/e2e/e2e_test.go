@@ -234,10 +234,20 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 		}
 	}
 	apply(ids)
-	// Immich itself occasionally drops a tag applied right after an upload (seen with no handoff app
-	// running at all), so, like a person would, make sure it stuck and add it again if it was lost.
-	// "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already
-	// handled carries a marker tag or is trashed, and must not have the tag put back on it.
+	keepTagged(t, u, ids, apply)
+}
+
+// keepTagged makes sure a tag that was just applied stuck, and applies it again when it did not.
+//
+// Immich itself occasionally drops a tag applied right after an upload (about 1 in 50, seen with no
+// handoff app running at all; see docs/immich-api-notes.md). A person would notice and tag again, so the
+// test helpers do the same, and the tests then measure this app and not that behaviour of Immich.
+//
+// "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already handled
+// carries a marker tag or is trashed, and must not have the tag put back on it. Both tagging helpers use
+// this, so a different way of tagging cannot reintroduce the flake.
+func keepTagged(t *testing.T, u user, ids []string, apply func(ids []string)) {
+	t.Helper()
 	for attempt := 0; attempt < 6; attempt++ {
 		time.Sleep(700 * time.Millisecond)
 		var missing []string
@@ -250,6 +260,7 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 		if len(missing) == 0 {
 			return
 		}
+		t.Logf("tag was dropped by Immich on %d photo(s); applying it again (attempt %d)", len(missing), attempt+1)
 		apply(missing)
 	}
 }
@@ -260,13 +271,17 @@ func tagLikeThePhone(t *testing.T, u user, tag string, ids ...string) {
 	t.Helper()
 	var tags []struct{ ID string }
 	mustOK(t, call(t, "PUT", "/tags", keyAuth(u), map[string]any{"tags": []string{tag}}, &tags), "upsert tag")
-	var out struct {
-		Count int `json:"count"`
+	apply := func(ids []string) {
+		var out struct {
+			Count int `json:"count"`
+		}
+		mustOK(t, call(t, "PUT", "/tags/assets", keyAuth(u), map[string]any{"assetIds": ids, "tagIds": []string{tags[0].ID}}, &out), "bulk tag")
+		if out.Count != len(ids) {
+			t.Fatalf("bulk tagging reported %d of %d", out.Count, len(ids))
+		}
 	}
-	mustOK(t, call(t, "PUT", "/tags/assets", keyAuth(u), map[string]any{"assetIds": ids, "tagIds": []string{tags[0].ID}}, &out), "bulk tag")
-	if out.Count != len(ids) {
-		t.Fatalf("bulk tagging reported %d of %d", out.Count, len(ids))
-	}
+	apply(ids)
+	keepTagged(t, u, ids, apply)
 }
 
 // search returns the ids of assets with a tag, optionally including trashed ones.
