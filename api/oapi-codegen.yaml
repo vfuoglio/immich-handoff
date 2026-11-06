@@ -28,3 +28,5 @@ output-options:
     - deleteApiKey
     - getMyApiKey
     - getApiKeys
+    - getMyPreferences
+    - updateMyPreferences

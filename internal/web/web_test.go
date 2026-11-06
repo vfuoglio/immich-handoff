@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,6 +47,30 @@ func fakeImmich() http.Handler {
 			return
 		}
 		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test"})
+	})
+	// Tags are off by default in Immich; the family account has them on, "sess=other" cannot be changed.
+	var prefMu sync.Mutex
+	tagsOn := map[string]bool{"sess=family": true}
+	cookie := func(r *http.Request) string { return strings.TrimSpace(r.Header.Get("Cookie")) }
+	prefs := func(on bool) map[string]any {
+		return map[string]any{"tags": map[string]any{"enabled": on, "sidebarWeb": on}}
+	}
+	mux.HandleFunc("GET /api/users/me/preferences", func(w http.ResponseWriter, r *http.Request) {
+		prefMu.Lock()
+		defer prefMu.Unlock()
+		j(w, prefs(tagsOn[cookie(r)]))
+	})
+	mux.HandleFunc("PUT /api/users/me/preferences", func(w http.ResponseWriter, r *http.Request) {
+		if cookie(r) == "sess=other" {
+			http.Error(w, "nope", http.StatusInternalServerError)
+			return
+		}
+		var body struct{ Tags struct{ Enabled bool } }
+		json.NewDecoder(r.Body).Decode(&body)
+		prefMu.Lock()
+		defer prefMu.Unlock()
+		tagsOn[cookie(r)] = body.Tags.Enabled
+		j(w, prefs(tagsOn[cookie(r)]))
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		tag := func(id, n string) map[string]any {
@@ -318,5 +343,40 @@ func TestInvitePageLinksPointAtTheRoot(t *testing.T) {
 	}
 	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "<base") {
 		t.Errorf("the dashboard needs no base: %.200s", body)
+	}
+}
+
+func TestTagsNoticeAndSwitch(t *testing.T) {
+	app, _ := setup(t)
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); !strings.Contains(body, "Tags are switched off") {
+		t.Errorf("a person with Tags off must be told: %.200s", body)
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=family", nil); strings.Contains(body, "Tags are switched off") {
+		t.Errorf("a person with Tags on must not be nagged: %.200s", body)
+	}
+	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "sess=alice", nil); code != 400 {
+		t.Errorf("switching Tags on needs the cross-site header, got %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "", hdr); code != 401 {
+		t.Errorf("switching Tags on needs a sign-in, got %d", code)
+	}
+	if code, body := do(t, "POST", app.URL+"/preferences/tags", "sess=alice", hdr); code != 200 || !strings.Contains(body, "refresh the Immich tab") {
+		t.Errorf("switching on: %d %q", code, body)
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "Tags are switched off") {
+		t.Errorf("the notice must go once Tags are on: %.200s", body)
+	}
+	// when Immich refuses, say so in the message line and keep the button
+	req, _ := http.NewRequest("POST", app.URL+"/preferences/tags", nil)
+	req.Header.Set("Cookie", "sess=other")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadGateway || res.Header.Get("HX-Retarget") != "#flash" {
+		t.Errorf("a refusal from Immich: %d, retarget %q", res.StatusCode, res.Header.Get("HX-Retarget"))
 	}
 }

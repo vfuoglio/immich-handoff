@@ -6,7 +6,7 @@ About ten minutes. You run one small container next to Immich; everyone else use
 
 - **Immich 3.2.0 or newer.** Earlier versions cannot tell the app when a tag is added.
 - **Docker**, on the machine that runs Immich (or one that shares a Docker network with it).
-- **Every person who takes part, senders and receivers, must switch Tags on by hand** in Immich (Account Settings -> Features -> Tags). Immich has it off by default, separately for each user, and this app does not change it. Senders need it to add tags to photos. Receivers need it to see the inbox tag on what arrives. Without it a person cannot see or set tags in the Immich app, even though the hand-over itself still works. Saving the setting is not enough: the person must also **reload Immich (refresh the browser tab or window)** before the tag options appear. Ask each person to do both when they join.
+- **Every person who takes part, senders and receivers, needs Tags switched on** in their Immich account. Immich has it off by default, separately for each user. Senders need it to add tags to photos, and receivers need it to see the inbox tag on what arrives. Without it a person cannot see or set tags in the Immich app, even though the hand-over itself still works. **The page notices this:** when someone opens it with Tags off, it shows a notice with a **Turn on Tags** button, which changes that one setting in their own Immich account (the same as Account Settings -> Features -> Tags). Either way, switching it on is not enough: the person must also **reload Immich (refresh the browser tab or window)** before the tag options appear.
 
 ## 1. Get the files
 

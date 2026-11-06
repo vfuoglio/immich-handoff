@@ -66,6 +66,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
 	mux.HandleFunc("POST /sync", w.syncNow)
+	mux.HandleFunc("POST /preferences/tags", w.enableTags)
 	mux.HandleFunc("POST /join", w.join)
 	mux.HandleFunc("POST /leave", w.leave)
 	mux.HandleFunc("POST /services", w.createService)
@@ -238,6 +239,11 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 
 func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d := DashboardData{User: me.user.Name, Services: w.servicesFor(ctx, me), Last: w.S.Last()}
+	// Tags are off by default in Immich, and without them a person cannot add or see tags, which is the whole
+	// of using this. If Immich cannot tell, say nothing rather than guess.
+	if on, err := me.sess.TagsEnabled(ctx); err == nil {
+		d.TagsOff = !on
+	}
 	if w.Hub == nil || !w.Hub.SelfService() {
 		return d
 	}
@@ -470,6 +476,25 @@ func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 	go w.S.Run(w.BackgroundCtx, "manual: "+me.user.Email, false)
 	rw.WriteHeader(http.StatusAccepted)
 	rw.Write([]byte("Sync started"))
+}
+
+// enableTags switches Tags on in the person's own Immich account, when they press the button for it. It
+// acts with their session and changes nothing but that one setting.
+func (w *Server) enableTags(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if err := me.sess.EnableTags(r.Context()); err != nil {
+		w.Log.Warn("could not switch tags on", "user", me.user.Email, "err", err)
+		rw.Header().Set("HX-Retarget", "#flash") // keep the button, show the problem in the message line
+		rw.Header().Set("HX-Reswap", "innerHTML")
+		rw.WriteHeader(http.StatusBadGateway)
+		fmt.Fprint(rw, "Could not switch Tags on: ", err.Error(), ". You can do it in Immich: Account Settings, Features, Tags.")
+		return
+	}
+	w.Log.Info("tags switched on", "user", me.user.Email)
+	rw.Write([]byte("Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear."))
 }
 
 func (w *Server) join(rw http.ResponseWriter, r *http.Request) {

@@ -93,6 +93,33 @@ func (a *API) Me(ctx context.Context) (User, error) {
 	return User{ID: r.JSON200.Id, Name: r.JSON200.Name, Email: string(r.JSON200.Email)}, nil
 }
 
+// TagsEnabled reports whether the person has Tags switched on in their Immich account. Immich has it off by
+// default for each user, and while it is off the person can neither add tags in the app nor see them.
+func (a *API) TagsEnabled(ctx context.Context) (bool, error) {
+	r, err := a.c.GetMyPreferencesWithResponse(ctx)
+	if err != nil {
+		return false, err
+	}
+	if r.JSON200 == nil {
+		return false, statusErr("getMyPreferences", r.StatusCode(), r.Body)
+	}
+	return r.JSON200.Tags.Enabled, nil
+}
+
+// EnableTags switches Tags on for the person (and shows them in the web sidebar), as the Tags switch in
+// Immich's account settings does. It needs the person's own session; the person has to ask for it.
+func (a *API) EnableTags(ctx context.Context) error {
+	on := true
+	r, err := a.c.UpdateMyPreferencesWithResponse(ctx, UpdateMyPreferencesJSONRequestBody{Tags: &TagsUpdate{Enabled: &on, SidebarWeb: &on}})
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("updateMyPreferences", r.StatusCode(), r.Body)
+	}
+	return nil
+}
+
 // ServerMajor returns the Immich major version.
 func (a *API) ServerVersion(ctx context.Context) (major, minor int, err error) {
 	r, err := a.c.GetServerVersionWithResponse(ctx)

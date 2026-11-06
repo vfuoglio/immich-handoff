@@ -48,7 +48,7 @@ Everyone's phone keeps backing up to their own account, and anyone can hand phot
 
 You need Immich 3.2.0 or newer and Docker.
 
-> **Everyone who takes part must switch Tags on in Immich, by hand.** It is off by default, per person: Immich, then Account Settings, Features, **Tags**. Senders need it to add tags to photos, and receivers need it to see the inbox tag on what arrives. Saving the setting is not enough: **reload the Immich page (refresh the browser tab) afterwards**, or the tags still do not appear. Without it, tags can be set by the app but people cannot see or use them in Immich.
+> **Everyone who takes part needs Tags switched on in Immich.** It is off by default, per person. The page notices and offers a **Turn on Tags** button (or do it in Immich: Account Settings, Features, **Tags**). Senders need Tags to add tags to photos, and receivers need them to see the inbox tag on what arrives. Switching them on is not enough: **reload the Immich page (refresh the browser tab) afterwards**, or the tags still do not appear. Without Tags, the app can set tags but people cannot see or use them in Immich.
 
 **Start from a release, not from `main`.** `main` is where the next version is being built, and it can be unstable or ahead of the published image. The latest release is [v1.1.0](https://github.com/vfuoglio/immich-handoff/releases/latest); the [releases page](https://github.com/vfuoglio/immich-handoff/releases) lists newer ones and, for each, what changed. If you do not use git, download that release's "Source code" archive from the same page.
 

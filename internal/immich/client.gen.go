@@ -848,6 +848,18 @@ type AlbumUserResponseDto struct {
 // AlbumUserRole Album user role
 type AlbumUserRole string
 
+// AlbumsResponse defines model for AlbumsResponse.
+type AlbumsResponse struct {
+	// DefaultAssetOrder Asset sort order
+	DefaultAssetOrder AssetOrder `json:"defaultAssetOrder"`
+}
+
+// AlbumsUpdate Album preferences
+type AlbumsUpdate struct {
+	// DefaultAssetOrder Asset sort order
+	DefaultAssetOrder *AssetOrder `json:"defaultAssetOrder,omitempty"`
+}
+
 // ApiKeyCreateDto defines model for ApiKeyCreateDto.
 type ApiKeyCreateDto struct {
 	// Name API key name
@@ -1085,6 +1097,12 @@ type AssetTypeEnum string
 // AssetVisibility Asset visibility
 type AssetVisibility string
 
+// AvatarUpdate defines model for AvatarUpdate.
+type AvatarUpdate struct {
+	// Color User avatar color
+	Color *UserAvatarColor `json:"color,omitempty"`
+}
+
 // BoolFilter defines model for BoolFilter.
 type BoolFilter struct {
 	Eq bool `json:"eq"`
@@ -1110,6 +1128,18 @@ type BulkIdResponseDto struct {
 type BulkIdsDto struct {
 	// Ids IDs to process
 	Ids []openapi_types.UUID `json:"ids"`
+}
+
+// CastResponse defines model for CastResponse.
+type CastResponse struct {
+	// GCastEnabled Whether Google Cast is enabled
+	GCastEnabled bool `json:"gCastEnabled"`
+}
+
+// CastUpdate defines model for CastUpdate.
+type CastUpdate struct {
+	// GCastEnabled Whether Google Cast is enabled
+	GCastEnabled *bool `json:"gCastEnabled,omitempty"`
 }
 
 // ContributorCountResponseDto defines model for ContributorCountResponseDto.
@@ -1161,6 +1191,48 @@ type DateFilterNullable struct {
 
 	// Ne Example: 2024-01-01T00:00:00.000Z
 	Ne *time.Time `json:"ne,omitempty"`
+}
+
+// DownloadResponse defines model for DownloadResponse.
+type DownloadResponse struct {
+	// ArchiveSize Maximum archive size in bytes
+	ArchiveSize int `json:"archiveSize"`
+
+	// IncludeEmbeddedVideos Whether to include embedded videos in downloads
+	IncludeEmbeddedVideos bool `json:"includeEmbeddedVideos"`
+}
+
+// DownloadUpdate defines model for DownloadUpdate.
+type DownloadUpdate struct {
+	// ArchiveSize Maximum archive size in bytes
+	ArchiveSize *int `json:"archiveSize,omitempty"`
+
+	// IncludeEmbeddedVideos Whether to include embedded videos in downloads
+	IncludeEmbeddedVideos *bool `json:"includeEmbeddedVideos,omitempty"`
+}
+
+// EmailNotificationsResponse defines model for EmailNotificationsResponse.
+type EmailNotificationsResponse struct {
+	// AlbumInvite Whether to receive email notifications for album invites
+	AlbumInvite bool `json:"albumInvite"`
+
+	// AlbumUpdate Whether to receive email notifications for album updates
+	AlbumUpdate bool `json:"albumUpdate"`
+
+	// Enabled Whether email notifications are enabled
+	Enabled bool `json:"enabled"`
+}
+
+// EmailNotificationsUpdate defines model for EmailNotificationsUpdate.
+type EmailNotificationsUpdate struct {
+	// AlbumInvite Whether to receive email notifications for album invites
+	AlbumInvite *bool `json:"albumInvite,omitempty"`
+
+	// AlbumUpdate Whether to receive email notifications for album updates
+	AlbumUpdate *bool `json:"albumUpdate,omitempty"`
+
+	// Enabled Whether email notifications are enabled
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 // EnumFilterAssetType defines model for EnumFilterAssetType.
@@ -1254,6 +1326,24 @@ type ExifResponseDto struct {
 	TimeZone *string `json:"timeZone,omitempty"`
 }
 
+// FoldersResponse defines model for FoldersResponse.
+type FoldersResponse struct {
+	// Enabled Whether folders are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether folders appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// FoldersUpdate defines model for FoldersUpdate.
+type FoldersUpdate struct {
+	// Enabled Whether folders are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether folders appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // IdFilter defines model for IdFilter.
 type IdFilter struct {
 	Eq *openapi_types.UUID `json:"eq,omitempty"`
@@ -1271,6 +1361,30 @@ type IdsFilter struct {
 	All  *[]openapi_types.UUID `json:"all,omitempty"`
 	Any  *[]openapi_types.UUID `json:"any,omitempty"`
 	None *[]openapi_types.UUID `json:"none,omitempty"`
+}
+
+// MemoriesResponse defines model for MemoriesResponse.
+type MemoriesResponse struct {
+	// Duration Memory duration in seconds
+	Duration int `json:"duration"`
+
+	// Enabled Whether memories are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether memories appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// MemoriesUpdate defines model for MemoriesUpdate.
+type MemoriesUpdate struct {
+	// Duration Memory duration in seconds
+	Duration *int `json:"duration,omitempty"`
+
+	// Enabled Whether memories are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether memories appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // MetadataSearchDto defines model for MetadataSearchDto.
@@ -1482,6 +1596,30 @@ type NumberFilterNullable struct {
 	NotIn *[]float64 `json:"notIn,omitempty"`
 }
 
+// PeopleResponse defines model for PeopleResponse.
+type PeopleResponse struct {
+	// Enabled Whether people are enabled
+	Enabled bool `json:"enabled"`
+
+	// MinimumFaces People face threshold
+	MinimumFaces *int `json:"minimumFaces,omitempty"`
+
+	// SidebarWeb Whether people appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// PeopleUpdate defines model for PeopleUpdate.
+type PeopleUpdate struct {
+	// Enabled Whether people are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// MinimumFaces People face threshold
+	MinimumFaces *int `json:"minimumFaces,omitempty"`
+
+	// SidebarWeb Whether people appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // Permission List of permissions
 type Permission string
 
@@ -1510,6 +1648,48 @@ type PersonResponseDto struct {
 
 	// UpdatedAt Last update date
 	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+}
+
+// PurchaseResponse defines model for PurchaseResponse.
+type PurchaseResponse struct {
+	// HideBuyButtonUntil Date until which to hide buy button
+	HideBuyButtonUntil string `json:"hideBuyButtonUntil"`
+
+	// ShowSupportBadge Whether to show support badge
+	ShowSupportBadge bool `json:"showSupportBadge"`
+}
+
+// PurchaseUpdate defines model for PurchaseUpdate.
+type PurchaseUpdate struct {
+	// HideBuyButtonUntil Date until which to hide buy button
+	HideBuyButtonUntil *string `json:"hideBuyButtonUntil,omitempty"`
+
+	// ShowSupportBadge Whether to show support badge
+	ShowSupportBadge *bool `json:"showSupportBadge,omitempty"`
+}
+
+// RatingsResponse defines model for RatingsResponse.
+type RatingsResponse struct {
+	// Enabled Whether ratings are enabled
+	Enabled bool `json:"enabled"`
+}
+
+// RatingsUpdate defines model for RatingsUpdate.
+type RatingsUpdate struct {
+	// Enabled Whether ratings are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RecentlyAddedResponse defines model for RecentlyAddedResponse.
+type RecentlyAddedResponse struct {
+	// SidebarWeb Whether the recently added page appears in the web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// RecentlyAddedUpdate defines model for RecentlyAddedUpdate.
+type RecentlyAddedUpdate struct {
+	// SidebarWeb Whether the recently added page appears in the web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // SearchAlbumResponseDto defines model for SearchAlbumResponseDto.
@@ -1662,6 +1842,24 @@ type ServerVersionResponseDto struct {
 	Prerelease *int `json:"prerelease"`
 }
 
+// SharedLinksResponse defines model for SharedLinksResponse.
+type SharedLinksResponse struct {
+	// Enabled Whether shared links are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether shared links appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// SharedLinksUpdate defines model for SharedLinksUpdate.
+type SharedLinksUpdate struct {
+	// Enabled Whether shared links are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether shared links appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
 // StringFilter defines model for StringFilter.
 type StringFilter struct {
 	Eq    *string   `json:"eq,omitempty"`
@@ -1723,6 +1921,24 @@ type TagResponseDto struct {
 type TagUpsertDto struct {
 	// Tags Tag names to upsert
 	Tags []string `json:"tags"`
+}
+
+// TagsResponse defines model for TagsResponse.
+type TagsResponse struct {
+	// Enabled Whether tags are enabled
+	Enabled bool `json:"enabled"`
+
+	// SidebarWeb Whether tags appear in web sidebar
+	SidebarWeb bool `json:"sidebarWeb"`
+}
+
+// TagsUpdate defines model for TagsUpdate.
+type TagsUpdate struct {
+	// Enabled Whether tags are enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// SidebarWeb Whether tags appear in web sidebar
+	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
 // UserAdminResponseDto defines model for UserAdminResponseDto.
@@ -1801,6 +2017,40 @@ type UserLicense struct {
 
 	// LicenseKey License key (format: /^IM(SV|CL)(-[\dA-Za-z]{4}){8}$/)
 	LicenseKey string `json:"licenseKey"`
+}
+
+// UserPreferencesResponseDto defines model for UserPreferencesResponseDto.
+type UserPreferencesResponseDto struct {
+	Albums             AlbumsResponse             `json:"albums"`
+	Cast               CastResponse               `json:"cast"`
+	Download           DownloadResponse           `json:"download"`
+	EmailNotifications EmailNotificationsResponse `json:"emailNotifications"`
+	Folders            FoldersResponse            `json:"folders"`
+	Memories           MemoriesResponse           `json:"memories"`
+	People             PeopleResponse             `json:"people"`
+	Purchase           PurchaseResponse           `json:"purchase"`
+	Ratings            RatingsResponse            `json:"ratings"`
+	RecentlyAdded      RecentlyAddedResponse      `json:"recentlyAdded"`
+	SharedLinks        SharedLinksResponse        `json:"sharedLinks"`
+	Tags               TagsResponse               `json:"tags"`
+}
+
+// UserPreferencesUpdateDto defines model for UserPreferencesUpdateDto.
+type UserPreferencesUpdateDto struct {
+	// Albums Album preferences
+	Albums             *AlbumsUpdate             `json:"albums,omitempty"`
+	Avatar             *AvatarUpdate             `json:"avatar,omitempty"`
+	Cast               *CastUpdate               `json:"cast,omitempty"`
+	Download           *DownloadUpdate           `json:"download,omitempty"`
+	EmailNotifications *EmailNotificationsUpdate `json:"emailNotifications,omitempty"`
+	Folders            *FoldersUpdate            `json:"folders,omitempty"`
+	Memories           *MemoriesUpdate           `json:"memories,omitempty"`
+	People             *PeopleUpdate             `json:"people,omitempty"`
+	Purchase           *PurchaseUpdate           `json:"purchase,omitempty"`
+	Ratings            *RatingsUpdate            `json:"ratings,omitempty"`
+	RecentlyAdded      *RecentlyAddedUpdate      `json:"recentlyAdded,omitempty"`
+	SharedLinks        *SharedLinksUpdate        `json:"sharedLinks,omitempty"`
+	Tags               *TagsUpdate               `json:"tags,omitempty"`
 }
 
 // UserResponseDto defines model for UserResponseDto.
@@ -1992,6 +2242,11 @@ type UntagAssetsJSONRequestBody = BulkIdsDto
 
 // TagAssetsJSONRequestBody defines body for TagAssets for application/json ContentType.
 type TagAssetsJSONRequestBody = BulkIdsDto
+
+// UpdateMyPreferencesJSONRequestBody defines body for UpdateMyPreferences for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateMyPreferencesJSONRequestBody = UserPreferencesUpdateDto
 
 // CreateWorkflowJSONRequestBody defines body for CreateWorkflow for application/json ContentType.
 type CreateWorkflowJSONRequestBody = WorkflowCreateDto
@@ -2247,6 +2502,35 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /users/me (the `GetMyUser` operationId).
 	GetMyUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMyPreferences Get my preferences
+	//
+	// Retrieve the preferences for the current user.
+	//
+	// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+	GetMyPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMyPreferencesWithBody Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMyPreferences Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferences(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchWorkflows List all workflows
 	//
@@ -2683,6 +2967,63 @@ func (c *Client) TagAssets(ctx context.Context, id openapi_types.UUID, body TagA
 // Corresponds with GET /users/me (the `GetMyUser` operationId).
 func (c *Client) GetMyUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMyUserRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetMyPreferences Get my preferences
+//
+// Retrieve the preferences for the current user.
+//
+// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+func (c *Client) GetMyPreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMyPreferencesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateMyPreferencesWithBody Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateMyPreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMyPreferencesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateMyPreferences Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateMyPreferences(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMyPreferencesRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3525,6 +3866,73 @@ func NewGetMyUserRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetMyPreferencesRequest constructs an http.Request for the GetMyPreferences method
+func NewGetMyPreferencesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users/me/preferences")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMyPreferencesRequest calls the generic UpdateMyPreferences builder with application/json body
+func NewUpdateMyPreferencesRequest(server string, body UpdateMyPreferencesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMyPreferencesRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateMyPreferencesRequestWithBody constructs an http.Request for the UpdateMyPreferences method, with any body, and a specified content type
+func NewUpdateMyPreferencesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users/me/preferences")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSearchWorkflowsRequest constructs an http.Request for the SearchWorkflows method
 func NewSearchWorkflowsRequest(server string, params *SearchWorkflowsParams) (*http.Request, error) {
 	var err error
@@ -4019,6 +4427,37 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /users/me (the `GetMyUser` operationId).
 	GetMyUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyUserResponse, error)
+
+	// GetMyPreferencesWithResponse Get my preferences
+	//
+	// Retrieve the preferences for the current user.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+	GetMyPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyPreferencesResponse, error)
+
+	// UpdateMyPreferencesWithBodyWithResponse Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error)
+
+	// UpdateMyPreferencesWithResponse Update my preferences
+	//
+	// Update the preferences of the current user.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateMyPreferencesWithResponse(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error)
 
 	// SearchWorkflowsWithResponse List all workflows
 	//
@@ -4689,6 +5128,88 @@ func (r GetMyUserResponse) ContentType() string {
 	return ""
 }
 
+type GetMyPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserPreferencesResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetMyPreferencesResponse) GetJSON200() *UserPreferencesResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetMyPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMyPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMyPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetMyPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateMyPreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *UserPreferencesResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateMyPreferencesResponse) GetJSON200() *UserPreferencesResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateMyPreferencesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMyPreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMyPreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateMyPreferencesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SearchWorkflowsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5202,6 +5723,54 @@ func (c *ClientWithResponses) GetMyUserWithResponse(ctx context.Context, reqEdit
 	return ParseGetMyUserResponse(rsp)
 }
 
+// GetMyPreferencesWithResponse Get my preferences
+//
+// Retrieve the preferences for the current user.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /users/me/preferences (the `GetMyPreferences` operationId).
+func (c *ClientWithResponses) GetMyPreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMyPreferencesResponse, error) {
+	rsp, err := c.GetMyPreferences(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMyPreferencesResponse(rsp)
+}
+
+// UpdateMyPreferencesWithBodyWithResponse Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateMyPreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error) {
+	rsp, err := c.UpdateMyPreferencesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMyPreferencesResponse(rsp)
+}
+
+// UpdateMyPreferencesWithResponse Update my preferences
+//
+// Update the preferences of the current user.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /users/me/preferences (the `UpdateMyPreferences` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateMyPreferencesWithResponse(ctx context.Context, body UpdateMyPreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMyPreferencesResponse, error) {
+	rsp, err := c.UpdateMyPreferences(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMyPreferencesResponse(rsp)
+}
+
 // SearchWorkflowsWithResponse List all workflows
 //
 // Retrieve a list of workflows available to the authenticated user.
@@ -5667,6 +6236,58 @@ func ParseGetMyUserResponse(rsp *http.Response) (*GetMyUserResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest UserAdminResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMyPreferencesResponse parses an HTTP response from a GetMyPreferencesWithResponse call
+func ParseGetMyPreferencesResponse(rsp *http.Response) (*GetMyPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMyPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserPreferencesResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMyPreferencesResponse parses an HTTP response from a UpdateMyPreferencesWithResponse call
+func ParseUpdateMyPreferencesResponse(rsp *http.Response) (*UpdateMyPreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMyPreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UserPreferencesResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

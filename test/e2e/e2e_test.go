@@ -454,6 +454,44 @@ func TestEndToEnd(t *testing.T) {
 	imgA := jpegBytes(1)
 	var aliceOrig string
 
+	t.Run("a person with Tags off is offered the switch, and it works through a real Immich session", func(t *testing.T) {
+		cookie := loginCookie(t, "admin@e2e.test") // the setup switches Tags on for the other users, not for the admin
+		page := func() string {
+			req, _ := http.NewRequest("GET", "http://localhost:"+appPort+"/", nil)
+			req.Header.Set("Cookie", cookie)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return string(b)
+		}
+		if !strings.Contains(page(), "Tags are switched off") {
+			t.Fatal("a person with Tags off must be told, and offered the switch")
+		}
+		if res := post(t, appPort, "/preferences/tags", cookie, nil); res.StatusCode != 200 {
+			t.Fatalf("switching Tags on: status %d", res.StatusCode)
+		}
+		if strings.Contains(page(), "Tags are switched off") {
+			t.Error("the notice must go once Tags are on")
+		}
+		var prefs struct {
+			Tags struct{ Enabled, SidebarWeb bool } `json:"tags"`
+		}
+		req, _ := http.NewRequest("GET", baseURL+"/api/users/me/preferences", nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		json.NewDecoder(res.Body).Decode(&prefs)
+		if !prefs.Tags.Enabled || !prefs.Tags.SidebarWeb {
+			t.Errorf("Immich must now have Tags on and in the sidebar, has %+v", prefs.Tags)
+		}
+	})
+
 	t.Run("the built-in health check passes against the running app and fails when it is not there", func(t *testing.T) {
 		run := func(addr string) error {
 			cmd := exec.Command(bin, "--healthcheck")

@@ -68,6 +68,7 @@ type DashboardData struct {
 	Orphaned []string   // services the person joined that their owner has since removed
 	Broken   []BrokenView
 	Activity []ActivityView
+	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
 	Last     *syncer.RunInfo
 }
@@ -112,9 +113,21 @@ templ Layout(title, user string) {
 	</html>
 }
 
+// TagsNotice offers to switch Tags on, which Immich has off by default and which everyone taking part needs.
+templ TagsNotice() {
+	<div class="card notice" id="tags-notice">
+		<h3>Tags are switched off in your Immich account</h3>
+		<p class="meta">Tags are how photos are handed over, and how you find what arrived. While they are off you cannot add tags in Immich or see them. Turning them on changes one setting in your Immich account, the same as Account Settings, Features, Tags.</p>
+		<p class="row"><button class="primary" hx-post="preferences/tags" hx-target="#tags-notice" hx-swap="innerHTML" hx-disabled-elt="this">Turn on Tags</button></p>
+	</div>
+}
+
 templ Dashboard(d DashboardData) {
 	@Layout("Immich Handoff", d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		if d.TagsOff {
+			@TagsNotice()
+		}
 		if d.Invited != nil {
 			<h2>You are invited</h2>
 			@OfferCard(*d.Invited)
