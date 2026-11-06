@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -24,6 +25,7 @@ type Defaults struct {
 	SentTag    string
 	Mode       string
 	ExpiryDays int
+	Album      string // ALBUM: used by the single service of a plain .env install only
 }
 
 // Env reads a variable (os.Getenv in production, a map in tests).
@@ -43,6 +45,7 @@ func DefaultsFrom(env Env) Defaults {
 	if v := env("SENT_TAG"); v != "" {
 		d.SentTag = v
 	}
+	d.Album = strings.TrimSpace(env("ALBUM"))
 	if v := env("HANDOFF_MODE"); v == syncer.ModeMove || v == syncer.ModeCopy {
 		d.Mode = v
 	}
@@ -88,7 +91,10 @@ func fromEnv(env Env, d Defaults, connect Connect, selfService bool) ([]*syncer.
 	if dest == "" || len(srcKeys) == 0 {
 		return nil, errors.New("IMMICH_DEST_API_KEY and IMMICH_SOURCE_API_KEYS are required (or set ROUTES_FILE)")
 	}
-	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, SentTag: d.SentTag, Mode: d.Mode, ExpiryDays: d.ExpiryDays, AllowJoin: env("ALLOW_JOIN") == "true"}
+	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, SentTag: d.SentTag, Mode: d.Mode, ExpiryDays: d.ExpiryDays, AllowJoin: env("ALLOW_JOIN") == "true", Album: d.Album}
+	if err := checkAlbum(d.Album); err != nil {
+		return nil, fmt.Errorf("ALBUM: %w", err)
+	}
 	for i, k := range srcKeys {
 		api, err := connect(k)
 		if err != nil {
@@ -119,6 +125,7 @@ type routesFile struct {
 		AllowJoin  bool     `yaml:"allow_join"`
 		Mode       string   `yaml:"mode"`
 		SentTag    string   `yaml:"sent_tag"`
+		Album      string   `yaml:"album"`
 	} `yaml:"services"`
 }
 
@@ -171,7 +178,10 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect, selfService b
 			problems = append(problems, where+": duplicate service name")
 		}
 		names[s.Name] = true
-		svc := &syncer.Service{Name: s.Name, Tag: s.Tag, InboxTag: s.InboxTag, RefusedTag: s.RefusedTag, SentTag: s.SentTag, Mode: s.Mode, ExpiryDays: s.ExpiryDays, AllowJoin: s.AllowJoin}
+		svc := &syncer.Service{Name: s.Name, Tag: s.Tag, InboxTag: s.InboxTag, RefusedTag: s.RefusedTag, SentTag: s.SentTag, Mode: s.Mode, ExpiryDays: s.ExpiryDays, AllowJoin: s.AllowJoin, Album: strings.TrimSpace(s.Album)}
+		if err := checkAlbum(svc.Album); err != nil {
+			problems = append(problems, where+": album: "+err.Error())
+		}
 		if svc.Tag == "" {
 			problems = append(problems, where+": tag is required")
 		}
@@ -231,4 +241,12 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect, selfService b
 		return nil, fmt.Errorf("routes file has problems:\n  - %s", strings.Join(problems, "\n  - "))
 	}
 	return services, nil
+}
+
+// checkAlbum accepts an empty name (no album) or a plain one of at most 100 characters.
+func checkAlbum(name string) error {
+	if utf8.RuneCountInString(name) > 100 || strings.ContainsAny(name, "\r\n\x00") {
+		return errors.New("must be at most 100 characters and have no line breaks")
+	}
+	return nil
 }

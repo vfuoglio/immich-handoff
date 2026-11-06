@@ -732,3 +732,55 @@ func TestEachCreatedServiceGetsItsOwnInboxTag(t *testing.T) {
 		t.Errorf("an owner's choice wins: %q", got)
 	}
 }
+
+func TestAServiceWithAnAlbumGetsAlbumPermissionsAndKeepsTheName(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "filed", Tag: "filed", Policy: "open", Album: "  Holiday 2026 "}); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "filed").Album; got != "Holiday 2026" {
+		t.Errorf("album = %q", got)
+	}
+	has := func(name string) bool {
+		for _, p := range e.f.lastPerms {
+			if p == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []string{"album.read", "album.create", "albumAsset.create"} {
+		if !has(want) {
+			t.Errorf("a service with an album needs %s on its key: %v", want, e.f.lastPerms)
+		}
+	}
+	for _, never := range []string{"album.update", "album.delete", "albumAsset.delete", "album.share"} {
+		if has(never) {
+			t.Errorf("the key must not be able to change or delete albums (%s): %v", never, e.f.lastPerms)
+		}
+	}
+	// a replacement key made when reconnecting keeps the album permissions
+	if err := e.h.ReconnectService(ctx, e.ann, ann, "filed"); err != nil {
+		t.Fatal(err)
+	}
+	if !has("albumAsset.create") {
+		t.Errorf("a reconnected service still files into its album: %v", e.f.lastPerms)
+	}
+	// a service without one does not ask for them
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "plainer", Tag: "plainer", Policy: "open"}); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "plainer").Album != "" || has("album.read") || has("albumAsset.create") {
+		t.Errorf("no album, so no album permissions: %v", e.f.lastPerms)
+	}
+}
+
+func TestABadAlbumNameIsRefused(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	for _, name := range []string{strings.Repeat("x", 101), "two\nlines"} {
+		err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bada", Tag: "bada", Album: name})
+		if !errors.Is(err, hub.ErrBadAlbum) || !hub.IsUserError(err) {
+			t.Errorf("album %q: %v", name, err)
+		}
+	}
+}

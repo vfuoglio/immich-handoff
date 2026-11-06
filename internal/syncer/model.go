@@ -26,7 +26,8 @@ const (
 type Service struct {
 	Name       string // "" is the single default service of a plain .env install
 	Tag        string // tag a sender adds
-	InboxTag   string // tag put on new copies in each receiver
+	InboxTag   string // tag put on new copies in each receiver (unless Album is set and works)
+	Album      string // optional: name of an album, in each receiver's account, that new copies are put in
 	RefusedTag string // replaces Tag on an original that a receiver refused
 	Mode       string // ModeMove (default) or ModeCopy
 	SentTag    string // copy mode: put on an original after it was handed over

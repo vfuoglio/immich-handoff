@@ -108,7 +108,11 @@ func (h *Hub) ReconnectService(ctx context.Context, sess *immich.API, owner immi
 	if v == nil {
 		return ErrNotOwner
 	}
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", immich.ReceiverPermissions)
+	keyPerms := immich.ReceiverPermissions
+	if v.Album != "" {
+		keyPerms = immich.ReceiverPermissionsAlbum
+	}
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", keyPerms)
 	if err != nil {
 		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
 	}

@@ -28,6 +28,7 @@ These apply to services you define yourself ([Fixed accounts](fixed-accounts.md)
 | `IMMICH_DEST_API_KEY` | | API key of the receiving account. |
 | `ROUTES_FILE` | | Path of a routes file for several services. |
 | `ALLOW_JOIN` | `false` | Let people join the single service from the page. |
+| `ALBUM` | | Name of an album, in the receiving account, that handed-over photos are put in instead of being tagged inbox. Only for the single service of a plain `.env` install; services in a routes file use `album:`. The receiving key needs `album.read`, `album.create` and `albumAsset.create`. |
 | `SHARE_TAG` | `share` | Tag people add to send a photo. |
 | `INBOX_TAG` | `inbox` | Tag on new photos in the receiving account. Services created on the page add `/<name>` to it. |
 | `INBOX_EXPIRY_DAYS` | `30` | Days before an unfiled photo loses the inbox tag. |

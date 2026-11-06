@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ const (
 	otherID  = "aaaaaaaa-0000-0000-0000-000000000009"
 	ts       = "2025-01-02T03:04:05.000Z"
 )
+
+// albumsDenied makes the fake Immich refuse to list albums, as it does for a key without album.read.
+var albumsDenied atomic.Bool
 
 // fakeImmich answers just enough for sign-in checks, counts and a dry-run pass.
 func fakeImmich() http.Handler {
@@ -71,6 +75,18 @@ func fakeImmich() http.Handler {
 		defer prefMu.Unlock()
 		tagsOn[cookie(r)] = body.Tags.Enabled
 		j(w, prefs(tagsOn[cookie(r)]))
+	})
+	// the receiver's albums: "Arrivals" exists with 7 photos, unless a test says the key may not read albums
+	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		if albumsDenied.Load() {
+			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
+			return
+		}
+		if r.URL.Query().Get("name") == "Arrivals" && r.URL.Query().Get("isOwned") == "true" {
+			j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999999", "albumName": "Arrivals", "assetCount": 7}})
+			return
+		}
+		j(w, []any{})
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		tag := func(id, n string) map[string]any {
@@ -388,5 +404,34 @@ func TestTagsNoticeAndSwitch(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusBadGateway || res.Header.Get("HX-Retarget") != "#flash" {
 		t.Errorf("a refusal from Immich: %d, retarget %q", res.StatusCode, res.Header.Get("HX-Retarget"))
+	}
+}
+
+func TestAReceiverOfAnAlbumServiceSeesTheAlbum(t *testing.T) {
+	app, s := setup(t)
+	s.Services[0].Album = "Arrivals"
+	_, body := do(t, "GET", app.URL+"/", "sess=family", nil)
+	if !strings.Contains(body, "Photos arrive in the album") || !strings.Contains(body, "Arrivals") {
+		t.Errorf("the receiver's card must say where photos arrive: %.400s", body)
+	}
+	_, frag := do(t, "GET", app.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
+	if !strings.Contains(frag, "7") || !strings.Contains(frag, "in the album") {
+		t.Errorf("the count must be the album's: %q", frag)
+	}
+	// senders are not told about the receiver's album
+	_, sender := do(t, "GET", app.URL+"/fragments/count?service=family&role=sender", "sess=alice", nil)
+	if strings.Contains(sender, "in the album") {
+		t.Errorf("a sender's count is still what waits to be handed over: %q", sender)
+	}
+}
+
+func TestTheCountFallsBackToTheInboxWhenTheAlbumCannotBeRead(t *testing.T) {
+	app, s := setup(t)
+	s.Services[0].Album = "Arrivals"
+	albumsDenied.Store(true)
+	t.Cleanup(func() { albumsDenied.Store(false) })
+	_, frag := do(t, "GET", app.URL+"/fragments/count?service=family&role=receiver", "sess=family", nil)
+	if strings.Contains(frag, "in the album") || !strings.Contains(frag, "in your inbox") {
+		t.Errorf("when the album cannot be read, arrivals are tagged inbox, so count those: %q", frag)
 	}
 }

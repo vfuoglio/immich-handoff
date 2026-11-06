@@ -132,6 +132,62 @@ func (a *API) ServerVersion(ctx context.Context) (major, minor int, err error) {
 	return r.JSON200.Major, r.JSON200.Minor, nil
 }
 
+// --- albums ---
+
+// FindAlbum returns an album this account owns with exactly this name, and how many photos it holds, or
+// nil if there is none. Albums shared with the account are ignored: a handed-over photo must never land in
+// somebody else's album. If several owned albums share the name, the first Immich lists is used.
+func (a *API) FindAlbum(ctx context.Context, name string) (id *openapi_types.UUID, count int, err error) {
+	owned := true
+	r, err := a.c.GetAllAlbumsWithResponse(ctx, &GetAllAlbumsParams{IsOwned: &owned, Name: &name})
+	if err != nil {
+		return nil, 0, err
+	}
+	if r.JSON200 == nil {
+		return nil, 0, statusErr("getAllAlbums", r.StatusCode(), r.Body)
+	}
+	for _, al := range *r.JSON200 {
+		if al.AlbumName == name {
+			i := al.Id
+			return &i, al.AssetCount, nil
+		}
+	}
+	return nil, 0, nil
+}
+
+// CreateAlbum makes an empty album in this account.
+func (a *API) CreateAlbum(ctx context.Context, name string) (openapi_types.UUID, error) {
+	r, err := a.c.CreateAlbumWithResponse(ctx, CreateAlbumJSONRequestBody{AlbumName: name})
+	if err != nil {
+		return openapi_types.UUID{}, err
+	}
+	if r.JSON201 == nil {
+		return openapi_types.UUID{}, statusErr("createAlbum", r.StatusCode(), r.Body)
+	}
+	return r.JSON201.Id, nil
+}
+
+// AddToAlbum puts photos in an album. Being in it already is not an error; any other refusal is.
+func (a *API) AddToAlbum(ctx context.Context, album openapi_types.UUID, ids ...openapi_types.UUID) error {
+	r, err := a.c.AddAssetsToAlbumWithResponse(ctx, album, AddAssetsToAlbumJSONRequestBody{Ids: ids})
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("addAssetsToAlbum", r.StatusCode(), r.Body)
+	}
+	for _, item := range *r.JSON200 {
+		if !item.Success && (item.Error == nil || *item.Error != BulkIdErrorReasonDuplicate) {
+			reason := "unknown"
+			if item.Error != nil {
+				reason = string(*item.Error)
+			}
+			return fmt.Errorf("could not add %s to the album: %s", item.Id, reason)
+		}
+	}
+	return nil
+}
+
 // --- tags ---
 
 // FindTag returns the tag id, or nil if it does not exist (and create is false).

@@ -228,10 +228,10 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	var out []ServiceView
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
-			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.CopiesFor(a)})
+			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.CopiesFor(a), ""})
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies()})
+			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies(), svc.Album})
 		}
 	}
 	return out
@@ -259,7 +259,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
 		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service)}
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album}
 			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 				for _, m := range members {
 					ov.Members = append(ov.Members, MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move"})
@@ -373,6 +373,15 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 		tag := svc.Tag
 		if role == "receiver" {
 			tag = svc.InboxTag
+			if svc.Album != "" {
+				// Arrivals go to the album: count what it holds. If it cannot be found (the receiver's key may
+				// not be allowed to see albums), arrivals are tagged inbox instead, so count those.
+				if id, n, err := acct.API.FindAlbum(r.Context(), svc.Album); err == nil && id != nil {
+					rw.Header().Set("Cache-Control", "no-store")
+					Count(n, "album", nil).Render(r.Context(), rw)
+					return
+				}
+			}
 		}
 		rw.Header().Set("Cache-Control", "no-store")
 		ids := w.tagged(r.Context(), acct, tag)
@@ -541,7 +550,7 @@ func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("expiry")))
 		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
 			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
-			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days,
+			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days, Album: r.PostFormValue("album"),
 		})
 	})
 }

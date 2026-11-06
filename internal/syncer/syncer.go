@@ -65,6 +65,9 @@ type Syncer struct {
 
 	recentMu sync.Mutex
 	recent   map[uuid.UUID]time.Time // photos handled a moment ago
+
+	albumMu     sync.Mutex
+	albumBroken map[string]bool // receivers whose album could not be used, so the problem is reported once, not every pass
 }
 
 // Totals are cumulative since the app started (kept in memory only).
@@ -276,6 +279,7 @@ type receiver struct {
 	acct   *Account
 	userID uuid.UUID
 	inbox  uuid.UUID
+	album  func(ctx context.Context) (uuid.UUID, error) // the service's album in this account, found or made when first needed; nil without one
 }
 
 func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
@@ -304,6 +308,9 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 		rc := receiver{acct: r, userID: me.ID}
 		if inbox != nil {
 			rc.inbox = *inbox
+		}
+		if svc.Album != "" && !s.Cfg.DryRun {
+			rc.album = s.albumFinder(r.API, svc.Album)
 		}
 		rs = append(rs, rc)
 	}
@@ -410,8 +417,10 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			// Immich can drop a tag added before it has finished reading a new upload, so wait for that
 			// first, then add the tag and check it stuck (a copy without it would arrive unnoticed).
 			s.waitProcessed(ctx, r.acct.API, up.Id)
-			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
-				return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
+				if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
+					return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+				}
 			}
 			outcome = "imported"
 		}
@@ -425,6 +434,59 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 	}
 	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
 	return outcome, nil
+}
+
+// albumFinder returns a function that finds the account's own album with this name, or makes it, once, the
+// first time a photo needs it. Looking it up by name every pass means an album the person deleted or renamed
+// simply comes back under the configured name at the next arrival.
+func (s *Syncer) albumFinder(api *immich.API, name string) func(ctx context.Context) (uuid.UUID, error) {
+	var once sync.Once
+	var id uuid.UUID
+	var err error
+	return func(ctx context.Context) (uuid.UUID, error) {
+		once.Do(func() {
+			var found *uuid.UUID
+			if found, _, err = api.FindAlbum(ctx, name); err != nil {
+				return
+			}
+			if found != nil {
+				id = *found
+				return
+			}
+			id, err = api.CreateAlbum(ctx, name)
+		})
+		return id, err
+	}
+}
+
+// fileInAlbum puts a new copy in the service's album and reports whether it did. When the service has no
+// album it does nothing (false). When the album cannot be used, for example because the receiver's key may
+// not touch albums, it says so (once, until it works again) and returns false, so the copy still gets the
+// inbox tag and is not lost: a hand-over never fails because of the album.
+func (s *Syncer) fileInAlbum(ctx context.Context, log *slog.Logger, svc *Service, r receiver, asset uuid.UUID) bool {
+	if r.album == nil {
+		return false
+	}
+	album, err := r.album(ctx)
+	if err == nil {
+		err = r.acct.API.AddToAlbum(ctx, album, asset)
+	}
+	key := svc.Label() + "/" + r.acct.Name
+	s.albumMu.Lock()
+	defer s.albumMu.Unlock()
+	if err != nil {
+		log.Warn("could not put the copy in the album; tagging it inbox instead", "receiver", r.acct.Name, "album", svc.Album, "err", err)
+		if !s.albumBroken[key] {
+			if s.albumBroken == nil {
+				s.albumBroken = map[string]bool{}
+			}
+			s.albumBroken[key] = true
+			s.notify(fmt.Sprintf("immich-handoff: could not put photos in the album %q for %s (%v); they are tagged %s instead. The receiver's key needs album.read, album.create and albumAsset.create.", svc.Album, r.acct.Name, err, svc.InboxTag))
+		}
+		return false
+	}
+	delete(s.albumBroken, key)
+	return true
 }
 
 // cleanupAll removes the inbox tag from filed or expired copies in every receiver, once per

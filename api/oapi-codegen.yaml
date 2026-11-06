@@ -30,3 +30,6 @@ output-options:
     - getApiKeys
     - getMyPreferences
     - updateMyPreferences
+    - getAllAlbums
+    - createAlbum
+    - addAssetsToAlbum

@@ -46,11 +46,22 @@ Under **Offer a service of your own**, choose:
 - a **name** and the **tag** senders will use;
 - **who can find it**: everyone on this Immich server, or only people you send a link to;
 - **who may send**: people you approve, or anyone;
-- optionally (**More options**) the tag put on what arrives, and how many days an unfiled photo keeps it.
+- optionally (**More options**) the tag put on what arrives, how many days an unfiled photo keeps it, and an **album** to put arrivals in.
 
 ![The form for offering a service](images/offer-form.png)
 
 Each service gets its own inbox tag by default, for example `inbox/Holiday 2026`, which Immich shows nested under `inbox`. Filter by it in Immich to see what arrived through that service. The inbox tag removes itself once a photo is in an album, or after 30 days; photos are never deleted by that. [When exactly](#when-the-inbox-tag-goes-away) is explained below.
+
+### Putting arrivals in an album
+
+Give a service an album (for example "Holiday 2026") and every photo handed over to it is put in that album in your Immich account, so there is nothing to file by hand.
+
+- **Instead of the inbox tag.** A photo in the album does not also get the inbox tag. The album is where you look; the page counts its photos. (The inbox tag would be removed within minutes anyway, because the photo is in an album.)
+- **The album is yours.** The app uses an album you own with exactly that name, and makes one when the first photo arrives if you do not have it. It never uses an album that was only shared with you. If two of your albums have that name, it uses the first Immich lists.
+- **If you delete or rename it,** the next photo makes a new album under the configured name. Photos already in the old one stay with it.
+- **Photos you already had** (the same photo handed over again) are left where you put them; only new arrivals are filed.
+- **It cannot get in the way of a hand-over.** If the album cannot be used, for example because the key is missing the album permissions, the photo still arrives, tagged inbox as without an album, and the log and the notification say why.
+- **The key asks for more.** Creating a service with an album gives its key permission to find, create and add to albums, and nothing more. A service without an album does not. See [Security](security.md#what-a-key-can-do). The album is chosen when the service is created.
 
 ### Approving senders and sharing a link
 

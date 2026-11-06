@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Arrivals can go into an album.** A service can name an album (in **More options** when creating it on the page, `album:` in a routes file, `ALBUM` for a plain install). Handed-over photos are put in that album of the receiver's account, made when the first photo arrives, instead of being tagged inbox. If the album cannot be used, the photo is tagged inbox as before and the problem is reported once. The key of a service with an album also gets `album.read`, `album.create` and `albumAsset.create`. This adds a column to the data file, so going back to an older version afterwards is not supported (as with any data change).
 - **The page notices when Tags are off** in a person's Immich account (Immich has them off by default) and offers a **Turn on Tags** button, which changes that one setting with their own session. They still need to refresh Immich afterwards. The documentation says so in the places it matters.
 - **Container health check.** The image now reports `healthy` or `unhealthy` in `docker ps`, using a built-in `immich-handoff --healthcheck` (the image has no shell or curl). The release workflow checks that both architectures declare it.
 - **The image is also published on Docker Hub** as `vfuoglio/immich-handoff`, so `image: vfuoglio/immich-handoff:1.1` in a compose file is enough to pull it. The same tags stay available on `ghcr.io/vfuoglio/immich-handoff`.

@@ -40,6 +40,9 @@ func countLabel(role string) string {
 	if role == "sender" {
 		return "waiting to be handed over"
 	}
+	if role == "album" {
+		return "in the album"
+	}
 	return "in your inbox"
 }
 

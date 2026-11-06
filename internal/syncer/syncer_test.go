@@ -25,6 +25,7 @@ const (
 	shareTag   = "33333333-3333-3333-3333-333333333333"
 	inboxTag   = "44444444-4444-4444-4444-444444444444"
 	refusedTag = "66666666-6666-6666-6666-666666666666"
+	albumID    = "99999999-9999-4999-8999-999999999999"
 	payload    = "pretend these are JPEG bytes"
 	ts         = "2025-01-02T03:04:05.000Z"
 )
@@ -42,6 +43,13 @@ type fakeImmich struct {
 	untaggedShare     []string
 	uploadedBytes     string
 	gotChecksumHeader string
+
+	// albums: the receiver's own album of that name exists already, the key may not touch albums at all,
+	// and what the app asked for
+	existingAlbum string
+	albumDenied   bool
+	albumCreated  []string
+	albumAdded    []string
 }
 
 func (f *fakeImmich) handler() http.Handler {
@@ -139,6 +147,54 @@ func (f *fakeImmich) handler() http.Handler {
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		j(w, 200, []any{tag(refusedTag, "share-duplicate")})
 	})
+	album := func(name string) map[string]any {
+		return map[string]any{"id": albumID, "albumName": name, "assetCount": 3}
+	}
+	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.albumDenied {
+			j(w, 403, map[string]any{"message": "Missing required permission: album.read"})
+			return
+		}
+		if r.URL.Query().Get("isOwned") != "true" {
+			j(w, 400, map[string]any{"message": "the app must only look at albums the account owns"})
+			return
+		}
+		if n := r.URL.Query().Get("name"); n != "" && n == f.existingAlbum {
+			j(w, 200, []any{album(n)})
+			return
+		}
+		j(w, 200, []any{})
+	})
+	mux.HandleFunc("POST /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.albumDenied {
+			j(w, 403, map[string]any{"message": "Missing required permission: album.create"})
+			return
+		}
+		var body struct{ AlbumName string }
+		json.NewDecoder(r.Body).Decode(&body)
+		f.albumCreated = append(f.albumCreated, body.AlbumName)
+		j(w, 201, album(body.AlbumName))
+	})
+	mux.HandleFunc("PUT /api/albums/"+albumID+"/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.albumDenied {
+			j(w, 403, map[string]any{"message": "Missing required permission: albumAsset.create"})
+			return
+		}
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		f.albumAdded = append(f.albumAdded, body.Ids...)
+		out := []any{}
+		for _, id := range body.Ids {
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		j(w, 200, out)
+	})
 	mux.HandleFunc("PUT /api/tags/"+refusedTag+"/assets", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.refusedTagged = append(f.refusedTagged, srcAsset)
@@ -194,6 +250,78 @@ func run(t *testing.T, f *fakeImmich) syncer.Counts {
 	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
 	s.Run(context.Background(), "test", false)
 	return s.Last().Counts
+}
+
+// runAlbum is run for a service that puts arrivals in an album.
+func runAlbum(t *testing.T, f *fakeImmich, albumName string) syncer.Counts {
+	t.Helper()
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	svc := service(
+		[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
+		[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
+	svc.Album = albumName
+	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	s.Run(context.Background(), "test", false)
+	return s.Last().Counts
+}
+
+func TestArrivalIsPutInANewAlbumInsteadOfTaggedInbox(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created"}
+	c := runAlbum(t, f, "Holiday 2026")
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts = %+v", c)
+	}
+	if len(f.albumCreated) != 1 || f.albumCreated[0] != "Holiday 2026" {
+		t.Errorf("the album must be made once, under the configured name: %v", f.albumCreated)
+	}
+	if len(f.albumAdded) != 1 || f.albumAdded[0] != dstAsset {
+		t.Errorf("the copy must be put in the album: %v", f.albumAdded)
+	}
+	if len(f.tagged) != 0 {
+		t.Errorf("a photo that is in the album does not also get the inbox tag: %v", f.tagged)
+	}
+	if len(f.deleted) != 1 {
+		t.Errorf("the original is still removed once the copy is verified: %v", f.deleted)
+	}
+}
+
+func TestAnExistingAlbumIsUsedNotDuplicated(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", existingAlbum: "Holiday 2026"}
+	runAlbum(t, f, "Holiday 2026")
+	if len(f.albumCreated) != 0 || len(f.albumAdded) != 1 {
+		t.Errorf("created %v, added %v", f.albumCreated, f.albumAdded)
+	}
+}
+
+func TestACopyThatAlreadyExistedIsNotPutInTheAlbum(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "duplicate"}
+	c := runAlbum(t, f, "Holiday 2026")
+	if c.Duplicate != 1 || len(f.albumAdded) != 0 || len(f.albumCreated) != 0 {
+		t.Errorf("a photo the receiver already had must be left where they put it: counts %+v, created %v, added %v", c, f.albumCreated, f.albumAdded)
+	}
+}
+
+func TestWhenTheAlbumCannotBeUsedTheCopyIsTaggedInboxAndNothingFails(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", albumDenied: true}
+	c := runAlbum(t, f, "Holiday 2026")
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("the hand-over must not fail because of the album: %+v", c)
+	}
+	if len(f.tagged) != 1 {
+		t.Errorf("the copy must still be findable, so it gets the inbox tag: %v", f.tagged)
+	}
+	if len(f.deleted) != 1 {
+		t.Errorf("and the original is removed as usual: %v", f.deleted)
+	}
+}
+
+func TestNoAlbumMeansNoAlbumCalls(t *testing.T) {
+	f := &fakeImmich{uploadStatus: "created", albumDenied: true} // would fail loudly if the app touched albums
+	c := run(t, f)
+	if c.Imported != 1 || c.Errors != 0 || len(f.albumCreated) != 0 || len(f.albumAdded) != 0 || len(f.tagged) != 1 {
+		t.Errorf("a service without an album must behave as before: %+v tagged %v", c, f.tagged)
+	}
 }
 
 func TestImportStreamsVerifiesTagsAndDeletesOriginal(t *testing.T) {

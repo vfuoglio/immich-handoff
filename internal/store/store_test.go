@@ -223,3 +223,36 @@ func TestMigrationKeepsExistingMembersBehaviour(t *testing.T) {
 		t.Errorf("existing members must keep their behaviour: %v", got)
 	}
 }
+
+func TestAServicesAlbumSurvivesARestart(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	s, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := uuid.New()
+	for _, v := range []Service{
+		{Name: "filed", Tag: "t1", InboxTag: "i1", Refused: "r", ExpiryDays: 30, OwnerID: owner, KeyID: uuid.New(), Key: "k1", Policy: PolicyOpen, Album: "Holiday 2026"},
+		{Name: "plain", Tag: "t2", InboxTag: "i2", Refused: "r", ExpiryDays: 30, OwnerID: owner, KeyID: uuid.New(), Key: "k2", Policy: PolicyOpen},
+	} {
+		if _, err := s.AddService(ctx, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+	s2, err := open(t, dir, "first-secret-value-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	got, err := s2.Services(ctx)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("services: %v %v", got, err)
+	}
+	for _, v := range got {
+		want := map[string]string{"filed": "Holiday 2026", "plain": ""}[v.Name]
+		if v.Album != want {
+			t.Errorf("%s: album %q, want %q", v.Name, v.Album, want)
+		}
+	}
+}

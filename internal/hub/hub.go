@@ -116,7 +116,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
-			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag,
+			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag, Album: v.Album,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {
