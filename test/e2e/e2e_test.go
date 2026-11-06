@@ -439,6 +439,20 @@ func TestEndToEnd(t *testing.T) {
 	imgA := jpegBytes(1)
 	var aliceOrig string
 
+	t.Run("the built-in health check passes against the running app and fails when it is not there", func(t *testing.T) {
+		run := func(addr string) error {
+			cmd := exec.Command(bin, "--healthcheck")
+			cmd.Env = append(os.Environ(), "LISTEN_ADDR="+addr)
+			return cmd.Run()
+		}
+		if err := run(":" + appPort); err != nil {
+			t.Errorf("--healthcheck against the running app: %v", err)
+		}
+		if err := run(":" + fmt.Sprint(atoi(appPort)+5000)); err == nil {
+			t.Error("--healthcheck must fail when nothing listens")
+		}
+	})
+
 	t.Run("tagging share imports via webhook, tags inbox, trashes the original", func(t *testing.T) {
 		aliceOrig, _ = upload(t, alice, "alice-1.jpg", imgA)
 		tagAsset(t, alice, "share", aliceOrig)

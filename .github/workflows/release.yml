@@ -65,6 +65,10 @@ jobs:
             # unprivileged user on that architecture
             set +e; out="$(docker run --rm --platform linux/$arch smoke:$arch 2>&1)"; code=$?; set -e
             [ "$code" -ne 0 ] && grep -q WEBHOOK_SECRET <<<"$out" || { echo "::error::$arch did not fail cleanly without configuration: $out"; exit 1; }
+            # the image declares its health check, and the check says so (non-zero) when the app is not running
+            [ "$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' smoke:$arch)" = yes ] || { echo "::error::$arch image has no HEALTHCHECK"; exit 1; }
+            set +e; out="$(docker run --rm --platform linux/$arch smoke:$arch --healthcheck 2>&1)"; code=$?; set -e
+            [ "$code" -ne 0 ] && grep -q "healthcheck failed" <<<"$out" || { echo "::error::$arch --healthcheck did not fail cleanly with no app running: $out"; exit 1; }
           done
 
       - uses: docker/login-action@v3

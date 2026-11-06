@@ -11,7 +11,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app (not your browser). |
 | `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos. |
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
-| `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. |
+| `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |
 | `NOTIFY_URL` | | ntfy-style URL that receives a message when something needs attention. |
 | `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs (catch-up, key and workflow checks, inbox tidy-up). |
 | `CLEANUP_INTERVAL_MINUTES` | `15` | How often photos filed in an album or past their expiry lose the inbox tag. `0` leaves that to the daily check. See [why a timer](using.md#when-the-inbox-tag-goes-away). |
