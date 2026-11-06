@@ -494,6 +494,7 @@ func (w *Server) enableTags(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Log.Info("tags switched on", "user", me.user.Email)
+	rw.Header().Set("HX-Trigger", "tags-on") // the page unlocks itself (app.js)
 	rw.Write([]byte("Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear."))
 }
 

@@ -467,14 +467,14 @@ func TestEndToEnd(t *testing.T) {
 			b, _ := io.ReadAll(res.Body)
 			return string(b)
 		}
-		if !strings.Contains(page(), "Tags are switched off") {
-			t.Fatal("a person with Tags off must be told, and offered the switch")
+		if before := page(); !strings.Contains(before, "Tags are switched off") || !strings.Contains(before, "inert") {
+			t.Fatal("a person with Tags off must be told, offered the switch, and have the rest of the page switched off")
 		}
 		if res := post(t, appPort, "/preferences/tags", cookie, nil); res.StatusCode != 200 {
 			t.Fatalf("switching Tags on: status %d", res.StatusCode)
 		}
-		if strings.Contains(page(), "Tags are switched off") {
-			t.Error("the notice must go once Tags are on")
+		if after := page(); strings.Contains(after, "Tags are switched off") || strings.Contains(after, "inert") {
+			t.Error("the notice and the lock must go once Tags are on")
 		}
 		var prefs struct {
 			Tags struct{ Enabled, SidebarWeb bool } `json:"tags"`

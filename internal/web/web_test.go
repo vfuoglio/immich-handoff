@@ -349,11 +349,12 @@ func TestInvitePageLinksPointAtTheRoot(t *testing.T) {
 func TestTagsNoticeAndSwitch(t *testing.T) {
 	app, _ := setup(t)
 	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
-	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); !strings.Contains(body, "Tags are switched off") {
-		t.Errorf("a person with Tags off must be told: %.200s", body)
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); !strings.Contains(body, "Tags are switched off") ||
+		!strings.Contains(body, `id="gated"`) || !strings.Contains(body, "inert") {
+		t.Errorf("a person with Tags off must be told, and the rest of the page switched off: %.300s", body)
 	}
-	if _, body := do(t, "GET", app.URL+"/", "sess=family", nil); strings.Contains(body, "Tags are switched off") {
-		t.Errorf("a person with Tags on must not be nagged: %.200s", body)
+	if _, body := do(t, "GET", app.URL+"/", "sess=family", nil); strings.Contains(body, "Tags are switched off") || strings.Contains(body, "inert") {
+		t.Errorf("a person with Tags on must not be nagged or locked out: %.300s", body)
 	}
 	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "sess=alice", nil); code != 400 {
 		t.Errorf("switching Tags on needs the cross-site header, got %d", code)
@@ -361,11 +362,20 @@ func TestTagsNoticeAndSwitch(t *testing.T) {
 	if code, _ := do(t, "POST", app.URL+"/preferences/tags", "", hdr); code != 401 {
 		t.Errorf("switching Tags on needs a sign-in, got %d", code)
 	}
-	if code, body := do(t, "POST", app.URL+"/preferences/tags", "sess=alice", hdr); code != 200 || !strings.Contains(body, "refresh the Immich tab") {
-		t.Errorf("switching on: %d %q", code, body)
+	ok, _ := http.NewRequest("POST", app.URL+"/preferences/tags", nil)
+	ok.Header.Set("Cookie", "sess=alice")
+	ok.Header.Set("X-Requested-With", "immich-handoff")
+	res0, err := http.DefaultClient.Do(ok)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "Tags are switched off") {
-		t.Errorf("the notice must go once Tags are on: %.200s", body)
+	b0, _ := io.ReadAll(res0.Body)
+	res0.Body.Close()
+	if res0.StatusCode != 200 || !strings.Contains(string(b0), "refresh the Immich tab") || res0.Header.Get("HX-Trigger") != "tags-on" {
+		t.Errorf("switching on: %d %q, trigger %q (the page unlocks itself on it)", res0.StatusCode, b0, res0.Header.Get("HX-Trigger"))
+	}
+	if _, body := do(t, "GET", app.URL+"/", "sess=alice", nil); strings.Contains(body, "Tags are switched off") || strings.Contains(body, "inert") {
+		t.Errorf("the notice and the lock must go once Tags are on: %.300s", body)
 	}
 	// when Immich refuses, say so in the message line and keep the button
 	req, _ := http.NewRequest("POST", app.URL+"/preferences/tags", nil)

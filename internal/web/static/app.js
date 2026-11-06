@@ -6,6 +6,15 @@ document.addEventListener("htmx:beforeSwap", (e) => {
   }
 });
 
+// Switching Tags on from the notice unlocks the rest of the page, which was dimmed and inert until then.
+document.addEventListener("tags-on", () => {
+  const g = document.getElementById("gated");
+  if (!g) return;
+  g.classList.remove("gated");
+  g.removeAttribute("inert");
+  g.removeAttribute("aria-disabled");
+});
+
 // Live status: the server sends a bare "run" signal when a pass finishes; we ask htmx to re-fetch the card.
 (function () {
   const indicator = document.getElementById("live");

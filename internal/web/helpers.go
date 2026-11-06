@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"github.com/a-h/templ"
 	"strings"
 )
 
@@ -194,4 +195,13 @@ type baseKey struct{}
 func baseHref(ctx context.Context) string {
 	b, _ := ctx.Value(baseKey{}).(string)
 	return b
+}
+
+// gate switches the page off while Tags are off in the person's Immich account: dimmed, and "inert" so that
+// nothing in it can be clicked or reached with the keyboard, until the notice's button turns Tags on.
+func gate(off bool) templ.Attributes {
+	if !off {
+		return nil
+	}
+	return templ.Attributes{"class": "gated", "inert": true, "aria-disabled": "true"}
 }
