@@ -41,8 +41,15 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "minor=$(echo "${v%%-*}" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
-          # only a tag push of a final version (no -rc, -test) becomes "latest"
-          if [ "${{ github.event_name }}" = push ] && [[ "$v" != *-* ]]; then echo "latest=true" >> "$GITHUB_OUTPUT"; else echo "latest=false" >> "$GITHUB_OUTPUT"; fi
+          final=false; [[ "$v" != *-* ]] && final=true   # no -rc1, -test or similar suffix
+          echo "final=$final" >> "$GITHUB_OUTPUT"
+          # `latest` goes only to a tag push of a final version that is the highest released so far, so a fix
+          # for an older line (1.1.1 when 1.2.0 exists) does not take it back; the X.Y tag below still moves
+          latest=false
+          if [ "${{ github.event_name }}" = push ] && [ "$final" = true ]; then
+            latest="$(git ls-remote --tags --refs origin 'refs/tags/v*' | sed 's#.*refs/tags/##' | .github/scripts/latest.sh "$v")"
+          fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
 
       - name: The changelog describes this version
         if: github.event_name == 'push'
@@ -90,7 +97,7 @@ jobs:
             ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.v.outputs.version }}
-            type=raw,value=${{ steps.v.outputs.minor }},enable=${{ steps.v.outputs.latest == 'true' || github.event_name == 'workflow_dispatch' }}
+            type=raw,value=${{ steps.v.outputs.minor }},enable=${{ steps.v.outputs.final == 'true' || github.event_name == 'workflow_dispatch' }}
             type=raw,value=latest,enable=${{ steps.v.outputs.latest == 'true' }}
 
       - name: Publish the multi-architecture image

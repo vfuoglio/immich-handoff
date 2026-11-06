@@ -4,7 +4,7 @@ For the maintainer. A release is a git tag; everything else is done by the relea
 
 ## What a release produces
 
-- the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag and is not `latest`)
+- the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and, if it is the highest version released so far, `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag, and not `X.Y` or `latest`)
 - a GitHub Release named after the tag, whose text is that version's section of `CHANGELOG.md`
 
 ## One-time setup
@@ -47,6 +47,19 @@ Without them the release fails at the Docker Hub login, before anything is publi
 - for **each** architecture, the freshly built image reports the right version with `--version`, and with no configuration it refuses to start and says `WEBHOOK_SECRET` is missing. That proves the binary runs, as the unprivileged user, on that architecture; it does not start a real Immich (the end-to-end tests do that with the binary, not the image)
 
 If any check fails nothing is published.
+
+## Patching an older version
+
+When 1.2.0 is out and 1.1 needs a fix, release `1.1.1` without disturbing what people on 1.2 get:
+
+```
+git switch -c release/1.1 v1.1.0
+git cherry-pick <the fix>
+# add a "## 1.1.1" section to CHANGELOG.md, commit
+git tag -a v1.1.1 -m "1.1.1" && git push origin release/1.1 v1.1.1
+```
+
+The release workflow runs on any tag, so this works from the branch. It moves the `1.1` tag to the fix, so people on `:1.1` receive it, and it leaves `latest` on the newest release, because `latest` goes only to the highest final version released so far (`.github/scripts/latest.sh` decides, and CI tests it). Merge the fix into `develop` as well, so it is not lost in the next minor version.
 
 ## A bad release
 
