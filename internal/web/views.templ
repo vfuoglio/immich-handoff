@@ -62,8 +62,9 @@ type MemberView struct {
 	Name  string
 	State string // active | broken
 	Copy  bool   // their originals are kept (otherwise moved to their trash)
-	Paused bool  // they paused their membership
-	Used   string // what they handed over in the last day, when the service has a limit
+	Paused  bool   // they paused their membership
+	AtLimit bool   // they reached the service's daily limit
+	Used    string // what they handed over in the last day, when the service has a limit
 }
 
 // BrokenView is a connection of the person that Immich rejected.
@@ -74,6 +75,49 @@ type BrokenView struct {
 // ActivityView is one line of the activity log.
 type ActivityView struct {
 	When, Text string
+}
+
+// NeedAction is a button on a card in the "Needs you" strip.
+type NeedAction struct {
+	Label, Path, Vals string
+	Confirm           string // asked before it runs; empty: no question
+	Primary           bool
+}
+
+// NeedView is one thing that waits on the person: a request to approve, a connection to restore, a pause or a
+// limit that holds photos back. Tone is the chip colour (bad, warn or empty).
+type NeedView struct {
+	Tone, Chip, Title, Text string
+	Actions                 []NeedAction
+}
+
+// DayBar is one day of the week's chart.
+type DayBar struct {
+	Label string // "Mon"
+	N     int
+}
+
+// NumbersView is the three numbers at the top of the Overview. Waiting only means something to a sender and Inbox to
+// a receiver, so each is shown only to the people it is about.
+type NumbersView struct {
+	Loading          bool // the first paint: skeletons, until the page asks for the real numbers
+	Sender, Receiver bool
+	Waiting, Inbox   int
+	Week             int
+	Days             [7]DayBar
+}
+
+// GuideStep is one step of the first-run guide.
+type GuideStep struct {
+	Text string
+	Done bool
+}
+
+// GuideView is the first-run guide, shown until it is finished or hidden.
+type GuideView struct {
+	Steps    []GuideStep
+	Done     int
+	NextStep string // what to do next, as the heading
 }
 
 // DashboardData is everything the main page shows.
@@ -89,6 +133,11 @@ type DashboardData struct {
 	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
 	Last     *syncer.RunInfo
+
+	Headline   string // the greeting, e.g. "Hello, Alice."
+	Needs      []NeedView
+	ShowNumber bool       // there is something to count: the person takes part in a service
+	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 }
 
 templ Layout(title, user string) {
@@ -158,19 +207,30 @@ templ Dashboard(d DashboardData) {
 			<h2>You are invited</h2>
 			@OfferCard(*d.Invited)
 		}
-		<h1>Your services</h1>
-		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
+		<h1>{ d.Headline }</h1>
+		<p class="lead">{ needsLine(len(d.Needs)) } Tag a photo in the Immich app and it is handed over within seconds.</p>
+		<h2>Needs you <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
+		if len(d.Needs) == 0 {
+			<div class="card need allclear"><b><span class="chip ok">All clear</span> Nothing needs you</b><p class="meta">New requests and problems appear here first.</p></div>
+		}
+		<div class="needs">
+			for _, n := range d.Needs {
+				@NeedCard(n)
+			}
+		</div>
+		if d.ShowNumber {
+			<h2>This week</h2>
+			@Numbers(NumbersView{Loading: true})
+		}
+		if d.Guide != nil {
+			@Guide(*d.Guide)
+		}
+		<h2>Your services</h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">You do not take part in any service yet.</div>
 		}
 		for _, s := range d.Services {
 			@ServiceCard(s)
-		}
-		for _, b := range d.Broken {
-			@BrokenCard(b)
-		}
-		for _, name := range d.Orphaned {
-			@OrphanCard(name)
 		}
 		if len(d.Owned) > 0 {
 			<h2>Services you offer</h2>
@@ -403,10 +463,7 @@ templ OwnedCard(o OwnedView) {
 			<p class="meta">What arrives is put in the album <strong>{ o.Album }</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.</p>
 		}
 		if o.Broken != "" {
-			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
-			<p class="row">
-				<button class="primary" hx-post="reconnect" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="Reconnecting creates a new receiver key in your Immich account.">Reconnect</button>
-			</p>
+			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect (the button is under Needs you, above).</p>
 		}
 		if len(o.Members) > 0 {
 			<p class="meta">
@@ -426,15 +483,8 @@ templ OwnedCard(o OwnedView) {
 			<button type="submit">Save limits</button>
 			<small class="meta">0 means no limit. Photos over the limit wait, tagged, until the day moves on.</small>
 		</form>
-		if len(o.Requests) == 0 {
-			<p class="meta">No requests waiting.</p>
-		}
-		for _, r := range o.Requests {
-			<div class="row">
-				<span><strong>{ r.Name }</strong> <span class="meta">{ r.Email }</span> wants to send.</span>
-				<button class="primary" hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "approve") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Approve</button>
-				<button hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "decline") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Decline</button>
-			</div>
+		if len(o.Requests) > 0 {
+			<p class="meta"><span class="chip warn">{ fmt.Sprint(len(o.Requests)) } waiting</span> Approve or decline them under Needs you, above.</p>
 		}
 		if o.Invite != "" {
 			<div class="field">
@@ -458,19 +508,6 @@ templ OwnedCard(o OwnedView) {
 				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Make invitation-only</button>
 			}
 			<button hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Delete " + o.Name + "? Its receiver key is removed from your Immich account and senders stop handing photos to you." }>Delete service</button>
-		</p>
-	</article>
-}
-
-templ OrphanCard(name string) {
-	<article class="card notice bad">
-		<header>
-			<h3>{ name }</h3>
-			<span class="chip bad">Removed by its owner</span>
-		</header>
-		<p class="meta">Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.</p>
-		<p class="row">
-			<button class="primary" hx-post="leave" hx-vals={ vals("service", name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
 		</p>
 	</article>
 }
@@ -528,20 +565,6 @@ templ OfferForm() {
 		<p class="row"><button class="primary" type="submit">Create service</button></p>
 	</form>
 }
-
-templ BrokenCard(b BrokenView) {
-	<article class="card notice bad">
-		<header>
-			<h3>{ b.Service }</h3>
-			<span class="chip bad">Connection lost</span>
-		</header>
-		<p class="meta">{ b.Note } Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.</p>
-		<p class="row">
-			<button class="primary" hx-post="leave" hx-vals={ vals("service", b.Service) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
-		</p>
-	</article>
-}
-
 // AdminData is everything the administrator's page shows.
 type AdminData struct {
 	User     string
@@ -683,4 +706,107 @@ templ AdminServiceCard(s AdminServiceView, removable bool) {
 			</p>
 		}
 	</article>
+}
+
+// NeedCard is one card of the "Needs you" strip.
+templ NeedCard(n NeedView) {
+	<article class={ "card", "need", n.Tone }>
+		<b><span class={ "chip", n.Tone }>{ n.Chip }</span> { n.Title }</b>
+		<p class="meta">{ n.Text }</p>
+		if len(n.Actions) > 0 {
+			<p class="row">
+				for _, a := range n.Actions {
+					if a.Confirm != "" {
+						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ a.Confirm }>{ a.Label }</button>
+					} else {
+						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ a.Label }</button>
+					}
+				}
+			</p>
+		}
+	</article>
+}
+
+// Numbers is the section of three numbers and the week's chart. It asks for itself again whenever a pass finishes.
+templ Numbers(n NumbersView) {
+	<section id="numbers" class="numbers" hx-get="fragments/numbers" hx-trigger="load, handoff:run from:body" hx-swap="outerHTML" aria-live="polite">
+		<div class="kpis">
+			<article class="card kpi wide">
+				<span class="kpi-label">Handed over, last 7 days</span>
+				<span class="num">
+					if n.Loading {
+						<span class="skeleton"></span>
+					} else {
+						{ fmt.Sprint(n.Week) }
+					}
+				</span>
+				if !n.Loading {
+					<svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" role="img" aria-label={ sparkLabel(n.Days) }>
+						<defs>
+							<linearGradient id="sparkfill" x1="0" x2="0" y1="0" y2="1">
+								<stop offset="0" stop-color="currentColor" stop-opacity=".35"></stop>
+								<stop offset="1" stop-color="currentColor" stop-opacity="0"></stop>
+							</linearGradient>
+						</defs>
+						<path d={ sparkArea(n.Days) } fill="url(#sparkfill)"></path>
+						<path class="spark-line" d={ sparkLine(n.Days) } fill="none"></path>
+						<circle class="spark-dot" cx={ sparkEndX() } cy={ sparkEndY(n.Days) } r="4.5"></circle>
+					</svg>
+					<ol class="days">
+						for _, d := range n.Days {
+							<li><b>{ fmt.Sprint(d.N) }</b><span>{ d.Label }</span></li>
+						}
+					</ol>
+					if n.Week == 0 {
+						<span class="sub">Nothing handed over yet this week.</span>
+					}
+				}
+			</article>
+			if n.Sender || n.Loading {
+				<article class="card kpi">
+					<span class="kpi-label">Waiting to go</span>
+					<span class="num">
+						if n.Loading {
+							<span class="skeleton"></span>
+						} else {
+							{ fmt.Sprint(n.Waiting) }
+						}
+					</span>
+					<span class="sub">tagged, still to be handed over</span>
+				</article>
+			}
+			if n.Receiver || n.Loading {
+				<article class="card kpi">
+					<span class="kpi-label">In your inbox</span>
+					<span class="num">
+						if n.Loading {
+							<span class="skeleton"></span>
+						} else {
+							{ fmt.Sprint(n.Inbox) }
+						}
+					</span>
+					<span class="sub">arrived and not yet filed</span>
+				</article>
+			}
+		</div>
+	</section>
+}
+
+// Guide is the first-run guide: a ring that fills as the steps are done.
+templ Guide(g GuideView) {
+	<h2>Get started</h2>
+	<section class="card guide" aria-label="Getting started">
+		<div class={ "ring", fmt.Sprintf("r%d", g.Done) } role="img" aria-label={ fmt.Sprintf("%d of %d steps done", g.Done, len(g.Steps)) }>
+			<span>{ fmt.Sprintf("%d/%d", g.Done, len(g.Steps)) }</span>
+		</div>
+		<div>
+			<h3>{ g.NextStep }</h3>
+			<ol class="steps">
+				for _, s := range g.Steps {
+					<li class={ doneIf(s.Done) }><span class="dot" aria-hidden="true">{ tickIf(s.Done) }</span> { s.Text }</li>
+				}
+			</ol>
+			<p class="row"><button hx-post="guide/dismiss" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Hide this guide</button></p>
+		</div>
+	</section>
 }

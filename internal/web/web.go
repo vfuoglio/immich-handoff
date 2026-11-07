@@ -73,6 +73,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
+	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
+	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
 	mux.HandleFunc("POST /sync", w.syncNow)
@@ -318,7 +320,8 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 				Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB}
 			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 				for _, m := range members {
-					mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused}
+					mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused,
+						AtLimit: (o.Service.LimitPhotos > 0 && m.Photos >= o.Service.LimitPhotos) || (o.Service.LimitMB > 0 && m.MB >= int64(o.Service.LimitMB))}
 					if o.Service.LimitPhotos > 0 || o.Service.LimitMB > 0 {
 						mv.Used = fmt.Sprintf("%d %s, %d MB in the last 24 hours", m.Photos, plural(m.Photos, "photo", "photos"), m.MB)
 					}
@@ -345,7 +348,126 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			d.Activity = append(d.Activity, ActivityView{a.At.Local().Format("2 Jan 15:04"), a.Text})
 		}
 	}
+	w.overview(ctx, me, &d)
 	return d
+}
+
+// overview fills in what the top of the page shows: the greeting, what needs the person, whether there are
+// numbers to show, and the first-run guide.
+func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
+	first := strings.Fields(me.user.Name)
+	d.Headline = "Hello."
+	if len(first) > 0 {
+		d.Headline = "Hello, " + first[0] + "."
+	}
+	d.Needs = needsOf(d)
+	d.ShowNumber = len(d.Services) > 0
+	if d.TagsOff {
+		return // the page is switched off until Tags are on, and so is the guide
+	}
+	if w.Hub == nil || w.Hub.GuideDone(ctx, me.user.ID) {
+		return
+	}
+	handed := 0
+	if _, counts, err := w.Hub.Week(ctx, me.user.ID, time.Now()); err == nil {
+		for _, c := range counts {
+			handed += c
+		}
+	}
+	steps := []GuideStep{
+		{"Turn on Tags in Immich", true}, // the page is switched off while they are off, so reaching here means they are on
+		{"Join a service, or offer one of your own", len(d.Services) > 0 || len(d.Owned) > 0},
+		{"Hand over your first photo: add a service's tag to a photo in Immich", handed > 0},
+	}
+	g := &GuideView{Steps: steps}
+	for _, s := range steps {
+		if s.Done {
+			g.Done++
+		}
+	}
+	if g.Done == len(steps) {
+		// finished: remember it, so the guide never comes back, and do not show it
+		if err := w.Hub.DismissGuide(ctx, me.user.ID); err != nil {
+			w.Log.Warn("could not remember that the guide was finished", "err", err)
+		}
+		return
+	}
+	for _, s := range steps {
+		if !s.Done {
+			g.NextStep = s.Text
+			break
+		}
+	}
+	d.Guide = g
+}
+
+// needsOf lists what waits on the person, most urgent first: connections that are lost, then requests to answer,
+// then pauses and limits that hold photos back.
+func needsOf(d *DashboardData) []NeedView {
+	var lost, ask, held []NeedView
+	for _, b := range d.Broken {
+		lost = append(lost, NeedView{Tone: "bad", Chip: "Connection lost", Title: b.Service, Text: b.Note + " Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.",
+			Actions: []NeedAction{{Label: "Clean up", Path: "leave", Vals: vals("service", b.Service), Primary: true}}})
+	}
+	for _, name := range d.Orphaned {
+		lost = append(lost, NeedView{Tone: "bad", Chip: "Removed by its owner", Title: name, Text: "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.",
+			Actions: []NeedAction{{Label: "Clean up", Path: "leave", Vals: vals("service", name), Primary: true}}})
+	}
+	for _, o := range d.Owned {
+		if o.Broken != "" {
+			lost = append(lost, NeedView{Tone: "bad", Chip: "Disconnected", Title: o.Name, Text: o.Broken + " Senders are paused until you reconnect.",
+				Actions: []NeedAction{{Label: "Reconnect", Path: "reconnect", Vals: vals("service", o.Name), Primary: true, Confirm: "Reconnecting creates a new receiver key in your Immich account."}}})
+		}
+		for _, r := range o.Requests {
+			ask = append(ask, NeedView{Tone: "warn", Chip: "Request", Title: r.Name + " wants to send to " + o.Name, Text: r.Email + " asks to send. You decide.",
+				Actions: []NeedAction{
+					{Label: "Approve", Path: "decide", Vals: decideVals(o.Name, r.ID, "approve"), Primary: true},
+					{Label: "Decline", Path: "decide", Vals: decideVals(o.Name, r.ID, "decline")}}})
+		}
+		if o.Paused {
+			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: o.Name, Text: "You paused this service: nothing is handed over to you, and photos senders tag stay tagged, until you resume it.",
+				Actions: []NeedAction{{Label: "Resume service", Path: "services/pause", Vals: pauseVals(o.Name, false), Primary: true}}})
+		}
+		for _, m := range o.Members {
+			if m.AtLimit {
+				held = append(held, NeedView{Tone: "warn", Chip: "Limit", Title: m.Name + " reached the daily limit for " + o.Name, Text: "Their next photos wait, still tagged, and go on their own as the day moves on. You can raise the limit in the service's card below."})
+			}
+		}
+	}
+	for _, s := range d.Services {
+		if s.Role != "sender" {
+			continue
+		}
+		switch {
+		case s.MinePaused:
+			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: s.Name, Text: "You paused sending. Photos you tag stay tagged and are handed over when you resume.",
+				Actions: []NeedAction{{Label: "Resume sending", Path: "pause", Vals: pauseVals(s.Name, false), Primary: true}}})
+		case s.Hold != "":
+			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: s.Name, Text: s.Hold + " Photos you tag stay tagged and are handed over when it resumes."})
+		}
+		if s.Waiting != "" {
+			held = append(held, NeedView{Tone: "warn", Chip: "Limit", Title: s.Name, Text: s.Waiting})
+		}
+	}
+	return append(append(lost, ask...), held...)
+}
+
+func (w *Server) dismissGuide(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil {
+		http.Error(rw, "nothing to remember it in", http.StatusNotFound)
+		return
+	}
+	if err := w.Hub.DismissGuide(r.Context(), me.user.ID); err != nil {
+		w.Log.Warn("could not hide the guide", "err", err)
+		http.Error(rw, "Could not do that: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 func ownerName(s *syncer.Service) string {
@@ -417,6 +539,38 @@ func (w *Server) requireMember(rw http.ResponseWriter, r *http.Request) *member 
 }
 
 // countFragment is how many photos wait (sender) or sit in the inbox (receiver) for one service.
+// pendingIDs are the photos a sender has waiting for a service: the ones tagged for it, and any in the album they
+// linked (each counted once even if it is also tagged).
+func (w *Server) pendingIDs(ctx context.Context, svc *syncer.Service, acct *syncer.Account, user uuid.UUID) []string {
+	ids := w.tagged(ctx, acct, svc.Tag)
+	if acct.WatchAlbum != uuid.Nil {
+		seen := map[string]bool{}
+		for _, id := range ids {
+			seen[id] = true
+		}
+		if pending, err := syncer.AlbumPending(ctx, svc, acct, user); err == nil {
+			for _, a := range pending {
+				if id := a.Id.String(); !seen[id] {
+					ids = append(ids, id)
+				}
+			}
+		}
+	}
+	return ids
+}
+
+// arrivedCount is what a receiver holds from a service. When arrivals go to an album, it counts what the album
+// holds (album = true); if the album cannot be found (the key may not be allowed to see albums), arrivals are
+// tagged inbox instead, so those are counted.
+func (w *Server) arrivedCount(ctx context.Context, svc *syncer.Service, acct *syncer.Account) (n int, album bool) {
+	if svc.Album != "" {
+		if id, count, err := acct.API.FindAlbum(ctx, svc.Album); err == nil && id != nil {
+			return count, true
+		}
+	}
+	return len(w.tagged(ctx, acct, svc.InboxTag)), false
+}
+
 func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 	me := w.requireMember(rw, r)
 	if me == nil {
@@ -431,37 +585,19 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 		if acct == nil {
 			break
 		}
-		tag := svc.Tag
-		if role == "receiver" {
-			tag = svc.InboxTag
-			if svc.Album != "" {
-				// Arrivals go to the album: count what it holds. If it cannot be found (the receiver's key may
-				// not be allowed to see albums), arrivals are tagged inbox instead, so count those.
-				if id, n, err := acct.API.FindAlbum(r.Context(), svc.Album); err == nil && id != nil {
-					rw.Header().Set("Cache-Control", "no-store")
-					Count(n, "album", nil).Render(r.Context(), rw)
-					return
-				}
-			}
-		}
 		rw.Header().Set("Cache-Control", "no-store")
-		ids := w.tagged(r.Context(), acct, tag)
-		if role == "sender" && acct.WatchAlbum != uuid.Nil {
-			// photos in the linked album wait too; count each once even if it is also tagged
-			seen := map[string]bool{}
-			for _, id := range ids {
-				seen[id] = true
+		if role == "receiver" {
+			n, album := w.arrivedCount(r.Context(), svc, acct)
+			if album {
+				Count(n, "album", nil).Render(r.Context(), rw)
+			} else {
+				Count(n, role, nil).Render(r.Context(), rw)
 			}
-			if pending, err := syncer.AlbumPending(r.Context(), svc, acct, me.user.ID); err == nil {
-				for _, a := range pending {
-					if id := a.Id.String(); !seen[id] {
-						ids = append(ids, id)
-					}
-				}
-			}
+			return
 		}
+		ids := w.pendingIDs(r.Context(), svc, acct, me.user.ID)
 		var thumbs []string
-		if role == "sender" && w.PublicImmichURL != "" {
+		if w.PublicImmichURL != "" {
 			for _, id := range ids[:min(len(ids), 6)] {
 				thumbs = append(thumbs, strings.TrimRight(w.PublicImmichURL, "/")+"/api/assets/"+id+"/thumbnail?size=thumbnail")
 			}
@@ -470,6 +606,37 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Error(rw, "no such service for you", http.StatusNotFound)
+}
+
+// numbersFragment is the Overview's three numbers and the week's chart, asked for when the page opens and again
+// whenever a pass finishes.
+func (w *Server) numbersFragment(rw http.ResponseWriter, r *http.Request) {
+	me := w.requireMember(rw, r)
+	if me == nil {
+		return
+	}
+	n := NumbersView{}
+	for _, svc := range w.S.Current() {
+		if a := me.account(svc, "sender"); a != nil {
+			n.Sender = true
+			n.Waiting += len(w.pendingIDs(r.Context(), svc, a, me.user.ID))
+		}
+		if a := me.account(svc, "receiver"); a != nil {
+			n.Receiver = true
+			c, _ := w.arrivedCount(r.Context(), svc, a)
+			n.Inbox += c
+		}
+	}
+	if w.Hub != nil {
+		if days, counts, err := w.Hub.Week(r.Context(), me.user.ID, time.Now()); err == nil {
+			for i := range days {
+				n.Days[i] = DayBar{Label: days[i].Format("Mon"), N: counts[i]}
+				n.Week += counts[i]
+			}
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	Numbers(n).Render(r.Context(), rw)
 }
 
 func (w *Server) lastRunFragment(rw http.ResponseWriter, r *http.Request) {

@@ -14,6 +14,22 @@ This page is for the people who send and receive photos. Everything happens on t
 
 > **Before you start: Tags must be on in Immich.** It is off by default and each person has it for their own account. If it is off, this page shows a notice with a **Turn on Tags** button; you can also do it in Immich under Account Settings, then Features, **Tags**. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Switching it on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
 
+## The Overview
+
+The page opens with what matters, in this order:
+
+1. **Needs you.** Everything that waits on a person, most urgent first, each with its button:
+   - **Connection lost** and **Removed by its owner**: **Clean up**, which deletes what the app made in your Immich account (then you can join again).
+   - **Disconnected** (a service you offer): **Reconnect**.
+   - **Request**: someone wants to send to a service you offer; **Approve** or **Decline**.
+   - **Paused**: a service you paused, or your own sending (**Resume**), or a service its owner paused (nothing for you to press).
+   - **Limit**: a sender is at the daily limit, or you are (see [Daily limits](#daily-limits-for-senders)).
+   When nothing waits, it says so. A request is answered here and nowhere else.
+2. **This week.** How many photos were handed over in the last seven days, as a small chart with one point per day (UTC days, today on the right). It counts what the app recorded for people who joined from the page: the photos **you sent**, and the ones that **arrived in services you offer**. Senders set up in `.env` or a routes file are not recorded, so they do not appear in it. Next to it, **Waiting to go** (photos you tagged that are still to be handed over, if you send) and **In your inbox** (what arrived and is not yet filed, if you receive). They refresh by themselves whenever a hand-over finishes.
+3. **Get started**, until you are done: turn on Tags, join or offer a service, hand over your first photo. A ring shows how far you are. It goes away by itself after the first hand-over, or when you press **Hide this guide**, and does not come back.
+
+Below that are your services, and what you can join or offer.
+
 ## Sending photos
 
 Open the page. It shows your services and what is waiting:
@@ -109,7 +125,7 @@ When anyone on the Immich server may send, one person could fill the receiver's 
 - Only photos that were actually handed over count (not duplicates and not refusals), by the size of the original. The size limit stops further photos once it is reached, so the last photo may take a sender slightly past it.
 - When a sender is at the limit, the rest of their tagged photos **wait, still tagged**. The sender's card says "The daily limit is reached, so N photos wait... They are handed over from <time>", the owner sees each sender's use ("12 photos, 340 MB in the last 24 hours") and a line in the recent events, and `NOTIFY_URL` is told once. The photos go on their own as soon as the oldest hand-over is 24 hours old, or at once when the owner raises or removes the limit.
 - It applies to photos from a linked album too. It applies to people who joined from the page; senders set up in `.env` or the routes file have no stored membership and are not limited.
-- What was handed over is recorded from the start, so a limit set today already counts today's photos. Records older than three days are forgotten.
+- What was handed over is recorded from the start, so a limit set today already counts today's photos. Records older than eight days are forgotten (the Overview's weekly chart uses them too).
 
 ## Leaving, and when a connection breaks
 

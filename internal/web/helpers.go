@@ -272,3 +272,84 @@ func limitText(photos, mb int) string {
 	}
 	return ""
 }
+
+func primaryIf(primary bool) string {
+	if primary {
+		return "primary"
+	}
+	return ""
+}
+
+func doneIf(done bool) string {
+	if done {
+		return "done"
+	}
+	return ""
+}
+
+func tickIf(done bool) string {
+	if done {
+		return "\u2713"
+	}
+	return ""
+}
+
+// needsLine is the sentence under the greeting.
+func needsLine(n int) string {
+	switch n {
+	case 0:
+		return "Nothing needs you right now."
+	case 1:
+		return "One thing needs you."
+	}
+	return fmt.Sprintf("%d things need you.", n)
+}
+
+// The week's chart is drawn to scale in a 300 by 56 box, one point at the centre of each of seven equal columns,
+// so the day labels under it (a seven-column grid) sit exactly under their points.
+const (
+	sparkW, sparkH = 300.0, 56.0
+	sparkTop       = 8.0
+	sparkBottom    = 50.0
+)
+
+func sparkMax(days [7]DayBar) int {
+	m := 1
+	for _, d := range days {
+		m = max(m, d.N)
+	}
+	return m
+}
+
+func sparkX(i int) float64 { return (float64(i) + .5) * sparkW / 7 }
+
+func sparkY(n, m int) float64 { return sparkBottom - float64(n)/float64(m)*(sparkBottom-sparkTop) }
+
+func sparkLine(days [7]DayBar) string {
+	m := sparkMax(days)
+	var b strings.Builder
+	for i, d := range days {
+		op := "L"
+		if i == 0 {
+			op = "M"
+		}
+		fmt.Fprintf(&b, "%s%.1f %.1f ", op, sparkX(i), sparkY(d.N, m))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func sparkArea(days [7]DayBar) string {
+	return fmt.Sprintf("%s L%.1f %.0f L%.1f %.0f Z", sparkLine(days), sparkX(6), sparkH, sparkX(0), sparkH)
+}
+
+func sparkEndX() string { return fmt.Sprintf("%.1f", sparkX(6)) }
+
+func sparkEndY(days [7]DayBar) string { return fmt.Sprintf("%.1f", sparkY(days[6].N, sparkMax(days))) }
+
+func sparkLabel(days [7]DayBar) string {
+	parts := make([]string, 0, 7)
+	for _, d := range days {
+		parts = append(parts, fmt.Sprintf("%s %d", d.Label, d.N))
+	}
+	return "Photos handed over per day, oldest first: " + strings.Join(parts, ", ")
+}

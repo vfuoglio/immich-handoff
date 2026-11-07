@@ -1879,4 +1879,20 @@ func TestPauseAndLimits(t *testing.T) {
 	if p := page(t, port, sender); strings.Contains(p, "The daily limit is reached") {
 		t.Error("the waiting notice must be gone once the photos went")
 	}
+
+	// the Overview's numbers: what moved this week, counted from what the app recorded
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+"/fragments/numbers", nil)
+	req.Header.Set("Cookie", owner)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nb, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(nb), "Handed over, last 7 days") || !strings.Contains(string(nb), ">4<") || !strings.Contains(string(nb), "In your inbox") {
+		t.Errorf("numbers for the owner: %d %.600s", res.StatusCode, nb)
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "Needs you") || !strings.Contains(p, "Nothing needs you right now.") {
+		t.Errorf("the owner's Overview must lead with the strip, all clear here: %.500s", p)
+	}
 }

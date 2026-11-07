@@ -25,7 +25,7 @@ func withClub(t *testing.T, st **store.Store) func(*web.Server) {
 		t.Cleanup(func() { s.Close() })
 		*st = s
 		ctx := context.Background()
-		if _, err := s.AddService(ctx, store.Service{Name: "club", Tag: "club-tag", InboxTag: "inbox/club", Refused: "dup", ExpiryDays: 30,
+		if _, err := s.AddService(ctx, store.Service{Name: "club", Tag: "share", InboxTag: "inbox", Refused: "dup", ExpiryDays: 30,
 			OwnerID: uuid.MustParse(familyID), OwnerName: "Family", OwnerEmail: "family@x.test", KeyID: uuid.New(), Key: "k-family",
 			Policy: store.PolicyOpen, Visibility: store.VisListed}); err != nil {
 			t.Fatal(err)

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -150,3 +153,58 @@ func (h *Hub) SetMemberPaused(ctx context.Context, user immich.User, service str
 
 // Window is how far back the daily cap looks, for showing "today" numbers.
 func Window() time.Duration { return syncer.LimitWindow }
+
+// Week is what moved through the person's services in each of the last seven days (UTC days, oldest first, the
+// last being today): the photos they handed over as a sender and the ones that arrived in services they own, both
+// as far as the data file recorded them (senders from the configuration are not recorded).
+func (h *Hub) Week(ctx context.Context, user uuid.UUID, now time.Time) (days [7]time.Time, counts [7]int, err error) {
+	today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	for i := range days {
+		days[i] = today.AddDate(0, 0, i-6)
+	}
+	if !h.SelfService() {
+		return days, counts, nil
+	}
+	links, err := h.Store.Links(ctx)
+	if err != nil {
+		return days, counts, err
+	}
+	owned := map[string]bool{}
+	for _, svc := range h.Services() {
+		if svc.OwnerID == user {
+			owned[svc.Label()] = true
+		}
+	}
+	var ids []string
+	for _, l := range links {
+		if l.Role == store.RoleSender && (l.ImmichUserID == user || owned[l.Service]) {
+			ids = append(ids, l.ID)
+		}
+	}
+	per, err := h.Store.HandoverDays(ctx, ids, days[0])
+	if err != nil {
+		return days, counts, err
+	}
+	for i, d := range days {
+		counts[i] = per[d.Format("2006-01-02")]
+	}
+	return days, counts, nil
+}
+
+// GuideDone reports whether the person has finished or hidden the first-run guide. Without a data file there is
+// nowhere to remember it, so the guide is not offered (true).
+func (h *Hub) GuideDone(ctx context.Context, user uuid.UUID) bool {
+	if !h.SelfService() {
+		return true
+	}
+	done, err := h.Store.GuideDone(ctx, user)
+	return err != nil || done
+}
+
+// DismissGuide remembers that the person finished or hid the first-run guide.
+func (h *Hub) DismissGuide(ctx context.Context, user uuid.UUID) error {
+	if !h.SelfService() {
+		return nil
+	}
+	return h.Store.SetGuideDone(ctx, user)
+}

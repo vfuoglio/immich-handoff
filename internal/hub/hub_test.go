@@ -1199,3 +1199,49 @@ func TestPausedStateSurvivesARestart(t *testing.T) {
 		t.Errorf("after a reload: service paused %v, limit %d, bob paused %v", s.Paused, s.LimitMB, s.Senders[0].Paused)
 	}
 }
+
+func TestTheWeekCountsWhatSendersHandedOverAndWhatArrivedForOwners(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	snd := service(e, "party").Senders[0]
+	for i := 0; i < 3; i++ {
+		e.h.Record(ctx, snd, 1<<20)
+	}
+	now := time.Now()
+	days, counts, err := e.h.Week(ctx, bobID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[6] != 3 || counts[0]+counts[1]+counts[2]+counts[3]+counts[4]+counts[5] != 0 {
+		t.Errorf("bob sent three today: %v", counts)
+	}
+	if days[6].Format("2006-01-02") != now.UTC().Format("2006-01-02") || days[0].Format("2006-01-02") != now.UTC().AddDate(0, 0, -6).Format("2006-01-02") {
+		t.Errorf("seven days, oldest first, the last being today: %v", days)
+	}
+	if _, owner, _ := e.h.Week(ctx, annID, now); owner[6] != 3 {
+		t.Errorf("ann owns the service they arrived in: %v", owner)
+	}
+	if _, other, _ := e.h.Week(ctx, uuid.New(), now); other != [7]int{} {
+		t.Errorf("someone with no part in it sees nothing: %v", other)
+	}
+}
+
+func TestTheGuideIsFinishedOnceAndOnlyWhereThereIsADataFile(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if e.h.GuideDone(ctx, bobID) {
+		t.Fatal("a new person has not finished the guide")
+	}
+	if err := e.h.DismissGuide(ctx, bobID); err != nil {
+		t.Fatal(err)
+	}
+	if !e.h.GuideDone(ctx, bobID) || e.h.GuideDone(ctx, annID) {
+		t.Error("it is remembered for bob, and only for bob")
+	}
+	noStore := &hub.Hub{}
+	if !noStore.GuideDone(ctx, bobID) {
+		t.Error("with nowhere to remember it the guide must not be offered")
+	}
+}

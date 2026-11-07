@@ -142,6 +142,11 @@ var migrations = []string{
 	   bytes   INTEGER NOT NULL
 	 );
 	 CREATE INDEX handovers_link ON handovers (link_id, at);`,
+	// The first-run guide on the Overview is shown until a person has finished or hidden it.
+	`CREATE TABLE guide (
+	   user_id TEXT PRIMARY KEY,
+	   done_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -362,14 +367,18 @@ func b2i(b bool) int {
 	return 0
 }
 
-// AddHandover records a photo a sender handed over, so the daily cap can be checked. Entries older than a
-// few days are dropped, since the cap only looks back one day.
+// HandoverRetention is how long a record of a hand-over is kept: the daily cap looks back one day and the
+// Overview's chart a week.
+const HandoverRetention = 8 * 24 * time.Hour
+
+// AddHandover records a photo a sender handed over, so the daily cap can be checked and the Overview can chart
+// the week. Entries older than HandoverRetention are dropped.
 func (s *Store) AddHandover(ctx context.Context, linkID string, bytes int64) error {
 	now := time.Now().UTC()
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO handovers (link_id, at, bytes) VALUES (?,?,?)`, linkID, now.Format(time.RFC3339Nano), bytes); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM handovers WHERE at < ?`, now.Add(-72*time.Hour).Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `DELETE FROM handovers WHERE at < ?`, now.Add(-HandoverRetention).Format(time.RFC3339Nano))
 	return err
 }
 
@@ -646,5 +655,50 @@ func (s *Store) Events(ctx context.Context, limit int) ([]Event, error) {
 // SetServiceVisibility changes who can see a service and sets its invitation token.
 func (s *Store) SetServiceVisibility(ctx context.Context, id, visibility, invite string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE services SET visibility = ?, invite = ? WHERE id = ?`, visibility, invite, id)
+	return err
+}
+
+// HandoverDays counts, per day, the photos handed over through these memberships since the given time. The days
+// are UTC dates ("2026-11-06"); a day without any is simply absent.
+func (s *Store) HandoverDays(ctx context.Context, linkIDs []string, since time.Time) (map[string]int, error) {
+	out := map[string]int{}
+	if len(linkIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(linkIDs)), ",")
+	args := make([]any, 0, len(linkIDs)+1)
+	for _, id := range linkIDs {
+		args = append(args, id)
+	}
+	args = append(args, since.UTC().Format(time.RFC3339Nano))
+	rows, err := s.db.QueryContext(ctx, `SELECT substr(at, 1, 10), COUNT(*) FROM handovers WHERE link_id IN (`+marks+`) AND at >= ? GROUP BY 1`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var day string
+		var n int
+		if err := rows.Scan(&day, &n); err != nil {
+			return nil, err
+		}
+		out[day] = n
+	}
+	return out, rows.Err()
+}
+
+// GuideDone reports whether the person has finished or hidden the first-run guide.
+func (s *Store) GuideDone(ctx context.Context, user uuid.UUID) (bool, error) {
+	var at string
+	err := s.db.QueryRowContext(ctx, `SELECT done_at FROM guide WHERE user_id = ?`, user.String()).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// SetGuideDone remembers that the person finished or hid the first-run guide.
+func (s *Store) SetGuideDone(ctx context.Context, user uuid.UUID) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO guide (user_id, done_at) VALUES (?, ?)`, user.String(), time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
