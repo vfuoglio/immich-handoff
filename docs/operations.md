@@ -46,19 +46,58 @@ With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for 
 
 ## Backups
 
-Only installs that let people join keep data: the `handoff-data` volume (its name starts with the folder name; see `docker volume ls`). Back it up while the app is stopped or idle, and keep a copy of `HANDOFF_STORE_KEY` separately, because the saved keys cannot be read without it:
+Only installs that let people join keep data: one file, `handoff.db`, in the `handoff-data` volume (its name starts with the folder name; see `docker volume ls`). It holds the services, the memberships and the saved API keys. Fixed-account installs store nothing.
+
+Ask the running app for a backup:
+
+```
+docker compose exec immich-handoff /immich-handoff backup
+```
+
+The command **queues** the backup and returns at once. The app makes it at the next quiet moment between hand-overs, so a copy never catches a photo halfway through, and writes it to `/data/backups/handoff-<date>-<time>.db`. The app's log says `backup ready` when it is done, and the file also shows up in the recent events on the [administrator's page](admin.md). Asking again while one is waiting does not queue another.
+
+If hand-overs never pause for **4 hours** (a very busy install, or a transfer that is stuck), the backup is made anyway so you are never left without one. That file is a consistent copy but may hold one hand-over caught halfway, so its name ends in `-forced` (`handoff-20261106-120000-forced.db`), and you are told: a warning in the log, a line in the recent events, and a message to `NOTIFY_URL` if you set it.
+
+Useful variations:
+
+- `backup --wait` stays, shows the progress, and exits when the backup is made, so a script can wait for it and read the result. Exit status **0**: made; **2**: made but forced (the file exists, see above); **1**: failed; **130**: interrupted with Ctrl-C (the backup is still queued in the app and will be made).
+- `backup --list` shows the backups in the folder, and the one in progress.
+- If the app is **not running**, the command copies at once and says so.
+
+Take the file out of the volume (this works without a shell in the image), and keep it, together with a separate copy of `HANDOFF_STORE_KEY`, somewhere other than this machine:
+
+```
+docker compose cp immich-handoff:/data/backups/handoff-20261106-120000.db .
+```
+
+The file holds the saved API keys, still encrypted with `HANDOFF_STORE_KEY`, plus names and emails in the clear, so it is no more sensitive than the volume itself. Old backups are not deleted by the app; remove the ones you do not need from `/data/backups`. It does not contain your `.env`, your routes file or the store key: keep those yourself.
+
+### Restoring
+
+Stop the app first. A restore refuses to run while the app is running, because replacing the file under it would corrupt it.
 
 ```
 docker compose stop immich-handoff
-docker run --rm -v immich-handoff_handoff-data:/data -v "$PWD":/backup busybox tar czf /backup/handoff-data.tgz -C /data .
+docker compose run --rm -v "$PWD/handoff-20261106-120000.db:/restore.db:ro" immich-handoff restore /restore.db
 docker compose start immich-handoff
 ```
 
-To restore, extract the archive into an empty volume the same way (`tar xzf`) before starting the app. Installs with only fixed accounts store nothing.
+The restore checks the file before it touches anything: it must pass SQLite's own integrity check, open with the current `HANDOFF_STORE_KEY` (the wrong key is reported as such), and not come from a newer version of the app. If the data folder already has data it refuses unless you add `--force`, which keeps the old file next to it as `handoff.db.before-restore`.
+
+### Moving to another machine
+
+1. On the old machine, make a backup as above and copy it out, and note `HANDOFF_STORE_KEY`.
+2. On the new machine, set up the app as in [Install](install.md) with the **same** `HANDOFF_STORE_KEY`. Do not start it yet.
+3. Restore the file as above.
+4. Set `PUBLIC_WEBHOOK_URL` for the new machine and start the app.
+
+The people's API keys live in Immich and stay valid, so nobody has to join again. At startup the app repairs each sender's workflow so it points at the new address. If the Immich server itself changed, the keys no longer work: the app notices, pauses those connections and tells people (see [Troubleshooting](troubleshooting.md)).
+
+An offline alternative, if you prefer archiving the volume: stop the app and `tar` the volume's contents (`docker run --rm -v immich-handoff_handoff-data:/data -v "$PWD":/backup busybox tar czf /backup/handoff-data.tgz -C /data .`), and extract it into an empty volume to restore.
 
 ## Upgrading
 
-Back up as above, read the changelog for the release you are moving to, then switch to it. A copy cloned at a release is not on `main`, so `git pull` does nothing; check out the new release instead (`v1.2.0` here is an example, see the [releases page](https://github.com/vfuoglio/immich-handoff/releases) for the real one):
+Make a backup ([how](#backups)), read the changelog for the release you are moving to, then switch to it. A copy cloned at a release is not on `main`, so `git pull` does nothing; check out the new release instead (`v1.2.0` here is an example, see the [releases page](https://github.com/vfuoglio/immich-handoff/releases) for the real one):
 
 ```
 git fetch --tags
@@ -79,12 +118,31 @@ The image comes from Docker Hub: `docker-compose.yml` names `vfuoglio/immich-han
 
 Before you upgrade **Immich** itself, you can run this project's whole test suite against the new Immich: `IMMICH_VERSION=<tag> test/run.sh` (see [Architecture](architecture.md#testing)).
 
+## Installing the page on a phone
+
+People reach the page from their phone, next to the Immich app, so it can be added to the home screen and opened like an app (no address bar, the app's icon and name). The page carries what a browser needs: a web app manifest, icons in the sizes phones ask for (including one that a phone may crop to any shape), the theme colours, and an icon for the iPhone.
+
+- **Android (Chrome and other Chromium browsers):** open the page, then the browser menu, **Install app** or **Add to Home screen**.
+- **iPhone and iPad (Safari):** open the page, then **Share**, **Add to Home Screen**.
+
+What it needs from you:
+
+- **HTTPS.** Browsers only install a page served over HTTPS (or from `localhost`). Behind a reverse proxy this is the proxy's certificate, as for Immich itself.
+- **The manifest and the icons must be reachable with the person's sign-in.** The page asks for the manifest with the browser's cookies (`crossorigin="use-credentials"`), because behind a login in front of the app (single sign-on at the proxy, for example) a request without cookies would be sent to the login page and the manifest would be ignored. Nothing special is needed otherwise: everything is under the page's own `static/` folder, so it also works behind a path prefix (the manifest's start address is relative).
+- **There is no service worker, and nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut.
+
+I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
+
 ## Monitoring
 
 - **Log:** `docker compose logs`. Each pass logs what it found and did; errors are marked `ERROR`.
 - **Notifications:** set `NOTIFY_URL` to an ntfy-style address and the app posts a message when a hand-over fails, a photo is refused, or a connection breaks.
 - **Container health:** the image checks itself every 30 seconds, so `docker ps` and `docker compose ps` show `healthy` or `unhealthy`, and tools that read Docker's health status can show or alert on it. The check asks the app's own `/healthz` (on `LISTEN_ADDR`) and passes only on `ok`. The image has no shell or `curl`, so the check is built into the program: `docker compose exec immich-handoff /immich-handoff --healthcheck` runs it by hand and exits 0 when healthy. A service that should wait for it can use `depends_on: immich-handoff: condition: service_healthy`. It does not test the connection to Immich; the page and the log show that.
 - **Health and metrics:** `GET /healthz` answers `ok`. `GET /metrics` returns counters in Prometheus text format (passes, photos by result, services, version) and needs the `X-Webhook-Secret` header with your secret.
+
+## Checking the setup
+
+`docker compose exec immich-handoff /immich-handoff doctor` tests the settings, the connection to Immich, every stored key and its permissions, and each sender's workflow, and says how to fix what fails. It is read-only, takes a few seconds, and exits 1 when anything failed, so it is safe to run on a live install and to use from a script or a scheduled job. What it checks, and how to read it, is in [Troubleshooting](troubleshooting.md#check-your-setup-first).
 
 ## Removing it
 

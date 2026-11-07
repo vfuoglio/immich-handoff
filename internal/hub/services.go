@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -58,6 +59,8 @@ type CreateParams struct {
 	InboxTag   string
 	ExpiryDays int
 	Album      string // optional: an album, in the owner's account, that handed-over photos are put in
+	// optional daily caps per sender: photos and megabytes, 0 for none
+	LimitPhotos, LimitMB int
 }
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
@@ -99,6 +102,9 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	} else if expiry > 3650 {
 		return ErrBadExpiry
 	}
+	if err := checkLimits(p.LimitPhotos, p.LimitMB); err != nil {
+		return err
+	}
 	for _, s := range h.Services() {
 		if strings.EqualFold(s.Label(), name) {
 			return ErrNameTaken
@@ -128,7 +134,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if _, err := h.Store.AddService(ctx, store.Service{
 		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
-		Visibility: visibility, Invite: invite, Album: album,
+		Visibility: visibility, Invite: invite, Album: album, LimitPhotos: p.LimitPhotos, LimitMB: p.LimitMB,
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -139,7 +145,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
-	h.event(ctx, name, owner.ID, "created", owner.Name+" started offering "+name)
+	h.event(ctx, name, owner.ID, "created", i18n.Pack("{name} started offering {service}", "name", owner.Name, "service", name))
 	h.Log.Info("service created", "service", name, "owner", owner.Email, "policy", policy)
 	return nil
 }
@@ -165,7 +171,7 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 	if err := h.Store.RemoveService(ctx, name); err != nil {
 		return err
 	}
-	h.event(ctx, name, owner.ID, "deleted", owner.Name+" removed the service "+name)
+	h.event(ctx, name, owner.ID, "deleted", i18n.Pack("{name} removed the service {service}", "name", owner.Name, "service", name))
 	h.Log.Info("service deleted", "service", name, "owner", owner.Email)
 	return h.Reload(ctx)
 }
@@ -205,7 +211,7 @@ func (h *Hub) Ask(ctx context.Context, user immich.User, service, invite string)
 		}
 		return err
 	}
-	h.event(ctx, service, user.ID, "asked", user.Name+" asked to send to "+service)
+	h.event(ctx, service, user.ID, "asked", i18n.Pack("{name} asked to send to {service}", "name", user.Name, "service", service))
 	h.Log.Info("join requested", "service", service, "user", user.Email)
 	return nil
 }
@@ -226,7 +232,11 @@ func (h *Hub) Decide(ctx context.Context, owner immich.User, service, requestID 
 			if approve {
 				status = store.StatusApproved
 			}
-			h.event(ctx, service, r.UserID, "decided", "The owner "+status+" "+r.Name+" for "+service)
+			if approve {
+				h.event(ctx, service, r.UserID, "decided", i18n.Pack("The owner approved {name} for {service}", "name", r.Name, "service", service))
+			} else {
+				h.event(ctx, service, r.UserID, "decided", i18n.Pack("The owner declined {name} for {service}", "name", r.Name, "service", service))
+			}
 			h.Log.Info("join request decided", "service", service, "user", r.Email, "status", status)
 			return h.Store.SetRequestStatus(ctx, r.ID, status)
 		}
@@ -318,7 +328,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit} {
 		if errors.Is(err, e) {
 			return true
 		}
@@ -368,7 +378,7 @@ func (h *Hub) NewInvite(ctx context.Context, owner immich.User, service string) 
 	if err := h.Store.SetServiceVisibility(ctx, v.ID, store.VisInvite, newToken()); err != nil {
 		return err
 	}
-	h.event(ctx, service, owner.ID, "invite", owner.Name+" made a new invitation link for "+service)
+	h.event(ctx, service, owner.ID, "invite", i18n.Pack("{name} made a new invitation link for {service}", "name", owner.Name, "service", service))
 	return h.Reload(ctx)
 }
 

@@ -290,3 +290,66 @@ func TestALinkedAlbumIsStoredChangedAndCleared(t *testing.T) {
 		t.Errorf("a missing membership: %v", err)
 	}
 }
+
+func TestHandoverDaysAreCountedPerDayAndOldOnesForgotten(t *testing.T) {
+	st, err := open(t, t.TempDir(), "0123456789abcdef0123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	// the fake clock: rows are written with their own timestamps by going through AddHandover then rewriting "at"
+	for i := 0; i < 3; i++ {
+		if err := st.AddHandover(ctx, "link-a", 1000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st.AddHandover(ctx, "link-b", 500)
+	st.AddHandover(ctx, "link-other", 500)
+	days, err2 := st.HandoverDays(ctx, []string{"link-a", "link-b"}, time.Now().Add(-time.Hour))
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	if days[today] != 4 || len(days) != 1 {
+		t.Errorf("per day: %v (link-other must not count)", days)
+	}
+	if got, _ := st.HandoverDays(ctx, nil, time.Now().Add(-time.Hour)); len(got) != 0 {
+		t.Errorf("no memberships, no days: %v", got)
+	}
+	// records older than the retention are dropped the next time one is added
+	old := time.Now().UTC().Add(-HandoverRetention - time.Hour).Format(time.RFC3339Nano)
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO handovers (link_id, at, bytes) VALUES ('link-a', ?, 1)`, old); err != nil {
+		t.Fatal(err)
+	}
+	st.AddHandover(ctx, "link-a", 1)
+	photos, _, _, _ := st.Handovers(ctx, "link-a", time.Now().Add(-30*24*time.Hour))
+	if photos != 4 {
+		t.Errorf("the record past the retention must be gone, link-a has %d (want 3 + 1 new)", photos)
+	}
+}
+
+func TestTheFirstRunGuideIsRememberedPerPerson(t *testing.T) {
+	st, err := open(t, t.TempDir(), "0123456789abcdef0123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	a, b := uuid.New(), uuid.New()
+	if done, err := st.GuideDone(ctx, a); err != nil || done {
+		t.Fatalf("a new person has not finished it: %v %v", done, err)
+	}
+	if err := st.SetGuideDone(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetGuideDone(ctx, a); err != nil {
+		t.Errorf("hiding it twice is fine: %v", err)
+	}
+	if done, _ := st.GuideDone(ctx, a); !done {
+		t.Error("it must stay finished")
+	}
+	if done, _ := st.GuideDone(ctx, b); done {
+		t.Error("it is remembered per person")
+	}
+}

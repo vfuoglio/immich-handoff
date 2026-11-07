@@ -19,6 +19,10 @@ type Account struct {
 	// Zero: none. WatchAlbumName is its name, for messages. Set when the account is built, never changed after.
 	WatchAlbum     uuid.UUID
 	WatchAlbumName string
+
+	// Paused: the sender paused their membership. Their tagged photos are left alone, still tagged, and are
+	// handed over when they resume. Set when the account is built, never changed after.
+	Paused bool
 }
 
 const (
@@ -45,6 +49,9 @@ type Service struct {
 	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
 	Unlisted      bool      // hidden from the directory; reachable only through Invite
 	Invite        string    // the owner's invitation token (only used by the hub)
+	Paused        bool      // the owner paused the service: nothing is handed over, and tagged photos stay tagged, until they resume
+	LimitPhotos   int       // most photos one sender may hand over in a day; 0: no limit
+	LimitMB       int       // most megabytes one sender may hand over in a day; 0: no limit
 	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
 }
 

@@ -10,11 +10,11 @@ In Immich, sign in to each account in turn and go to **Account Settings -> API K
 
 | Account | Permissions |
 |---|---|
-| Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `workflow.read` `workflow.create` `workflow.update` |
+| Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `workflow.read` `workflow.create` `workflow.update` `workflow.logs` |
 | The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` |
 | The **receiving** account, if the service puts arrivals in an album (`album`, see below) | the above, plus `album.read` `album.create` `albumAsset.create` |
 
-The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out.
+The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out. `workflow.logs` is optional: it only lets the [setup check](troubleshooting.md#check-your-setup-first) see how Immich's runs of the workflow ended, and everything else works without it.
 
 ### 2. Put them in `.env`
 

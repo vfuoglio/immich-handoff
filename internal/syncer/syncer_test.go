@@ -68,7 +68,7 @@ func (f *fakeImmich) handler() http.Handler {
 	good := base64.StdEncoding.EncodeToString(sum[:])
 	asset := func(id string, trashed bool, checksum string) map[string]any {
 		return map[string]any{"id": id, "originalFileName": "IMG_1.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts,
-			"isFavorite": true, "isTrashed": trashed, "checksum": checksum}
+			"isFavorite": true, "isTrashed": trashed, "checksum": checksum, "exifInfo": map[string]any{"fileSizeInByte": 2_000_000}}
 	}
 	tag := func(id, name string) map[string]any {
 		return map[string]any{"id": id, "name": name, "value": name, "createdAt": ts, "updatedAt": ts}

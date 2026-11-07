@@ -20,6 +20,16 @@ type ServiceView struct {
 	Album    string // receiver: the album arrivals are put in, if the service has one
 	CanWatch bool   // sender: joined from this page, so may link an album
 	Watch    string // sender: the album linked to this service, whose photos are all handed over
+
+	Hold       string // why this sender's photos are on hold (paused by the owner, or by themselves); empty: not
+	MinePaused bool   // sender: they paused their own membership
+	CanPause   bool   // sender: joined from this page, so may pause
+	Limit      string // the daily limit for each sender ("20 photos and 500 MB a day"); empty: none
+	Used       string // sender: how much of it they have used in the last day
+	Waiting    string // sender: photos waiting because the limit was reached, and until when
+	Stopped    bool   // receiver: the owner paused this service
+	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
+	Account    string // sender: the name this person's account goes by in the service (what live events call them)
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -44,6 +54,9 @@ type OwnedView struct {
 	Album             string // the album arrivals are put in, if the service has one
 	Requests          []RequestView
 	Members           []MemberView
+	Paused            bool // the owner paused it
+	LimitPhotos       int  // daily cap per sender, 0: none
+	LimitMB           int
 }
 
 // MemberView is a sender of a service the person owns.
@@ -51,6 +64,9 @@ type MemberView struct {
 	Name  string
 	State string // active | broken
 	Copy  bool   // their originals are kept (otherwise moved to their trash)
+	Paused  bool   // they paused their membership
+	AtLimit bool   // they reached the service's daily limit
+	Used    string // what they handed over in the last day, when the service has a limit
 }
 
 // BrokenView is a connection of the person that Immich rejected.
@@ -61,6 +77,67 @@ type BrokenView struct {
 // ActivityView is one line of the activity log.
 type ActivityView struct {
 	When, Text string
+	Tone       string // ok | warn | bad | "" : the colour of the dot on the timeline
+}
+
+// Chip is a small state label on a service row.
+type Chip struct{ Tone, Text string }
+
+// SceneLane is one sender's lane in the live scene.
+type SceneLane struct {
+	Name     string // what live events call the sender
+	State    string // flow | paused | capped | broken
+	PausedBy string // service | sender, when State is paused
+}
+
+// SceneStage is one service in the live scene: its senders' lanes and the gate they hand photos through.
+type SceneStage struct {
+	Service string
+	Where   string // one line about the receiving side
+	Lanes   []SceneLane
+}
+
+// NeedAction is a button on a card in the "Needs you" strip.
+type NeedAction struct {
+	Label, Path, Vals string
+	Confirm           string // asked before it runs; empty: no question
+	Primary           bool
+}
+
+// NeedView is one thing that waits on the person: a request to approve, a connection to restore, a pause or a
+// limit that holds photos back. Tone is the chip colour (bad, warn or empty).
+type NeedView struct {
+	Tone, Chip, Title, Text string
+	Actions                 []NeedAction
+}
+
+// DayBar is one day of the week's chart.
+type DayBar struct {
+	Label string // "Mon"
+	N     int
+}
+
+// NumbersView is the three numbers at the top of the Overview. Waiting only means something to a sender and Inbox to
+// a receiver, so each is shown only to the people it is about.
+type NumbersView struct {
+	Loading          bool // the first paint: skeletons, until the page asks for the real numbers
+	Sender, Receiver bool
+	Waiting, Inbox   int
+	Week             int
+	Days             [7]DayBar
+}
+
+// GuideStep is one step of the first-run guide.
+type GuideStep struct {
+	Text string
+	Done bool
+}
+
+// GuideView is the first-run guide, shown until it is finished or hidden.
+type GuideView struct {
+	Steps    []GuideStep
+	Done     int
+	NextStep string // what to do next, as the heading
 }
 
 // DashboardData is everything the main page shows.
@@ -76,11 +153,18 @@ type DashboardData struct {
 	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
 	Last     *syncer.RunInfo
+
+	Headline   string // the greeting, e.g. "Hello, Alice."
+	Gist       string // the highlighted half of the heading, e.g. "Two things need you."
+	Needs      []NeedView
+	Scene      []SceneStage // one stage per service that has senders
+	ShowNumber bool       // there is something to count: the person takes part in a service
+	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 }
 
 templ Layout(title, user string) {
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang={ loc(ctx).Code() }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -90,20 +174,60 @@ templ Layout(title, user string) {
 			}
 			<title>{ title }</title>
 			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials"/>
+			<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
+			<meta name="theme-color" content="#f5f2fd" media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content="#0d0b20" media="(prefers-color-scheme: dark)"/>
+			<meta name="apple-mobile-web-app-title" content="Handoff"/>
 			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/theme.js"></script>
 			<script src="static/htmx.min.js" defer></script>
 			<script src="static/app.js" defer></script>
 		</head>
 		<body hx-headers='{"X-Requested-With": "immich-handoff"}'>
+			<div id="glow" aria-hidden="true"></div>
 			<div class="wrap">
 				<header class="bar">
 					<div class="brand">
 						<img src="static/favicon.svg" alt="" width="28" height="28"/>
-						Immich Handoff
+						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
+					if hasTabs(ctx) {
+						<nav class="tabs" aria-label={ t(ctx, "Views") }>
+							<a href="#overview" data-view="overview">{ t(ctx, "Overview") }</a>
+							<a href="#services" data-view="services">{ t(ctx, "Services") }</a>
+							<a href="#activity" data-view="activity">{ t(ctx, "Activity") }</a>
+						</nav>
+					}
+					<details class="lang">
+						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>
+							<span class="lang-code">{ loc(ctx).Code() }</span>
+						</summary>
+						<ul class="lang-menu" role="menu">
+							for _, l := range languages() {
+								<li role="none"><button type="button" role="menuitemradio" data-lang={ string(l) } aria-checked={ checked(loc(ctx).Lang == l) } lang={ string(l) }>{ langName(l) }</button></li>
+							}
+						</ul>
+					</details>
 					if user != "" {
 						<div class="who">
-							<span id="live" class="live off" title="Live updates" role="img" aria-label="Live updates"></span>
+							if isAdmin(ctx) {
+								<a class="adminlink" href="admin">{ t(ctx, "Admin") }</a>
+							}
+							if hasTabs(ctx) {
+								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }>{ t(ctx, "Search") } <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
+							}
+							<span id="live" class="live off" title={ t(ctx, "Live updates") } role="img" aria-label={ t(ctx, "Live updates") }></span>
+							<button type="button" class="icon-btn" id="theme" aria-label={ t(ctx, "Dark theme") } title={ t(ctx, "Switch between the light and the dark theme") } aria-pressed="false">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17" ></path><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path></svg>
+							</button>
+							if hasTabs(ctx) {
+								<button type="button" class="icon-btn" id="sound" aria-label={ t(ctx, "Arrival chime and vibration") } title={ t(ctx, "Arrival chime and vibration when a photo lands") } aria-pressed="true">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><g class="on"><path d="M16.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 6a8.5 8.5 0 0 1 0 12"></path></g><path class="off" d="M17 9l5 6M22 9l-5 6"></path></svg>
+								</button>
+							}
 							<span class="avatar" aria-hidden="true">{ initial(user) }</span>
 							<span>{ user }</span>
 						</div>
@@ -112,7 +236,23 @@ templ Layout(title, user string) {
 				<main>
 					{ children... }
 				</main>
-				<footer>Photos you tag in Immich are handed over automatically.</footer>
+				<footer>{ t(ctx, "Photos you tag in Immich are handed over automatically.") }</footer>
+				if hasTabs(ctx) {
+					<dialog id="cmd" class="cmd" aria-label={ t(ctx, "Command palette") }>
+						<input id="cmd-q" type="text" placeholder={ t(ctx, "Type a command or the name of a service") } aria-label={ t(ctx, "Command") } autocomplete="off" role="combobox" aria-controls="cmd-list" aria-expanded="true"/>
+						<ul id="cmd-list" role="listbox"></ul>
+					</dialog>
+				}
+				<dialog id="confirm" class="confirm" aria-labelledby="confirm-title">
+					<form method="dialog">
+						<h3 id="confirm-title">{ t(ctx, "Please confirm") }</h3>
+						<p id="confirm-text" class="meta"></p>
+						<p class="row confirm-actions">
+							<button value="cancel">{ t(ctx, "Cancel") }</button>
+							<button value="ok" id="confirm-ok" class="primary">{ t(ctx, "Continue") }</button>
+						</p>
+					</form>
+				</dialog>
 			</div>
 		</body>
 	</html>
@@ -120,10 +260,11 @@ templ Layout(title, user string) {
 
 // TagsNotice offers to switch Tags on, which Immich has off by default and which everyone taking part needs.
 templ TagsNotice() {
-	<div class="card notice" id="tags-notice">
-		<h3>Tags are switched off in your Immich account</h3>
-		<p class="meta">Tags are how photos are handed over, and how you find what arrived. While they are off you cannot add tags in Immich or see them, so the rest of this page is switched off until you turn them on. Turning them on changes one setting in your Immich account, the same as Account Settings, Features, Tags.</p>
-		<p class="row"><button class="primary" hx-post="preferences/tags" hx-target="#tags-notice" hx-swap="innerHTML" hx-disabled-elt="this">Turn on Tags</button></p>
+	<div class="card notice tags" id="tags-notice">
+		<header><span class="chip warn">{ t(ctx, "Tags are off") }</span></header>
+		<h3>{ t(ctx, "Tags are switched off in your Immich account") }</h3>
+		<p class="meta">{ t(ctx, "Tags are how photos are handed over, and how you find what arrived. While they are off you cannot add tags in Immich or see them, so the rest of this page is switched off until you turn them on. Turning them on changes one setting in your Immich account, the same as Account Settings, Features, Tags.") }</p>
+		<p class="row"><button class="primary" hx-post="preferences/tags" hx-target="#tags-notice" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn on Tags") }</button></p>
 	</div>
 }
 
@@ -134,60 +275,94 @@ templ Dashboard(d DashboardData) {
 			@TagsNotice()
 		}
 		<div id="gated" { gate(d.TagsOff)... }>
-		if d.Invited != nil {
-			<h2>You are invited</h2>
-			@OfferCard(*d.Invited)
-		}
-		<h1>Your services</h1>
-		<p class="lead">Tag a photo in the Immich app and it is handed over within seconds.</p>
-		if len(d.Services) == 0 {
-			<div class="card empty">You do not take part in any service yet.</div>
-		}
-		for _, s := range d.Services {
-			@ServiceCard(s)
-		}
-		for _, b := range d.Broken {
-			@BrokenCard(b)
-		}
-		for _, name := range d.Orphaned {
-			@OrphanCard(name)
-		}
-		if len(d.Owned) > 0 {
-			<h2>Services you offer</h2>
-			for _, o := range d.Owned {
-				@OwnedCard(o)
+		<section class="view" id="v-overview" aria-label={ t(ctx, "Overview") }>
+			<h1>{ d.Headline } <em>{ d.Gist }</em></h1>
+			<p class="lead">{ t(ctx, "Everything that was handed over went through; these are the only things that wait on a person. Tag a photo in the Immich app and it is handed over within seconds.") }</p>
+			<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
+			if len(d.Needs) == 0 {
+				<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
 			}
-		}
-		if len(d.Offers) > 0 {
-			<h2>Services you can send to</h2>
-			for _, o := range d.Offers {
-				@OfferCard(o)
+			<div class="needs">
+				for _, n := range d.Needs {
+					@NeedCard(n)
+				}
+			</div>
+			if d.ShowNumber {
+				<h2>{ t(ctx, "This week") }</h2>
+				@Numbers(NumbersView{Loading: true})
 			}
-		}
-		if d.CanOffer {
-			<details class="offer">
-				<summary>Offer a service of your own</summary>
-				@OfferForm()
-			</details>
-		}
-		if len(d.Activity) > 0 {
-			<h2>Recent events</h2>
-			<section class="card" aria-label="Recent events">
-				<ul class="events">
-					for _, a := range d.Activity {
-						<li><span class="meta">{ a.When }</span> { a.Text }</li>
-					}
-				</ul>
-			</section>
-		}
-		if len(d.Services) > 0 {
-			<h2>Activity</h2>
-			@LastRun(d.Last)
-			<p class="row">
-				<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">Sync now</button>
-				<span id="synctoast" class="toast" aria-live="polite"></span>
-			</p>
-		}
+			if d.Guide != nil {
+				@Guide(*d.Guide)
+			}
+			if len(d.Scene) > 0 {
+				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
+				@Scene(d.Scene)
+			}
+		</section>
+		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
+			<h1>
+				@templ.Raw(h(ctx, "Your <em>services</em>"))
+			</h1>
+			<p class="lead">{ t(ctx, "Open a service to see how it works, change who can send, pause it or set a daily limit. What cannot be undone sits at the bottom of each one.") }</p>
+			if d.RowCount() == 0 {
+				<div class="card empty">{ t(ctx, "You do not take part in any service yet.") }</div>
+			}
+			if len(d.Sending()) > 0 {
+				<h2>{ t(ctx, "You send to") }</h2>
+				for i, sv := range d.Sending() {
+					@SendRow(sv, fmt.Sprintf("send-%d", i), d.RowCount() == 1)
+				}
+			}
+			if len(d.Receiving()) > 0 {
+				<h2>{ t(ctx, "You receive") }</h2>
+				for i, sv := range d.Receiving() {
+					@ReceiveRow(sv, fmt.Sprintf("recv-%d", i), d.RowCount() == 1)
+				}
+			}
+			if len(d.Owned) > 0 {
+				<h2>{ t(ctx, "You offer") }</h2>
+				for i, o := range d.Owned {
+					@OwnedRow(o, fmt.Sprintf("own-%d", i), d.RowCount() == 1)
+				}
+			}
+			if len(d.Offers) > 0 {
+				<h2>{ t(ctx, "You can join") }</h2>
+				for _, o := range d.Offers {
+					@OfferCard(o)
+				}
+			}
+			if d.CanOffer {
+				<details class="offer">
+					<summary>{ t(ctx, "Offer a service of your own") }</summary>
+					@OfferForm()
+				</details>
+			}
+		</section>
+		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
+			<h1>
+				@templ.Raw(h(ctx, "What <em>happened</em>"))
+			</h1>
+			<p class="lead">{ t(ctx, "The latest events across your services. Nothing here changes a photo.") }</p>
+			if len(d.Activity) > 0 {
+				<section class="card timeline-card" aria-label={ t(ctx, "Recent events") }>
+					<ol class="timeline">
+						for _, a := range d.Activity {
+							<li><time>{ a.When }</time><span class={ "dot", a.Tone } aria-hidden="true"></span><span>{ a.Text }</span></li>
+						}
+					</ol>
+				</section>
+			} else {
+				<div class="card empty">{ t(ctx, "Nothing has happened yet.") }</div>
+			}
+			if len(d.Services) > 0 {
+				<h2>{ t(ctx, "Last run") }</h2>
+				@LastRun(d.Last)
+				<p class="row">
+					<button class="primary" hx-post="sync" hx-target="#synctoast" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Sync now") }</button>
+					<span id="synctoast" class="toast" aria-live="polite"></span>
+				</p>
+			}
+		</section>
 		</div>
 	}
 }
@@ -196,17 +371,19 @@ templ Dashboard(d DashboardData) {
 templ WatchBox(s ServiceView) {
 	<div class="watch">
 		if s.Watch != "" {
-			<p class="meta">Everything in your album <strong>{ s.Watch }</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.</p>
+			<p class="meta">
+				@templ.Raw(h(ctx, "Everything in your album <strong>{album}</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.", "album", s.Watch))
+			</p>
 		}
 		<p class="row">
 			if s.Watch != "" {
-				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Stop handing over this album</button>
+				<button hx-post="services/album/stop" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Stop handing over this album") }</button>
 			}
 			<button hx-get={ "fragments/albums?service=" + url.QueryEscape(s.Name) } hx-target="next .albumform" hx-swap="innerHTML" hx-disabled-elt="this">
 				if s.Watch != "" {
-					Link a different album
+					{ t(ctx, "Link a different album") }
 				} else {
-					Hand over a whole album
+					{ t(ctx, "Hand over a whole album") }
 				}
 			</button>
 		</p>
@@ -217,63 +394,122 @@ templ WatchBox(s ServiceView) {
 // AlbumChoice is the form that follows: the sender's own albums, and a button to link the chosen one.
 templ AlbumChoice(service string, albums []AlbumOption, copies bool) {
 	if len(albums) == 0 {
-		<p class="meta">You have no albums of your own yet. Make one in Immich, then come back.</p>
+		<p class="meta">{ t(ctx, "You have no albums of your own yet. Make one in Immich, then come back.") }</p>
 	} else {
-		<form class="card" hx-post="services/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ albumConfirm(service, copies) }>
+		<form class="card" hx-post="services/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ albumConfirm(ctx, service, copies) } data-confirm-title={ t(ctx, "Hand over this album?") } data-confirm-label={ t(ctx, "Hand over") }>
 			<input type="hidden" name="service" value={ service }/>
 			<div class="field">
-				<label for="watch-album">Album to hand over to { service }</label>
+				<label for="watch-album">{ t(ctx, "Album to hand over to {service}", "service", service) }</label>
 				<select id="watch-album" name="album">
 					for _, a := range albums {
 						<option value={ a.ID }>{ a.Label }</option>
 					}
 				</select>
 			</div>
-			<p class="meta">Everything in it, and whatever you add later, goes to { service }. { originalsNote(copies) } Only photos you own are used.</p>
-			<p class="row"><button class="primary" type="submit">Hand over this album</button></p>
+			<p class="meta">{ t(ctx, "Everything in it, and whatever you add later, goes to {service}.", "service", service) } { originalsNote(ctx, copies) } { t(ctx, "Only photos you own are used.") }</p>
+			<p class="row"><button class="primary" type="submit">{ t(ctx, "Hand over this album") }</button></p>
 		</form>
 	}
 }
 
-templ ServiceCard(s ServiceView) {
-	<article class="card">
-		<header>
-			<h3>{ s.Name }</h3>
-			<span class={ "chip", roleClass(s.Role) }>{ roleLabel(s.Role) }</span>
-		</header>
-		if s.Paused != "" {
-			<p class="meta"><span class="chip warn">Paused</span> { s.Paused } Photos stay where they are until it is fixed.</p>
-		}
-		<p class="meta">
-			if s.Role == "sender" {
-				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it. { originalsNote(s.Copy) }
-			} else if s.Album != "" {
-				Photos arrive in the album <strong>{ s.Album }</strong>.
-			} else {
-				Photos arrive tagged <code class="tag">{ s.Tag }</code>.
+// RowHead is the always-visible line of a service row: a coloured initial, the name and what it is, state chips,
+// and the number that matters (filled in by the page asking for it, see Count).
+templ RowHead(name, subtitle string, chips []Chip, sum string) {
+	<summary>
+		<span class={ "badge", hueClass(name) } aria-hidden="true">{ initial(name) }</span>
+		<span class="title"><b>{ name }</b><span>{ subtitle }</span></span>
+		<span class="chips">
+			for _, c := range chips {
+				<span class={ "chip", c.Tone }>{ c.Text }</span>
 			}
-			{ fmt.Sprintf(" %d %s, %d %s.", s.From, plural(s.From, "sender", "senders"), s.To, plural(s.To, "receiver", "receivers")) }
-		</p>
-		if s.Role == "sender" && s.CanWatch {
-			@WatchBox(s)
-		}
-		if s.CanLeave {
-			<p class="row">
-				<button hx-post="leave" hx-vals={ `{"service":"` + s.Name + `"}` } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Leave " + s.Name + "? Your Immich API key for it and its workflow will be deleted." }>Leave</button>
-			</p>
-		}
-		<div class="stats">
-			<div class="stat" hx-get={ "fragments/count?service=" + s.Name + "&role=" + s.Role } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
-				<span class="skeleton"></span>
-				<small>{ countLabel(s.Role) }</small>
-			</div>
-		</div>
-	</article>
+		</span>
+		<span id={ sum } class="sum"><span class="skeleton"></span></span>
+		<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+	</summary>
 }
 
-templ Count(n int, role string, thumbs []string) {
+// SendRow is a service the person sends to: what is on hold, how to send, the album, and (apart) how to leave.
+templ SendRow(s ServiceView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(s.Name, roleLabel(ctx, s.Role)+" \u00b7 "+originalsShort(ctx, s.Copy), sendChips(ctx, s), "sum-"+id)
+		<div class="body">
+			if s.Paused != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { s.Paused } { t(ctx, "Photos stay where they are until it is fixed.") }</p>
+			}
+			if s.Hold != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { s.Hold } { t(ctx, "Photos tagged meanwhile stay tagged and are handed over when it resumes.") }</p>
+			}
+			if s.Limit != "" {
+				<p class="meta">{ t(ctx, "The owner limits each sender to {limit}.", "limit", s.Limit) } { s.Used }</p>
+			}
+			if s.Waiting != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Waiting") }</span> { s.Waiting }</p>
+			}
+			<p class="meta">
+				@templ.Raw(h(ctx, `Add the tag <code class="tag">{tag}</code> to a photo in Immich to send it.`, "tag", s.Tag))
+				{ originalsNote(ctx, s.Copy) }
+				{ " " + n(ctx, "{n} sender", "{n} senders", s.From) + ", " + n(ctx, "{n} receiver", "{n} receivers", s.To) + "." }
+			</p>
+			<div class="stats">
+				<div class="stat" hx-get={ countURL(s.Name, s.Role, "sum-"+id) } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
+					<span class="skeleton"></span>
+					<small>{ countLabel(ctx, s.Role) }</small>
+				</div>
+			</div>
+			if s.CanWatch {
+				@WatchBox(s)
+			}
+			if s.CanPause {
+				<p class="row">
+					if s.MinePaused {
+						<button class="primary" data-act="resume" hx-post="pause" hx-vals={ pauseVals(s.Name, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Resume sending") }</button>
+					} else {
+						<button data-act="pause" hx-post="pause" hx-vals={ pauseVals(s.Name, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Pause sending to this service? Photos you tag stay tagged and are handed over when you resume.") } data-confirm-title={ t(ctx, "Pause sending?") } data-confirm-label={ t(ctx, "Pause") }>{ t(ctx, "Pause sending") }</button>
+					}
+				</p>
+			}
+			if s.CanLeave {
+				<div class="danger-zone">
+					<span class="meta">{ t(ctx, "Leaving deletes the API key and the workflow this app made in your Immich account. Your photos are not touched.") }</span>
+					<button class="danger" hx-post="leave" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Leave {name}? Your Immich API key for it and its workflow will be deleted.", "name", s.Name) } data-confirm-title={ t(ctx, "Leave {name}?", "name", s.Name) } data-confirm-label={ t(ctx, "Leave") } data-danger="true">{ t(ctx, "Leave") }</button>
+				</div>
+			}
+		</div>
+	</details>
+}
+
+// ReceiveRow is a service from the configuration that the person receives from (the ones they offer are OwnedRow).
+templ ReceiveRow(s ServiceView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(s.Name, roleLabel(ctx, s.Role)+" \u00b7 "+receiveShort(ctx, s), recvChips(ctx, s), "sum-"+id)
+		<div class="body">
+			if s.Paused != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { s.Paused } { t(ctx, "Photos stay where they are until it is fixed.") }</p>
+			}
+			if s.Stopped {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { t(ctx, "This service is paused: nothing is handed over to you until it resumes.") }</p>
+			}
+			<p class="meta">
+				if s.Album != "" {
+					@templ.Raw(h(ctx, "Photos arrive in the album <strong>{album}</strong>.", "album", s.Album))
+				} else {
+					@templ.Raw(h(ctx, `Photos arrive tagged <code class="tag">{tag}</code>.`, "tag", s.Tag))
+				}
+				{ " " + n(ctx, "{n} sender", "{n} senders", s.From) + ", " + n(ctx, "{n} receiver", "{n} receivers", s.To) + "." }
+			</p>
+			<div class="stats">
+				<div class="stat" hx-get={ countURL(s.Name, s.Role, "sum-"+id) } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
+					<span class="skeleton"></span>
+					<small>{ countLabel(ctx, s.Role) }</small>
+				</div>
+			</div>
+		</div>
+	</details>
+}
+
+templ Count(n int, role string, thumbs []string, sum string) {
 	{ fmt.Sprint(n) }
-	<small>{ countLabel(role) }</small>
+	<small>{ countLabel(ctx, role) }</small>
 	if len(thumbs) > 0 {
 		<span class="thumbs">
 			for _, t := range thumbs {
@@ -281,24 +517,27 @@ templ Count(n int, role string, thumbs []string) {
 			}
 		</span>
 	}
+	if sum != "" {
+		<span id={ sum } class="sum" hx-swap-oob="true"><b data-odo={ sum }>{ fmt.Sprint(n) }</b><small>{ shortLabel(ctx, role) }</small></span>
+	}
 }
 
 templ LastRun(info *syncer.RunInfo) {
 	<section id="lastrun" class="card" hx-get="fragments/lastrun" hx-trigger="handoff:run from:body" hx-swap="outerHTML" aria-live="polite">
 		if info == nil {
-			<p class="meta">No run yet since the app started.</p>
+			<p class="meta">{ t(ctx, "No run yet since the app started.") }</p>
 		} else {
 			<header>
-				<h3>Last run</h3>
-				<span class="meta">{ info.Finished.Format("2 Jan 15:04:05") } · { reasonLabel(info.Reason) }</span>
+				<h3>{ t(ctx, "Last run") }</h3>
+				<span class="meta">{ loc(ctx).Stamp(info.Finished) } · { reasonLabel(ctx, info.Reason) }</span>
 			</header>
 			<div class="row">
-				<span class="chip ok">{ fmt.Sprint(info.Counts.Imported) } handed over</span>
-				<span class="chip">{ fmt.Sprint(info.Counts.Duplicate) } already there</span>
-				<span class={ "chip", warnIf(info.Counts.Refused > 0) }>{ fmt.Sprint(info.Counts.Refused) } refused</span>
-				<span class={ "chip", badIf(info.Counts.Errors > 0) }>{ fmt.Sprint(info.Counts.Errors) } errors</span>
+				<span class="chip ok">{ t(ctx, "{n} handed over", "n", info.Counts.Imported) }</span>
+				<span class="chip">{ t(ctx, "{n} already there", "n", info.Counts.Duplicate) }</span>
+				<span class={ "chip", warnIf(info.Counts.Refused > 0) }>{ t(ctx, "{n} refused", "n", info.Counts.Refused) }</span>
+				<span class={ "chip", badIf(info.Counts.Errors > 0) }>{ t(ctx, "{n} errors", "n", info.Counts.Errors) }</span>
 				if info.Counts.DryRun > 0 {
-					<span class="chip">{ fmt.Sprint(info.Counts.DryRun) } dry-run</span>
+					<span class="chip">{ t(ctx, "{n} dry-run", "n", info.Counts.DryRun) }</span>
 				}
 			</div>
 			if info.Error != "" {
@@ -308,12 +547,15 @@ templ LastRun(info *syncer.RunInfo) {
 	</section>
 }
 
+// Notice is a page of its own for what stops a person before the dashboard: not signed in, an invitation that is no
+// longer valid, a failure. The icon, a large heading and one plain sentence.
 templ Notice(title, text string, bad bool) {
 	@Layout(title, "") {
-		<div class={ "card", "notice", badClass(bad) }>
+		<section class={ "notice-page", templ.KV("bad", bad) }>
+			<span class="notice-icon" aria-hidden="true"><img src="static/favicon.svg" alt="" width="56" height="56"/></span>
 			<h1>{ title }</h1>
 			<p class="lead">{ text }</p>
-		</div>
+		</section>
 	}
 }
 
@@ -321,10 +563,10 @@ templ OfferCard(o OfferView) {
 	<article class="card">
 		<header>
 			<h3>{ o.Name }</h3>
-			<span class={ "chip", offerChip(o.State) }>{ offerLabel(o.State) }</span>
+			<span class={ "chip", offerChip(o.State) }>{ offerLabel(ctx, o.State) }</span>
 		</header>
 		<p class="meta">
-			Send photos by adding the tag <code class="tag">{ o.Tag }</code> to them in Immich.
+			{ t(ctx, "Send photos by adding the tag") } <code class="tag">{ o.Tag }</code> { t(ctx, "to them in Immich.") }
 			if o.Owner != "" {
 				{ " Offered by " + o.Owner + "." }
 			}
@@ -333,143 +575,489 @@ templ OfferCard(o OfferView) {
 			<p class="row">
 				switch o.State {
 					case "join", "approved":
-						<span class="meta q">What should happen to your originals?</span>
-						<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, true) }>
-							{ joinLabel(o.State, true) }
+						<span class="meta q">{ t(ctx, "What should happen to your originals?") }</span>
+						<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, true) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
+							{ joinLabel(ctx, o.State, true) }
 						</button>
-						<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(o.Name, o.Tag, false) }>
-							{ joinLabel(o.State, false) }
+						<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, false) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
+							{ joinLabel(ctx, o.State, false) }
 						</button>
 					case "request":
-						<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Ask to join</button>
+						<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask to join") }</button>
 				}
 			</p>
 		}
 	</article>
 }
 
-templ OwnedCard(o OwnedView) {
-	<article class="card">
-		<header>
-			<h3>{ o.Name }</h3>
-			<span class="chip">{ policyLabel(o.Policy) }</span>
-		</header>
-		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
-		if o.Album != "" {
-			<p class="meta">What arrives is put in the album <strong>{ o.Album }</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.</p>
-		}
-		if o.Broken != "" {
-			<p class="meta"><span class="chip bad">Disconnected</span> { o.Broken } Senders are paused until you reconnect.</p>
-			<p class="row">
-				<button class="primary" hx-post="reconnect" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="Reconnecting creates a new receiver key in your Immich account.">Reconnect</button>
-			</p>
-		}
-		if len(o.Members) > 0 {
+// OwnedRow is a service the person offers: who sends, the limits, the invitation, and (apart) deleting it.
+templ OwnedRow(o OwnedView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(o.Name, policyLabel(ctx, o.Policy)+" \u00b7 "+t(ctx, "you receive"), ownedChips(ctx, o), "sum-"+id)
+		<div class="body">
 			<p class="meta">
-				Senders:
-				for _, m := range o.Members {
-					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State, m.Copy) }</span>
-				}
+				@templ.Raw(h(ctx, `You receive the photos senders tag <code class="tag">{tag}</code>.`, "tag", o.Tag))
+				{ t(ctx, "Nobody can see the key the app uses for your account.") }
 			</p>
-		}
-		if len(o.Requests) == 0 {
-			<p class="meta">No requests waiting.</p>
-		}
-		for _, r := range o.Requests {
-			<div class="row">
-				<span><strong>{ r.Name }</strong> <span class="meta">{ r.Email }</span> wants to send.</span>
-				<button class="primary" hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "approve") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Approve</button>
-				<button hx-post="decide" hx-vals={ decideVals(o.Name, r.ID, "decline") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Decline</button>
-			</div>
-		}
-		if o.Invite != "" {
-			<div class="field">
-				<label for={ "inv-" + o.Name }>Invitation link (only people with it can find this service)</label>
-				<div class="row">
-					<input id={ "inv-" + o.Name } class="invite" readonly data-invite={ o.Invite }/>
-					<button type="button" class="copy">Copy</button>
-					<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="The current link will stop working. Continue?">New link</button>
+			if o.Album != "" {
+				<p class="meta">
+					@templ.Raw(h(ctx, "What arrives is put in the album <strong>{album}</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.", "album", o.Album))
+				</p>
+			}
+			if o.Broken != "" {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Disconnected") }</span> { unpack(ctx, o.Broken) } { t(ctx, "Senders are paused until you reconnect (the button is under Needs you, above).") }</p>
+			}
+			if len(o.Requests) > 0 {
+				<p class="meta"><span class="chip warn">{ t(ctx, "{n} waiting", "n", len(o.Requests)) }</span> { t(ctx, "Approve or decline them under Needs you, above.") }</p>
+			}
+			<div class="stats">
+				<div class="stat" hx-get={ countURL(o.Name, "receiver", "sum-"+id) } hx-trigger="load, handoff:run from:body" hx-swap="innerHTML">
+					<span class="skeleton"></span>
+					<small>{ countLabel(ctx, "receiver") }</small>
 				</div>
 			</div>
-		}
-		<p class="row">
-			if o.Invite != "" {
-				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">List for everyone</button>
+			if len(o.Members) > 0 {
+				<div class="members">
+					<span class="meta">{ t(ctx, "Senders") }</span>
+					for _, m := range o.Members {
+						<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(ctx, m.State, m.Copy) }{ pausedSuffix(ctx, m.Paused) }</span>
+						if m.Used != "" {
+							<span class="meta">{ m.Used }</span>
+						}
+					}
+				</div>
 			} else {
-				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Make invitation-only</button>
+				<p class="meta">{ t(ctx, "Nobody sends to this service yet.") }</p>
 			}
-			<button hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Delete " + o.Name + "? Its receiver key is removed from your Immich account and senders stop handing photos to you." }>Delete service</button>
-		</p>
-	</article>
-}
-
-templ OrphanCard(name string) {
-	<article class="card notice bad">
-		<header>
-			<h3>{ name }</h3>
-			<span class="chip bad">Removed by its owner</span>
-		</header>
-		<p class="meta">Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.</p>
-		<p class="row">
-			<button class="primary" hx-post="leave" hx-vals={ vals("service", name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
-		</p>
-	</article>
+			<form class="limits" hx-post="services/limits" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="service" value={ o.Name }/>
+				<label>{ t(ctx, "Photos per sender per day") } <input name="photos" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitPhotos) } class="narrow"/></label>
+				<label>{ t(ctx, "MB per sender per day") } <input name="mb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitMB) } class="narrow"/></label>
+				<button type="submit">{ t(ctx, "Save limits") }</button>
+				<small class="meta">{ t(ctx, "0 means no limit. Photos over the limit wait, tagged, until the day moves on.") }</small>
+			</form>
+			if o.Invite != "" {
+				<div class="field">
+					<label for={ "inv-" + id }>{ t(ctx, "Invitation link (only people with it can find this service)") }</label>
+					<div class="row">
+						<input id={ "inv-" + id } class="invite" readonly data-invite={ o.Invite }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current link will stop working. Continue?") } data-confirm-title={ t(ctx, "Make a new link?") } data-confirm-label={ t(ctx, "New link") }>{ t(ctx, "New link") }</button>
+					</div>
+				</div>
+			}
+			<p class="row">
+				if o.Paused {
+					<button class="primary" data-act="resume" hx-post="services/pause" hx-vals={ pauseVals(o.Name, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Resume service") }</button>
+				} else {
+					<button data-act="pause" hx-post="services/pause" hx-vals={ pauseVals(o.Name, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Pause this service? Nothing is handed over to you, and photos senders tag stay tagged, until you resume it.") } data-confirm-title={ t(ctx, "Pause this service?") } data-confirm-label={ t(ctx, "Pause") }>{ t(ctx, "Pause service") }</button>
+				}
+				if o.Invite != "" {
+					<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "List for everyone") }</button>
+				} else {
+					<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "invite") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make invitation-only") }</button>
+				}
+			</p>
+			<div class="danger-zone">
+				<span class="meta">{ t(ctx, "Deleting removes the receiver key from your Immich account. Senders stop handing photos to you and are told. Photos already in your library stay.") }</span>
+				<button class="danger" hx-post="services/delete" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Delete {name}? Its receiver key is removed from your Immich account and senders stop handing photos to you.", "name", o.Name) } data-confirm-title={ t(ctx, "Delete {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Delete service") } data-danger="true">{ t(ctx, "Delete service") }</button>
+			</div>
+		</div>
+	</details>
 }
 
 templ OfferForm() {
-	<form class="card" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm="Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.">
-		<p class="meta">Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.</p>
-		<div class="field">
-			<label for="svc-name">Service name</label>
-			<input id="svc-name" name="name" required minlength="2" maxlength="40" placeholder="Holiday 2026"/>
-		</div>
-		<div class="field">
-			<label for="svc-tag">Tag senders add</label>
-			<input id="svc-tag" name="tag" required maxlength="64" placeholder="holiday"/>
-		</div>
-		<div class="field">
-			<label for="svc-vis">Who can find it</label>
-			<select id="svc-vis" name="visibility">
-				<option value="listed">Everyone on this Immich server</option>
-				<option value="invite">Only people I send a link to</option>
-			</select>
-		</div>
-		<details>
-			<summary class="meta">More options</summary>
+	<form class="card offer-form" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.") } data-confirm-title={ t(ctx, "Create this service?") } data-confirm-label={ t(ctx, "Create service") }>
+		<p class="meta">{ t(ctx, "Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.") }</p>
+		<div class="form-grid">
 			<div class="field">
-				<label for="svc-inbox">Tag put on what arrives (default: inbox)</label>
-				<input id="svc-inbox" name="inbox" maxlength="64" placeholder="inbox"/>
+				<label for="svc-name">{ t(ctx, "Service name") }</label>
+				<input id="svc-name" name="name" required minlength="2" maxlength="40" placeholder={ t(ctx, "Holiday 2026") }/>
 			</div>
 			<div class="field">
-				<label for="svc-album">Put what arrives in this album (optional, instead of the inbox tag)</label>
-				<input id="svc-album" name="album" maxlength="100" placeholder="Holiday 2026"/>
-				<small class="meta">An album of yours with that name; it is made if you do not have one. The key the app uses then also gets permission to find, create and add to albums.</small>
+				<label for="svc-tag">{ t(ctx, "Tag senders add") }</label>
+				<input id="svc-tag" name="tag" required maxlength="64" placeholder={ t(ctx, "holiday") }/>
 			</div>
 			<div class="field">
-				<label for="svc-expiry">Days before an unfiled photo loses that tag (default: 30)</label>
-				<input id="svc-expiry" name="expiry" type="number" min="1" max="3650" placeholder="30"/>
+				<label for="svc-policy">{ t(ctx, "Who may send") }</label>
+				<select id="svc-policy" name="policy">
+					<option value="approval">{ t(ctx, "People I approve") }</option>
+					<option value="open">{ t(ctx, "Anyone on this Immich server") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="svc-vis">{ t(ctx, "Who can find it") }</label>
+				<select id="svc-vis" name="visibility">
+					<option value="listed">{ t(ctx, "Everyone on this Immich server") }</option>
+					<option value="invite">{ t(ctx, "Only people I send a link to") }</option>
+				</select>
+			</div>
+		</div>
+		<details class="more">
+			<summary>{ t(ctx, "More options") }</summary>
+			<div class="form-grid">
+				<div class="field">
+					<label for="svc-inbox">{ t(ctx, "Tag put on what arrives (default: inbox)") }</label>
+					<input id="svc-inbox" name="inbox" maxlength="64" placeholder={ t(ctx, "inbox") }/>
+				</div>
+				<div class="field">
+					<label for="svc-expiry">{ t(ctx, "Days before an unfiled photo loses that tag (default: 30)") }</label>
+					<input id="svc-expiry" name="expiry" type="number" min="1" max="3650" placeholder="30"/>
+				</div>
+				<div class="field wide">
+					<label for="svc-album">{ t(ctx, "Put what arrives in this album (optional, instead of the inbox tag)") }</label>
+					<input id="svc-album" name="album" maxlength="100" placeholder={ t(ctx, "Holiday 2026") }/>
+					<small class="meta">{ t(ctx, "An album of yours with that name; it is made if you do not have one. The key the app uses then also gets permission to find, create and add to albums.") }</small>
+				</div>
+				<div class="field">
+					<label for="svc-lphotos">{ t(ctx, "Most photos each sender may hand over in a day (optional)") }</label>
+					<input id="svc-lphotos" name="photos" type="number" min="0" max="1000000" placeholder={ t(ctx, "no limit") }/>
+				</div>
+				<div class="field">
+					<label for="svc-lmb">{ t(ctx, "Most megabytes each sender may hand over in a day (optional)") }</label>
+					<input id="svc-lmb" name="mb" type="number" min="0" max="1000000" placeholder={ t(ctx, "no limit") }/>
+				</div>
+				<small class="meta wide">{ t(ctx, "Photos over a limit wait, tagged, until the day moves on. You can change the limits later.") }</small>
 			</div>
 		</details>
-		<div class="field">
-			<label for="svc-policy">Who may send</label>
-			<select id="svc-policy" name="policy">
-				<option value="approval">People I approve</option>
-				<option value="open">Anyone on this Immich server</option>
-			</select>
-		</div>
-		<p class="row"><button class="primary" type="submit">Create service</button></p>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Create service") }</button></p>
 	</form>
 }
 
-templ BrokenCard(b BrokenView) {
-	<article class="card notice bad">
-		<header>
-			<h3>{ b.Service }</h3>
-			<span class="chip bad">Connection lost</span>
-		</header>
-		<p class="meta">{ b.Note } Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.</p>
-		<p class="row">
-			<button class="primary" hx-post="leave" hx-vals={ vals("service", b.Service) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
-		</p>
+// AdminData is everything the administrator's page shows.
+type AdminData struct {
+	User     string
+	Services []AdminServiceView
+	Leftover []AdminMemberView
+	Activity []AdminActivityView
+	SelfOn   bool // people can join from the page, so there is a store to remove from
+	Senders   int  // senders across all services
+	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+}
+
+type AdminServiceView struct {
+	Name, Tag, Owner, Policy, Album string
+	InviteOnly, Copy, FromConfig    bool
+	Paused                          bool
+	Limit                           string
+	Receivers                       int
+	Broken                          string
+	Members                         []AdminMemberView
+}
+
+type AdminMemberView struct {
+	LinkID, Name, Email, State, Note, Album string
+	Copy, FromConfig                        bool
+	Paused                                  bool
+}
+
+type AdminActivityView struct{ When, Service, Text, Tone string }
+
+templ AdminPage(d AdminData) {
+	@Layout(t(ctx, "Immich Handoff: admin"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>
+			@templ.Raw(h(ctx, "Everything on this <em>server</em>"))
+		</h1>
+		<p class="lead">{ t(ctx, "Every service, who offers it, who sends to it, and whether the connections work.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<div class="kpis admin-kpis">
+			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Services") }</span><span class="num">{ fmt.Sprint(len(d.Services)) }</span><span class="sub">{ t(ctx, "offered on this server") }</span></article>
+			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Senders") }</span><span class="num">{ fmt.Sprint(d.Senders) }</span><span class="sub">{ t(ctx, "across all services") }</span></article>
+			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Need attention") }</span><span class="num">{ fmt.Sprint(d.Attention) }</span><span class="sub">{ t(ctx, "paused, limited or disconnected") }</span></article>
+		</div>
+		<p class="meta">{ t(ctx, "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.") }</p>
+		<h2>{ t(ctx, "Check the connections") }</h2>
+		<section class="card">
+			<p class="row">
+				<button class="primary" hx-post="admin/check" hx-target="#checkresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#checkresult">{ t(ctx, "Check now") }</button>
+				<span class="meta">
+					@templ.Raw(h(ctx, "The same check as <code>immich-handoff doctor</code>. It only reads."))
+				</span>
+			</p>
+			<pre id="checkresult" class="checkresult" aria-live="polite"></pre>
+		</section>
+		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
+		if len(d.Services) == 0 {
+			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
+		}
+		for i, s := range d.Services {
+			@AdminServiceCard(s, d.SelfOn, fmt.Sprintf("adm-%d", i), len(d.Services) == 1)
+		}
+		if len(d.Leftover) > 0 {
+			<h2>{ t(ctx, "Waiting to clean up") }</h2>
+			<p class="meta">{ t(ctx, "Their service was removed. They still hold a key and a workflow in Immich and see a Clean up button on their page. Nothing is handed over for them.") }</p>
+			<section class="card">
+				<ul class="events">
+					for _, m := range d.Leftover {
+						<li>{ m.Name } <span class="meta">{ m.Email }</span></li>
+					}
+				</ul>
+			</section>
+		}
+		if len(d.Activity) > 0 {
+			<h2>{ t(ctx, "Recent events") }</h2>
+			<section class="card timeline-card" aria-label={ t(ctx, "Recent events") }>
+				<ol class="timeline">
+					for _, a := range d.Activity {
+						<li><time>{ a.When }</time><span class={ "dot", a.Tone } aria-hidden="true"></span><span>{ a.Text }</span></li>
+					}
+				</ol>
+			</section>
+		}
+	}
+}
+
+// AdminServiceCard is one service for the administrator, as a row that opens to its facts, senders and (apart) its removal.
+templ AdminServiceCard(s AdminServiceView, removable bool, id string, open bool) {
+	<details class="svc card" name="adm" open?={ open }>
+		<summary>
+			<span class={ "badge", hueClass(s.Name) } aria-hidden="true">{ initial(s.Name) }</span>
+			<span class="title"><b>{ s.Name }</b><span>{ adminPolicy(ctx, s.Policy) }{ adminOwner(s.Owner) }</span></span>
+			<span class="chips">
+				if s.InviteOnly {
+					<span class="chip">{ t(ctx, "Invitation only") }</span>
+				}
+				if s.FromConfig {
+					<span class="chip">{ t(ctx, "From configuration") }</span>
+				}
+				if s.Broken != "" {
+					<span class="chip bad">{ t(ctx, "Disconnected") }</span>
+				}
+				if s.Paused {
+					<span class="chip warn">{ t(ctx, "Paused") }</span>
+				}
+			</span>
+			<span class="sum"><b>{ fmt.Sprint(len(s.Members)) }</b><small>{ n(ctx, "sender", "senders", len(s.Members)) }</small></span>
+			<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+		</summary>
+		<div class="body">
+			<p class="meta">
+				@templ.Raw(h(ctx, `Tag <code class="tag">{tag}</code>.`, "tag", s.Tag))
+				if s.Limit != "" {
+					{ t(ctx, "Limit per sender: {limit}.", "limit", s.Limit) }
+				}
+				if s.Owner != "" {
+					{ t(ctx, "Offered by {name}.", "name", s.Owner) }
+				}
+				{ n(ctx, "{n} receiver", "{n} receivers", s.Receivers) + "." }
+				if s.Copy {
+					{ t(ctx, "Originals are kept.") }
+				} else {
+					{ t(ctx, "Originals are moved to the sender's trash.") }
+				}
+				if s.Album != "" {
+					@templ.Raw(h(ctx, "Arrivals go to the album <strong>{album}</strong>.", "album", s.Album))
+				}
+			</p>
+			if s.Broken != "" {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Disconnected") }</span> { unpack(ctx, s.Broken) }</p>
+			}
+			if len(s.Members) == 0 {
+				<p class="meta">{ t(ctx, "No senders yet.") }</p>
+			}
+			<ul class="member-list">
+				for _, m := range s.Members {
+					<li>
+						<span class={ "chip", memberChip(m.State) }>{ m.Name }</span>
+						<span class="member-facts">
+							if m.Email != "" {
+								<span class="meta">{ m.Email }</span>
+							}
+							<span class="meta">{ memberSuffix(ctx, m.State, m.Copy) }{ pausedSuffix(ctx, m.Paused) }</span>
+							if m.Album != "" {
+								<span class="meta">{ t(ctx, "album {name}", "name", m.Album) }</span>
+							}
+							if m.FromConfig {
+								<span class="meta">{ t(ctx, "from configuration") }</span>
+							}
+							if m.Note != "" {
+								<span class="meta member-note">{ unpack(ctx, m.Note) }</span>
+							}
+						</span>
+						if m.LinkID != "" && removable {
+							<button class="danger" hx-post="admin/members/remove" hx-vals={ vals("link", m.LinkID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove {name} from {service}? The app stops handing over their photos. Their API key stays in their Immich account until they delete it; they are told on their page.", "name", m.Name, "service", s.Name) } data-confirm-title={ t(ctx, "Remove this member?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+						}
+					</li>
+				}
+			</ul>
+			if !s.FromConfig && removable {
+				<div class="danger-zone">
+					<span class="meta">{ t(ctx, "Removing the service stops everything handed over to it. The owner's receiver key stays in their Immich account until they delete it; members and the owner are told.") }</span>
+					<button class="danger" hx-post="admin/services/remove" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove the service {name}? Nothing is handed over any more. The owner's receiver key stays in their Immich account until they delete it; members and owner are told.", "name", s.Name) } data-confirm-title={ t(ctx, "Remove this service?") } data-confirm-label={ t(ctx, "Remove service") } data-danger="true">{ t(ctx, "Remove this service") }</button>
+				</div>
+			}
+		</div>
+	</details>
+}
+
+// NeedCard is one card of the "Needs you" strip.
+templ NeedCard(n NeedView) {
+	<article class={ "card", "need", n.Tone }>
+		<b><span class={ "chip", n.Tone }>{ n.Chip }</span> { n.Title }</b>
+		<p class="meta">{ n.Text }</p>
+		if len(n.Actions) > 0 {
+			<p class="row">
+				for _, a := range n.Actions {
+					if a.Confirm != "" {
+						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ a.Confirm } data-confirm-title={ a.Label + "?" } data-confirm-label={ a.Label }>{ a.Label }</button>
+					} else {
+						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ a.Label }</button>
+					}
+				}
+			</p>
+		}
 	</article>
+}
+
+// Numbers is the section of three numbers and the week's chart. It asks for itself again whenever a pass finishes.
+templ Numbers(n NumbersView) {
+	<section id="numbers" class="numbers" hx-get="fragments/numbers" hx-trigger={ numbersTrigger(n) } hx-swap="outerHTML" aria-live="polite">
+		<div class="kpis">
+			<article class="card kpi wide">
+				<span class="kpi-label">{ t(ctx, "Handed over, last 7 days") }</span>
+				<span class="num" data-odo="week">
+					if n.Loading {
+						<span class="skeleton"></span>
+					} else {
+						{ fmt.Sprint(n.Week) }
+					}
+				</span>
+				if !n.Loading {
+					<svg class="spark" viewBox="0 0 300 56" preserveAspectRatio="none" role="img" aria-label={ sparkLabel(ctx, n.Days) }>
+						<defs>
+							<linearGradient id="sparkfill" x1="0" x2="0" y1="0" y2="1">
+								<stop offset="0" stop-color="currentColor" stop-opacity=".35"></stop>
+								<stop offset="1" stop-color="currentColor" stop-opacity="0"></stop>
+							</linearGradient>
+						</defs>
+						<path d={ sparkArea(n.Days) } fill="url(#sparkfill)"></path>
+						<path class="spark-line" d={ sparkLine(n.Days) } fill="none"></path>
+						<circle class="spark-dot" cx={ sparkEndX() } cy={ sparkEndY(n.Days) } r="4.5"></circle>
+					</svg>
+					<ol class="days">
+						for _, d := range n.Days {
+							<li><b>{ fmt.Sprint(d.N) }</b><span>{ d.Label }</span></li>
+						}
+					</ol>
+					if n.Week == 0 {
+						<span class="sub">{ t(ctx, "Nothing handed over yet this week.") }</span>
+					}
+				}
+			</article>
+			if n.Sender || n.Loading {
+				<article class="card kpi">
+					<span class="kpi-label">{ t(ctx, "Waiting to go") }</span>
+					<span class="num" data-odo="waiting">
+						if n.Loading {
+							<span class="skeleton"></span>
+						} else {
+							{ fmt.Sprint(n.Waiting) }
+						}
+					</span>
+					<span class="sub">{ t(ctx, "tagged, still to be handed over") }</span>
+				</article>
+			}
+			if n.Receiver || n.Loading {
+				<article class="card kpi">
+					<span class="kpi-label">{ t(ctx, "In your inbox") }</span>
+					<span class="num" data-odo="inbox">
+						if n.Loading {
+							<span class="skeleton"></span>
+						} else {
+							{ fmt.Sprint(n.Inbox) }
+						}
+					</span>
+					<span class="sub">{ t(ctx, "arrived and not yet filed") }</span>
+				</article>
+			}
+		</div>
+	</section>
+}
+
+// Guide is the first-run guide: a ring that fills as the steps are done.
+templ Guide(g GuideView) {
+	<h2>{ t(ctx, "Get started") }</h2>
+	<section class="card guide" aria-label={ t(ctx, "Getting started") }>
+		<div class={ "ring", fmt.Sprintf("r%d", g.Done) } role="img" aria-label={ t(ctx, "{done} of {total} steps done", "done", g.Done, "total", len(g.Steps)) }>
+			<span>{ fmt.Sprintf("%d/%d", g.Done, len(g.Steps)) }</span>
+		</div>
+		<div>
+			<h3>{ g.NextStep }</h3>
+			<ol class="steps">
+				for _, s := range g.Steps {
+					<li class={ doneIf(s.Done) }><span class="dot" aria-hidden="true">{ tickIf(s.Done) }</span> { s.Text }</li>
+				}
+			</ol>
+			<p class="row"><button hx-post="guide/dismiss" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Hide this guide") }</button></p>
+		</div>
+	</section>
+}
+
+// Scene is the live scene: for each service a stage with a lane per sender and a gate into the receiving library. The
+// script (scene.ts) animates it from the live events; without script or motion the same facts are in the lane labels,
+// the counter and the log. It asks for itself again when the page learns it missed something.
+templ Scene(stages []SceneStage) {
+	<section id="scene" class="scene" hx-get="fragments/scene" hx-trigger="scene:refresh from:body" hx-swap="outerHTML" aria-label={ t(ctx, "Live hand-overs") }>
+		<p class="meta scene-offline" data-offline hidden>{ t(ctx, "Live updates are off for now: the connection to the app dropped. They come back by themselves; the numbers above still refresh when you reload the page.") }</p>
+		for _, st := range stages {
+			<article class="card stage" data-stage data-service={ st.Service }>
+				<header>
+					<h3>{ st.Service }</h3>
+					<span class="meta">{ st.Where }</span>
+				</header>
+				<div class="stage-body">
+					<div class="lanes">
+						for _, l := range st.Lanes {
+							<div class="lane" data-lane data-sender={ l.Name } data-state={ l.State } data-paused={ l.PausedBy }>
+								<div class="lane-who">
+									<span class="lane-ring" aria-hidden="true"><span class={ "avatar", hueClass(l.Name) }>{ initial(l.Name) }</span></span>
+									<div>
+										<b>{ l.Name }</b>
+										<span class="lane-state" data-lane-state>{ laneLabel(ctx, l) }</span>
+									</div>
+								</div>
+								<div class="track" data-track></div>
+							</div>
+						}
+					</div>
+					<aside class="gate" aria-label={ t(ctx, "Arrivals in {service}", "service", st.Service) }>
+						<div class="landed" data-landed aria-hidden="true"></div>
+						<div>
+							<span class="big" data-arrived data-odo={ "arrived:" + st.Service }>0</span>
+							<span class="cl">{ t(ctx, "arrived while you watch") }</span>
+						</div>
+					</aside>
+				</div>
+			</article>
+		}
+		<ul class="scene-log" data-log aria-label={ t(ctx, "What just happened") }><li class="meta" data-empty>{ t(ctx, "Nothing yet. What happens next shows here.") }</li></ul>
+		<p class="visually-hidden" role="status" aria-live="polite" data-announce></p>
+	</section>
+}
+
+// InvitePage is where an invitation link leads: the invited service, large, and what joining means, and nothing else.
+templ InvitePage(d DashboardData) {
+	@Layout("Immich Handoff", d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		if d.TagsOff {
+			@TagsNotice()
+		}
+		<div id="gated" { gate(d.TagsOff)... }>
+			<section class="invite-hero">
+				<h1>
+					@templ.Raw(h(ctx, "You are invited to <em>{name}</em>", "name", d.Invited.Name))
+				</h1>
+				<p class="lead">
+					if d.Invited.Owner != "" {
+						{ d.Invited.Owner } { t(ctx, "offers this service.") }
+					}
+					{ t(ctx, "Photos you tag in Immich are handed over to them. You choose what happens to your own originals, and you can stop at any time.") }
+				</p>
+			</section>
+			<div class="invite-card">
+				@OfferCard(*d.Invited)
+			</div>
+			<p class="meta"><a href="../">{ t(ctx, "Not now: open your own page") }</a></p>
+		</div>
+	}
 }

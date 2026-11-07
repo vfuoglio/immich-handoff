@@ -18,3 +18,5 @@ go run . shots lost ../../docs/images
 ```
 
 The sample photos are generated landscapes (`go run . gen <dir>`), so no real pictures or people appear.
+
+Every picture is taken in English: the tool sends `Accept-Language: en` and sets the page's language cookie to English, whatever language the machine uses. The pictures belong to the English documentation.

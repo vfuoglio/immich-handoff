@@ -13,9 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/config"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -41,6 +43,14 @@ func main() {
 	// For the container's HEALTHCHECK, which has no shell or curl: `immich-handoff --healthcheck`.
 	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
 		os.Exit(runHealthcheck(env("LISTEN_ADDR", ":8080")))
+	}
+	// Backing up and restoring the data file: `immich-handoff backup [--wait|--list]`, `immich-handoff restore <file>`.
+	if len(os.Args) >= 2 && (os.Args[1] == "backup" || os.Args[1] == "restore") {
+		os.Exit(runBackupCommand(context.Background(), os.Args[1], os.Args[2:], os.Stdout, os.Stderr))
+	}
+	// A check of the setup: `immich-handoff doctor` (run it inside the container; it reads the same settings).
+	if len(os.Args) == 2 && os.Args[1] == "doctor" {
+		os.Exit(runDoctor(context.Background(), os.Stdout))
 	}
 	level := slog.LevelInfo
 	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
@@ -68,8 +78,9 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	bus := &live.Bus{} // what is happening, told to the pages that are open (nobody else)
 	s := &syncer.Syncer{
-		Services: services, Log: log,
+		Services: services, Log: log, Bus: bus,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
 			NotifyURL: os.Getenv("NOTIFY_URL"),
@@ -99,9 +110,11 @@ func run(log *slog.Logger) error {
 		log.Warn("an API key from the configuration is not accepted by Immich", "account", a.Name)
 	}
 
+	var backups *backup.Manager // set when there is a store to back up
+
 	// Self-service joining needs a place to keep keys, protected by a key of its own.
 	defaults := config.DefaultsFrom(os.Getenv)
-	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log,
+	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus,
 		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) }}
@@ -115,21 +128,34 @@ func run(log *slog.Logger) error {
 			return err
 		}
 		dir := env("DATA_DIR", "/data")
-		st, err := store.Open(dir+"/handoff.db", v)
+		// marks the data folder as in use, so a restore can refuse to replace the file under a running app
+		unlock, err := backup.Lock(dir)
+		if err != nil {
+			return fmt.Errorf("%s: %w (is another copy of the app using the same data?)", dir, err)
+		}
+		defer unlock()
+		st, err := store.Open(dir+"/"+backup.DataFile, v)
 		if err != nil {
 			return err
 		}
 		defer st.Close()
 		h.Store = st
+		backups = &backup.Manager{Dir: dir + "/backups", Source: st, Idle: s, Log: log, Tell: s.Tell,
+			Event: func(kind, text string) {
+				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
+					log.Warn("could not write the activity log", "err", err)
+				}
+			}}
 		log.Info("self-service joining is on", "data", dir)
 	}
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
 	s.Provider = h
+	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx,
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus,
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins

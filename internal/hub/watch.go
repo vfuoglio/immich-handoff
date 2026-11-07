@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -60,7 +61,7 @@ func (h *Hub) LinkAlbum(ctx context.Context, sess *immich.API, user immich.User,
 	if err := h.Store.SetLinkAlbum(ctx, link.ID, album, name); err != nil {
 		return err
 	}
-	h.event(ctx, service, user.ID, "album", user.Name+" linked the album "+name+" to "+service+": everything in it is handed over")
+	h.event(ctx, service, user.ID, "album", i18n.Pack("{name} linked the album {album} to {service}: everything in it is handed over", "name", user.Name, "album", name, "service", service))
 	h.Log.Info("album linked", "service", service, "user", user.Email, "album", name)
 	return h.Reload(ctx)
 }
@@ -81,7 +82,7 @@ func (h *Hub) UnlinkAlbum(ctx context.Context, user immich.User, service string)
 	if err := h.Store.SetLinkAlbum(ctx, link.ID, uuid.Nil, ""); err != nil {
 		return err
 	}
-	h.event(ctx, service, user.ID, "album", user.Name+" stopped handing over the album "+link.AlbumName+" to "+service)
+	h.event(ctx, service, user.ID, "album", i18n.Pack("{name} stopped handing over the album {album} to {service}", "name", user.Name, "album", link.AlbumName, "service", service))
 	h.Log.Info("album unlinked", "service", service, "user", user.Email, "album", link.AlbumName)
 	return h.Reload(ctx)
 }
@@ -89,13 +90,15 @@ func (h *Hub) UnlinkAlbum(ctx context.Context, user immich.User, service string)
 // AlbumHandedOver implements syncer.Reporter: it adds a line to the person's recent events when a pass handed
 // over photos from their linked album.
 func (h *Hub) AlbumHandedOver(svc *syncer.Service, snd *syncer.Account, handed, refused, failed int) {
-	text := fmt.Sprintf("%d %s from the album %s handed over to %s", handed, plural(handed), snd.WatchAlbumName, svc.Label())
+	parts := []string{i18n.PackN("{n} photo from the album {album} handed over to {service}", "{n} photos from the album {album} handed over to {service}", handed,
+		"album", snd.WatchAlbumName, "service", svc.Label())}
 	if refused > 0 {
-		text += fmt.Sprintf(", %d refused (the receiver has them in the trash)", refused)
+		parts = append(parts, i18n.Pack("{n} refused (the receiver has them in the trash)", "n", refused))
 	}
 	if failed > 0 {
-		text += fmt.Sprintf(", %d failed and will be retried", failed)
+		parts = append(parts, i18n.Pack("{n} failed and will be retried", "n", failed))
 	}
+	text := i18n.PackJoin(", ", parts...)
 	h.event(context.Background(), svc.Label(), snd.UserID, "album", text)
 }
 

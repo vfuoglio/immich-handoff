@@ -1,0 +1,13 @@
+{
+  "name": "immich-handoff-typecheck",
+  "private": true,
+  "description": "Type-checks the page's TypeScript (internal/web/ts). Used by CI only: building and running the program needs no Node.",
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --test ../../internal/web/ts/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}

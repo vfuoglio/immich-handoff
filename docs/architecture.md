@@ -36,12 +36,14 @@ For the curious, and for anyone changing the code.
 |---|---|
 | `cmd/immich-handoff` | Starts everything from the environment. |
 | `internal/syncer` | The engine: passes, hand-overs, tag cleanup, workflow setup. |
-| `internal/hub` | People and services: joining, offering, approval, invitations, key health. |
+| `internal/hub` | People and services: joining, offering, approval, invitations, key health, the administrator's overview and removals. |
+| `internal/doctor` | The setup check behind `immich-handoff doctor` and the admin page's **Check now**. |
 | `internal/store`, `internal/vault` | The SQLite file and the encryption of keys in it. |
 | `internal/immich` | The generated client plus a small wrapper. |
-| `internal/web` | The page: templates, handlers, styles, live updates. |
+| `internal/web` | The page: templates, handlers, styles, live updates. Its scripts are TypeScript in `internal/web/ts`, bundled into `static/app.js` (see below). |
 | `internal/config` | Environment and routes file. |
 | `test/` | The end-to-end suite and the throwaway Immich it runs against. |
+| `tools/typecheck` | Type-checks the page's TypeScript. Used by CI only. |
 | `tools/screenshots` | Makes the pictures in `docs/images` from a real running demo. |
 
 ## Testing
@@ -53,7 +55,48 @@ test/run.sh          # end-to-end: starts a throwaway Immich 3.2.0, runs the rea
 
 `test/run.sh` creates users with the exact API-key permissions the docs list and checks the whole flow against a real Immich: workflow creation, a tag arriving through the real workflow, duplicates, trashed copies, the inbox tidy-up, one-to-many routes, joining and leaving, offering services with approval and invitation links, move and copy, tagging the way the phone app does, and keys deleted on either side. `keep=1 test/run.sh` leaves Immich running afterwards, and `test/dev.sh` starts the app against it. `IMMICH_VERSION=<tag> test/run.sh` tests another Immich release. `E2E_PORT` and `E2E_APP_PORT` move the test ports if the defaults are taken.
 
-Generated code (`go generate ./...`: the Immich client and the templates) is committed; CI fails if it is stale. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).
+`TestBrowser` (`test/e2e/browser_test.go`) is part of that run and drives the real page in headless Chrome or Chromium (chromedp, no Node) against the real app and Immich, as a person would: the bar with the icon, tabs, search, theme and sound; the fonts and the palette in light and dark; the drifting light and its stop for reduced motion; cards that tilt toward a mouse and not for a touch screen; the tabs and the address; rows that open in place; the command palette; the question dialog; approving a request; the live scene following a real hand-over (and staying still for reduced motion); no sideways scroll on a phone, a tablet and a desktop; the language menu; and that an idle page makes no requests. It holds the page to the agreed design as well as to working. It finds the browser on its own (`CHROME=/path` names one); without a browser it is skipped on a developer's machine and fails in CI, where one is installed. It needs no browser to build or run the app.
+
+Generated code (`go generate ./...`: the Immich client, the templates and the page's script bundle) is committed; CI fails if it is stale.
+
+### Live events
+
+An open page listens to `GET /events` (server-sent events). Besides the old bare `run` signal (a pass finished, so the page refreshes its numbers), the stream carries typed JSON events, `event: live`, of what is happening. `internal/live` makes and routes them; `internal/web/ts/live.ts` has the matching TypeScript types and a parser that ignores anything malformed, and `app.ts` re-sends each one as a `handoff:live` event on the page for whatever listens (the live scene, later).
+
+| `kind` | When | Other fields |
+|---|---|---|
+| `started` | a photo is being handed over | `service`, `sender`, `count` |
+| `handed` | it was handed over | `reason: "duplicate"` when the receiver already had it |
+| `refused` | the receiver has it in their trash; the original was kept | |
+| `failed` | it could not be handed over; the original was kept and it is retried | |
+| `held` | photos wait for the daily limit, still tagged | `reason: "limit"`, `count` waiting, `until` when they can go |
+| `limit` | a sender reached the daily limit | `count`, `until` |
+| `paused`, `resumed` | a service (`reason: "service"`) or a sender (`reason: "sender"`) paused or resumed | `sender` for a sender |
+| `lost` | a connection was cut: a sender's key (`reason: "sender"`) or a service's receiver key (`reason: "service"`) | |
+| `restored` | an owner reconnected a service | |
+| `resync` | some events were dropped for a slow page: ask for the current state again | |
+
+Every event has `at`. **Who hears what:** an event goes to the sender it is about, the owner of the service and whoever receives from it, and to an Immich administrator (who hears everything); never to anyone else, so a sender never hears another sender's photos. **What is in an event:** no photo, no file name, no id, no key, no email; only the service, the sender's name and a count. The routing (who may hear) is kept on the server and is not part of the event. **Bursts:** the per-photo kinds (`started`, `handed`, `refused`, `failed`) are gathered for 300 ms and sent as one event with a `count`, so a big upload makes a few events, not hundreds. A pause is told when it happens (`paused`/`resumed`), not once per pass, because a paused service touches nothing; a page that opens later gets the current state from the page itself, not from the stream.
+
+The live scene on the Overview (`internal/web/ts/scene.ts`) is built from these events and from nothing else. What a lane shows is a small pure function of the events it has seen (`applyEvent`, `laneState`, `stateText`: a lost connection beats a pause, which beats the limit), and the sentence in the log is `describe`; both are unit-tested with Node (`npm test` in `tools/typecheck`). The server renders each lane in the state it knows (`GET /fragments/scene`, also used to catch up when the page missed events), the script keeps it current. Tokens are made by the script only for a real event, capped per lane and in total, and skipped under reduced motion or in a hidden tab; the scene starts no timer and no animation while idle.
+
+### The page's look
+
+`internal/web/static/app.css` is a small design system: colour, type, spacing and shape are CSS tokens at the top (the twilight palette of the app icon, light and dark, following the browser unless the person chose one with the icon in the bar), and the components use only those tokens. The fonts (Bricolage Grotesque, Figtree and JetBrains Mono, latin and latin-ext, plus Onest and JetBrains Mono for Cyrillic) are variable woff2 files in `static/fonts` with their licences beside them (SIL Open Font License), served by the app itself: the Content-Security-Policy allows fonts from the app only, and nothing is ever requested from a font service. No page may use an inline style or script (the policy blocks them), and a test checks this. The light/dark choice is a script of its own (`static/theme.js`) loaded first and without `defer`, so a saved choice applies before the first paint; it is kept in the browser's `localStorage`, never on the server.
+
+Questions (`hx-confirm`) are asked in a native `<dialog>` that every page carries, not the browser's own pop-up: `app.ts` catches htmx's `htmx:confirm` event, shows the question in the dialog and lets the request go ahead only on OK. A button names the dialog's title and button with `data-confirm-title` and `data-confirm-label`, and marks a destructive action with `data-danger`; a test checks every question has them.
+
+The light behind the page is three glows in CSS: two drift slowly for ever in opposite directions (moved with `transform` only, which the graphics card does without redrawing, so it costs next to nothing, and the browser stops it in a hidden tab; reduced motion turns it off), and the effects (`effects.ts`: the light that leans toward the pointer and flares on arrival, cards that tilt), the rolling digits (`odometer.ts`: any number marked `data-odo="<key>"`, the key remembering what it showed before a refresh replaced it), the arrival chime (`sound.ts`, made with the browser's own audio, no sound file) and the command palette (`palette.ts`) are separate small modules started from `app.ts`. They are event-driven (a pointer move, a live event), so nothing runs while the page is idle, and they are skipped for reduced motion; tilt only on a fine pointer. The palette builds its list from the page each time it opens, so it offers exactly the buttons the person has and runs them by pressing them. The effects set CSS variables through the browser's style API, which the Content-Security-Policy allows (it only forbids `style` attributes in the markup). The three views and their tabs (`tabs.ts`) are chosen by the address's `#fragment`; `theme.js`, loaded first, marks the page before it paints so a view never flashes.
+
+### Languages
+
+The pages come in English, German, French and Spanish; only what a person reads on a page is translated. The log, the setup check, `NOTIFY_URL` messages and all documentation stay English, always. English is the source: the English sentence is the message's own key, with `{name}` placeholders, so the code stays readable and a message nobody has translated shows in English instead of nothing. Each language is one file, `internal/i18n/lang/<code>.json` (a sentence, or for a counted message an object of plural forms: `one` and `other`, and `few` and `many` in Russian). Templates use `t(ctx, "...")`, `h(...)` for a sentence with markup (values are escaped, the message's own tags are kept) and `n(...)` for counts; the scripts get theirs from a JSON block in the page (`clientMessages` in `internal/web/helpers.go`, read by `ts/i18n.ts`). Text that is stored (events, notes) is saved as the English sentence plus its values (`i18n.Pack`) and turned into words when it is read, so it follows the reader's language. The language comes from the `handoff-lang` cookie, else `Accept-Language`, else English.
+
+To add or fix a language, edit its JSON file and run `go test ./internal/i18n ./internal/web`: tests check that every language has every message, with the same placeholders and markup and the plural forms it needs, and that the scripts' messages match what the page carries. To add a language, add its code to `All` and `Names` in `internal/i18n/i18n.go` (its plural rule, month and weekday names are there for Italian, Portuguese and Russian already), then a file with every message. When a sentence is added or changed in a template, the same sentence must be added to every language file.
+
+### The page's scripts
+
+They are written in TypeScript (`internal/web/ts/*.ts`) and bundled by esbuild into `internal/web/static/app.js`, which is committed and embedded like the templates. esbuild is a pinned Go tool in `go.mod`, so `go generate ./...` rebuilds the bundle with nothing else installed, and building, running and testing the program never needs Node. esbuild strips types without checking them, so the types are checked separately: `cd tools/typecheck && npm ci && npm run check` runs `tsc --noEmit` in strict mode, and CI does the same in its `types` job. That job is the only place Node is used. Edit the `.ts` files, never `app.js`; the `.map` file next to it lets the browser's developer tools show the original source. The strict Content-Security-Policy still applies: scripts load from the app itself, never inline. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).
 
 ## Documentation images
 

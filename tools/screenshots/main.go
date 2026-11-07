@@ -21,6 +21,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +68,22 @@ func main() {
 		proxycheck(os.Args[2])
 	default:
 		log.Fatal("unknown command")
+	}
+}
+
+// inEnglish makes the browser ask for English and choose it in the page's language menu, so every picture is in
+// English whatever the machine's language is (the pictures are for the English documentation).
+func inEnglish() chromedp.Action {
+	return chromedp.Tasks{
+		network.Enable(),
+		network.SetExtraHTTPHeaders(network.Headers{"Accept-Language": "en"}),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			u, err := url.Parse(appURL)
+			if err != nil {
+				return err
+			}
+			return network.SetCookie("handoff-lang", "en").WithDomain(u.Hostname()).WithPath("/").Do(ctx)
+		}),
 	}
 }
 
@@ -200,6 +217,7 @@ func take(s shot, outdir string) {
 	var buf []byte
 	tasks := chromedp.Tasks{
 		emulation.SetDeviceMetricsOverride(int64(s.width), int64(s.height), scale, s.mobile),
+		inEnglish(),
 	}
 	scheme := "light"
 	if s.dark {
@@ -369,7 +387,7 @@ func proxycheck(page string) {
 		defer cancel()
 		ctx, cancelT := context.WithTimeout(ctx, 60*time.Second)
 		defer cancelT()
-		tasks := chromedp.Tasks{}
+		tasks := chromedp.Tasks{inEnglish()}
 		for _, c := range loginCookies(who) {
 			c := c
 			tasks = append(tasks, chromedp.ActionFunc(func(ctx context.Context) error {

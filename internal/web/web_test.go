@@ -23,6 +23,7 @@ const (
 	aliceID  = "aaaaaaaa-0000-0000-0000-000000000001"
 	familyID = "aaaaaaaa-0000-0000-0000-000000000002"
 	otherID  = "aaaaaaaa-0000-0000-0000-000000000009"
+	adminID  = "aaaaaaaa-0000-0000-0000-00000000000a"
 	ts       = "2025-01-02T03:04:05.000Z"
 )
 
@@ -38,19 +39,22 @@ func fakeImmich() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
-			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"},
+			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},
 			"k-alice": {aliceID, "Alice"}, "k-family": {familyID, "Family"},
 		}
 		key := r.Header.Get("x-api-key")
 		if key == "" {
 			key = strings.TrimSpace(r.Header.Get("Cookie"))
+			if i := strings.Index(key, "; handoff-lang="); i >= 0 { // Immich ignores a cookie that is not its own
+				key = key[:i]
+			}
 		}
 		u, ok := who[key]
 		if !ok {
 			http.Error(w, "no", http.StatusUnauthorized)
 			return
 		}
-		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test"})
+		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test", "isAdmin": key == "sess=admin"})
 	})
 	// Tags are off by default in Immich; the family account has them on, "sess=other" cannot be changed.
 	var prefMu sync.Mutex
@@ -175,7 +179,7 @@ func TestSignInStates(t *testing.T) {
 func TestDashboardShowsMyServices(t *testing.T) {
 	app, _ := setup(t)
 	code, body := do(t, "GET", app.URL+"/", "sess=alice", nil)
-	for _, want := range []string{"Your services", "family", "You send", "share", "Alice", `hx-post="sync"`} {
+	for _, want := range []string{"You send to", "family", "You send", "share", "Alice", `hx-post="sync"`} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q (code %d)", want, code)
 		}
@@ -222,6 +226,30 @@ func TestWebhookSecret(t *testing.T) {
 	}
 	if code, _ := do(t, "POST", app.URL+"/webhook/immich", "", map[string]string{"X-Webhook-Secret": "s3cret"}); code != 202 {
 		t.Errorf("good secret: %d", code)
+	}
+}
+
+// The doctor command calls the webhook address to test it; that must answer 200 (not 202) and must not
+// need a photo, and without the secret it is still refused.
+func TestWebhookTestCallFromTheDoctor(t *testing.T) {
+	app, _ := setup(t)
+	post := func(secret string) int {
+		req, _ := http.NewRequest("POST", app.URL+"/webhook/immich", strings.NewReader(`{"handoffTest":true}`))
+		if secret != "" {
+			req.Header.Set("X-Webhook-Secret", secret)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := post(""); code != 401 {
+		t.Errorf("test call without the secret: %d", code)
+	}
+	if code := post("s3cret"); code != 200 {
+		t.Errorf("test call with the secret: %d", code)
 	}
 }
 
@@ -494,6 +522,48 @@ func TestASenderChoosesAnAlbumFromTheirOwnList(t *testing.T) {
 		}
 		if code, _ := do(t, "POST", app.URL+path, "sess=alice", hdr); code != 404 {
 			t.Errorf("%s without self-service switched on, got %d", path, code)
+		}
+	}
+}
+
+func TestThePageSpeaksTheLanguageTheCookieOrTheBrowserAsksFor(t *testing.T) {
+	app, _ := setup(t)
+	for _, c := range []struct {
+		cookie, accept, lang, want string
+	}{
+		{"sess=alice", "", "en", "You send to"},
+		{"sess=alice; handoff-lang=de", "", "de", "Du sendest an"},
+		{"sess=alice", "fr-CH, fr;q=0.9", "fr", "Vous envoyez à"},
+		{"sess=alice", "es-ES,es;q=0.9", "es", "Tú envías"},
+		{"sess=alice; handoff-lang=es", "de", "es", "Tú envías"}, // the person's own choice wins
+		{"sess=alice", "ja", "en", "You send to"},                // none we have
+	} {
+		req, _ := http.NewRequest("GET", app.URL+"/", nil)
+		req.Header.Set("Cookie", c.cookie)
+		if c.accept != "" {
+			req.Header.Set("Accept-Language", c.accept)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		body := string(b)
+		if !strings.Contains(body, c.want) || !strings.Contains(body, `<html lang="`+c.lang+`"`) {
+			t.Errorf("%q / %q: want %q in lang %s", c.cookie, c.accept, c.want, c.lang)
+		}
+		if got := res.Header.Get("Content-Language"); got != c.lang {
+			t.Errorf("%q / %q: Content-Language %q, want %q", c.cookie, c.accept, got, c.lang)
+		}
+		if !strings.Contains(res.Header.Get("Vary"), "Accept-Language") {
+			t.Errorf("the answer depends on the language, so Vary must say so: %q", res.Header.Get("Vary"))
+		}
+		if c.lang != "en" && strings.Contains(body, "You send to") {
+			t.Errorf("%q / %q: English left on a %s page", c.cookie, c.accept, c.lang)
+		}
+		if !strings.Contains(body, `id="i18n"`) || !strings.Contains(body, `class="lang"`) {
+			t.Errorf("the page lacks the messages for scripts or the language menu")
 		}
 	}
 }

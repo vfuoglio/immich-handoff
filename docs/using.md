@@ -14,6 +14,38 @@ This page is for the people who send and receive photos. Everything happens on t
 
 > **Before you start: Tags must be on in Immich.** It is off by default and each person has it for their own account. If it is off, this page shows a notice with a **Turn on Tags** button; you can also do it in Immich under Account Settings, then Features, **Tags**. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Switching it on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
 
+## Finding your way
+
+The bar at the top has three tabs: **Overview** (what needs you, the week's numbers, the live scene), **Services** (all your services, what you can join, offering your own) and **Activity** (what happened, the last run, Sync now). The address remembers the tab (`#services`), so you can bookmark it and the page comes back to it after an action. Next to them: **Search** (also **Ctrl K**, or **Cmd K** on a Mac) opens a command palette: type a few letters to jump to a tab or a service, or to do what you can do (approve a request, pause or resume, sync); it lists only what you are allowed to do, and it presses the same button the page has, so questions are still asked. On a phone you can add the page to the home screen so it opens like an app (see [Operations](operations.md#installing-the-page-on-a-phone)). The half-moon icon switches the light and the dark theme, and the speaker icon turns the soft chime (and a short phone buzz) off and on when a photo lands (the first click or key press wakes the sound, a browser rule). Both choices are kept in this browser. The code next to them (en, de, fr, es) is the language menu: the pages follow your browser's language and this picks another for good; only the pages are translated, not the log or the documentation.
+
+A few small touches make it feel alive and can be ignored: the light behind the page drifts slowly, leans toward your pointer and flares when a photo lands, cards tilt a little toward a mouse, and numbers roll like a departures board. They are skipped with a touch screen or when your browser asks for reduced motion, and nothing moves while the page is idle.
+
+## The Overview
+
+The page opens with what matters, in this order:
+
+1. **Needs you.** Everything that waits on a person, most urgent first, each with its button:
+   - **Connection lost** and **Removed by its owner**: **Clean up**, which deletes what the app made in your Immich account (then you can join again).
+   - **Disconnected** (a service you offer): **Reconnect**.
+   - **Request**: someone wants to send to a service you offer; **Approve** or **Decline**.
+   - **Paused**: a service you paused, or your own sending (**Resume**), or a service its owner paused (nothing for you to press).
+   - **Limit**: a sender is at the daily limit, or you are (see [Daily limits](#daily-limits-for-senders)).
+   When nothing waits, it says so. A request is answered here and nowhere else.
+2. **This week.** How many photos were handed over in the last seven days, as a small chart with one point per day (UTC days, today on the right). It counts what the app recorded for people who joined from the page: the photos **you sent**, and the ones that **arrived in services you offer**. Senders set up in `.env` or a routes file are not recorded, so they do not appear in it. Next to it, **Waiting to go** (photos you tagged that are still to be handed over, if you send) and **In your inbox** (what arrived and is not yet filed, if you receive). They refresh by themselves whenever a hand-over finishes.
+3. **Get started**, until you are done: turn on Tags, join or offer a service, hand over your first photo. A ring shows how far you are. It goes away by itself after the first hand-over, or when you press **Hide this guide**, and does not come back.
+
+Below that are your services, in sections by what you do with them: **You send to**, **You receive**, **You offer** (services you created) and **You can join**. Each service is one line (its initial, name, what it is, any state such as Paused or Limit, and the number that matters: photos waiting, or in your inbox). Press it to open it in place and see its settings: the tag, the album, who sends and how much they have used, the limits, the invitation link and the pause button. With only one service it starts open.
+
+What cannot be undone sits apart at the bottom of an open service, in a dashed box that says what it does: **Leave** (for a service you send to) and **Delete service** (for one you offer). Every question, such as joining, pausing, leaving or deleting, is asked in a dialog in the page itself, with a title, one clear sentence and a button named for what it does (red when it cannot be undone); Escape or Cancel changes nothing.
+
+### The live scene
+
+Near the bottom of the Overview, **Live** shows what is happening as it happens. Each service you take part in has a stage: one **lane** for each sender (you send to a service: your own lane; you offer or receive from it: the senders), and a gate into the receiving library on the right. When a photo is handed over, a small coloured square travels along the sender's lane into the gate and the **arrived while you watch** counter goes up. The squares are only squares: the scene never shows a photo or a file name, and it shows only real hand-overs, never made-up ones.
+
+A lane also says in words what state it is in, so the colour is never the only sign: **Flowing**, **Paused by the owner** or **Paused by the sender** (dashed lane), **Daily limit reached** with how many wait and until when (amber), **Connection lost** (red, with a cross). A short log under the stages lists the last few things in a sentence each, and a screen reader is told the same sentence.
+
+It stays calm: nothing moves while nothing happens, only a few squares fly at once (a big upload counts the rest without more squares), and if your browser asks for reduced motion, or the tab is hidden, the squares are skipped and only the labels, the counter and the log change. If the connection to the app drops, the scene dims and says so, then catches up by itself when it is back.
+
 ## Sending photos
 
 Open the page. It shows your services and what is waiting:
@@ -92,6 +124,25 @@ You see each sender's name and, on a request, their email address. Senders see o
 
 ![The page for an owner](images/dashboard-owner.png)
 
+## Pausing
+
+A sender can press **Pause sending** on a service they joined from the page, and **Resume sending** later. An owner can press **Pause service** on a service they offer, and **Resume service**. Both are for being away, or for sorting something out, without leaving and losing the key and the workflow.
+
+- While paused, **nothing is handed over and nothing is touched**: photos tagged meanwhile stay tagged, in the sender's account, and the daily check and the album check skip them too.
+- On **Resume**, the waiting photos are handed over at once.
+- Everyone involved can see it: a sender sees "You paused" or "The owner paused this service" on the card, and an owner sees "(paused)" next to a sender who paused. It also shows on the [administrator's page](admin.md) and in the recent events.
+- A pause survives a restart of the app. It does not change what is stored in Immich, and a sender can still leave while paused.
+
+## Daily limits for senders
+
+When anyone on the Immich server may send, one person could fill the receiver's storage. An owner can cap what **each sender** hands over to a service in a day: a number of **photos**, a number of **megabytes**, or both (**More options** when creating the service, or **Save limits** on the service's card later). Empty or 0 means no limit.
+
+- "A day" is the **last 24 hours**, not the calendar day: a photo counts until 24 hours after it was handed over.
+- Only photos that were actually handed over count (not duplicates and not refusals), by the size of the original. The size limit stops further photos once it is reached, so the last photo may take a sender slightly past it.
+- When a sender is at the limit, the rest of their tagged photos **wait, still tagged**. The sender's card says "The daily limit is reached, so N photos wait... They are handed over from <time>", the owner sees each sender's use ("12 photos, 340 MB in the last 24 hours") and a line in the recent events, and `NOTIFY_URL` is told once. The photos go on their own as soon as the oldest hand-over is 24 hours old, or at once when the owner raises or removes the limit.
+- It applies to photos from a linked album too. It applies to people who joined from the page; senders set up in `.env` or the routes file have no stored membership and are not limited.
+- What was handed over is recorded from the start, so a limit set today already counts today's photos. Records older than eight days are forgotten (the Overview's weekly chart uses them too).
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.
@@ -101,6 +152,8 @@ You see each sender's name and, on a request, their email address. Senders see o
 ![A connection that was cut](images/connection-lost.png)
 
 A sender whose key was deleted presses **Clean up** and can join again; photos they tagged meanwhile are handed over once they have. An owner whose own key was deleted presses **Reconnect**, and senders resume by themselves.
+
+If an Immich administrator removes you from a service, or removes the service, you see why on this page with a **Clean up** button. Your API key in Immich stays valid until you delete it, which **Clean up** does for you ([why](admin.md#why-removal-cannot-delete-the-keys)).
 
 The page also lists recent events (joined, asked, approved, connection lost, reconnected) for the services you take part in.
 

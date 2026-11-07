@@ -1,12 +1,35 @@
 # Troubleshooting
 
-Start with the app's log: `docker compose logs --tail 100`. Then find your symptom.
+Start with the setup check, then the app's log (`docker compose logs --tail 100`), then find your symptom below.
+
+## Check your setup first
+
+```
+docker compose exec immich-handoff /immich-handoff doctor
+```
+
+It reads the settings the app is running with and checks each one against Immich. Every line is `ok`, `warn` (works, but worth a look) or `FAIL` (something will not work), and a failure says what to change. It covers:
+
+- the secrets: `WEBHOOK_SECRET` and `HANDOFF_STORE_KEY` are long enough;
+- `PUBLIC_WEBHOOK_URL`: set, a real address, not `localhost` (which for Immich's server means Immich itself), and ending in `/webhook/immich`;
+- Immich: reachable at `IMMICH_BASE_URL` and version 3.2.0 or newer;
+- the webhook address: the check calls it the way Immich would and tells you whether it reaches this app and accepts the secret;
+- every key, from the configuration and from people who joined: still accepted, and holding every permission it needs;
+- whether **Tags** is switched on in each person's account;
+- each sender's workflow: present, enabled, and pointing at the current address and secret;
+- how Immich's most recent runs of that workflow ended. This is the proof that Immich can reach the app: a failed run means Immich could not deliver the notice. A workflow that has never run is fine; tag a photo and run the check again.
+
+It only reads. It never changes Immich, the data file or a photo, and it exits with status 1 when anything failed (warnings do not count), so it can be used in a script. One thing it cannot do is send Immich a test message on demand, because Immich has no such call; the workflow runs stand in for it.
+
 
 ## Installing and starting
 
 | Symptom | Likely cause and fix |
 |---|---|
 | The app stops right away mentioning `WEBHOOK_SECRET` or `HANDOFF_STORE_KEY` | The value is missing or shorter than 16 characters. Set a long random one in `.env` (`openssl rand -hex 24`). |
+| The app stops with `the app is running and using this data folder` | Another copy of the app (an old container that was not stopped, or a second install pointing at the same volume) holds the data. Stop it first: two copies on one data file would corrupt it. |
+| `backup` says the app is using the data but did not answer | The command could not reach the app at `LISTEN_ADDR`, or `WEBHOOK_SECRET` differs. Run it inside the app's container (`docker compose exec immich-handoff /immich-handoff backup`). |
+| A backup stays queued for a long time | Hand-overs are running without a pause, and the backup waits for a quiet moment; after 4 hours it is made anyway and named `-forced`. See [Backups](operations.md#backups). |
 | "the store key does not match this database" | `HANDOFF_STORE_KEY` was changed. Put the original back, or delete the `handoff-data` volume and let people join again. |
 | An error about `IMMICH_NETWORK` or a missing network | The network name is wrong. Run `docker network ls` and put Immich's network in `.env`. |
 | `HTTP 401` or `HTTP 403` in the log | A fixed-account API key is missing a permission. See the table in [Fixed accounts](fixed-accounts.md) and create a new key with the full list. |

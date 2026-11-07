@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -544,7 +546,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	}
 	for _, who := range []uuid.UUID{bobID, annID} {
 		acts, _ := e.h.Activity(ctx, who, 10)
-		if len(acts) == 0 || !strings.Contains(acts[0].Text, "cut") {
+		if len(acts) == 0 || !strings.Contains(en(acts[0].Text), "cut") {
 			t.Errorf("both sides see it in the activity (%s): %+v", who, acts)
 		}
 	}
@@ -924,11 +926,447 @@ func TestAHandOverFromTheAlbumLeavesALineInTheSendersRecentEvents(t *testing.T) 
 	}
 	found := false
 	for _, ev := range evs {
-		if ev.Kind == "album" && strings.Contains(ev.Text, "12 photos from the album To send handed over to family") && strings.Contains(ev.Text, "1 refused") {
+		if ev.Kind == "album" && strings.Contains(en(ev.Text), "12 photos from the album To send handed over to family") && strings.Contains(en(ev.Text), "1 refused") {
 			found = true
 		}
 	}
 	if !found {
 		t.Errorf("recent events: %+v", evs)
+	}
+}
+
+func TestAnAdministratorRemovingAMemberStopsHandOversAndTellsThePerson(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	admin := immich.User{ID: uuid.New(), Name: "Root", Email: "root@x.test", IsAdmin: true}
+	links, _ := e.st.Links(ctx)
+	var id string
+	for _, l := range links {
+		if l.Role == "sender" {
+			id = l.ID
+		}
+	}
+	if err := e.h.AdminRemoveMember(ctx, admin, "nope"); !errors.Is(err, hub.ErrNoSuchEntry) {
+		t.Errorf("an unknown member: %v", err)
+	}
+	if err := e.h.AdminRemoveMember(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "party").Senders; len(got) != 0 {
+		t.Errorf("a removed member must stop being used: %d senders", len(got))
+	}
+	if len(e.f.deletedKeys) != 0 {
+		t.Errorf("the app cannot delete another person's key, and must not pretend to: %v", e.f.deletedKeys)
+	}
+	b, _ := e.h.BrokenFor(ctx, bobID)
+	if len(b) != 1 || !strings.Contains(en(b[0].Note), "Root") || !strings.Contains(en(b[0].Note), "still valid") {
+		t.Errorf("bob must be told on his page: %+v", b)
+	}
+	acts, _ := e.h.Activity(ctx, bobID, 10)
+	if len(acts) == 0 || !strings.Contains(en(acts[0].Text), "removed from party by an administrator") {
+		t.Errorf("bob's recent events: %+v", acts)
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "Root") {
+		t.Errorf("the operator must be told: %v", told)
+	}
+	// the person can still clean up, which deletes what the app made in their account
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("clean up after a removal: %v", err)
+	}
+	if len(e.f.keys) != 1 { // only the owner's receiver key is left, which only the owner can delete
+		t.Errorf("keys left after cleaning up: %d", len(e.f.keys))
+	}
+}
+
+func TestAnAdministratorRemovingAServiceTellsOwnerAndMembers(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	admin := immich.User{ID: uuid.New(), Name: "Root", Email: "root@x.test", IsAdmin: true}
+	if err := e.h.AdminRemoveService(ctx, admin, "family"); !errors.Is(err, hub.ErrNotRemovable) {
+		t.Errorf("a service from the configuration: %v", err)
+	}
+	if err := e.h.AdminRemoveService(ctx, admin, "nope"); !errors.Is(err, hub.ErrNoSuchEntry) {
+		t.Errorf("an unknown service: %v", err)
+	}
+	if err := e.h.AdminRemoveService(ctx, admin, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "party") != nil {
+		t.Error("the service must be gone")
+	}
+	if len(e.f.deletedKeys) != 0 {
+		t.Errorf("the app cannot delete the owner's key: %v", e.f.deletedKeys)
+	}
+	if o, _ := e.h.Orphaned(ctx, bobID); len(o) != 1 {
+		t.Errorf("bob must be told the service is gone: %v", o)
+	}
+	owner, _ := e.h.Activity(ctx, annID, 10)
+	if len(owner) == 0 || !strings.Contains(en(owner[0].Text), "still valid in your Immich account") {
+		t.Errorf("the owner must be told their key stays: %+v", owner)
+	}
+	if len(told) != 1 {
+		t.Errorf("the operator must be told: %v", told)
+	}
+	// both can still clean up
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("bob cleans up: %v", err)
+	}
+	_, left, _ := e.h.Overview(ctx)
+	if len(left) != 0 {
+		t.Errorf("nothing should be waiting to clean up: %+v", left)
+	}
+}
+
+func TestTheOverviewListsEveryServiceWithItsOwnerAndMembers(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	services, left, err := e.h.Overview(ctx)
+	if err != nil || len(left) != 0 || len(services) != 2 {
+		t.Fatalf("overview: %d services, %d leftover, %v", len(services), len(left), err)
+	}
+	var party *hub.AdminService
+	for i := range services {
+		if services[i].Name == "party" {
+			party = &services[i]
+		}
+	}
+	if party == nil || party.FromConfig || party.OwnerEmail != "ann@x.test" || len(party.Members) != 1 || party.Members[0].Email != "bob@x.test" || party.Members[0].LinkID == "" {
+		t.Errorf("party: %+v", party)
+	}
+	if services[0].Name != "family" || !services[0].FromConfig {
+		t.Errorf("the configured service must be marked: %+v", services[0])
+	}
+}
+
+func TestOnlyTheOwnerCanPauseAServiceAndResumingWakesAPass(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.SetServicePaused(ctx, bob, "party", true); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("someone else pausing: %v", err)
+	}
+	if err := e.h.SetServicePaused(ctx, ann, "nope", true); err == nil {
+		t.Error("an unknown service must be refused")
+	}
+	if service(e, "party").Paused {
+		t.Fatal("nothing was paused yet")
+	}
+	woken := len(e.woken)
+	if err := e.h.SetServicePaused(ctx, ann, "party", true); err != nil {
+		t.Fatal(err)
+	}
+	if !service(e, "party").Paused || len(e.woken) != woken {
+		t.Errorf("paused: %v, woken %d (pausing needs no pass)", service(e, "party").Paused, len(e.woken))
+	}
+	if err := e.h.SetServicePaused(ctx, ann, "party", false); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "party").Paused || len(e.woken) != woken+1 || e.woken[len(e.woken)-1] != "service resumed" {
+		t.Errorf("resumed: paused %v, woken %v", service(e, "party").Paused, e.woken)
+	}
+	acts, _ := e.h.Activity(ctx, annID, 5)
+	if len(acts) < 2 || !strings.Contains(en(acts[0].Text), "resumed") || !strings.Contains(en(acts[1].Text), "paused") {
+		t.Errorf("both must be in the activity log: %+v", acts)
+	}
+}
+
+func TestASenderPausesAndResumesTheirOwnMembership(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.SetMemberPaused(ctx, bob, "party", true); !errors.Is(err, hub.ErrNotJoined) {
+		t.Errorf("pausing without having joined: %v", err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.SetMemberPaused(ctx, bob, "party", true); err != nil {
+		t.Fatal(err)
+	}
+	snd := service(e, "party").Senders
+	if len(snd) != 1 || !snd[0].Paused {
+		t.Fatalf("bob must be paused: %+v", snd)
+	}
+	members, _ := e.h.MembersOf(ctx, "party")
+	if len(members) != 1 || !members[0].Paused {
+		t.Errorf("the owner must see that bob paused: %+v", members)
+	}
+	woken := len(e.woken)
+	if err := e.h.SetMemberPaused(ctx, bob, "party", false); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "party").Senders[0].Paused || len(e.woken) != woken+1 {
+		t.Errorf("resumed: %v woken %v", service(e, "party").Senders[0].Paused, e.woken)
+	}
+	if err := e.h.SetMemberPaused(ctx, ann, "party", true); !errors.Is(err, hub.ErrNotJoined) {
+		t.Errorf("the owner pausing someone else's membership: %v", err)
+	}
+}
+
+func TestOnlyTheOwnerSetsLimitsAndTheyAreChecked(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "bad", Tag: "bad", LimitPhotos: -1}); !errors.Is(err, hub.ErrBadLimit) {
+		t.Errorf("a negative limit at creation: %v", err)
+	}
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", LimitPhotos: 5, LimitMB: 200}); err != nil {
+		t.Fatal(err)
+	}
+	if s := service(e, "party"); s.LimitPhotos != 5 || s.LimitMB != 200 {
+		t.Errorf("limits at creation: %d %d", s.LimitPhotos, s.LimitMB)
+	}
+	if err := e.h.SetLimits(ctx, bob, "party", 1, 1); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("someone else setting limits: %v", err)
+	}
+	for _, bad := range [][2]int{{-1, 0}, {0, -5}, {2_000_000, 0}} {
+		if err := e.h.SetLimits(ctx, ann, "party", bad[0], bad[1]); !errors.Is(err, hub.ErrBadLimit) {
+			t.Errorf("limits %v: %v", bad, err)
+		}
+	}
+	woken := len(e.woken)
+	if err := e.h.SetLimits(ctx, ann, "party", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if s := service(e, "party"); s.LimitPhotos != 0 || s.LimitMB != 0 || len(e.woken) != woken+1 {
+		t.Errorf("limits removed: %d %d, woken %v (waiting photos must be looked at again)", s.LimitPhotos, s.LimitMB, e.woken)
+	}
+}
+
+func TestWhatASenderHandsOverIsCountedForTheirMembershipOnly(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", LimitPhotos: 2})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	snd := service(e, "party").Senders[0]
+	snap, err := e.h.Handed(ctx, snd, time.Now().Add(-time.Hour))
+	if err != nil || !snap.Tracked || snap.Photos != 0 {
+		t.Fatalf("nothing yet: %+v %v", snap, err)
+	}
+	e.h.Record(ctx, snd, 3<<20)
+	e.h.Record(ctx, snd, 1<<20)
+	snap, _ = e.h.Handed(ctx, snd, time.Now().Add(-time.Hour))
+	if snap.Photos != 2 || snap.Bytes != 4<<20 || snap.Oldest.IsZero() {
+		t.Errorf("after two: %+v", snap)
+	}
+	if snap, _ = e.h.Handed(ctx, snd, time.Now().Add(time.Minute)); snap.Photos != 0 {
+		t.Errorf("only what is inside the window counts: %+v", snap)
+	}
+	members, _ := e.h.MembersOf(ctx, "party")
+	if len(members) != 1 || members[0].Photos != 2 || members[0].MB != 4 {
+		t.Errorf("the owner sees what bob handed over: %+v", members)
+	}
+	// an account from the configuration has no stored membership: nothing to count, nothing to cap
+	cfg := service(e, "family")
+	if cfg.Receivers == nil {
+		t.Fatal("setup")
+	}
+	if snap, _ := e.h.Handed(ctx, cfg.Receivers[0], time.Now().Add(-time.Hour)); snap.Tracked {
+		t.Error("an account from the configuration must not be tracked")
+	}
+	// leaving forgets the record
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	snd = service(e, "party").Senders[0]
+	if snap, _ := e.h.Handed(ctx, snd, time.Now().Add(-time.Hour)); snap.Photos != 0 {
+		t.Errorf("a new membership starts with nothing counted: %+v", snap)
+	}
+}
+
+func TestPausedStateSurvivesARestart(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", LimitMB: 7})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	e.h.SetMemberPaused(ctx, bob, "party", true)
+	e.h.SetServicePaused(ctx, ann, "party", true)
+	if err := e.h.Reload(ctx); err != nil { // what a restart does: rebuild everything from the data file
+		t.Fatal(err)
+	}
+	s := service(e, "party")
+	if !s.Paused || s.LimitMB != 7 || !s.Senders[0].Paused {
+		t.Errorf("after a reload: service paused %v, limit %d, bob paused %v", s.Paused, s.LimitMB, s.Senders[0].Paused)
+	}
+}
+
+func TestTheWeekCountsWhatSendersHandedOverAndWhatArrivedForOwners(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	snd := service(e, "party").Senders[0]
+	for i := 0; i < 3; i++ {
+		e.h.Record(ctx, snd, 1<<20)
+	}
+	now := time.Now()
+	days, counts, err := e.h.Week(ctx, bobID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[6] != 3 || counts[0]+counts[1]+counts[2]+counts[3]+counts[4]+counts[5] != 0 {
+		t.Errorf("bob sent three today: %v", counts)
+	}
+	if days[6].Format("2006-01-02") != now.UTC().Format("2006-01-02") || days[0].Format("2006-01-02") != now.UTC().AddDate(0, 0, -6).Format("2006-01-02") {
+		t.Errorf("seven days, oldest first, the last being today: %v", days)
+	}
+	if _, owner, _ := e.h.Week(ctx, annID, now); owner[6] != 3 {
+		t.Errorf("ann owns the service they arrived in: %v", owner)
+	}
+	if _, other, _ := e.h.Week(ctx, uuid.New(), now); other != [7]int{} {
+		t.Errorf("someone with no part in it sees nothing: %v", other)
+	}
+}
+
+func TestTheGuideIsFinishedOnceAndOnlyWhereThereIsADataFile(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if e.h.GuideDone(ctx, bobID) {
+		t.Fatal("a new person has not finished the guide")
+	}
+	if err := e.h.DismissGuide(ctx, bobID); err != nil {
+		t.Fatal(err)
+	}
+	if !e.h.GuideDone(ctx, bobID) || e.h.GuideDone(ctx, annID) {
+		t.Error("it is remembered for bob, and only for bob")
+	}
+	noStore := &hub.Hub{}
+	if !noStore.GuideDone(ctx, bobID) {
+		t.Error("with nowhere to remember it the guide must not be offered")
+	}
+}
+
+// en is stored text (a line of the log, the reason a connection is paused) in English, as a reader of English sees it.
+func en(s string) string { return i18n.For(i18n.English).Unpack(s) }
+
+// feeds opens one page for each kind of person who might be looking.
+type feeds struct{ owner, sender, other, root, receiver *live.Sub }
+
+func listen(e *env) *feeds {
+	bus := &live.Bus{Window: 10 * time.Millisecond}
+	e.h.Bus = bus
+	sub := func(id uuid.UUID, all bool) *live.Sub { s, _ := bus.Subscribe(id, all); return s }
+	return &feeds{owner: sub(annID, false), sender: sub(bobID, false), other: sub(uuid.New(), false), root: sub(uuid.New(), true), receiver: sub(familyID, false)}
+}
+
+func heard(s *live.Sub) []live.Event {
+	var out []live.Event
+	for {
+		select {
+		case ev := <-s.C:
+			out = append(out, ev)
+		case <-time.After(150 * time.Millisecond):
+			return out
+		}
+	}
+}
+
+func told(evs []live.Event, kind live.Kind, reason string) bool {
+	for _, ev := range evs {
+		if ev.Kind == kind && ev.Reason == reason {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPausingAndResumingAreToldToTheRightPeople(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+
+	e.h.SetServicePaused(ctx, ann, "party", true)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		if !told(heard(s), live.Paused, "service") {
+			t.Errorf("%s must hear that the service was paused", name)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+
+	e.h.SetMemberPaused(ctx, bob, "party", true)
+	e.h.SetMemberPaused(ctx, bob, "party", false)
+	evs := heard(f.owner)
+	if !told(evs, live.Paused, "sender") || !told(evs, live.Resumed, "sender") {
+		t.Errorf("the owner must hear bob pause and resume: %v", evs)
+	}
+	for _, ev := range evs {
+		if ev.Reason == "sender" && ev.Sender != "Bob" {
+			t.Errorf("the event names the sender: %+v", ev)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+}
+
+func TestALostConnectionAndItsRestoreAreTold(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+
+	e.f.deleteKeyOf("bob") // bob deletes his key in Immich
+	e.h.CheckKeys(ctx)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		if !told(heard(s), live.Lost, "sender") {
+			t.Errorf("%s must hear bob's connection was cut", name)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+
+	// the owner's own key is deleted: the service cannot receive, and every sender is told too
+	e.h.Join(ctx, e.sess, bob, "party", "", "") // bob joins again after cleaning up
+	e.h.Leave(ctx, e.sess, bob, "party")
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f = listen(e)
+	e.f.deleteKeyOf("ann")
+	e.h.CheckKeys(ctx)
+	if !told(heard(f.sender), live.Lost, "service") {
+		t.Error("a sender must hear that the service lost its receiver")
+	}
+	e.h.ReconnectService(ctx, e.ann, ann, "party")
+	if !told(heard(f.owner), live.Restored, "service") || !told(heard(f.sender), live.Restored, "service") {
+		t.Error("owner and senders must hear that the service was restored")
+	}
+}
+
+func TestAReachedLimitIsToldToTheOwnerAndTheSender(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", LimitPhotos: 1})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+	snd := service(e, "party").Senders[0]
+	until := time.Now().Add(3 * time.Hour)
+	e.h.LimitReached(service(e, "party"), snd, 2, until)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		var got live.Event
+		for _, ev := range heard(s) {
+			if ev.Kind == live.Limit {
+				got = ev
+			}
+		}
+		if got.Count != 2 || got.Until == nil || got.Sender != "Bob" {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
 	}
 }

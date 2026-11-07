@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -86,7 +87,7 @@ func call(t *testing.T, method, path string, auth map[string]string, body any, o
 // The exact API key permissions documented in the README. The suite runs with these (not "all"),
 // so a permission the app really needs but the README omits fails the tests.
 var (
-	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update"}
+	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"}
 	destPermissions   = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload"}
 )
 
@@ -516,6 +517,46 @@ func TestEndToEnd(t *testing.T) {
 			x, code := getAsset(t, alice, aliceOrig)
 			return code == 200 && x.IsTrashed
 		})
+	})
+
+	t.Run("doctor is quiet on a healthy setup and names what is wrong otherwise", func(t *testing.T) {
+		doctor := func(extra ...string) (string, int) {
+			cmd := exec.Command(bin, "doctor")
+			cmd.Env = append(os.Environ(),
+				"IMMICH_BASE_URL="+baseURL,
+				"IMMICH_SOURCE_API_KEYS="+alice.appKey+","+bob.appKey,
+				"IMMICH_DEST_API_KEY="+family.appKey,
+				"WEBHOOK_SECRET="+secret,
+				"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+appPort+"/webhook/immich",
+				"HANDOFF_MODE=move")
+			cmd.Env = append(cmd.Env, extra...)
+			out, err := cmd.CombinedOutput()
+			code := 0
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			return string(out), code
+		}
+		// Immich ran alice's workflow when she tagged the photo above, and the app answered it.
+		out, code := doctor()
+		if code != 0 || !strings.Contains(out, "Immich's last") || strings.Contains(out, "FAIL") {
+			t.Errorf("healthy setup: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("WEBHOOK_SECRET=" + secret + "-changed"); code != 1 || !strings.Contains(out, "does not match the current settings") {
+			t.Errorf("a changed secret: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("PUBLIC_WEBHOOK_URL=http://localhost:" + appPort + "/webhook/immich"); code != 1 || !strings.Contains(out, "Immich itself") {
+			t.Errorf("a loopback address: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("IMMICH_BASE_URL=http://127.0.0.1:1"); code != 1 || !strings.Contains(out, "cannot reach Immich") {
+			t.Errorf("Immich not reachable: exit %d\n%s", code, out)
+		}
+		// it only reads: the real workflow is still the one the app made
+		if out, code := doctor(); code != 0 {
+			t.Errorf("after the failing checks the workflow must be untouched: exit %d\n%s", code, out)
+		}
 	})
 
 	t.Run("the trashed original is still reported as already uploaded (phone backup will skip it)", func(t *testing.T) {
@@ -1167,7 +1208,7 @@ services:
 		}
 		b, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if !strings.Contains(string(b), "Services you can send to") || !strings.Contains(string(b), "open") {
+		if !strings.Contains(string(b), "You can join") || !strings.Contains(string(b), "open") {
 			t.Fatalf("join offer missing: %.300s", b)
 		}
 		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}, "mode": {"move"}}); res.StatusCode != 204 {
@@ -1568,5 +1609,427 @@ func TestCopyMode(t *testing.T) {
 	}
 	if strings.Contains(a.log.String(), `"msg":"duplicate"`) {
 		t.Errorf("Immich's search kept listing the photo and it was processed again:\n%s", a.log.String())
+	}
+}
+
+// TestAdmin: Immich says who is an administrator; only they see every service and member, and they can
+// remove one. Immich lets only a key's owner delete it, so the person's key stays until they clean up.
+func TestAdmin(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns a service, bob sends to it
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 9)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	admin, owner, sender := loginCookie(t, "admin@e2e.test"), loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	get := func(cookie, path string) (int, string) {
+		req, _ := http.NewRequest("GET", "http://localhost:"+port+path, nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"admin-svc"}, "tag": {"admin-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"admin-svc"}, "mode": {"copy"}}), 204, "join")
+
+	for name, c := range map[string]string{"owner": owner, "sender": sender, "signed out": ""} {
+		if code, _ := get(c, "/admin"); code != 404 {
+			t.Errorf("%s: GET /admin = %d, want 404", name, code)
+		}
+	}
+	code, body := get(admin, "/admin")
+	if code != 200 || !strings.Contains(body, "admin-svc") || !strings.Contains(body, "bob@e2e.test") || !strings.Contains(body, "alice@e2e.test") {
+		t.Fatalf("the administrator's page: %d %.600s", code, body)
+	}
+	if _, home := get(admin, "/"); !strings.Contains(home, `href="admin"`) {
+		t.Error("the administrator is not offered the admin page")
+	}
+	if res := post(t, port, "/admin/members/remove", owner, url.Values{"link": {"x"}}); res.StatusCode != 404 {
+		t.Errorf("a non-admin removing a member: %d, want 404", res.StatusCode)
+	}
+
+	req, _ := http.NewRequest("POST", "http://localhost:"+port+"/admin/check", nil) // post() discards the body, and this one is read
+	req.Header.Set("Cookie", admin)
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(b), "Settings") || !strings.Contains(string(b), "reached Immich") {
+		t.Errorf("Check now: %d %.400s", res.StatusCode, b)
+	}
+
+	m := regexp.MustCompile(`link&#34;:&#34;([0-9a-f-]+)&#34;`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("no Remove button for bob in the page: %.800s", body)
+	}
+	must(post(t, port, "/admin/members/remove", admin, url.Values{"link": {m[1]}}), 204, "admin removes bob")
+
+	// the app stopped using bob's key, but cannot delete it: it is still in bob's account, and bob is told
+	if !hasName(keyNames(t, bob), "handoff: admin-svc") {
+		t.Error("Immich lets only the owner delete a key; it must still be there")
+	}
+	if p := page(t, port, sender); !strings.Contains(p, "Connection lost") || !strings.Contains(p, "still valid in your Immich account") {
+		t.Errorf("bob must be told on his page: %.800s", p)
+	}
+	// bob cleans up, which deletes what the app made in his account
+	must(post(t, port, "/leave", sender, url.Values{"service": {"admin-svc"}}), 204, "bob cleans up")
+	if hasName(keyNames(t, bob), "handoff: admin-svc") {
+		t.Error("cleaning up must delete bob's key")
+	}
+
+	// removing the whole service: the owner's receiver key stays too, and the owner is told
+	_, body = get(admin, "/admin")
+	if !strings.Contains(body, "Remove this service") {
+		t.Fatalf("no Remove this service button: %.600s", body)
+	}
+	must(post(t, port, "/admin/services/remove", admin, url.Values{"service": {"admin-svc"}}), 204, "admin removes the service")
+	if !hasName(keyNames(t, alice), "handoff: admin-svc (receiving)") {
+		t.Error("the owner's receiver key must stay: only the owner can delete it")
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "was removed by an administrator") {
+		t.Errorf("the owner must be told: %.800s", p)
+	}
+	if _, body := get(admin, "/admin"); strings.Contains(body, "Remove this service") {
+		t.Error("the removed service is still listed")
+	}
+}
+
+// TestBackupAndRestore: back up while the app runs, move the data to a fresh folder on another port, and the same
+// people and services are back and still hand photos over.
+func TestBackupAndRestore(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 10)
+	data := t.TempDir()
+	envOf := func(port, data string) []string {
+		return []string{"IMMICH_BASE_URL=" + baseURL, "WEBHOOK_SECRET=" + secret, "LISTEN_ADDR=:" + port, "DATA_DIR=" + data,
+			"HANDOFF_STORE_KEY=an-e2e-store-key-0123456789",
+			"PUBLIC_WEBHOOK_URL=http://host.docker.internal:" + port + "/webhook/immich"}
+	}
+	cli := func(env []string, args ...string) (int, string) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return code, string(out)
+	}
+	a := launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+data)
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"moved"}, "tag": {"moved-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"moved"}, "mode": {"move"}}), 204, "join")
+
+	// the command works against the running app, and the file appears
+	code, out := cli(envOf(port, data), "backup", "--wait")
+	if code != 0 || !strings.Contains(out, "Backup ready") {
+		t.Fatalf("backup --wait: exit %d\n%s", code, out)
+	}
+	files, _ := filepath.Glob(filepath.Join(data, "backups", "handoff-*.db"))
+	if len(files) != 1 || strings.Contains(files[0], "forced") {
+		t.Fatalf("backup files: %v\n%s", files, out)
+	}
+	if code, out := cli(envOf(port, data), "backup", "--list"); code != 0 || !strings.Contains(out, filepath.Base(files[0])) {
+		t.Errorf("--list: exit %d\n%s", code, out)
+	}
+	// replacing the data of a running app is refused
+	if code, out := cli(envOf(port, data), "restore", "--force", files[0]); code != 1 || !strings.Contains(out, "running") {
+		t.Errorf("restore under a running app: exit %d\n%s", code, out)
+	}
+
+	// move to a fresh folder and another port
+	a.stop()
+	data2, port2 := t.TempDir(), fmt.Sprint(atoi(appPort)+11)
+	if code, out := cli(envOf(port2, data2), "restore", files[0]); code != 0 {
+		t.Fatalf("restore: exit %d\n%s", code, out)
+	}
+	launchApp(t, bin, port2, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+data2)
+	if p := page(t, port2, owner); !strings.Contains(p, "moved") || !strings.Contains(p, "bob") && !strings.Contains(p, "Bob") {
+		t.Errorf("the service and its member must be back: %.600s", p)
+	}
+	// the keys still work and the workflow was repaired to point at the new address
+	eventually(t, "bob's workflow points at the new app", 90*time.Second, func() bool {
+		var wfs []struct {
+			Name  string
+			Steps []struct {
+				Config map[string]any
+			}
+		}
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: moved" {
+				for _, s := range w.Steps {
+					if u, _ := s.Config["url"].(string); strings.Contains(u, ":"+port2+"/") {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	})
+	id, _ := upload(t, bob, "after-restore.jpg", jpegBytes(9200))
+	tagAsset(t, bob, "moved-tag", id)
+	eventually(t, "a photo is handed over by the restored app", 90*time.Second, func() bool {
+		x, code := getAsset(t, bob, id)
+		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox/moved", false)) >= 1
+	})
+}
+
+// TestPauseAndLimits: a paused sender's tagged photos stay tagged and go when they resume; a daily limit holds the
+// rest back, says so, and a higher limit lets them go.
+func TestPauseAndLimits(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 12)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"calm"}, "tag": {"calm-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"calm"}, "mode": {"move"}}), 204, "join")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: calm" {
+				return true
+			}
+		}
+		return false
+	})
+	trashed := func(id string) bool { x, code := getAsset(t, bob, id); return code == 200 && x.IsTrashed }
+	inbox := func() int { return len(searchTag(t, alice, "inbox/calm", false)) }
+	stays := func(what string, id string) {
+		t.Helper()
+		time.Sleep(6 * time.Second) // long enough for the webhook, which arrives within a second or two
+		if trashed(id) {
+			t.Fatalf("%s: the photo was handed over", what)
+		}
+	}
+
+	// --- bob pauses: a photo tagged meanwhile stays tagged, and goes when he resumes ---
+	must(post(t, port, "/pause", sender, url.Values{"service": {"calm"}, "paused": {"1"}}), 204, "bob pauses")
+	if p := page(t, port, sender); !strings.Contains(p, "You paused sending") {
+		t.Errorf("bob's page: %.600s", p)
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "(paused)") {
+		t.Errorf("the owner must see bob paused: %.600s", p)
+	}
+	base := inbox()
+	one, _ := upload(t, bob, "paused-1.jpg", jpegBytes(9301))
+	tagAsset(t, bob, "calm-tag", one)
+	stays("sender paused", one)
+	must(post(t, port, "/pause", sender, url.Values{"service": {"calm"}, "paused": {"0"}}), 204, "bob resumes")
+	eventually(t, "the waiting photo is handed over after bob resumes", 90*time.Second, func() bool { return trashed(one) && inbox() == base+1 })
+
+	// --- the owner pauses the whole service ---
+	must(post(t, port, "/services/pause", owner, url.Values{"service": {"calm"}, "paused": {"1"}}), 204, "owner pauses")
+	if p := page(t, port, sender); !strings.Contains(p, "The owner paused this service.") {
+		t.Errorf("bob must be told: %.600s", p)
+	}
+	two, _ := upload(t, bob, "paused-2.jpg", jpegBytes(9302))
+	tagAsset(t, bob, "calm-tag", two)
+	stays("service paused", two)
+	must(post(t, port, "/services/pause", owner, url.Values{"service": {"calm"}, "paused": {"0"}}), 204, "owner resumes")
+	eventually(t, "the waiting photo is handed over after the owner resumes", 90*time.Second, func() bool { return trashed(two) && inbox() == base+2 })
+
+	// --- a daily limit of three photos, two of which went today already: one more goes, the next waits, and a
+	// higher limit lets it go ---
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"calm"}, "photos": {"3"}}), 204, "limit three photos")
+	three, _ := upload(t, bob, "limit-3.jpg", jpegBytes(9303))
+	tagAsset(t, bob, "calm-tag", three)
+	eventually(t, "the third photo of the day goes", 90*time.Second, func() bool { return trashed(three) && inbox() == base+3 })
+	// three photos handed over today: the limit is reached
+	four, _ := upload(t, bob, "limit-4.jpg", jpegBytes(9304))
+	tagAsset(t, bob, "calm-tag", four)
+	eventually(t, "bob is told the limit is reached", 90*time.Second, func() bool {
+		return strings.Contains(page(t, port, sender), "The daily limit is reached")
+	})
+	if trashed(four) {
+		t.Fatal("a photo over the limit must not be handed over")
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "reached the daily limit") {
+		t.Errorf("the owner must see the event: %.800s", p)
+	}
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"calm"}, "photos": {"50"}}), 204, "raise the limit")
+	eventually(t, "the waiting photo goes once the limit is raised", 90*time.Second, func() bool { return trashed(four) && inbox() == base+4 })
+	if p := page(t, port, sender); strings.Contains(p, "The daily limit is reached") {
+		t.Error("the waiting notice must be gone once the photos went")
+	}
+
+	// the Overview's numbers: what moved this week, counted from what the app recorded
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+"/fragments/numbers", nil)
+	req.Header.Set("Cookie", owner)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nb, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(nb), "Handed over, last 7 days") || !strings.Contains(string(nb), ">4<") || !strings.Contains(string(nb), "In your inbox") {
+		t.Errorf("numbers for the owner: %d %.600s", res.StatusCode, nb)
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "Needs you") || !strings.Contains(p, "Nothing needs you right now.") {
+		t.Errorf("the owner's Overview must lead with the strip, all clear here: %.500s", p)
+	}
+}
+
+// openStream listens to the page's live stream as a signed-in person, and returns the events it carries.
+func openStream(t *testing.T, port, cookie string) (status int, events <-chan map[string]any) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://localhost:"+port+"/events", nil)
+	req.Header.Set("Cookie", cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(chan map[string]any, 64)
+	if res.StatusCode != 200 {
+		res.Body.Close()
+		return res.StatusCode, out
+	}
+	go func() {
+		defer res.Body.Close()
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			if l := sc.Text(); strings.HasPrefix(l, "data: {") {
+				var m map[string]any
+				if json.Unmarshal([]byte(strings.TrimPrefix(l, "data: ")), &m) == nil {
+					out <- m
+				}
+			}
+		}
+	}()
+	return 200, out
+}
+
+func waitEvent(t *testing.T, who string, events <-chan map[string]any, within time.Duration, match func(map[string]any) bool) map[string]any {
+	t.Helper()
+	deadline := time.After(within)
+	for {
+		select {
+		case ev := <-events:
+			if match(ev) {
+				return ev
+			}
+		case <-deadline:
+			t.Fatalf("%s never heard the expected live event", who)
+		}
+	}
+}
+
+// TestLiveEvents: a real hand-over, a pause and a daily limit are told to the page as they happen, to the sender, the
+// owner and the administrator, and to nobody else.
+func TestLiveEvents(t *testing.T) {
+	alice, bob, _, grandma := bootstrap(t) // alice owns the service, bob sends, grandma takes no part
+	_ = grandma
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 13)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender, admin, stranger := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test"), loginCookie(t, "admin@e2e.test"), loginCookie(t, "grandma@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"live"}, "tag": {"live-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"live"}, "mode": {"move"}}), 204, "join")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: live" {
+				return true
+			}
+		}
+		return false
+	})
+
+	if code, _ := openStream(t, port, stranger); code != 403 {
+		t.Errorf("someone who takes part in nothing must not listen: %d", code)
+	}
+	_, ownerFeed := openStream(t, port, owner)
+	_, senderFeed := openStream(t, port, sender)
+	_, adminFeed := openStream(t, port, admin)
+	time.Sleep(500 * time.Millisecond) // the streams are open
+
+	// a real hand-over
+	id, _ := upload(t, bob, "live-1.jpg", jpegBytes(9401))
+	tagAsset(t, bob, "live-tag", id)
+	for who, feed := range map[string]<-chan map[string]any{"owner": ownerFeed, "sender": senderFeed, "administrator": adminFeed} {
+		ev := waitEvent(t, who, feed, 90*time.Second, func(e map[string]any) bool { return e["kind"] == "handed" })
+		if ev["service"] != "live" || ev["sender"] == nil || ev["count"] != float64(1) {
+			t.Errorf("%s heard %v", who, ev)
+		}
+		for k := range ev {
+			switch k {
+			case "kind", "service", "sender", "reason", "count", "until", "at":
+			default:
+				t.Errorf("%s: unexpected field %q in %v", who, k, ev)
+			}
+		}
+		if b, _ := json.Marshal(ev); strings.Contains(string(b), "live-1.jpg") || strings.Contains(string(b), id) {
+			t.Errorf("%s: an event must name no photo: %s", who, b)
+		}
+	}
+	_ = alice
+
+	// the live scene on the page: a stage for the service with a lane for bob, which follows what really happens
+	if p := page(t, port, owner); !strings.Contains(p, `data-service="live"`) || !strings.Contains(p, `data-state="flow"`) || !strings.Contains(p, "arrived while you watch") {
+		t.Errorf("the owner's page must have the live scene with bob's lane: %.600s", p)
+	}
+
+	// the sender pauses
+	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"1"}}), 204, "bob pauses")
+	if p := page(t, port, owner); !strings.Contains(p, `data-state="paused" data-paused="sender"`) || !strings.Contains(p, "Paused by the sender") {
+		t.Errorf("bob's lane must show his pause: %.800s", p)
+	}
+	for who, feed := range map[string]<-chan map[string]any{"owner": ownerFeed, "sender": senderFeed} {
+		waitEvent(t, who, feed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "paused" && e["reason"] == "sender" })
+	}
+	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"0"}}), 204, "bob resumes")
+	waitEvent(t, "owner", ownerFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "resumed" })
+	if p := page(t, port, owner); strings.Contains(p, `data-paused="sender"`) {
+		t.Errorf("after resuming the lane must not say paused: %.400s", p)
+	}
+
+	// the daily limit: one photo went today, so a limit of one holds the next
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"live"}, "photos": {"1"}}), 204, "limit")
+	id2, _ := upload(t, bob, "live-2.jpg", jpegBytes(9402))
+	tagAsset(t, bob, "live-tag", id2)
+	held := waitEvent(t, "owner", ownerFeed, 90*time.Second, func(e map[string]any) bool { return e["kind"] == "held" })
+	if held["reason"] != "limit" || held["count"] != float64(1) || held["until"] == nil {
+		t.Errorf("held: %v", held)
+	}
+	waitEvent(t, "sender", senderFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "limit" })
+	if p := page(t, port, owner); !strings.Contains(p, `data-state="capped"`) || !strings.Contains(p, "Daily limit reached") {
+		t.Errorf("bob's lane must show the limit: %.800s", p)
 	}
 }

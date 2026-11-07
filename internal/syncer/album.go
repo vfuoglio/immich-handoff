@@ -23,6 +23,12 @@ type Reporter interface {
 	AlbumHandedOver(svc *Service, snd *Account, handed, refused, failed int)
 }
 
+// LimitReporter is implemented by a Provider that wants to hear when a sender's photos first start waiting for
+// the daily cap.
+type LimitReporter interface {
+	LimitReached(svc *Service, snd *Account, waiting int, until time.Time)
+}
+
 // AlbumPending returns the photos in the sender's linked album that still have to be handed over: photos the
 // sender owns (an album can hold other people's photos) that are not in the trash and do not already carry
 // the service's "handed over" or "refused" tag. Those tags are how a photo that stays in the album (copy
