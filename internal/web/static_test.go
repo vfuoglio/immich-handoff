@@ -1,8 +1,14 @@
 package web_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"image"
+	_ "image/png"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -150,5 +156,89 @@ func TestTheBackgroundDriftsCheaplyAndStopsForReducedMotion(t *testing.T) {
 	reduced := regexp.MustCompile(`(?s)@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}`).FindStringSubmatch(css)
 	if reduced == nil || !strings.Contains(reduced[1], "animation-iteration-count: 1") || !strings.Contains(reduced[1], "*::before, *::after") {
 		t.Error("reduced motion must stop every animation, including the ones on ::before and ::after")
+	}
+}
+
+// The page can be added to a phone's home screen: a manifest with the app's icon, icons in the sizes phones ask for, and
+// nothing cached (there is no service worker, so nothing signed-in is ever kept by the page itself).
+func TestThePageCanBeInstalledOnAPhone(t *testing.T) {
+	app, _ := setup(t)
+	get := func(path string) (int, string, []byte) {
+		res, err := http.Get(app.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, res.Header.Get("Content-Type"), b
+	}
+	code, typ, raw := get("/static/manifest.webmanifest")
+	if code != 200 || !strings.HasPrefix(typ, "application/manifest+json") {
+		t.Fatalf("manifest: %d %q", code, typ)
+	}
+	var m struct {
+		Name, ShortName, StartURL, Scope, Display, BackgroundColor, ThemeColor string
+		Icons                                                                  []struct{ Src, Sizes, Type, Purpose string }
+	}
+	if err := json.Unmarshal([]byte(strings.NewReplacer("short_name", "shortname", "start_url", "starturl", "background_color", "backgroundcolor", "theme_color", "themecolor").Replace(string(raw))), &m); err != nil {
+		t.Fatalf("the manifest is not valid JSON: %v", err)
+	}
+	if m.Name != "Immich Handoff" || m.Display != "standalone" || m.ThemeColor == "" || m.BackgroundColor == "" {
+		t.Errorf("manifest basics: %+v", m)
+	}
+	// start_url and scope are relative to the manifest, so the app works behind a path prefix: the manifest lives one
+	// level down (static/), so "../" is the page itself, and the start is inside the scope
+	base, _ := url.Parse("https://host.example/handoff/static/manifest.webmanifest")
+	start, _ := base.Parse(m.StartURL)
+	scope, _ := base.Parse(m.Scope)
+	if start.String() != "https://host.example/handoff/" || !strings.HasPrefix(start.String(), scope.String()) {
+		t.Errorf("start %s, scope %s: both must resolve to the page under any prefix", start, scope)
+	}
+	// the sizes phones ask for, each a real PNG of the size it claims, and one that can be cropped to any shape
+	var any192, any512, maskable bool
+	for _, ic := range m.Icons {
+		code, _, b := get("/static/" + ic.Src)
+		if code != 200 {
+			t.Errorf("icon %s: %d", ic.Src, code)
+			continue
+		}
+		cfg, format, err := image.DecodeConfig(bytes.NewReader(b))
+		if err != nil || format != "png" || fmt.Sprintf("%dx%d", cfg.Width, cfg.Height) != ic.Sizes {
+			t.Errorf("icon %s must be a %s png: got %v %s %v", ic.Src, ic.Sizes, cfg, format, err)
+		}
+		any192 = any192 || (ic.Purpose == "any" && ic.Sizes == "192x192")
+		any512 = any512 || (ic.Purpose == "any" && ic.Sizes == "512x512")
+		maskable = maskable || ic.Purpose == "maskable"
+	}
+	if !any192 || !any512 || !maskable {
+		t.Errorf("icons needed: 192 any %v, 512 any %v, maskable %v", any192, any512, maskable)
+	}
+	if code, _, b := get("/static/apple-touch-icon.png"); code != 200 {
+		t.Errorf("apple-touch-icon: %d", code)
+	} else if cfg, _, err := image.DecodeConfig(bytes.NewReader(b)); err != nil || cfg.Width != 180 || cfg.Height != 180 {
+		t.Errorf("the iPhone icon must be 180 x 180: %v %v", cfg, err)
+	}
+
+	// the page points at it, with the sign-in cookie sent along (behind a login the manifest would otherwise be refused),
+	// and the policy allows it
+	res, err := http.Get(app.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if !strings.Contains(res.Header.Get("Content-Security-Policy"), "manifest-src 'self'") {
+		t.Error("the policy must allow the manifest from the app itself")
+	}
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	for _, want := range []string{`<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials">`, `<link rel="apple-touch-icon" href="static/apple-touch-icon.png">`,
+		`name="theme-color" content="#f5f2fd" media="(prefers-color-scheme: light)"`, `name="theme-color" content="#0d0b20" media="(prefers-color-scheme: dark)"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page head lacks %s", want)
+		}
+	}
+	// nothing is cached by the page: there is no service worker
+	_, _, js := get("/static/app.js")
+	if strings.Contains(string(js), "serviceWorker") || strings.Contains(string(raw), "serviceworker") {
+		t.Error("the page must not install a service worker: nothing signed-in may be cached")
 	}
 }

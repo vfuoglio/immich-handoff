@@ -118,6 +118,21 @@ The image comes from Docker Hub: `docker-compose.yml` names `vfuoglio/immich-han
 
 Before you upgrade **Immich** itself, you can run this project's whole test suite against the new Immich: `IMMICH_VERSION=<tag> test/run.sh` (see [Architecture](architecture.md#testing)).
 
+## Installing the page on a phone
+
+People reach the page from their phone, next to the Immich app, so it can be added to the home screen and opened like an app (no address bar, the app's icon and name). The page carries what a browser needs: a web app manifest, icons in the sizes phones ask for (including one that a phone may crop to any shape), the theme colours, and an icon for the iPhone.
+
+- **Android (Chrome and other Chromium browsers):** open the page, then the browser menu, **Install app** or **Add to Home screen**.
+- **iPhone and iPad (Safari):** open the page, then **Share**, **Add to Home Screen**.
+
+What it needs from you:
+
+- **HTTPS.** Browsers only install a page served over HTTPS (or from `localhost`). Behind a reverse proxy this is the proxy's certificate, as for Immich itself.
+- **The manifest and the icons must be reachable with the person's sign-in.** The page asks for the manifest with the browser's cookies (`crossorigin="use-credentials"`), because behind a login in front of the app (single sign-on at the proxy, for example) a request without cookies would be sent to the login page and the manifest would be ignored. Nothing special is needed otherwise: everything is under the page's own `static/` folder, so it also works behind a path prefix (the manifest's start address is relative).
+- **There is no service worker, and nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut.
+
+I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
+
 ## Monitoring
 
 - **Log:** `docker compose logs`. Each pass logs what it found and did; errors are marked `ERROR`.

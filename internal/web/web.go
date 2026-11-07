@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -51,6 +52,11 @@ type Server struct {
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 
 	limiter limiter
+}
+
+func init() {
+	// the web app manifest is served by the file server below; not every system's table knows its type
+	mime.AddExtensionType(".webmanifest", "application/manifest+json")
 }
 
 func (w *Server) Handler() http.Handler {
@@ -106,7 +112,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
 		img += " " + u.Scheme + "://" + u.Host
 	}
-	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src " + img +
+	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; img-src " + img +
 		"; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
