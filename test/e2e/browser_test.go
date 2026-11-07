@@ -5,14 +5,17 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/network"
@@ -151,7 +154,7 @@ func theWorld(t *testing.T) world {
 	_ = grandma
 	bin := buildApp(t)
 	port := fmt.Sprint(atoi(appPort) + 20)
-	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "HANDOFF_ADMIN_BACKUP_DOWNLOAD=true")
 	w := world{port: port, alice: alice, bob: bob,
 		owner: loginCookie(t, "alice@e2e.test"), sender: loginCookie(t, "bob@e2e.test"), grandma: loginCookie(t, "grandma@e2e.test")}
 	must := func(res *http.Response, want int, what string) {
@@ -557,6 +560,73 @@ func TestBrowser(t *testing.T) {
 		// and back
 		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-services details.svc[open] button[data-act="resume"]').click()`, nil))
 		until(t, ctx, "the lane to flow again", `document.querySelector('#scene [data-lane]').dataset.state === 'flow'`, 10*time.Second)
+	})
+
+	t.Run("an administrator downloads a backup from the page, after the dialog", func(t *testing.T) {
+		dir := t.TempDir()
+		ctx := browse(t, w.port, loginCookie(t, "admin@e2e.test"), look{})
+		run(t, ctx,
+			browser.SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(dir),
+			chromedp.Navigate(w.url()+"admin"), chromedp.WaitVisible("#backups", chromedp.ByQuery))
+		until(t, ctx, "the page's scripts started", `document.querySelector('#backups') !== null`, 10*time.Second)
+		if got := js[string](t, ctx, `document.querySelector('#backups').textContent`); !strings.Contains(got, "Automatic backups: every 24h, keeping the newest 7") {
+			t.Errorf("the schedule is not on the page: %q", got)
+		}
+		// Cancel downloads nothing
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		if got := js[string](t, ctx, `document.getElementById('confirm-title').textContent`); got != "Download a backup?" {
+			t.Errorf("the dialog's title: %q", got)
+		}
+		run(t, ctx, chromedp.Click(`#confirm button[value="cancel"]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog to close", `!document.getElementById('confirm').open`, 3*time.Second)
+		time.Sleep(700 * time.Millisecond)
+		if files, _ := os.ReadDir(dir); len(files) != 0 {
+			t.Fatalf("Cancel downloaded something: %v", files)
+		}
+		// OK downloads the file
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		run(t, ctx, chromedp.Click(`#confirm-ok`, chromedp.ByQuery))
+		var saved string
+		eventually(t, "the file to arrive", 15*time.Second, func() bool {
+			files, _ := os.ReadDir(dir)
+			for _, f := range files {
+				if strings.HasPrefix(f.Name(), "handoff-") && strings.HasSuffix(f.Name(), ".db") {
+					saved = filepath.Join(dir, f.Name())
+					return true
+				}
+			}
+			return false
+		})
+		head := make([]byte, 15)
+		f, err := os.Open(saved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		if _, err := io.ReadFull(f, head); err != nil || string(head) != "SQLite format 3" {
+			t.Errorf("the downloaded file is not a database: %q %v", head, err)
+		}
+		until(t, ctx, "the page to say it was downloaded", `document.getElementById('flash').textContent.includes('downloaded')`, 5*time.Second)
+		// a second one at once is refused, and the page says why
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		run(t, ctx, chromedp.Click(`#confirm-ok`, chromedp.ByQuery))
+		until(t, ctx, "the refusal", `document.getElementById('flash').textContent.includes('only one is handed out')`, 10*time.Second)
+		// and it is in the recent events, with who did it
+		admin := loginCookie(t, "admin@e2e.test")
+		eventually(t, "the download in the recent events", 10*time.Second, func() bool {
+			req, _ := http.NewRequest("GET", "http://localhost:"+w.port+"/admin", nil)
+			req.Header.Set("Cookie", admin)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return false
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return strings.Contains(string(b), "A backup was downloaded by admin")
+		})
 	})
 
 	t.Run("the request is approved from the page", func(t *testing.T) {

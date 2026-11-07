@@ -147,6 +147,18 @@ func settings(r *Report, in Input) {
 // backups reports what is set about backups. Without a store key nothing is stored, so there is nothing to say.
 func backups(r *Report, in Input) {
 	hasStore := firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") != ""
+	download := firstOf(in.Env, "HANDOFF_ADMIN_BACKUP_DOWNLOAD")
+	switch {
+	case download != "" && download != "true":
+		r.add(Warn, "HANDOFF_ADMIN_BACKUP_DOWNLOAD is "+download+": only the value true switches the download on, so it is off",
+			"Set it to true to offer Download backup on the administrator's page, or remove the line.")
+	case download == "true" && !hasStore:
+		r.add(Warn, "HANDOFF_ADMIN_BACKUP_DOWNLOAD is true but HANDOFF_STORE_KEY is not set, so nothing is stored and there is nothing to download",
+			"Set HANDOFF_STORE_KEY (see the installation guide), or remove HANDOFF_ADMIN_BACKUP_DOWNLOAD.")
+	case download == "true":
+		r.add(OK, "an Immich administrator can download a backup from the administrator's page (HANDOFF_ADMIN_BACKUP_DOWNLOAD=true)",
+			"")
+	}
 	if !hasStore {
 		return
 	}

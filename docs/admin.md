@@ -14,7 +14,7 @@ At the top, three numbers: how many **services** are offered, how many **senders
 - **Pauses and limits**: a **Paused** chip on a service its owner paused, "(paused)" next to a sender who paused, and the daily limit per sender when there is one.
 - **Its members**: name, email, whether they keep or move their originals, the album they linked, and whether their connection works or why it does not.
 - **Waiting to clean up**: people whose service was removed and who still hold a key in Immich.
-- **Backups**: whether automatic backups are on (how often, how many are kept, which folder), the newest backup and when it was made, or why the last one failed. Only installs that keep data have this section.
+- **Backups**: whether automatic backups are on (how often, how many are kept, which folder), the newest backup and when it was made, or why the last one failed. If you set `HANDOFF_ADMIN_BACKUP_DOWNLOAD=true` a **Download backup** button is here too (after a confirmation, at most one every 10 minutes, each one written to the recent events). Without that setting the page says the download is off and links to [how to turn it on and what to know first](operations.md#download-a-backup-from-the-administrators-page). Only installs that keep data have this section.
 - **Recent events** across all services.
 - **Check now**: runs the same setup check as `immich-handoff doctor` (see [Troubleshooting](troubleshooting.md#check-your-setup-first)) and shows the result on the page: every key and its permissions, Tags, each sender's workflow and how Immich's recent runs of it ended. It only reads.
 

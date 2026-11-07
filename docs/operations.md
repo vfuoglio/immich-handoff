@@ -69,7 +69,7 @@ Useful variations:
 The app also makes a backup **on its own**, so there is one even if nobody ever runs the command. It is on by default whenever the app keeps data (`HANDOFF_STORE_KEY` is set).
 
 - **How often:** every 24 hours (`BACKUP_EVERY`, for example `12h`; one hour at the least). A backup is made about half a minute after the app starts if there is none yet or the newest is more than that old; after a restart it waits until the newest is `BACKUP_EVERY` old, so restarting often does not make more.
-- **How many:** the newest 7 (`BACKUP_KEEP`). Older automatic backups are removed. Their names start with `handoff-auto-`. Backups you asked for with the command are never removed by the app.
+- **How many:** the newest 7 (`BACKUP_KEEP`). Older automatic backups are removed. Their names start with `handoff-auto-`. Backups you asked for with the command, and files downloaded from the page, are never removed by the app.
 - **Quiet moment:** an automatic backup waits for a quiet moment between hand-overs, and is made anyway after 4 hours (named `-forced`), exactly like the one the command asks for.
 - **When it fails** (a full disk, a folder that cannot be written), you are told like for any failed backup: a line in the log, a line in the recent events and a message to `NOTIFY_URL`. The app tries again an hour later, and the [administrator's page](admin.md#what-it-shows) says that the last backup failed and why. `doctor` also checks the settings.
 - **Turn it off** with `BACKUP_EVERY=off`. The command keeps working.
@@ -86,6 +86,28 @@ services:
 ```
 
 The folder must be writable by the app. To restore from one of these files, follow [Restoring](#restoring) with that file.
+
+### Download a backup from the administrator's page
+
+An Immich administrator can download a backup from the [administrator's page](admin.md), without a command line. **It is off by default**, because the file it hands out holds every stored API key (still encrypted with `HANDOFF_STORE_KEY`) and everyone's name and email, and a button makes that file reachable by anyone who gets hold of an administrator's session. Turn it on only if you want that convenience and you trust whoever is an administrator in Immich.
+
+To switch it on, add this to `.env` and restart the app:
+
+```
+HANDOFF_ADMIN_BACKUP_DOWNLOAD=true
+```
+
+Only the exact value `true` works. Then the administrator's page shows a **Download backup** button in its **Backups** section (until then the page says that the download is off and links here). What limits it:
+
+- It is not a link: the page sends a POST request with the header that a page from another site cannot send, and only a signed-in Immich administrator is answered. Everyone else, and everyone when the switch is off, gets "not found".
+- Pressing the button first asks in a dialog, which says what the file holds.
+- Only one download is handed out every **10 minutes** for the whole app, whoever asks.
+- Every download is written to the recent events with the administrator's name and email, and sent to `NOTIFY_URL` if you set it, so a download you did not make shows.
+- The copy is made at once (it does not wait for a quiet moment: it is consistent anyway) in a private folder, and removed as soon as it has been sent. The answer is marked `no-store`, so no cache keeps it.
+- It exists only where the app keeps data, so it needs `HANDOFF_STORE_KEY`.
+- It cannot restore: restoring needs the app stopped, so it stays a [command](#restoring).
+
+Keep the downloaded file, together with a separate copy of `HANDOFF_STORE_KEY`, somewhere other than this machine. `doctor` says whether the download is on. See also [Security and trust](security.md#backups).
 
 Take the file out of the volume (this works without a shell in the image), and keep it, together with a separate copy of `HANDOFF_STORE_KEY`, somewhere other than this machine:
 

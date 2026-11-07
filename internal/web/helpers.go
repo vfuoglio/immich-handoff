@@ -20,6 +20,9 @@ func loc(ctx context.Context) *i18n.Locale { return i18n.From(ctx) }
 func t(ctx context.Context, msg string, kv ...any) string { return i18n.From(ctx).T(msg, kv...) }
 
 // h is a message with a little markup of its own (<code>, <strong>, <em>); its values are escaped.
+// backupDocsURL is where the page sends an administrator to read about switching the backup download on.
+const backupDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/operations.md#download-a-backup-from-the-administrators-page"
+
 func h(ctx context.Context, msg string, kv ...any) string { return i18n.From(ctx).H(msg, kv...) }
 
 // n is a message with a count: the English singular (its key) and plural.
@@ -599,7 +602,7 @@ var clientMessages = []string{
 	"A sender", "Activity", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
 	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
-	"Switch between the light and the dark theme", "Sync now", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",
+	"Switch between the light and the dark theme", "Sync now", "The backup could not be downloaded.", "The backup was downloaded.", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",
 	"{n} photo", "{n} photo waits", "{service} lost its connection", "{service} was paused by its owner", "{service} was reconnected", "{service} was resumed",
 	"{who} handed over {photos} to {service}", "{who} is handing over {photos} to {service}", "{who} paused sending to {service}", "{who} reached the daily limit for {service}",
 	"{who} resumed sending to {service}", "{who}'s connection to {service} was lost; no photo was touched", "{who}: {photos} already there in {service}",

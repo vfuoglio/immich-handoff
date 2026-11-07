@@ -739,6 +739,7 @@ type AdminData struct {
 // AdminBackup is what the administrator's page says about backups.
 type AdminBackup struct {
 	Has      bool   // there is a store, so there is something to back up
+	Download bool   // the download button is switched on (HANDOFF_ADMIN_BACKUP_DOWNLOAD)
 	Every    string // how often, as written in BACKUP_EVERY, or "" when automatic backups are off
 	Keep     int
 	Folder   string
@@ -823,7 +824,7 @@ templ AdminPage(d AdminData) {
 	}
 }
 
-// AdminBackups is the Backups section: the schedule, the newest backup and the last failure.
+// AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
 templ AdminBackups(b AdminBackup) {
 	<h2>{ t(ctx, "Backups") }</h2>
 	<section class="card" id="backups">
@@ -844,6 +845,16 @@ templ AdminBackups(b AdminBackup) {
 					{ t(ctx, "No backup has been made yet.") }
 			}
 		</p>
+		if b.Download {
+			<p class="row">
+				<button class="primary" data-backup-download="admin/backup/download" hx-post="admin/backup/download" hx-swap="none" hx-disabled-elt="this" hx-confirm={ t(ctx, "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.") } data-confirm-title={ t(ctx, "Download a backup?") } data-confirm-label={ t(ctx, "Download") }>{ t(ctx, "Download backup") }</button>
+				<span class="meta">{ t(ctx, "A copy of the app's data, made now. It is written to the recent events.") }</span>
+			</p>
+		} else {
+			<p class="meta">
+				@templ.Raw(h(ctx, "Downloading a backup from this page is off. To turn it on, and what to know first, see <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Backups</a>.", "url", backupDocsURL))
+			</p>
+		}
 	</section>
 }
 

@@ -34,7 +34,7 @@ An Immich **administrator** can also open the [administrator's page](admin.md), 
 ## Protections in the app
 
 - Immich's events carry a shared secret (`WEBHOOK_SECRET`); the app refuses one that is missing or shorter than 16 characters.
-- The page accepts only people signed in to Immich. Every change needs a header that a page on another website cannot send, and each person is limited to 30 changes a minute.
+- The page accepts only people signed in to Immich. Every change needs a header that a page on another website cannot send, and each person is limited to 30 changes a minute. The one action that takes data away, the optional backup download, is off unless you switch it on and is limited further (see [Backups](#backups)).
 - Pages are served with a strict content security policy, cannot be placed in a frame, and only load scripts and styles from the app itself.
 - The metrics page needs the same secret.
 - A photo is only removed after every receiver holds a verified copy (checked by checksum), and never while a connection is broken or a service has no healthy receiver.
@@ -43,6 +43,7 @@ An Immich **administrator** can also open the [administrator's page](admin.md), 
 
 - A backup is a copy of the data file: every stored API key (encrypted with `HANDOFF_STORE_KEY`, which is **not** in the file) and names and emails in the clear. Treat it like the volume itself, and keep the store key separately.
 - The app makes automatic backups into `/data/backups` by default. That is beside the data it protects, so point `BACKUP_DIR` at a second folder if you want to survive losing the volume.
+- **The administrator's page can hand a backup to a browser, but only if you switch that on** (`HANDOFF_ADMIN_BACKUP_DOWNLOAD=true`). It is off by default because a stolen administrator session could then take a copy of the names and emails and the encrypted keys. When on, it needs a POST with the header a page on another website cannot send, a signed-in Immich administrator, and a confirmation in the page; it is limited to one download every 10 minutes for the whole app; each one is written to the recent events and sent to `NOTIFY_URL`; the copy is made in a private folder, removed as soon as it is sent, and marked `no-store`. The encrypted keys are useful only to someone who also has `HANDOFF_STORE_KEY`, which the page never shows. Details: [Download a backup from the administrator's page](operations.md#download-a-backup-from-the-administrators-page).
 
 ## The image you run
 

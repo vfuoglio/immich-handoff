@@ -2,6 +2,7 @@
 // (esbuild); the bundle is committed, so building the program needs nothing else. `tsc --noEmit` checks
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
+import { initBackup } from "./backup";
 import { loadCatalog, t } from "./i18n";
 import { parseLive } from "./live";
 import { initScene } from "./scene";
@@ -78,6 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLanguage();
   initTabs();
   initRows();
+  initBackup();
   initEffects();
   initPalette();
   initSound();

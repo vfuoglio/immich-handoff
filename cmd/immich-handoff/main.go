@@ -164,7 +164,7 @@ func run(log *slog.Logger) error {
 	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus,
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins

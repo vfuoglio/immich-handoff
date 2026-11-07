@@ -453,6 +453,40 @@ func TestAFailedAutomaticBackupIsReportedAndTriedAgainLater(t *testing.T) {
 	}
 }
 
+func TestADownloadIsACopyMadeAtOnceThatLeavesNothingBehind(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	busy := &fakeIdle{busy: true} // a download does not wait for a quiet moment
+	m, told, events := manager(t, st, busy)
+
+	f, name, cleanup, err := m.Download(context.Background(), "Alice (a@x.test)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(name, "handoff-") || !strings.HasSuffix(name, ".db") {
+		t.Fatalf("name %q", name)
+	}
+	head := make([]byte, 15)
+	if _, err := io.ReadFull(f, head); err != nil || string(head) != "SQLite format 3" {
+		t.Fatalf("not a SQLite file: %q %v", head, err)
+	}
+	if len(told()) != 1 || !strings.Contains(told()[0], "Alice (a@x.test)") {
+		t.Fatalf("whoever runs the app was not told: %v", told())
+	}
+	if len(events()) != 1 || !strings.Contains(events()[0], "downloaded by Alice") {
+		t.Fatalf("the activity log: %v", events())
+	}
+	cleanup()
+	entries, _ := os.ReadDir(m.Dir)
+	if len(entries) != 0 {
+		t.Fatalf("a download left files in the backup folder: %v", entries)
+	}
+	if files, _ := backup.List(m.Dir); len(files) != 0 {
+		t.Fatalf("a download shows up as a backup: %v", files)
+	}
+}
+
 func TestTheScheduleIsReadFromTheEnvironment(t *testing.T) {
 	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	every, keep, err := backup.ParseSchedule(get(nil))

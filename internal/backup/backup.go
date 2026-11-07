@@ -356,6 +356,32 @@ func sleepUntil(ctx context.Context, now, t time.Time) bool {
 	}
 }
 
+// Download makes a copy at once, for someone to take away. It does not wait for a quiet moment: the copy is
+// consistent either way. The caller reads the file and then calls cleanup, which removes it. who is named in
+// the activity log and in the message to whoever runs the app.
+func (m *Manager) Download(ctx context.Context, who string) (f *os.File, name string, cleanup func(), err error) {
+	if err = os.MkdirAll(m.Dir, 0o700); err != nil {
+		return nil, "", nil, err
+	}
+	dir, err := os.MkdirTemp(m.Dir, ".download-")
+	if err != nil {
+		return nil, "", nil, err
+	}
+	removeDir := func() { os.RemoveAll(dir) }
+	name = "handoff-" + m.now().UTC().Format("20060102-150405") + ".db"
+	path := filepath.Join(dir, name)
+	if err = m.Source.Backup(ctx, path); err == nil {
+		f, err = os.Open(path)
+	}
+	if err != nil {
+		removeDir()
+		return nil, "", nil, err
+	}
+	m.Log.Info("backup downloaded", "by", who)
+	m.tell("backup downloaded by "+who, "backup", "A backup was downloaded by "+who)
+	return f, name, func() { f.Close(); removeDir() }, nil
+}
+
 // ParseSchedule reads BACKUP_EVERY (a time such as 24h, or "off"; default 24h) and BACKUP_KEEP (default 7).
 func ParseSchedule(getenv func(string) string) (every time.Duration, keep int, err error) {
 	every = 24 * time.Hour
