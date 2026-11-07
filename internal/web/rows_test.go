@@ -74,7 +74,7 @@ func TestARowsNumberRidesAlongWithItsCount(t *testing.T) {
 	var st *store.Store
 	app, _ := setup(t, withClub(t, &st))
 	_, frag := do(t, "GET", app.URL+"/fragments/count?service=club&role=sender&sum=sum-send-0", "sess=other", nil)
-	has(t, frag, `id="sum-send-0"`, `hx-swap-oob="true"`, "<b>2</b>", "waiting")
+	has(t, frag, `id="sum-send-0"`, `hx-swap-oob="true"`, `<b data-odo="sum-send-0">2</b>`, "waiting")
 	// only the ids the page makes are accepted
 	_, frag = do(t, "GET", app.URL+"/fragments/count?service=club&role=sender&sum=x%22%3E%3Cscript", "sess=other", nil)
 	lacks(t, frag, "hx-swap-oob", "<script")

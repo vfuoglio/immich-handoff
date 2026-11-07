@@ -7,6 +7,7 @@
 // information is shown as text: lane labels, the arrived counter and a short log, all in a live region.
 
 import type { LiveEvent } from "./live.ts";
+import { setOdometer } from "./odometer.ts";
 
 export type LaneState = "flow" | "paused" | "capped" | "broken";
 
@@ -233,10 +234,7 @@ function say(root: HTMLElement, text: string): void {
 function land(stage: Stage, n: number, hue: number): void {
   const total = (arrived.get(stage.service) ?? 0) + n;
   arrived.set(stage.service, total);
-  stage.counter.textContent = String(total);
-  stage.counter.classList.remove("bump");
-  void stage.counter.offsetWidth; // restart the little pulse
-  stage.counter.classList.add("bump");
+  setOdometer(stage.counter, total, `arrived:${stage.service}`);
   const chip = document.createElement("i");
   chip.className = `t${hue}`;
   stage.landed.prepend(chip);
@@ -291,7 +289,7 @@ export function initScene(root: HTMLElement): void {
     stages = readStages(root);
     stages.forEach((s) => {
       const n = arrived.get(s.service) ?? 0;
-      s.counter.textContent = String(n);
+      setOdometer(s.counter, n, `arrived:${s.service}`);
     });
   };
   reread();

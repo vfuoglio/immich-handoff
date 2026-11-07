@@ -4,6 +4,11 @@
 
 import { parseLive } from "./live";
 import { initScene } from "./scene";
+import { enhance } from "./odometer";
+import { initEffects } from "./effects";
+import { initPalette } from "./palette";
+import { initSound } from "./sound";
+import { initTabs } from "./tabs";
 
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
@@ -66,8 +71,18 @@ document.addEventListener("tags-on", () => {
 
 // The live scene at the bottom of the Overview, when the page has one.
 document.addEventListener("DOMContentLoaded", () => {
+  initTabs();
+  initEffects();
+  initPalette();
+  initSound();
+  enhance(document); // numbers that are already on the page roll up to their value
   const scene = document.getElementById("scene");
   if (scene) initScene(scene);
+});
+
+// numbers swapped in beside the main target (the number on a service's line) roll too
+document.addEventListener("htmx:oobAfterSwap", (e) => {
+  if (e.target instanceof Element) enhance(e.target);
 });
 
 // Invitation links: show the full address (it depends on where this page is served) and let people copy it.
@@ -79,7 +94,10 @@ function fillInvites(scope: ParentNode): void {
 document.addEventListener("DOMContentLoaded", () => fillInvites(document));
 document.addEventListener("htmx:afterSwap", (e) => {
   const target = e.target;
-  if (target instanceof Element) fillInvites(target);
+  if (target instanceof Element) {
+    fillInvites(target);
+    enhance(target); // a refreshed number rolls from what it showed before
+  }
 });
 document.addEventListener("click", (e) => {
   const target = e.target;

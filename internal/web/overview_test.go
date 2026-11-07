@@ -36,14 +36,14 @@ func TestTheOverviewLeadsWithWhatNeedsThePerson(t *testing.T) {
 
 	// nothing wrong: a greeting, an all-clear, no strip of cards
 	owner := get(t, app.URL, "sess=family")
-	has(t, owner, "<h1>Hello, Family.</h1>", "Nothing needs you right now.", "All clear", `Needs you <span class="count-badge">0</span>`)
+	has(t, owner, "<h1>Hello, Family. <em>Nothing needs you.</em></h1>", "Nothing needs you right now.", "All clear", `Needs you <span class="count-badge">0</span>`)
 
 	// a request to answer, from someone who wants to send to the owner's service
 	if _, err := st.AddRequest(ctx, store.Request{Service: "club", UserID: uuid.New(), Name: "Dana", Email: "dana@x.test"}); err != nil {
 		t.Fatal(err)
 	}
 	owner = get(t, app.URL, "sess=family")
-	has(t, owner, "One thing needs you.", "Dana wants to send to club", "dana@x.test", "Approve", "Decline", `class="count-badge">1<`)
+	has(t, owner, "<em>One thing needs you.</em>", "Dana wants to send to club", "dana@x.test", "Approve", "Decline", `class="count-badge">1<`)
 	lacks(t, owner, "All clear")
 	if n := strings.Count(owner, ">Approve<"); n != 1 {
 		t.Errorf("a request is answered in one place, found %d Approve buttons", n)
@@ -173,6 +173,63 @@ func TestTheFirstRunGuideFollowsTheStepsAndGoesAwayWhenDone(t *testing.T) {
 func TestAnInstallWithOnlyFixedAccountsHasTheOverviewToo(t *testing.T) {
 	app, _ := setup(t)
 	body := get(t, app.URL, "sess=alice")
-	has(t, body, "<h1>Hello, Alice.</h1>", "Nothing needs you right now.", `id="numbers"`, `id="scene"`)
+	has(t, body, "<h1>Hello, Alice. <em>Nothing needs you.</em></h1>", "Nothing needs you right now.", `id="numbers"`, `id="scene"`)
 	lacks(t, body, "Get started", "<h1></h1>")
+}
+
+// The dashboard is three views of one page, chosen from the bar; the other pages have no tabs.
+func TestTheDashboardHasThreeViewsAndTabsToSwitchThem(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	body := get(t, app.URL, "sess=family")
+	has(t, body, `<nav class="tabs" aria-label="Views">`, `href="#overview" data-view="overview"`, `href="#services" data-view="services"`, `href="#activity" data-view="activity"`,
+		`<section class="view" id="v-overview"`, `<section class="view" id="v-services"`, `<section class="view" id="v-activity"`)
+	// what belongs in each view
+	view := func(id string) string {
+		i := strings.Index(body, `id="`+id+`"`)
+		j := strings.Index(body[i+1:], `<section class="view"`)
+		if j < 0 {
+			return body[i:]
+		}
+		return body[i : i+1+j]
+	}
+	has(t, view("v-overview"), "Needs you", "This week", `id="scene"`)
+	lacks(t, view("v-overview"), "Save limits", "Last run")
+	has(t, view("v-services"), "You offer", "Save limits", "Offer a service of your own")
+	has(t, view("v-activity"), "What <em>happened</em>", "Last run", "Sync now")
+	// without script everything is shown; with it the early script marks the page, so only the chosen view shows
+	_, js := do(t, "GET", app.URL+"/static/theme.js", "", nil)
+	has(t, js, `classList.add("js")`, "overview", "services", "activity")
+	// pages that are not the dashboard have no tabs
+	_, admin := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	lacks(t, admin, `<nav class="tabs"`)
+}
+
+func TestTheHeadingSaysHowManyThingsNeedThePerson(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	ctx := context.Background()
+	for i, want := range []string{"One thing needs you.", "Two things need you.", "Three things need you."} {
+		if _, err := st.AddRequest(ctx, store.Request{Service: "club", UserID: uuid.New(), Name: "Person", Email: "p" + string(rune('a'+i)) + "@x.test"}); err != nil {
+			t.Fatal(err)
+		}
+		has(t, get(t, app.URL, "sess=family"), "<em>"+want+"</em>")
+	}
+}
+
+// The bar carries the search and the chime on the dashboard, and the effects have what they need in the markup.
+func TestTheDashboardHasTheSearchTheChimeAndWhatTheEffectsNeed(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	body := get(t, app.URL, "sess=family")
+	has(t, body, `id="palette"`, "Ctrl K", `<dialog id="cmd" class="cmd"`, `id="cmd-q"`, `role="listbox"`, `id="sound"`, `aria-pressed="true"`, `id="glow"`)
+	// the numbers that roll are marked, with a key so a refreshed number rolls from what it showed before
+	_, nums := do(t, "GET", app.URL+"/fragments/numbers", "sess=family", nil)
+	has(t, nums, `data-odo="week"`, `data-odo="inbox"`)
+	_, count := do(t, "GET", app.URL+"/fragments/count?service=club&role=receiver&sum=sum-own-0", "sess=family", nil)
+	has(t, count, `data-odo="sum-own-0"`)
+	has(t, body, `data-odo="arrived:club"`)
+	// the other pages have neither the search nor the chime
+	_, admin := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	lacks(t, admin, `id="palette"`, `id="sound"`, `id="cmd"`)
 }

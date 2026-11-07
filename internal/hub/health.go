@@ -199,6 +199,7 @@ func (h *Hub) MembersOf(ctx context.Context, service string) ([]Member, error) {
 type Activity struct {
 	At   time.Time
 	Text string
+	Kind string // what sort of event: joined, broken, paused ...
 }
 
 func (h *Hub) Activity(ctx context.Context, user uuid.UUID, limit int) ([]Activity, error) {
@@ -227,7 +228,7 @@ func (h *Hub) Activity(ctx context.Context, user uuid.UUID, limit int) ([]Activi
 	var out []Activity
 	for _, e := range events {
 		if mine[e.Service] || e.UserID == user {
-			out = append(out, Activity{e.At, e.Text})
+			out = append(out, Activity{e.At, e.Text, e.Kind})
 			if len(out) == limit {
 				break
 			}

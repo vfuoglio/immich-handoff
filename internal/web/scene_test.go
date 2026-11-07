@@ -76,7 +76,7 @@ func TestEveryLaneStateHasWordsAndTheSceneHasWhatScreenReadersNeed(t *testing.T)
 	app, _ := setup(t, withClub(t, &st))
 	owner := get(t, app.URL, "sess=family")
 	// the page works without script or motion: lane words, a counter and a log are all in the markup
-	has(t, owner, "data-lane-state", `data-arrived>0<`, "data-log", `aria-label="What just happened"`, "Nothing yet. What happens next shows here.")
+	has(t, owner, "data-lane-state", `data-arrived data-odo="arrived:club">0<`, "data-log", `aria-label="What just happened"`, "Nothing yet. What happens next shows here.")
 	// what is read aloud, and the notice for when the stream is down (hidden until the script says so)
 	has(t, owner, `role="status" aria-live="polite" data-announce`, `data-offline hidden`, "Live updates are off for now")
 	// a token is never part of the markup: it is made by the script for a real event, so nothing moves by itself

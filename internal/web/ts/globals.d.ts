@@ -1,5 +1,10 @@
 // What the page's scripts rely on that is not part of the browser's own types.
 
+/** View Transitions are not in every browser's types yet. */
+interface Document {
+  startViewTransition?(update: () => void): unknown;
+}
+
 /** htmx is loaded by its own script tag (static/htmx.min.js) and exposes a global. */
 declare const htmx: {
   trigger(element: Element, eventName: string): void;
@@ -32,6 +37,7 @@ interface DocumentEventMap {
   "htmx:confirm": CustomEvent<HtmxConfirmDetail>;
   "htmx:beforeSwap": CustomEvent<HtmxBeforeSwapDetail>;
   "htmx:afterSwap": CustomEvent<HtmxAfterSwapDetail>;
+  "htmx:oobAfterSwap": CustomEvent<unknown>;
   /** Sent by the server (HX-Trigger) after Tags were switched on. */
   "tags-on": CustomEvent<unknown>;
 }

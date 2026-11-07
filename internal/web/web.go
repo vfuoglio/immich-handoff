@@ -359,7 +359,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if acts, err := w.Hub.Activity(ctx, me.user.ID, 12); err == nil {
 		for _, a := range acts {
-			d.Activity = append(d.Activity, ActivityView{a.At.Local().Format("2 Jan 15:04"), a.Text})
+			d.Activity = append(d.Activity, ActivityView{a.At.Local().Format("2 Jan 15:04"), a.Text, activityTone(a.Kind)})
 		}
 	}
 	w.overview(ctx, me, &d)
@@ -374,6 +374,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	if len(first) > 0 {
 		d.Headline = "Hello, " + first[0] + "."
 	}
+	d.Gist = needsGist(len(needsOf(d)))
 	d.Needs = needsOf(d)
 	d.Scene = sceneOf(d, w.S.Current())
 	d.ShowNumber = len(d.Services) > 0
@@ -535,7 +536,7 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	ctx := context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin)
+	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)
 	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
 }
 

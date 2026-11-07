@@ -207,6 +207,15 @@ type baseKey struct{}
 
 type adminKey struct{}
 
+type tabsKey struct{}
+
+// hasTabs is whether this page has views to switch between (the Overview, Services and Activity): the dashboard has,
+// the invitation, admin and notice pages do not.
+func hasTabs(ctx context.Context) bool {
+	b, _ := ctx.Value(tabsKey{}).(bool)
+	return b
+}
+
 // isAdmin is whether the signed-in person is an Immich administrator, so the header can link to the admin page.
 func isAdmin(ctx context.Context) bool {
 	b, _ := ctx.Value(adminKey{}).(bool)
@@ -532,4 +541,33 @@ func sceneOf(d *DashboardData, current []*syncer.Service) []SceneStage {
 		}
 	}
 	return out
+}
+
+var numberWords = []string{"Nothing", "One thing", "Two things", "Three things", "Four things", "Five things", "Six things", "Seven things", "Eight things", "Nine things", "Ten things"}
+
+// needsGist is the highlighted half of the page's heading.
+func needsGist(n int) string {
+	switch {
+	case n == 0:
+		return "Nothing needs you."
+	case n < len(numberWords):
+		if n == 1 {
+			return "One thing needs you."
+		}
+		return numberWords[n] + " need you."
+	}
+	return fmt.Sprintf("%d things need you.", n)
+}
+
+// activityTone colours a timeline dot by what kind of event it is.
+func activityTone(kind string) string {
+	switch kind {
+	case "broken", "removed", "deleted", "left":
+		return "bad"
+	case "limit", "paused", "album":
+		return "warn"
+	case "joined", "approved", "reconnected", "resumed", "created", "backup":
+		return "ok"
+	}
+	return ""
 }
