@@ -233,3 +233,21 @@ func TestTheDashboardHasTheSearchTheChimeAndWhatTheEffectsNeed(t *testing.T) {
 	_, admin := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
 	lacks(t, admin, `id="palette"`, `id="sound"`, `id="cmd"`)
 }
+
+// The section of numbers replaces itself when it is refreshed. If the refreshed one asked for itself again at once, it
+// would swap in a loop for as long as the page is open (a browser test found this).
+func TestTheRefreshedNumbersDoNotAskForThemselvesAgainAtOnce(t *testing.T) {
+	app, _ := setup(t)
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	_, fragment := do(t, "GET", app.URL+"/fragments/numbers", "sess=alice", nil)
+	if !strings.Contains(page, `hx-trigger="load, handoff:run from:body"`) {
+		t.Error("the first paint must ask for the numbers at once")
+	}
+	i := strings.Index(fragment, `id="numbers"`)
+	if i < 0 || strings.Contains(fragment[i:i+300], "load") {
+		t.Errorf("the refreshed numbers must wait for the next pass, not ask again at once: %.300s", fragment)
+	}
+	if !strings.Contains(fragment, `hx-trigger="handoff:run from:body"`) {
+		t.Error("the refreshed numbers must still refresh after the next pass")
+	}
+}

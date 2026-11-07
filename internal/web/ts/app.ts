@@ -9,6 +9,7 @@ import { enhance } from "./odometer";
 import { initEffects } from "./effects";
 import { initLanguage } from "./lang";
 import { initPalette } from "./palette";
+import { initRows } from "./rows";
 import { initSound } from "./sound";
 import { initTabs } from "./tabs";
 
@@ -76,6 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCatalog();
   initLanguage();
   initTabs();
+  initRows();
   initEffects();
   initPalette();
   initSound();

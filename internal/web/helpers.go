@@ -618,3 +618,12 @@ func clientCatalog(ctx context.Context) map[string]any {
 	}
 	return map[string]any{"lang": l.Code(), "messages": msgs}
 }
+
+// numbersTrigger is when the numbers section asks for itself again. The first paint (skeletons) asks at once; the
+// section that comes back must not, or it would ask again and again for ever, as it replaces itself.
+func numbersTrigger(n NumbersView) string {
+	if n.Loading {
+		return "load, handoff:run from:body"
+	}
+	return "handoff:run from:body"
+}

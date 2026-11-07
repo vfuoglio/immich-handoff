@@ -357,6 +357,11 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .lane[data-state="paused"] .lane-state { color: var(--muted); }
 .lane[data-state="capped"] .lane-state { color: var(--warn); }
 .lane[data-state="broken"] .lane-state { color: var(--bad); }
+.lane-ring { --ring: var(--ok); flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--ring), color-mix(in oklab, var(--ring) 55%, var(--border))); transition: background .4s; }
+.lane-ring .avatar { width: 38px; height: 38px; }
+.lane[data-state="paused"] .lane-ring { --ring: var(--muted); }
+.lane[data-state="capped"] .lane-ring { --ring: var(--warn); }
+.lane[data-state="broken"] .lane-ring { --ring: var(--bad); }
 .lane .avatar { background: linear-gradient(140deg, hsl(var(--h) 85% 68%), hsl(calc(var(--h) + 50) 75% 52%)); }
 .track { position: relative; height: 56px; min-width: 0; }
 .track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: repeating-linear-gradient(90deg, var(--border) 0 8px, transparent 8px 16px); }
@@ -366,7 +371,9 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .token, .landed i { background: radial-gradient(circle at 70% 30%, #fff9 0 7%, transparent 8%), linear-gradient(170deg, hsl(var(--ph) 90% 66%), hsl(calc(var(--ph) + 45) 70% 34%)); border: 1px solid #ffffff55; }
 .token { position: absolute; left: 0; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 11px; box-shadow: 0 8px 20px -6px hsl(var(--ph) 80% 50% / .7); }
 .t0 { --ph: 24; } .t1 { --ph: 190; } .t2 { --ph: 265; } .t3 { --ph: 330; } .t4 { --ph: 45; } .t5 { --ph: 150; }
-.gate { border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
+.gate { position: relative; overflow: hidden; border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
+.gate > * { position: relative; z-index: 1; }
+.gate::after { content: ""; position: absolute; left: -40%; right: -40%; bottom: -30%; height: 70%; z-index: 0; background: radial-gradient(ellipse at center, color-mix(in oklab, var(--horizon) 50%, transparent), transparent 65%); filter: blur(10px); pointer-events: none; }
 .landed { display: flex; min-height: 28px; }
 .landed i { width: 28px; height: 28px; border-radius: 8px; margin-right: -13px; animation: pop .45s cubic-bezier(.2, 1.5, .4, 1); }
 @keyframes pop { from { transform: scale(0); } }

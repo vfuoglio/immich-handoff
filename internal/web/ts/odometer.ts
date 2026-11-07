@@ -57,7 +57,7 @@ export function setOdometer(el: HTMLElement, value: number, key: string): void {
 export function enhance(scope: ParentNode): void {
   scope.querySelectorAll<HTMLElement>("[data-odo]").forEach((el) => {
     const text = (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
-    if (!/^\\d+$/.test(text)) return;
+    if (!/^\d+$/.test(text)) return;
     setOdometer(el, Number(text), el.dataset["odo"] ?? "");
   });
 }

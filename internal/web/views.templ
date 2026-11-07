@@ -911,7 +911,7 @@ templ NeedCard(n NeedView) {
 
 // Numbers is the section of three numbers and the week's chart. It asks for itself again whenever a pass finishes.
 templ Numbers(n NumbersView) {
-	<section id="numbers" class="numbers" hx-get="fragments/numbers" hx-trigger="load, handoff:run from:body" hx-swap="outerHTML" aria-live="polite">
+	<section id="numbers" class="numbers" hx-get="fragments/numbers" hx-trigger={ numbersTrigger(n) } hx-swap="outerHTML" aria-live="polite">
 		<div class="kpis">
 			<article class="card kpi wide">
 				<span class="kpi-label">{ t(ctx, "Handed over, last 7 days") }</span>
@@ -1010,7 +1010,7 @@ templ Scene(stages []SceneStage) {
 						for _, l := range st.Lanes {
 							<div class="lane" data-lane data-sender={ l.Name } data-state={ l.State } data-paused={ l.PausedBy }>
 								<div class="lane-who">
-									<span class={ "avatar", hueClass(l.Name) } aria-hidden="true">{ initial(l.Name) }</span>
+									<span class="lane-ring" aria-hidden="true"><span class={ "avatar", hueClass(l.Name) }>{ initial(l.Name) }</span></span>
 									<div>
 										<b>{ l.Name }</b>
 										<span class="lane-state" data-lane-state>{ laneLabel(ctx, l) }</span>
