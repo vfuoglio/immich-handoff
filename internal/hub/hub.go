@@ -77,10 +77,10 @@ func (h *Hub) Reload(ctx context.Context) error {
 	if h.accounts == nil {
 		h.accounts = map[string]*syncer.Account{}
 	}
-	account := func(id, name string, user uuid.UUID, key, mode string, album uuid.UUID, albumName string) *syncer.Account {
+	account := func(id, name string, user uuid.UUID, key, mode string, album uuid.UUID, albumName string, paused bool) *syncer.Account {
 		// the account is kept between reloads, unless the sender linked or unlinked an album since: an
 		// account's fields never change while the syncer may be reading them, so it is replaced instead
-		if a, ok := h.accounts[id]; ok && a.WatchAlbum == album {
+		if a, ok := h.accounts[id]; ok && a.WatchAlbum == album && a.Paused == paused {
 			return a
 		}
 		api, err := h.Connect(key)
@@ -88,7 +88,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			h.Log.Error("cannot use stored key", "id", id, "err", err)
 			return nil
 		}
-		a := &syncer.Account{Name: name, API: api, UserID: user, Mode: mode, WatchAlbum: album, WatchAlbumName: albumName}
+		a := &syncer.Account{Name: name, API: api, UserID: user, Mode: mode, WatchAlbum: album, WatchAlbumName: albumName, Paused: paused}
 		h.accounts[id] = a
 		return a
 	}
@@ -99,7 +99,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			continue
 		}
 		live[l.ID] = true
-		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key, l.Mode, l.AlbumID, l.AlbumName); a != nil {
+		if a := account(l.ID, l.Name, l.ImmichUserID, l.Key, l.Mode, l.AlbumID, l.AlbumName, l.Paused); a != nil {
 			extra[l.Service] = append(extra[l.Service], a)
 		}
 	}
@@ -111,7 +111,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 	}
 	for _, v := range owned {
 		live[v.ID] = true
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "", uuid.Nil, "")
+		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "", uuid.Nil, "", false)
 		if rcv == nil {
 			continue
 		}
@@ -119,6 +119,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
 			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag, Album: v.Album,
+			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB,
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {

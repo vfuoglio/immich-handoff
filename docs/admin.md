@@ -9,6 +9,7 @@ The app keeps no list of its own. When someone opens the page it asks Immich, wi
 ## What it shows
 
 - **Every service**: its tag, who offers it, who may send, whether originals are kept or moved, the album arrivals go to, and whether it works. Services from the configuration (`.env` or the routes file) are marked **From configuration**.
+- **Pauses and limits**: a **Paused** chip on a service its owner paused, "(paused)" next to a sender who paused, and the daily limit per sender when there is one.
 - **Its members**: name, email, whether they keep or move their originals, the album they linked, and whether their connection works or why it does not.
 - **Waiting to clean up**: people whose service was removed and who still hold a key in Immich.
 - **Recent events** across all services.

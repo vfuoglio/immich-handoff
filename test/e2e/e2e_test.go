@@ -1793,3 +1793,90 @@ func TestBackupAndRestore(t *testing.T) {
 		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox/moved", false)) >= 1
 	})
 }
+
+// TestPauseAndLimits: a paused sender's tagged photos stay tagged and go when they resume; a daily limit holds the
+// rest back, says so, and a higher limit lets them go.
+func TestPauseAndLimits(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns the service, bob sends
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 12)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"calm"}, "tag": {"calm-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"calm"}, "mode": {"move"}}), 204, "join")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: calm" {
+				return true
+			}
+		}
+		return false
+	})
+	trashed := func(id string) bool { x, code := getAsset(t, bob, id); return code == 200 && x.IsTrashed }
+	inbox := func() int { return len(searchTag(t, alice, "inbox/calm", false)) }
+	stays := func(what string, id string) {
+		t.Helper()
+		time.Sleep(6 * time.Second) // long enough for the webhook, which arrives within a second or two
+		if trashed(id) {
+			t.Fatalf("%s: the photo was handed over", what)
+		}
+	}
+
+	// --- bob pauses: a photo tagged meanwhile stays tagged, and goes when he resumes ---
+	must(post(t, port, "/pause", sender, url.Values{"service": {"calm"}, "paused": {"1"}}), 204, "bob pauses")
+	if p := page(t, port, sender); !strings.Contains(p, "You paused sending") {
+		t.Errorf("bob's page: %.600s", p)
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "(paused)") {
+		t.Errorf("the owner must see bob paused: %.600s", p)
+	}
+	base := inbox()
+	one, _ := upload(t, bob, "paused-1.jpg", jpegBytes(9301))
+	tagAsset(t, bob, "calm-tag", one)
+	stays("sender paused", one)
+	must(post(t, port, "/pause", sender, url.Values{"service": {"calm"}, "paused": {"0"}}), 204, "bob resumes")
+	eventually(t, "the waiting photo is handed over after bob resumes", 90*time.Second, func() bool { return trashed(one) && inbox() == base+1 })
+
+	// --- the owner pauses the whole service ---
+	must(post(t, port, "/services/pause", owner, url.Values{"service": {"calm"}, "paused": {"1"}}), 204, "owner pauses")
+	if p := page(t, port, sender); !strings.Contains(p, "The owner paused this service.") {
+		t.Errorf("bob must be told: %.600s", p)
+	}
+	two, _ := upload(t, bob, "paused-2.jpg", jpegBytes(9302))
+	tagAsset(t, bob, "calm-tag", two)
+	stays("service paused", two)
+	must(post(t, port, "/services/pause", owner, url.Values{"service": {"calm"}, "paused": {"0"}}), 204, "owner resumes")
+	eventually(t, "the waiting photo is handed over after the owner resumes", 90*time.Second, func() bool { return trashed(two) && inbox() == base+2 })
+
+	// --- a daily limit of three photos, two of which went today already: one more goes, the next waits, and a
+	// higher limit lets it go ---
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"calm"}, "photos": {"3"}}), 204, "limit three photos")
+	three, _ := upload(t, bob, "limit-3.jpg", jpegBytes(9303))
+	tagAsset(t, bob, "calm-tag", three)
+	eventually(t, "the third photo of the day goes", 90*time.Second, func() bool { return trashed(three) && inbox() == base+3 })
+	// three photos handed over today: the limit is reached
+	four, _ := upload(t, bob, "limit-4.jpg", jpegBytes(9304))
+	tagAsset(t, bob, "calm-tag", four)
+	eventually(t, "bob is told the limit is reached", 90*time.Second, func() bool {
+		return strings.Contains(page(t, port, sender), "The daily limit is reached")
+	})
+	if trashed(four) {
+		t.Fatal("a photo over the limit must not be handed over")
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "reached the daily limit") {
+		t.Errorf("the owner must see the event: %.800s", p)
+	}
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"calm"}, "photos": {"50"}}), 204, "raise the limit")
+	eventually(t, "the waiting photo goes once the limit is raised", 90*time.Second, func() bool { return trashed(four) && inbox() == base+4 })
+	if p := page(t, port, sender); strings.Contains(p, "The daily limit is reached") {
+		t.Error("the waiting notice must be gone once the photos went")
+	}
+}

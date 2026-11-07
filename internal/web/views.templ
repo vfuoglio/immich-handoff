@@ -20,6 +20,14 @@ type ServiceView struct {
 	Album    string // receiver: the album arrivals are put in, if the service has one
 	CanWatch bool   // sender: joined from this page, so may link an album
 	Watch    string // sender: the album linked to this service, whose photos are all handed over
+
+	Hold       string // why this sender's photos are on hold (paused by the owner, or by themselves); empty: not
+	MinePaused bool   // sender: they paused their own membership
+	CanPause   bool   // sender: joined from this page, so may pause
+	Limit      string // the daily limit for each sender ("20 photos and 500 MB a day"); empty: none
+	Used       string // sender: how much of it they have used in the last day
+	Waiting    string // sender: photos waiting because the limit was reached, and until when
+	Stopped    bool   // receiver: the owner paused this service
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -44,6 +52,9 @@ type OwnedView struct {
 	Album             string // the album arrivals are put in, if the service has one
 	Requests          []RequestView
 	Members           []MemberView
+	Paused            bool // the owner paused it
+	LimitPhotos       int  // daily cap per sender, 0: none
+	LimitMB           int
 }
 
 // MemberView is a sender of a service the person owns.
@@ -51,6 +62,8 @@ type MemberView struct {
 	Name  string
 	State string // active | broken
 	Copy  bool   // their originals are kept (otherwise moved to their trash)
+	Paused bool  // they paused their membership
+	Used   string // what they handed over in the last day, when the service has a limit
 }
 
 // BrokenView is a connection of the person that Immich rejected.
@@ -247,6 +260,18 @@ templ ServiceCard(s ServiceView) {
 		if s.Paused != "" {
 			<p class="meta"><span class="chip warn">Paused</span> { s.Paused } Photos stay where they are until it is fixed.</p>
 		}
+		if s.Hold != "" {
+			<p class="meta"><span class="chip warn">Paused</span> { s.Hold } Photos tagged meanwhile stay tagged and are handed over when it resumes.</p>
+		}
+		if s.Stopped {
+			<p class="meta"><span class="chip warn">Paused</span> You paused this service: nothing is handed over to you until you resume it (on its card under Services you offer).</p>
+		}
+		if s.Limit != "" && s.Role == "sender" {
+			<p class="meta">The owner limits each sender to { s.Limit }. { s.Used }</p>
+		}
+		if s.Waiting != "" {
+			<p class="meta"><span class="chip warn">Waiting</span> { s.Waiting }</p>
+		}
 		<p class="meta">
 			if s.Role == "sender" {
 				Add the tag <code class="tag">{ s.Tag }</code> to a photo in Immich to send it. { originalsNote(s.Copy) }
@@ -259,6 +284,15 @@ templ ServiceCard(s ServiceView) {
 		</p>
 		if s.Role == "sender" && s.CanWatch {
 			@WatchBox(s)
+		}
+		if s.CanPause {
+			<p class="row">
+				if s.MinePaused {
+					<button class="primary" hx-post="pause" hx-vals={ pauseVals(s.Name, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Resume sending</button>
+				} else {
+					<button hx-post="pause" hx-vals={ pauseVals(s.Name, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="Pause sending to this service? Photos you tag stay tagged and are handed over when you resume.">Pause sending</button>
+				}
+			</p>
 		}
 		if s.CanLeave {
 			<p class="row">
@@ -356,6 +390,9 @@ templ OwnedCard(o OwnedView) {
 		<header>
 			<h3>{ o.Name }</h3>
 			<span class="chip">{ policyLabel(o.Policy) }</span>
+			if o.Paused {
+				<span class="chip warn">Paused</span>
+			}
 		</header>
 		<p class="meta">You receive the photos senders tag <code class="tag">{ o.Tag }</code>. Nobody can see the key the app uses for your account.</p>
 		if o.Album != "" {
@@ -371,10 +408,20 @@ templ OwnedCard(o OwnedView) {
 			<p class="meta">
 				Senders:
 				for _, m := range o.Members {
-					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State, m.Copy) }</span>
+					<span class={ "chip", memberChip(m.State) }>{ m.Name }{ memberSuffix(m.State, m.Copy) }{ pausedSuffix(m.Paused) }</span>
+					if m.Used != "" {
+						<span class="meta">{ m.Used }</span>
+					}
 				}
 			</p>
 		}
+		<form class="row" hx-post="services/limits" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="service" value={ o.Name }/>
+			<label>Photos per sender per day <input name="photos" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitPhotos) } style="width:6rem"/></label>
+			<label>MB per sender per day <input name="mb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitMB) } style="width:6rem"/></label>
+			<button type="submit">Save limits</button>
+			<small class="meta">0 means no limit. Photos over the limit wait, tagged, until the day moves on.</small>
+		</form>
 		if len(o.Requests) == 0 {
 			<p class="meta">No requests waiting.</p>
 		}
@@ -396,6 +443,11 @@ templ OwnedCard(o OwnedView) {
 			</div>
 		}
 		<p class="row">
+			if o.Paused {
+				<button class="primary" hx-post="services/pause" hx-vals={ pauseVals(o.Name, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Resume service</button>
+			} else {
+				<button hx-post="services/pause" hx-vals={ pauseVals(o.Name, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm="Pause this service? Nothing is handed over to you, and photos senders tag stay tagged, until you resume it.">Pause service</button>
+			}
 			if o.Invite != "" {
 				<button hx-post="services/visibility" hx-vals={ visVals(o.Name, "listed") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">List for everyone</button>
 			} else {
@@ -452,6 +504,15 @@ templ OfferForm() {
 				<label for="svc-expiry">Days before an unfiled photo loses that tag (default: 30)</label>
 				<input id="svc-expiry" name="expiry" type="number" min="1" max="3650" placeholder="30"/>
 			</div>
+			<div class="field">
+				<label for="svc-lphotos">Most photos each sender may hand over in a day (optional)</label>
+				<input id="svc-lphotos" name="photos" type="number" min="0" max="1000000" placeholder="no limit"/>
+			</div>
+			<div class="field">
+				<label for="svc-lmb">Most megabytes each sender may hand over in a day (optional)</label>
+				<input id="svc-lmb" name="mb" type="number" min="0" max="1000000" placeholder="no limit"/>
+				<small class="meta">Photos over a limit wait, tagged, until the day moves on. You can change this later.</small>
+			</div>
 		</details>
 		<div class="field">
 			<label for="svc-policy">Who may send</label>
@@ -489,6 +550,8 @@ type AdminData struct {
 type AdminServiceView struct {
 	Name, Tag, Owner, Policy, Album string
 	InviteOnly, Copy, FromConfig    bool
+	Paused                          bool
+	Limit                           string
 	Receivers                       int
 	Broken                          string
 	Members                         []AdminMemberView
@@ -497,6 +560,7 @@ type AdminServiceView struct {
 type AdminMemberView struct {
 	LinkID, Name, Email, State, Note, Album string
 	Copy, FromConfig                        bool
+	Paused                                  bool
 }
 
 type AdminActivityView struct{ When, Service, Text string }
@@ -558,9 +622,15 @@ templ AdminServiceCard(s AdminServiceView, removable bool) {
 			if s.Broken != "" {
 				<span class="chip bad">Disconnected</span>
 			}
+			if s.Paused {
+				<span class="chip warn">Paused</span>
+			}
 		</header>
 		<p class="meta">
 			Tag <code class="tag">{ s.Tag }</code>.
+			if s.Limit != "" {
+				Limit per sender: { s.Limit }.
+			}
 			if s.Owner != "" {
 				Offered by { s.Owner }.
 			}
@@ -587,7 +657,7 @@ templ AdminServiceCard(s AdminServiceView, removable bool) {
 					if m.Email != "" {
 						<span class="meta">{ m.Email }</span>
 					}
-					<span class="meta">{ memberSuffix(m.State, m.Copy) }</span>
+					<span class="meta">{ memberSuffix(m.State, m.Copy) }{ pausedSuffix(m.Paused) }</span>
 					if m.Album != "" {
 						<span class="meta">album { m.Album }</span>
 					}

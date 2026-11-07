@@ -150,6 +150,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	s.Provider = h
+	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups,

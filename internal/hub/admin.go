@@ -27,6 +27,7 @@ type AdminMember struct {
 	Copy       bool // their originals are kept
 	Album      string
 	FromConfig bool
+	Paused     bool // they paused their membership
 }
 
 // AdminService is one service with its owner, members and health, for the administrator's page.
@@ -39,6 +40,9 @@ type AdminService struct {
 	Album                 string
 	Receivers             int
 	Broken                string // why it cannot work right now, if so
+	Paused                bool   // the owner paused it
+	LimitPhotos           int    // daily cap per sender, 0: none
+	LimitMB               int
 	FromConfig            bool
 	Members               []AdminMember
 	Created               time.Time
@@ -69,6 +73,7 @@ func (h *Hub) Overview(ctx context.Context) (services []AdminService, leftover [
 		a := AdminService{
 			Name: svc.Label(), Tag: svc.Tag, InboxTag: svc.InboxTag, Copy: svc.Copies(), Album: svc.Album,
 			Receivers: len(svc.Receivers), Broken: svc.Broken, FromConfig: !isOwned,
+			Paused: svc.Paused, LimitPhotos: svc.LimitPhotos, LimitMB: svc.LimitMB,
 			Policy: "approval", InviteOnly: svc.Unlisted,
 		}
 		if svc.AllowJoin {
@@ -84,7 +89,7 @@ func (h *Hub) Overview(ctx context.Context) (services []AdminService, leftover [
 		for _, l := range links {
 			if l.Service == svc.Label() && l.Role == store.RoleSender {
 				a.Members = append(a.Members, AdminMember{LinkID: l.ID, Name: l.Name, Email: l.Email, State: l.State, Note: l.Note,
-					Copy: l.Mode != syncer.ModeMove, Album: l.AlbumName})
+					Copy: l.Mode != syncer.ModeMove, Album: l.AlbumName, Paused: l.Paused})
 			}
 		}
 		services = append(services, a)

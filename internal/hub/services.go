@@ -58,6 +58,8 @@ type CreateParams struct {
 	InboxTag   string
 	ExpiryDays int
 	Album      string // optional: an album, in the owner's account, that handed-over photos are put in
+	// optional daily caps per sender: photos and megabytes, 0 for none
+	LimitPhotos, LimitMB int
 }
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
@@ -99,6 +101,9 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	} else if expiry > 3650 {
 		return ErrBadExpiry
 	}
+	if err := checkLimits(p.LimitPhotos, p.LimitMB); err != nil {
+		return err
+	}
 	for _, s := range h.Services() {
 		if strings.EqualFold(s.Label(), name) {
 			return ErrNameTaken
@@ -128,7 +133,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if _, err := h.Store.AddService(ctx, store.Service{
 		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
-		Visibility: visibility, Invite: invite, Album: album,
+		Visibility: visibility, Invite: invite, Album: album, LimitPhotos: p.LimitPhotos, LimitMB: p.LimitMB,
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -318,7 +323,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit} {
 		if errors.Is(err, e) {
 			return true
 		}

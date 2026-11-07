@@ -61,6 +61,7 @@ type Link struct {
 	Mode         string    // "copy" keeps the sender's originals, "move" trashes them; chosen by the sender
 	AlbumID      uuid.UUID // an album of the sender's whose photos are all handed over; zero: none
 	AlbumName    string    // its name when it was linked, for display
+	Paused       bool      // the sender paused: their tagged photos wait, tagged, until they resume
 	CreatedAt    time.Time
 }
 
@@ -129,6 +130,18 @@ var migrations = []string{
 	// A sender may link one of their own albums to a service: everything in it is handed over.
 	`ALTER TABLE links ADD COLUMN album_id TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE links ADD COLUMN album_name TEXT NOT NULL DEFAULT '';`,
+	// A sender or an owner may pause; an owner may cap what each sender hands over in a day. handovers records
+	// what each sender handed over (for the cap), and only the last few days of it are kept.
+	`ALTER TABLE links ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE services ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE services ADD COLUMN limit_photos INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE services ADD COLUMN limit_mb INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE handovers (
+	   link_id TEXT NOT NULL,
+	   at      TEXT NOT NULL,
+	   bytes   INTEGER NOT NULL
+	 );
+	 CREATE INDEX handovers_link ON handovers (link_id, at);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -299,14 +312,88 @@ func (s *Store) ForgetLinkKey(ctx context.Context, id string) error {
 }
 
 func (s *Store) RemoveLink(ctx context.Context, id string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM handovers WHERE link_id = ?`, id); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM links WHERE id = ?`, id)
 	return err
+}
+
+// SetLinkPaused records that a sender paused or resumed their membership.
+func (s *Store) SetLinkPaused(ctx context.Context, id string, paused bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE links SET paused = ? WHERE id = ?`, b2i(paused), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetServicePaused records that the owner paused or resumed a service.
+func (s *Store) SetServicePaused(ctx context.Context, name string, paused bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE services SET paused = ? WHERE name = ?`, b2i(paused), name)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetServiceLimits sets the most a sender may hand over to the service in a day: photos and megabytes, 0 for none.
+func (s *Store) SetServiceLimits(ctx context.Context, name string, photos, megabytes int) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE services SET limit_photos = ?, limit_mb = ? WHERE name = ?`, photos, megabytes, name)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// AddHandover records a photo a sender handed over, so the daily cap can be checked. Entries older than a
+// few days are dropped, since the cap only looks back one day.
+func (s *Store) AddHandover(ctx context.Context, linkID string, bytes int64) error {
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO handovers (link_id, at, bytes) VALUES (?,?,?)`, linkID, now.Format(time.RFC3339Nano), bytes); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM handovers WHERE at < ?`, now.Add(-72*time.Hour).Format(time.RFC3339Nano))
+	return err
+}
+
+// Handovers is what the sender handed over since the given time: how many photos, how many bytes, and when
+// the earliest of them was (the zero time when there were none).
+func (s *Store) Handovers(ctx context.Context, linkID string, since time.Time) (photos int, bytes int64, oldest time.Time, err error) {
+	var first sql.NullString
+	var total sql.NullInt64
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(bytes), 0), MIN(at) FROM handovers WHERE link_id = ? AND at >= ?`,
+		linkID, since.UTC().Format(time.RFC3339Nano)).Scan(&photos, &total, &first)
+	if err != nil {
+		return 0, 0, time.Time{}, err
+	}
+	bytes = total.Int64
+	if first.Valid {
+		oldest, _ = time.Parse(time.RFC3339Nano, first.String)
+	}
+	return photos, bytes, oldest, nil
 }
 
 // Links returns every membership with its key decrypted.
 func (s *Store) Links(ctx context.Context) ([]Link, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, mode, album_id, album_name, created_at FROM links ORDER BY created_at, id`)
+		`SELECT id, service, role, immich_user_id, name, email, key_id, key_enc, state, note, mode, album_id, album_name, paused, created_at FROM links ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +403,7 @@ func (s *Store) Links(ctx context.Context) ([]Link, error) {
 		var l Link
 		var user, keyID, albumID, created string
 		var enc []byte
-		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &l.Mode, &albumID, &l.AlbumName, &created); err != nil {
+		if err := rows.Scan(&l.ID, &l.Service, &l.Role, &user, &l.Name, &l.Email, &keyID, &enc, &l.State, &l.Note, &l.Mode, &albumID, &l.AlbumName, &l.Paused, &created); err != nil {
 			return nil, err
 		}
 		l.AlbumID, _ = uuid.Parse(albumID)
@@ -351,6 +438,8 @@ type Service struct {
 	Visibility, Invite     string // who can see it; the invitation token (empty until one is made)
 	Mode, SentTag          string // "move" or "copy"; the tag put on originals that were copied
 	Album                  string // name of the album handed-over photos are put in, in the owner's account; empty: none
+	Paused                 bool   // the owner paused the service: nothing is handed over until they resume
+	LimitPhotos, LimitMB   int    // most a sender may hand over in a day (photos, megabytes); 0: no limit
 	CreatedAt              time.Time
 }
 
@@ -374,9 +463,9 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 		return v, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, visibility, invite, mode, sent_tag, album, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.Visibility, v.Invite, v.Mode, v.SentTag, v.Album, v.CreatedAt.Format(time.RFC3339Nano))
+		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, visibility, invite, mode, sent_tag, album, limit_photos, limit_mb, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.Visibility, v.Invite, v.Mode, v.SentTag, v.Album, v.LimitPhotos, v.LimitMB, v.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		if isUnique(err) {
 			return v, ErrExists
@@ -388,7 +477,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 
 func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, created_at FROM services ORDER BY created_at, id`)
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, paused, limit_photos, limit_mb, created_at FROM services ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +487,7 @@ func (s *Store) Services(ctx context.Context) ([]Service, error) {
 		var v Service
 		var owner, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &created); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &v.Paused, &v.LimitPhotos, &v.LimitMB, &created); err != nil {
 			return nil, err
 		}
 		v.OwnerID, _ = uuid.Parse(owner)
@@ -422,7 +511,7 @@ func (s *Store) RemoveService(ctx context.Context, name string) error {
 	}
 	defer tx.Rollback()
 	for _, q := range []string{
-		`UPDATE links SET state = 'orphaned' WHERE service = ?`,
+		`UPDATE links SET state = 'orphaned', paused = 0 WHERE service = ?`,
 		`DELETE FROM requests WHERE service = ?`,
 		`DELETE FROM services WHERE name = ?`,
 	} {

@@ -243,3 +243,32 @@ func albumConfirm(service string, copies bool) string {
 	}
 	return "Hand over everything in this album to " + service + ", now and whatever you add later? Your originals are moved to your trash once the other side has a verified copy."
 }
+
+func pausedSuffix(paused bool) string {
+	if paused {
+		return " (paused)"
+	}
+	return ""
+}
+
+func pauseVals(service string, paused bool) string {
+	v := "0"
+	if paused {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": service, "paused": v})
+	return string(b)
+}
+
+// limitText says a service's daily cap in words ("20 photos and 500 MB a day"); empty when there is none.
+func limitText(photos, mb int) string {
+	switch {
+	case photos > 0 && mb > 0:
+		return fmt.Sprintf("%d %s and %d MB a day", photos, plural(photos, "photo", "photos"), mb)
+	case photos > 0:
+		return fmt.Sprintf("%d %s a day", photos, plural(photos, "photo", "photos"))
+	case mb > 0:
+		return fmt.Sprintf("%d MB a day", mb)
+	}
+	return ""
+}

@@ -84,6 +84,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /leave", w.leave)
 	mux.HandleFunc("POST /services", w.createService)
 	mux.HandleFunc("POST /services/delete", w.deleteService)
+	mux.HandleFunc("POST /services/limits", w.setLimits)
+	mux.HandleFunc("POST /services/pause", w.pauseService)
+	mux.HandleFunc("POST /pause", w.pauseSending)
 	mux.HandleFunc("POST /ask", w.ask)
 	mux.HandleFunc("POST /reconnect", w.reconnect)
 	mux.HandleFunc("POST /decide", w.decide)
@@ -247,13 +250,46 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	var out []ServiceView
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
-			out = append(out, ServiceView{svc.Label(), "sender", svc.Tag, len(svc.Senders), len(svc.Receivers), joined[svc.Label()], svc.Broken, svc.CopiesFor(a), "", joined[svc.Label()], a.WatchAlbumName})
+			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
+				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
+				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(svc.LimitPhotos, svc.LimitMB)}
+			switch {
+			case svc.Paused:
+				v.Hold = "The owner paused this service."
+			case a.Paused:
+				v.Hold = "You paused sending to this service."
+			}
+			w.limitsFor(ctx, &v, svc, a)
+			out = append(out, v)
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{svc.Label(), "receiver", svc.InboxTag, len(svc.Senders), len(svc.Receivers), false, svc.Broken, svc.Copies(), svc.Album, false, ""})
+			out = append(out, ServiceView{Name: svc.Label(), Role: "receiver", Tag: svc.InboxTag, From: len(svc.Senders), To: len(svc.Receivers),
+				Paused: svc.Broken, Copy: svc.Copies(), Album: svc.Album, Stopped: svc.Paused})
 		}
 	}
 	return out
+}
+
+// limitsFor fills in how much of the daily limit a sender has used, and what is waiting because of it.
+func (w *Server) limitsFor(ctx context.Context, v *ServiceView, svc *syncer.Service, a *syncer.Account) {
+	if svc.LimitPhotos == 0 && svc.LimitMB == 0 || w.Hub == nil {
+		return
+	}
+	snap, err := w.Hub.Handed(ctx, a, time.Now().Add(-syncer.LimitWindow))
+	if err != nil || !snap.Tracked {
+		return
+	}
+	var parts []string
+	if svc.LimitPhotos > 0 {
+		parts = append(parts, fmt.Sprintf("%d of %d %s", snap.Photos, svc.LimitPhotos, plural(svc.LimitPhotos, "photo", "photos")))
+	}
+	if svc.LimitMB > 0 {
+		parts = append(parts, fmt.Sprintf("%d of %d MB", snap.Bytes>>20, svc.LimitMB))
+	}
+	v.Used = "Used in the last 24 hours: " + strings.Join(parts, ", ") + "."
+	if h, ok := w.S.HeldFor(a); ok && syncer.Capped(svc, snap) {
+		v.Waiting = fmt.Sprintf("The daily limit is reached, so %d %s wait, still tagged. They are handed over from %s.", h.Waiting, plural(h.Waiting, "photo", "photos"), h.Until.Local().Format("2 Jan 15:04"))
+	}
 }
 
 func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
@@ -278,10 +314,15 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
 		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album}
+			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
+				Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB}
 			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 				for _, m := range members {
-					ov.Members = append(ov.Members, MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move"})
+					mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused}
+					if o.Service.LimitPhotos > 0 || o.Service.LimitMB > 0 {
+						mv.Used = fmt.Sprintf("%d %s, %d MB in the last 24 hours", m.Photos, plural(m.Photos, "photo", "photos"), m.MB)
+					}
+					ov.Members = append(ov.Members, mv)
 				}
 			}
 			if o.Service.AllowJoin {
@@ -631,10 +672,57 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "created", func(ctx context.Context, me *member, _ string) error {
 		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("expiry")))
+		photos, mb, err := limitFields(r)
+		if err != nil {
+			return err
+		}
 		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
 			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
 			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days, Album: r.PostFormValue("album"),
+			LimitPhotos: photos, LimitMB: mb,
 		})
+	})
+}
+
+// limitFields reads the daily limits of a form: empty means none, anything else must be a whole number.
+func limitFields(r *http.Request) (photos, mb int, err error) {
+	read := func(name string) (int, error) {
+		v := strings.TrimSpace(r.PostFormValue(name))
+		if v == "" {
+			return 0, nil
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, hub.ErrBadLimit
+		}
+		return n, nil
+	}
+	if photos, err = read("photos"); err != nil {
+		return
+	}
+	mb, err = read("mb")
+	return
+}
+
+func (w *Server) setLimits(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "limits", func(ctx context.Context, me *member, service string) error {
+		photos, mb, err := limitFields(r)
+		if err != nil {
+			return err
+		}
+		return w.Hub.SetLimits(ctx, me.user, service, photos, mb)
+	})
+}
+
+func (w *Server) pauseService(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "paused", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.SetServicePaused(ctx, me.user, service, r.PostFormValue("paused") == "1")
+	})
+}
+
+func (w *Server) pauseSending(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "paused", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.SetMemberPaused(ctx, me.user, service, r.PostFormValue("paused") == "1")
 	})
 }
 

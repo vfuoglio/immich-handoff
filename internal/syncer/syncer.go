@@ -47,6 +47,7 @@ type Syncer struct {
 	Cfg      Config
 	Services []*Service // fixed services (used when Provider is nil)
 	Provider Provider   // optional: services that can change while running
+	Usage    Usage      // optional: records what senders hand over, so a service's daily cap can be applied
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -65,6 +66,10 @@ type Syncer struct {
 
 	recentMu sync.Mutex
 	recent   map[uuid.UUID]time.Time // photos handled a moment ago
+
+	heldMu sync.Mutex
+	held   map[*Account]Held        // senders whose photos wait for the daily cap
+	wake   map[*Account]*time.Timer // when to look again, per waiting sender
 
 	albumMu     sync.Mutex
 	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
@@ -316,6 +321,11 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 	if svc.Broken != "" || len(svc.Receivers) == 0 {
 		return
 	}
+	// A paused service hands nothing over and touches nothing: tagged photos stay tagged until it resumes.
+	if svc.Paused {
+		log.Debug("service is paused; leaving tagged photos alone")
+		return
+	}
 	var rs []receiver
 	for _, r := range svc.Receivers {
 		me, err := r.API.Me(ctx)
@@ -350,6 +360,11 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 
 func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
 	log = log.With("sender", snd.Name)
+	if snd.Paused {
+		log.Debug("sender is paused; leaving their tagged photos alone")
+		s.release(snd)
+		return
+	}
 	me, err := snd.API.Me(ctx)
 	if err != nil {
 		if immich.IsAuthError(err) {
@@ -414,7 +429,33 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 	}
 	var fromAlbumDone, fromAlbumRefused, fromAlbumFailed int
-	for _, a := range assets {
+	// the daily cap: what this sender has handed over to this service in the last day
+	var snap Snapshot
+	// what a sender hands over is always recorded, so a limit set later counts what already went today
+	track := s.Usage != nil && !s.Cfg.DryRun
+	capped := track && (svc.LimitPhotos > 0 || svc.LimitMB > 0)
+	if capped {
+		var err error
+		if snap, err = s.Usage.Handed(ctx, snd, time.Now().Add(-LimitWindow)); err != nil {
+			log.Warn("cannot read what was handed over today; applying no cap this pass", "err", err)
+			capped = false
+		}
+	}
+	held := false
+	for i, a := range assets {
+		if capped && Capped(svc, snap) {
+			waiting := 0
+			for _, rest := range assets[i:] {
+				if !s.justHandled(rest.Id) {
+					waiting++
+				}
+			}
+			if waiting > 0 {
+				s.hold(ctx, log, svc, snd, snap, waiting)
+				held = true
+			}
+			break
+		}
 		if s.justHandled(a.Id) {
 			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
 			continue
@@ -433,6 +474,20 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		case out == "imported":
 			c.Imported++
 			s.markJustHandled(a.Id)
+			if track {
+				size := sizeOf(nil)
+				if a.ExifInfo != nil {
+					size = sizeOf(a.ExifInfo.FileSizeInByte)
+				}
+				if err := s.Usage.Record(ctx, snd, size); err != nil {
+					log.Warn("could not record the hand-over for the daily cap", "err", err)
+				}
+				snap.Photos++
+				snap.Bytes += size
+				if snap.Oldest.IsZero() {
+					snap.Oldest = time.Now()
+				}
+			}
 			if fromAlbum[a.Id] {
 				fromAlbumDone++
 			}
@@ -452,6 +507,9 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 			c.DryRun++
 		}
 		s.publishSoon() // the page's "waiting" counter counts down while a long hand-over runs
+	}
+	if !held {
+		s.release(snd)
 	}
 	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
 	return

@@ -166,7 +166,12 @@ func (h *Hub) BrokenFor(ctx context.Context, user uuid.UUID) ([]BrokenLink, erro
 }
 
 // Member is a sender of a service the person owns, with the state of their connection.
-type Member struct{ Name, State, Mode string }
+type Member struct {
+	Name, State, Mode string
+	Paused            bool  // they paused their membership
+	Photos            int   // handed over in the last day
+	MB                int64 // megabytes handed over in the last day
+}
 
 func (h *Hub) MembersOf(ctx context.Context, service string) ([]Member, error) {
 	links, err := h.Store.Links(ctx)
@@ -176,7 +181,11 @@ func (h *Hub) MembersOf(ctx context.Context, service string) ([]Member, error) {
 	var out []Member
 	for _, l := range links {
 		if l.Service == service && l.Role == store.RoleSender && l.State != store.StateOrphaned {
-			out = append(out, Member{l.Name, l.State, l.Mode})
+			m := Member{Name: l.Name, State: l.State, Mode: l.Mode, Paused: l.Paused}
+			if photos, bytes, _, err := h.Store.Handovers(ctx, l.ID, time.Now().Add(-syncer.LimitWindow)); err == nil {
+				m.Photos, m.MB = photos, bytes>>20
+			}
+			out = append(out, m)
 		}
 	}
 	return out, nil

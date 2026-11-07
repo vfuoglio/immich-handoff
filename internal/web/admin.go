@@ -56,11 +56,11 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	member := func(m hub.AdminMember) AdminMemberView {
-		return AdminMemberView{LinkID: m.LinkID, Name: m.Name, Email: m.Email, State: m.State, Note: m.Note, Album: m.Album, Copy: m.Copy, FromConfig: m.FromConfig}
+		return AdminMemberView{LinkID: m.LinkID, Name: m.Name, Email: m.Email, State: m.State, Note: m.Note, Album: m.Album, Copy: m.Copy, FromConfig: m.FromConfig, Paused: m.Paused}
 	}
 	for _, s := range services {
 		v := AdminServiceView{Name: s.Name, Tag: s.Tag, Policy: s.Policy, Album: s.Album, InviteOnly: s.InviteOnly, Copy: s.Copy,
-			FromConfig: s.FromConfig, Receivers: s.Receivers, Broken: s.Broken}
+			FromConfig: s.FromConfig, Receivers: s.Receivers, Broken: s.Broken, Paused: s.Paused, Limit: limitText(s.LimitPhotos, s.LimitMB)}
 		if s.OwnerName != "" {
 			v.Owner = s.OwnerName + " (" + s.OwnerEmail + ")"
 		}
