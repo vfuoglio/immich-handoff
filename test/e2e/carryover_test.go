@@ -334,6 +334,13 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		motion := "none"
 		if dst.LivePhotoVideoID != nil {
 			motion = "has a motion clip"
+			// the app promises this: the clip arrives hidden, as a video, and the still is linked to it
+			clipCopy := getFull(t, family, *dst.LivePhotoVideoID)
+			if clipCopy.Type != "VIDEO" || clipCopy.Visibility != "hidden" {
+				t.Errorf("the receiver's motion clip is type %q, visibility %q; want a hidden VIDEO", clipCopy.Type, clipCopy.Visibility)
+			}
+		} else {
+			t.Error("the receiver's copy of a live photo has no motion clip")
 		}
 		sv := getFull(t, alice, video)
 		row("live photo: motion clip", "paired with the still", motion)

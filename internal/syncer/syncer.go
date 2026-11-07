@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -533,14 +534,49 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 		return "dryrun", nil
 	}
 	outcome := "duplicate"
+	// A live photo is a still plus a separate hidden motion clip. The clip goes first, hidden, and the still is
+	// uploaded linked to it, so the receiver's copy plays too. Without a readable clip only the still goes.
+	clip := s.motionClipOf(ctx, log, snd, a)
+	clipHandedOver := clip != nil // false once a receiver's still is found not to be linked to its clip
 	for _, r := range rs {
-		up, sum, err := immich.Transfer(ctx, snd.API, r.acct.API, a)
+		var motion *uuid.UUID
+		if clip != nil {
+			cup, csum, err := immich.TransferWith(ctx, snd.API, r.acct.API, *clip, immich.UploadOptions{Hidden: true})
+			if err != nil {
+				return "", fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
+			}
+			cc, err := r.acct.API.Asset(ctx, cup.Id)
+			if err != nil {
+				return "", fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
+			}
+			if cc.IsTrashed {
+				log.Warn("the motion clip exists in a receiver's trash; handover refused, original kept and retagged",
+					"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
+				if err := s.markRefused(ctx, svc, snd.API, a.Id, shareTag); err != nil {
+					return "", fmt.Errorf("handover refused but could not retag the original: %w", err)
+				}
+				return "refused", nil
+			}
+			if !immich.ChecksumMatches(cc.Checksum, csum) {
+				return "", fmt.Errorf("checksum mismatch on %s's copy %s of the motion clip", r.acct.Name, cup.Id)
+			}
+			id := cup.Id
+			motion = &id
+		}
+		up, sum, err := immich.TransferWith(ctx, snd.API, r.acct.API, a, immich.UploadOptions{MotionClip: motion})
 		if err != nil {
 			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
 		}
 		copy_, err := r.acct.API.Asset(ctx, up.Id)
 		if err != nil {
 			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
+		}
+		if motion != nil && (copy_.LivePhotoVideoId == nil || !strings.EqualFold(*copy_.LivePhotoVideoId, motion.String())) {
+			// The still was already there without its clip (handed over earlier, as a plain photo), so Immich kept
+			// that copy as it was. The clip stays with the sender: nothing that is not linked is deleted.
+			log.Warn("the receiver's copy of the still is not linked to the motion clip; the clip is not removed from the sender",
+				"file", a.OriginalFileName, "receiver", r.acct.Name)
+			clipHandedOver = false
 		}
 		if copy_.IsTrashed {
 			log.Warn("a copy exists in a receiver's trash; handover refused, original kept and retagged",
@@ -569,11 +605,38 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
 			return "", fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
 		}
-	} else if err := snd.API.DeleteAsset(ctx, a.Id, s.Cfg.DeleteForce); err != nil {
-		return "", fmt.Errorf("copies verified but original not removed: %w", err)
+	} else {
+		ids := []uuid.UUID{a.Id}
+		if clip != nil && clipHandedOver {
+			ids = append(ids, clip.Id) // the hidden clip goes with its still, or it would stay behind unseen
+		}
+		if err := snd.API.DeleteAssets(ctx, ids, s.Cfg.DeleteForce); err != nil {
+			return "", fmt.Errorf("copies verified but original not removed: %w", err)
+		}
 	}
 	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
 	return outcome, nil
+}
+
+// motionClipOf is the sender's motion clip of a live photo, or nil when the photo has none (or it cannot be read:
+// then only the still is handed over, as before, and the log says so).
+func (s *Syncer) motionClipOf(ctx context.Context, log *slog.Logger, snd *Account, a immich.AssetResponseDto) *immich.AssetResponseDto {
+	if a.LivePhotoVideoId == nil || *a.LivePhotoVideoId == "" {
+		return nil
+	}
+	id, err := uuid.Parse(*a.LivePhotoVideoId)
+	if err != nil {
+		return nil
+	}
+	clip, err := snd.API.Asset(ctx, id)
+	if err != nil {
+		log.Warn("the live photo's motion clip could not be read; only the still is handed over", "file", a.OriginalFileName, "err", err)
+		return nil
+	}
+	if clip.IsTrashed {
+		return nil
+	}
+	return clip
 }
 
 // albumFinder returns a function that finds the account's own album with this name, or makes it, once, the

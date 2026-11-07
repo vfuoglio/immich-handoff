@@ -24,7 +24,7 @@ Everything below was checked against a real Immich 3.2.0 by `test/e2e/carryover_
 | **Tags** | Only the inbox tag, which the app adds. The sender's other tags are not copied. |
 | **An archived photo** | It arrives in the receiver's timeline. The archived state is not carried. |
 | **Edits made in Immich** (rotate, crop, mirror) | The original, unedited photo. Immich keeps edits as instructions next to the file, so only the file itself moves. |
-| **A live photo's motion** | The still only. The motion clip is a separate hidden item in Immich and is not handed over. With **move**, the original still goes to the trash and its hidden clip is left behind in the sender's account. |
+| **A live photo's motion** | Handed over with the still. The motion clip is a separate hidden video in Immich; it is uploaded to the receiver first, hidden, and the still is linked to it, so the receiver's copy plays. With **move**, the still and its clip go to the sender's trash together. If the clip cannot be read, only the still is handed over. If the receiver already had the still from an earlier hand-over without its clip, that copy is left as it was and the sender's clip is not removed. |
 | **A stack** | Only the photo that was tagged, on its own. The receiver's copy is not in a stack, and photos that were not tagged are not handed over. |
 
 ## Not checked

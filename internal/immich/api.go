@@ -380,7 +380,12 @@ func (a *API) Asset(ctx context.Context, id openapi_types.UUID) (*AssetResponseD
 }
 
 func (a *API) DeleteAsset(ctx context.Context, id openapi_types.UUID, force bool) error {
-	r, err := a.c.DeleteAssetsWithResponse(ctx, DeleteAssetsJSONRequestBody{Ids: []openapi_types.UUID{id}, Force: &force})
+	return a.DeleteAssets(ctx, []openapi_types.UUID{id}, force)
+}
+
+// DeleteAssets removes several assets in one request, so they go together or not at all.
+func (a *API) DeleteAssets(ctx context.Context, ids []openapi_types.UUID, force bool) error {
+	r, err := a.c.DeleteAssetsWithResponse(ctx, DeleteAssetsJSONRequestBody{Ids: ids, Force: &force})
 	if err != nil {
 		return err
 	}
@@ -396,6 +401,20 @@ func (a *API) DeleteAsset(ctx context.Context, id openapi_types.UUID, force bool
 // disk or buffering the file. It returns the uploaded asset and the SHA-1 of the bytes that
 // actually flowed through, so the caller can verify the stored copy before deleting anything.
 func Transfer(ctx context.Context, src, dst *API, a AssetResponseDto) (*AssetMediaResponseDto, hash.Hash, error) {
+	return TransferWith(ctx, src, dst, a, UploadOptions{})
+}
+
+// UploadOptions say how an upload differs from a plain photo.
+type UploadOptions struct {
+	// Hidden uploads the file with visibility "hidden": it is not shown in the timeline. A live photo's motion
+	// clip is a hidden video.
+	Hidden bool
+	// MotionClip links the upload to this video of the same account as its motion (a live photo).
+	MotionClip *openapi_types.UUID
+}
+
+// TransferWith is Transfer with options.
+func TransferWith(ctx context.Context, src, dst *API, a AssetResponseDto, opts UploadOptions) (*AssetMediaResponseDto, hash.Hash, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	dl, err := src.bulk.DownloadAsset(ctx, a.Id, nil)
@@ -418,7 +437,7 @@ func Transfer(ctx context.Context, src, dst *API, a AssetResponseDto) (*AssetMed
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		pw.CloseWithError(writeUpload(mw, io.TeeReader(body, h), a))
+		pw.CloseWithError(writeUpload(mw, io.TeeReader(body, h), a, opts))
 	}()
 
 	// No x-immich-checksum header: the hash is only known after the stream has been read.
@@ -436,11 +455,17 @@ func Transfer(ctx context.Context, src, dst *API, a AssetResponseDto) (*AssetMed
 	return nil, nil, statusErr("uploadAsset", r.StatusCode(), r.Body)
 }
 
-func writeUpload(mw *multipart.Writer, file io.Reader, a AssetResponseDto) error {
+func writeUpload(mw *multipart.Writer, file io.Reader, a AssetResponseDto, opts UploadOptions) error {
 	fields := map[string]string{
 		"fileCreatedAt":  a.FileCreatedAt.UTC().Format(time.RFC3339Nano),
 		"fileModifiedAt": a.FileModifiedAt.UTC().Format(time.RFC3339Nano),
 		"isFavorite":     strconv.FormatBool(a.IsFavorite),
+	}
+	if opts.Hidden {
+		fields["visibility"] = string(Hidden)
+	}
+	if opts.MotionClip != nil {
+		fields["livePhotoVideoId"] = opts.MotionClip.String()
 	}
 	for k, v := range fields {
 		if err := mw.WriteField(k, v); err != nil {
