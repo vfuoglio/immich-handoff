@@ -266,3 +266,45 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 .steps li.done { color: var(--muted); }
 .steps li.done .dot { background: var(--ok); border-color: var(--ok); color: var(--on-accent); }
 @media (max-width: 520px) { .guide { grid-template-columns: minmax(0, 1fr); } }
+
+/* service rows: a compact line that opens in place */
+.svc { padding: 0; overflow: hidden; }
+.svc > summary { list-style: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: .8rem; align-items: center; padding: .8rem 1rem; cursor: pointer; }
+.svc > summary::-webkit-details-marker { display: none; }
+.svc > summary:hover { background: color-mix(in oklab, var(--surface-2) 40%, transparent); }
+.badge { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font: 800 1.1rem var(--font-display); color: var(--on-accent); background: linear-gradient(150deg, hsl(var(--h) 85% 66%), hsl(calc(var(--h) + 60) 75% 50%)); }
+.h0 { --h: 18; } .h1 { --h: 48; } .h2 { --h: 90; } .h3 { --h: 140; } .h4 { --h: 170; } .h5 { --h: 200; }
+.h6 { --h: 230; } .h7 { --h: 262; } .h8 { --h: 290; } .h9 { --h: 318; } .h10 { --h: 340; } .h11 { --h: 0; }
+.svc .title { min-width: 0; }
+.svc .title b { display: block; font: 700 1.05rem/1.25 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.svc .title span { display: block; color: var(--muted); font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.svc .chips { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+.svc .sum { text-align: right; font-variant-numeric: tabular-nums; min-width: 3.4rem; }
+.svc .sum b { display: block; font: 800 1.4rem/1 var(--font-display); }
+.svc .sum small { color: var(--muted); font: 500 .66rem var(--font-mono); letter-spacing: .04em; text-transform: uppercase; }
+.svc .chev { width: 22px; height: 22px; color: var(--muted); transition: transform .25s; }
+.svc[open] .chev { transform: rotate(180deg); }
+.svc .body { display: grid; gap: .9rem; padding: 1rem 1.15rem 1.15rem; border-top: 1px solid var(--border); animation: open .3s ease-out; }
+.svc .body > * { margin: 0; min-width: 0; }
+@keyframes open { from { opacity: 0; transform: translateY(-6px); } }
+.members { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem; }
+form.limits { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .8rem .9rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: color-mix(in oklab, var(--bg) 40%, transparent); }
+form.limits label { font-weight: 600; font-size: .9rem; display: flex; align-items: center; gap: .4rem; }
+form.limits small { flex-basis: 100%; }
+@media (max-width: 560px) {
+  .svc > summary { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .svc .chips { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }
+}
+
+/* the part of a row that cannot be undone, set apart */
+.danger-zone { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; padding: .8rem .9rem; border-radius: var(--radius-sm); border: 1px dashed color-mix(in oklab, var(--bad) 55%, var(--border)); }
+.danger-zone .meta { flex: 1 1 14rem; }
+button.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 50%, transparent); }
+button.danger:hover { background: color-mix(in oklab, var(--bad) 14%, transparent); border-color: var(--bad); }
+
+/* the page's own question dialog */
+dialog.confirm { border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; width: min(27rem, calc(100vw - 2rem)); color: var(--text); background: var(--surface); box-shadow: 0 50px 100px -30px #000; }
+dialog.confirm::backdrop { background: color-mix(in oklab, var(--bg) 62%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+dialog.confirm h3 { margin: 0 0 .5rem; font-size: 1.25rem; letter-spacing: -.01em; }
+dialog.confirm p { margin: 0 0 1.1rem; }
+.confirm-actions { justify-content: flex-end; margin: 0; }

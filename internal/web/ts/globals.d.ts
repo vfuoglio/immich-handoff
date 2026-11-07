@@ -17,7 +17,15 @@ interface HtmxAfterSwapDetail {
   elt: Element;
 }
 
+/** The parts of htmx's `htmx:confirm` event the page uses to ask in its own dialog. */
+interface HtmxConfirmDetail {
+  elt: Element;
+  question: string | null;
+  issueRequest(skipConfirmation?: boolean): void;
+}
+
 interface DocumentEventMap {
+  "htmx:confirm": CustomEvent<HtmxConfirmDetail>;
   "htmx:beforeSwap": CustomEvent<HtmxBeforeSwapDetail>;
   "htmx:afterSwap": CustomEvent<HtmxAfterSwapDetail>;
   /** Sent by the server (HX-Trigger) after Tags were switched on. */

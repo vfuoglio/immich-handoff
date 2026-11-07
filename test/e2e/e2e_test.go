@@ -1207,7 +1207,7 @@ services:
 		}
 		b, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if !strings.Contains(string(b), "Services you can send to") || !strings.Contains(string(b), "open") {
+		if !strings.Contains(string(b), "You can join") || !strings.Contains(string(b), "open") {
 			t.Fatalf("join offer missing: %.300s", b)
 		}
 		if res := post(t, port, "/join", cookie, url.Values{"service": {"open"}, "mode": {"move"}}); res.StatusCode != 204 {

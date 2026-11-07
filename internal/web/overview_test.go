@@ -66,7 +66,7 @@ func TestTheOverviewLeadsWithWhatNeedsThePerson(t *testing.T) {
 	st.SetLinkState(ctx, links[0].ID, store.StateBroken, "Other's API key was deleted.")
 	sender := get(t, app.URL, "sess=other")
 	has(t, sender, "Connection lost", "Other&#39;s API key was deleted.", ">Clean up<")
-	if i, j := strings.Index(sender, "Connection lost"), strings.Index(sender, "Your services"); i < 0 || j < 0 || i > j {
+	if i, j := strings.Index(sender, "Connection lost"), strings.Index(sender, "You send to"); i < 0 || j < 0 || i > j {
 		t.Error("what needs the person comes before the list of services")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/a-h/templ"
+	"net/url"
 	"strings"
 )
 
@@ -353,3 +354,100 @@ func sparkLabel(days [7]DayBar) string {
 	}
 	return "Photos handed over per day, oldest first: " + strings.Join(parts, ", ")
 }
+
+// hueClass picks one of twelve colours for a service's initial from its name, so a service looks the same every time.
+func hueClass(name string) string {
+	var sum uint32 = 2166136261
+	for _, b := range []byte(name) {
+		sum = (sum ^ uint32(b)) * 16777619
+	}
+	return fmt.Sprintf("h%d", sum%12)
+}
+
+func originalsShort(copyMode bool) string {
+	if copyMode {
+		return "keeps originals"
+	}
+	return "moves originals"
+}
+
+func receiveShort(s ServiceView) string {
+	if s.Album != "" {
+		return "arrives in an album"
+	}
+	return "arrives tagged " + s.Tag
+}
+
+// shortLabel is the small word under the number on a row's line.
+func shortLabel(role string) string {
+	switch role {
+	case "sender":
+		return "waiting"
+	case "album":
+		return "in album"
+	}
+	return "in inbox"
+}
+
+// countURL is where a row asks for its number. sum names the element on the row's line that gets the number too.
+func countURL(service, role, sum string) string {
+	return "fragments/count?service=" + url.QueryEscape(service) + "&role=" + role + "&sum=" + sum
+}
+
+func sendChips(s ServiceView) []Chip {
+	var c []Chip
+	if s.Paused != "" {
+		c = append(c, Chip{"bad", "Problem"})
+	}
+	if s.Hold != "" || s.MinePaused {
+		c = append(c, Chip{"warn", "Paused"})
+	}
+	if s.Waiting != "" {
+		c = append(c, Chip{"warn", "Limit"})
+	}
+	return c
+}
+
+func recvChips(s ServiceView) []Chip {
+	var c []Chip
+	if s.Paused != "" {
+		c = append(c, Chip{"bad", "Problem"})
+	}
+	if s.Stopped {
+		c = append(c, Chip{"warn", "Paused"})
+	}
+	return c
+}
+
+func ownedChips(o OwnedView) []Chip {
+	var c []Chip
+	if o.Broken != "" {
+		c = append(c, Chip{"bad", "Disconnected"})
+	}
+	if o.Paused {
+		c = append(c, Chip{"warn", "Paused"})
+	}
+	if n := len(o.Requests); n > 0 {
+		c = append(c, Chip{"warn", fmt.Sprintf("%d waiting", n)})
+	}
+	return c
+}
+
+// Sending is the services the person sends to.
+func (d DashboardData) Sending() []ServiceView { return d.byRole("sender", false) }
+
+// Receiving is the services the person receives from but does not offer themselves (those are in Owned).
+func (d DashboardData) Receiving() []ServiceView { return d.byRole("receiver", true) }
+
+func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
+	var out []ServiceView
+	for _, s := range d.Services {
+		if s.Role == role && !(notOwned && s.Owned) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// RowCount is how many service rows the page shows; with exactly one it starts open.
+func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }

@@ -176,7 +176,7 @@ func TestSignInStates(t *testing.T) {
 func TestDashboardShowsMyServices(t *testing.T) {
 	app, _ := setup(t)
 	code, body := do(t, "GET", app.URL+"/", "sess=alice", nil)
-	for _, want := range []string{"Your services", "family", "You send", "share", "Alice", `hx-post="sync"`} {
+	for _, want := range []string{"You send to", "family", "You send", "share", "Alice", `hx-post="sync"`} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q (code %d)", want, code)
 		}

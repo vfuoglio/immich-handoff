@@ -10,6 +10,29 @@ document.addEventListener("htmx:beforeSwap", (e) => {
   }
 });
 
+// Questions (hx-confirm) are asked in the page's own dialog, in its own style and words, not the browser's. A button
+// can set the title (data-confirm-title), the label of the button that goes ahead (data-confirm-label) and mark the
+// action as destructive (data-danger).
+document.addEventListener("htmx:confirm", (e) => {
+  const { question, elt, issueRequest } = e.detail;
+  const dialog = document.getElementById("confirm");
+  if (!question || !(dialog instanceof HTMLDialogElement)) return; // no question: go ahead; no dialog: the browser asks
+  e.preventDefault();
+  const title = document.getElementById("confirm-title");
+  const text = document.getElementById("confirm-text");
+  const ok = document.getElementById("confirm-ok");
+  if (!title || !text || !ok) return;
+  const data = elt instanceof HTMLElement ? elt.dataset : {};
+  title.textContent = data["confirmTitle"] ?? "Please confirm";
+  text.textContent = question;
+  ok.textContent = data["confirmLabel"] ?? "Continue";
+  ok.classList.toggle("danger", data["danger"] === "true");
+  ok.classList.toggle("primary", data["danger"] !== "true");
+  dialog.returnValue = "cancel";
+  dialog.addEventListener("close", () => { if (dialog.returnValue === "ok") issueRequest(true); }, { once: true });
+  dialog.showModal();
+});
+
 // Switching Tags on from the notice unlocks the rest of the page, which was dimmed and inert until then.
 document.addEventListener("tags-on", () => {
   const gated = document.getElementById("gated");

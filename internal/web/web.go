@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -266,7 +267,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 		}
 		if m.account(svc, "receiver") != nil {
 			out = append(out, ServiceView{Name: svc.Label(), Role: "receiver", Tag: svc.InboxTag, From: len(svc.Senders), To: len(svc.Receivers),
-				Paused: svc.Broken, Copy: svc.Copies(), Album: svc.Album, Stopped: svc.Paused})
+				Paused: svc.Broken, Copy: svc.Copies(), Album: svc.Album, Stopped: svc.Paused, Owned: svc.OwnerID == m.user.ID})
 		}
 	}
 	return out
@@ -571,6 +572,8 @@ func (w *Server) arrivedCount(ctx context.Context, svc *syncer.Service, acct *sy
 	return len(w.tagged(ctx, acct, svc.InboxTag)), false
 }
 
+var sumID = regexp.MustCompile(`^sum-[a-z]+-[0-9]+$`)
+
 func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 	me := w.requireMember(rw, r)
 	if me == nil {
@@ -586,12 +589,16 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 			break
 		}
 		rw.Header().Set("Cache-Control", "no-store")
+		sum := r.URL.Query().Get("sum")
+		if !sumID.MatchString(sum) {
+			sum = "" // only the ids this page makes are accepted
+		}
 		if role == "receiver" {
 			n, album := w.arrivedCount(r.Context(), svc, acct)
 			if album {
-				Count(n, "album", nil).Render(r.Context(), rw)
+				Count(n, "album", nil, sum).Render(r.Context(), rw)
 			} else {
-				Count(n, role, nil).Render(r.Context(), rw)
+				Count(n, role, nil, sum).Render(r.Context(), rw)
 			}
 			return
 		}
@@ -602,7 +609,7 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 				thumbs = append(thumbs, strings.TrimRight(w.PublicImmichURL, "/")+"/api/assets/"+id+"/thumbnail?size=thumbnail")
 			}
 		}
-		Count(len(ids), role, thumbs).Render(r.Context(), rw)
+		Count(len(ids), role, thumbs, sum).Render(r.Context(), rw)
 		return
 	}
 	http.Error(rw, "no such service for you", http.StatusNotFound)
