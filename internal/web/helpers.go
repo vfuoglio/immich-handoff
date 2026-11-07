@@ -571,3 +571,11 @@ func activityTone(kind string) string {
 	}
 	return ""
 }
+
+// adminOwner is " · offered by ..." for the line under a service's name, or nothing for a service from the configuration.
+func adminOwner(owner string) string {
+	if owner == "" {
+		return ""
+	}
+	return " \u00b7 " + owner
+}

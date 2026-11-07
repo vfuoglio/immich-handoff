@@ -530,7 +530,7 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 	d := w.dashboardData(r.Context(), me)
 	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token}
 	rw.Header().Set("Cache-Control", "no-store")
-	Dashboard(d).Render(r.Context(), rw)
+	InvitePage(d).Render(r.Context(), rw)
 }
 
 func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {

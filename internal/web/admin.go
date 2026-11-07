@@ -59,6 +59,15 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 		return AdminMemberView{LinkID: m.LinkID, Name: m.Name, Email: m.Email, State: m.State, Note: m.Note, Album: m.Album, Copy: m.Copy, FromConfig: m.FromConfig, Paused: m.Paused}
 	}
 	for _, s := range services {
+		d.Senders += len(s.Members)
+		if s.Broken != "" || s.Paused {
+			d.Attention++
+		}
+		for _, m := range s.Members {
+			if m.State != "active" || m.Paused {
+				d.Attention++
+			}
+		}
 		v := AdminServiceView{Name: s.Name, Tag: s.Tag, Policy: s.Policy, Album: s.Album, InviteOnly: s.InviteOnly, Copy: s.Copy,
 			FromConfig: s.FromConfig, Receivers: s.Receivers, Broken: s.Broken, Paused: s.Paused, Limit: limitText(s.LimitPhotos, s.LimitMB)}
 		if s.OwnerName != "" {
@@ -72,9 +81,10 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	for _, m := range leftover {
 		d.Leftover = append(d.Leftover, member(m))
 	}
+	d.Attention += len(leftover)
 	if events, err := w.Hub.RecentEvents(r.Context(), 30); err == nil {
 		for _, e := range events {
-			d.Activity = append(d.Activity, AdminActivityView{When: e.At.Local().Format("2 Jan 15:04"), Service: e.Service, Text: e.Text})
+			d.Activity = append(d.Activity, AdminActivityView{When: e.At.Local().Format("2 Jan 15:04"), Service: e.Service, Text: e.Text, Tone: activityTone(e.Kind)})
 		}
 	}
 	rw.Header().Set("Cache-Control", "no-store")

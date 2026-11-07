@@ -420,3 +420,46 @@ dialog.cmd ul { list-style: none; margin: 0; padding: .4rem; max-height: 50vh; o
 dialog.cmd li { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem .8rem; border-radius: 12px; cursor: pointer; }
 dialog.cmd li[aria-selected="true"] { background: var(--surface-2); }
 dialog.cmd li small { color: var(--muted); font-family: var(--font-mono); font-size: .72rem; align-self: center; white-space: nowrap; }
+
+/* pages that stop a person before the dashboard: not signed in, an invitation that no longer works */
+.notice-page { max-width: 34rem; margin: 18vh auto 0; text-align: center; display: grid; justify-items: center; gap: .4rem; }
+.notice-icon { width: 92px; height: 92px; border-radius: 28px; display: grid; place-items: center; margin-bottom: .6rem;
+  border: 1px solid var(--border); background: color-mix(in oklab, var(--surface) 70%, transparent); box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.notice-page.bad .notice-icon { border-color: color-mix(in oklab, var(--bad) 55%, transparent); box-shadow: 0 0 0 6px color-mix(in oklab, var(--bad) 14%, transparent), var(--shadow); }
+.notice-page h1 { margin: 0; }
+.notice-page .lead { margin: .2rem 0 0; }
+
+/* Tags are off: the one thing that blocks the page, so it is the loudest thing on it */
+.card.notice.tags { border-color: color-mix(in oklab, var(--warn) 55%, var(--border)); border-left-width: 5px; border-left-color: var(--warn);
+  background: linear-gradient(160deg, color-mix(in oklab, var(--warn) 12%, var(--surface)), color-mix(in oklab, var(--surface-2) 52%, transparent)); }
+.card.notice.tags header { justify-content: flex-start; margin-bottom: .5rem; }
+.card.notice.tags h3 { font-size: 1.3rem; margin-bottom: .3rem; }
+.card.notice.tags button.primary { padding: .7rem 1.3rem; font-size: 1rem; }
+
+/* the invitation page */
+.invite-hero { padding-top: 1rem; }
+.invite-hero .lead { max-width: 48ch; }
+.invite-card .card { padding: 1.3rem 1.4rem; border-radius: 28px; }
+.invite-card .card h3 { font-size: 1.5rem; }
+.invite-card .card .row button { padding: .7rem 1.2rem; font-size: 1rem; }
+
+/* forms: a grid of fields, the optional ones folded away */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0 1rem; }
+.form-grid .wide { grid-column: 1 / -1; }
+.field small { color: var(--muted); font-size: .8rem; }
+details.more { margin: .6rem 0 0; border-top: 1px solid var(--border); padding-top: .4rem; }
+details.more > summary { cursor: pointer; padding: .5rem 0; font-weight: 600; font-size: .9rem; color: var(--accent); list-style: none; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "+"; display: inline-block; width: 1.1rem; font-weight: 700; }
+details.more[open] > summary::before { content: "\2212"; }
+.form-actions { margin-top: 1rem; }
+.form-actions button.primary { padding: .7rem 1.4rem; font-size: 1rem; }
+
+/* the administrator's page */
+.admin-kpis { margin: .4rem 0 1rem; }
+.member-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.member-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; padding: .6rem .8rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: color-mix(in oklab, var(--bg) 35%, transparent); }
+.member-facts { display: flex; flex-wrap: wrap; gap: .1rem .8rem; flex: 1 1 14rem; min-width: 0; }
+.member-note { flex-basis: 100%; }
+.member-list li button { margin-left: auto; padding: .35rem .8rem; font-size: .85rem; }

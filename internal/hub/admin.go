@@ -104,8 +104,8 @@ func (h *Hub) Overview(ctx context.Context) (services []AdminService, leftover [
 
 // AdminActivity is one line of the whole activity log.
 type AdminActivity struct {
-	At            time.Time
-	Service, Text string
+	At                  time.Time
+	Service, Text, Kind string
 }
 
 // RecentEvents returns the newest entries of the activity log across every service.
@@ -119,7 +119,7 @@ func (h *Hub) RecentEvents(ctx context.Context, limit int) ([]AdminActivity, err
 	}
 	out := make([]AdminActivity, 0, len(events))
 	for _, e := range events {
-		out = append(out, AdminActivity{e.At, e.Service, e.Text})
+		out = append(out, AdminActivity{e.At, e.Service, e.Text, e.Kind})
 	}
 	return out, nil
 }
