@@ -47,7 +47,9 @@ function collect(): Command[] {
   }
   // what waits on the person: the buttons on the "Needs you" cards
   document.querySelectorAll<HTMLElement>("#v-overview .needs .card.need").forEach((card) => {
-    const title = card.querySelector("b")?.textContent?.trim() ?? "";
+    const heading = card.querySelector("b")?.cloneNode(true) as HTMLElement | undefined;
+    heading?.querySelectorAll(".chip").forEach((chip) => chip.remove()); // the tag ("Request") is not part of the name
+    const title = heading?.textContent?.trim() ?? "";
     card.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
       commands.push({ label: `${button.textContent?.trim() ?? ""}: ${title}`, hint: t("needs you"), run: () => button.click() });
     });

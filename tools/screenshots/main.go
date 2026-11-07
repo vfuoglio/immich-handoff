@@ -172,6 +172,7 @@ type shot struct {
 	height int
 	dark   bool
 	mobile bool
+	fold   bool   // only what shows without scrolling (the window's size), not the whole page
 	xpath  string // clip to this element instead of the full page
 	pad    int    // extra pixels around a clipped element
 	wait   string // JS condition that must become true
@@ -198,7 +199,7 @@ func loginCookies(email string) []*network.CookieParam {
 	return out
 }
 
-const settled = `document.readyState==='complete' && document.querySelectorAll('.skeleton').length===0 && Array.from(document.images).every(i=>i.complete)`
+const settled = `document.readyState==='complete' && document.querySelectorAll('.skeleton').length===0`
 
 func take(s shot, outdir string) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -210,7 +211,7 @@ func take(s shot, outdir string) {
 	ctx, cancelT := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelT()
 
-	scale := 2.0
+	scale := 1.5
 	if s.height == 0 {
 		s.height = 900
 	}
@@ -249,6 +250,8 @@ func take(s shot, outdir string) {
 	}
 	if s.xpath != "" {
 		tasks = append(tasks, screenshotElement(s.xpath, s.pad, &buf))
+	} else if s.fold {
+		tasks = append(tasks, chromedp.CaptureScreenshot(&buf))
 	} else {
 		tasks = append(tasks, chromedp.FullScreenshot(&buf, 100))
 	}
@@ -288,25 +291,33 @@ func screenshotElement(xpath string, pad int, out *[]byte) chromedp.Action {
 
 func shots(set, outdir string) {
 	os.MkdirAll(outdir, 0o755)
-	const waitingSender = 820
+	const desktop = 1280
+	const live = 2500 * time.Millisecond // the numbers roll and the scene settles
+	openFirstRow := `document.querySelector('#v-services details.svc').open = true`
 	switch set {
 	case "sender": // Alice with photos waiting to be handed over
-		take(shot{name: "dashboard-sender", who: "alice@test.local", url: appURL, width: waitingSender}, outdir)
-		take(shot{name: "dashboard-sender-dark", who: "alice@test.local", url: appURL, width: waitingSender, dark: true}, outdir)
-		take(shot{name: "dashboard-mobile", who: "alice@test.local", url: appURL, width: 390, height: 844, mobile: true}, outdir)
-		take(shot{name: "dashboard-mobile-dark", who: "alice@test.local", url: appURL, width: 390, height: 844, mobile: true, dark: true}, outdir)
+		take(shot{name: "dashboard-sender", who: "alice@test.local", url: appURL, width: desktop, height: 900, fold: true, pause: live}, outdir)
+		take(shot{name: "dashboard-sender-dark", who: "alice@test.local", url: appURL, width: desktop, height: 900, fold: true, dark: true, pause: live}, outdir)
+		take(shot{name: "dashboard-mobile", who: "alice@test.local", url: appURL, width: 390, height: 844, mobile: true, fold: true, pause: live}, outdir)
+		take(shot{name: "dashboard-mobile-dark", who: "alice@test.local", url: appURL, width: 390, height: 844, mobile: true, fold: true, dark: true, pause: live}, outdir)
+		take(shot{name: "live-scene", who: "alice@test.local", url: appURL, width: desktop, height: 900, pause: live,
+			xpath: `//section[@id='scene']`, pad: 12}, outdir)
+		take(shot{name: "services-sender", who: "alice@test.local", url: appURL + "#services", width: desktop, height: 900, fold: true, pause: live, js: openFirstRow}, outdir)
 	case "owner":
-		take(shot{name: "dashboard-owner", who: "bob@test.local", url: appURL, width: waitingSender}, outdir)
-		take(shot{name: "owner-service", who: "bob@test.local", url: appURL, width: waitingSender,
-			xpath: `//h2[normalize-space()='Services you offer']/following-sibling::article[1]`, pad: 16}, outdir)
-		take(shot{name: "offer-form", who: "bob@test.local", url: appURL, width: waitingSender,
+		take(shot{name: "dashboard-owner", who: "bob@test.local", url: appURL, width: desktop, height: 900, fold: true, pause: live}, outdir)
+		take(shot{name: "owner-service", who: "bob@test.local", url: appURL + "#services", width: desktop, height: 900,
+			js: openFirstRow, xpath: `//section[@id='v-services']//details[contains(@class,'svc')][1]`, pad: 16}, outdir)
+		take(shot{name: "offer-form", who: "bob@test.local", url: appURL + "#services", width: desktop, height: 900,
 			js:    `document.querySelector('details.offer').open = true`,
 			xpath: `//details[contains(@class,'offer')]`, pad: 16}, outdir)
-		take(shot{name: "join-choice", who: "dave@test.local", url: appURL, width: waitingSender,
-			xpath: `//h2[normalize-space()='Services you can send to']/following-sibling::article[1]`, pad: 16}, outdir)
+		take(shot{name: "join-choice", who: "dave@test.local", url: appURL + "#services", width: desktop, height: 900,
+			xpath: `(//section[@id='v-services']//article[contains(@class,'card')])[1]`, pad: 16}, outdir)
+		take(shot{name: "activity", who: "bob@test.local", url: appURL + "#activity", width: desktop, height: 900, fold: true, pause: live}, outdir)
+		take(shot{name: "palette", who: "bob@test.local", url: appURL, width: desktop, height: 900, fold: true, pause: live,
+			js: `document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true})); window.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}))`}, outdir)
 	case "lost":
-		take(shot{name: "connection-lost", who: "carol@test.local", url: appURL, width: waitingSender,
-			xpath: `//article[contains(@class,'notice')][1]`, pad: 16}, outdir)
+		take(shot{name: "connection-lost", who: "carol@test.local", url: appURL, width: desktop, height: 900,
+			xpath: `//div[contains(@class,'needs')]/article[contains(@class,'need')][1]`, pad: 16}, outdir)
 	case "immich":
 		take(shot{name: "immich-family", who: "family@test.local", url: immichURL + "/photos", width: 1280, height: 660,
 			wait:  `document.readyState==='complete' && document.querySelectorAll('img').length>3 && Array.from(document.images).every(i=>i.complete)`,
@@ -331,7 +342,7 @@ func hero(dir string) {
 	page := fmt.Sprintf(`<!doctype html><meta charset=utf-8><style>
 html,body{margin:0;width:1600px;height:860px;overflow:hidden;font-family:system-ui}
 body{background:radial-gradient(1200px 700px at 15%% 10%%,#8b9bff 0,transparent 60%%),linear-gradient(135deg,#3b47a8,#5b6bd8 55%%,#9db9f5)}
-.win{position:absolute;left:110px;top:70px;width:900px;height:720px;border-radius:18px;overflow:hidden;background:#fff;
+.win{position:absolute;left:110px;top:96px;width:900px;height:667px;border-radius:18px;overflow:hidden;background:#fff;
   box-shadow:0 40px 90px rgba(10,14,60,.45),0 0 0 1px rgba(255,255,255,.35)}
 .win .bar{height:34px;background:#eceef8;display:flex;align-items:center;gap:7px;padding-left:14px}
 .win .bar i{width:11px;height:11px;border-radius:50%%;background:#c9cde6;display:block}
@@ -343,7 +354,7 @@ body{background:radial-gradient(1200px 700px at 15%% 10%%,#8b9bff 0,transparent 
 </style>
 <div class=win><div class=bar><i></i><i></i><i></i></div><img src="%s"></div>
 <div class=phone><div class=screen><img src="%s"></div></div>`,
-		dataURI(filepath.Join(dir, "dashboard-sender.png")), dataURI(filepath.Join(dir, "dashboard-mobile-dark.png")))
+		dataURI(filepath.Join(dir, "dashboard-owner.png")), dataURI(filepath.Join(dir, "dashboard-mobile-dark.png")))
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("no-sandbox", true), chromedp.Flag("hide-scrollbars", true))
 	actx, cancelA := chromedp.NewExecAllocator(context.Background(), opts...)
