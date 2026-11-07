@@ -1,6 +1,26 @@
 # Troubleshooting
 
-Start with the app's log: `docker compose logs --tail 100`. Then find your symptom.
+Start with the setup check, then the app's log (`docker compose logs --tail 100`), then find your symptom below.
+
+## Check your setup first
+
+```
+docker compose exec immich-handoff /immich-handoff doctor
+```
+
+It reads the settings the app is running with and checks each one against Immich. Every line is `ok`, `warn` (works, but worth a look) or `FAIL` (something will not work), and a failure says what to change. It covers:
+
+- the secrets: `WEBHOOK_SECRET` and `HANDOFF_STORE_KEY` are long enough;
+- `PUBLIC_WEBHOOK_URL`: set, a real address, not `localhost` (which for Immich's server means Immich itself), and ending in `/webhook/immich`;
+- Immich: reachable at `IMMICH_BASE_URL` and version 3.2.0 or newer;
+- the webhook address: the check calls it the way Immich would and tells you whether it reaches this app and accepts the secret;
+- every key, from the configuration and from people who joined: still accepted, and holding every permission it needs;
+- whether **Tags** is switched on in each person's account;
+- each sender's workflow: present, enabled, and pointing at the current address and secret;
+- how Immich's most recent runs of that workflow ended. This is the proof that Immich can reach the app: a failed run means Immich could not deliver the notice. A workflow that has never run is fine; tag a photo and run the check again.
+
+It only reads. It never changes Immich, the data file or a photo, and it exits with status 1 when anything failed (warnings do not count), so it can be used in a script. One thing it cannot do is send Immich a test message on demand, because Immich has no such call; the workflow runs stand in for it.
+
 
 ## Installing and starting
 

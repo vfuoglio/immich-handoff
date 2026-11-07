@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"sort"
+	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -92,4 +94,65 @@ func sameSteps(have, want []WorkflowStepDto) bool {
 		}
 	}
 	return true
+}
+
+// WorkflowState is what CheckWorkflow found, without changing anything.
+type WorkflowState string
+
+const (
+	WorkflowOK      WorkflowState = "ok"      // there, enabled, and sending to the right address with the right secret
+	WorkflowMissing WorkflowState = "missing" // no workflow with that name
+	WorkflowDrifted WorkflowState = "drifted" // there, but disabled or its steps differ (address, secret, tag)
+)
+
+// CheckWorkflow looks at the workflow EnsureWorkflow would keep, and reports whether it is as it should be.
+// It only reads. id is set when the workflow exists.
+func (a *API) CheckWorkflow(ctx context.Context, w WorkflowSpec) (WorkflowState, *openapi_types.UUID, error) {
+	name := w.Name
+	list, err := a.c.SearchWorkflowsWithResponse(ctx, &SearchWorkflowsParams{Name: &name})
+	if err != nil {
+		return "", nil, err
+	}
+	if list.JSON200 == nil {
+		return "", nil, statusErr("searchWorkflows", list.StatusCode(), list.Body)
+	}
+	for _, have := range *list.JSON200 {
+		if have.Name == nil || *have.Name != w.Name {
+			continue
+		}
+		id := have.Id
+		if have.Enabled && have.Trigger == AssetTagged && sameSteps(have.Steps, w.steps()) {
+			return WorkflowOK, &id, nil
+		}
+		return WorkflowDrifted, &id, nil
+	}
+	return WorkflowMissing, nil, nil
+}
+
+// WorkflowRun is one run of a workflow, as Immich logged it.
+type WorkflowRun struct {
+	At       time.Time
+	Result   string // "completed", "halted" or "error"
+	LastStep string // the step it stopped at, when it ended early
+}
+
+// WorkflowRuns returns the newest runs of a workflow, newest first.
+func (a *API) WorkflowRuns(ctx context.Context, id openapi_types.UUID, limit int) ([]WorkflowRun, error) {
+	r, err := a.c.GetWorkflowLogsWithResponse(ctx, id, &GetWorkflowLogsParams{Limit: &limit})
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getWorkflowLogs", r.StatusCode(), r.Body)
+	}
+	runs := make([]WorkflowRun, 0, len(*r.JSON200))
+	for _, e := range *r.JSON200 {
+		run := WorkflowRun{At: e.At, Result: string(e.Result)}
+		if e.LastStep != nil {
+			run.LastStep = e.LastStep.Method
+		}
+		runs = append(runs, run)
+	}
+	sort.Slice(runs, func(i, j int) bool { return runs[i].At.After(runs[j].At) })
+	return runs, nil
 }

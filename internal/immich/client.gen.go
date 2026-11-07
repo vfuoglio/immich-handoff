@@ -753,6 +753,27 @@ func (e UserStatus) Valid() bool {
 	}
 }
 
+// Defines values for WorkflowResult.
+const (
+	Completed WorkflowResult = "completed"
+	Error     WorkflowResult = "error"
+	Halted    WorkflowResult = "halted"
+)
+
+// Valid indicates whether the value is a known member of the WorkflowResult enum.
+func (e WorkflowResult) Valid() bool {
+	switch e {
+	case Completed:
+		return true
+	case Error:
+		return true
+	case Halted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WorkflowTrigger.
 const (
 	AssetCreate             WorkflowTrigger = "AssetCreate"
@@ -2129,6 +2150,32 @@ type WorkflowCreateDto struct {
 	Trigger WorkflowTrigger `json:"trigger"`
 }
 
+// WorkflowLogEntryDto defines model for WorkflowLogEntryDto.
+type WorkflowLogEntryDto struct {
+	// At Workflow run date/time
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	At time.Time `json:"at"`
+
+	// Id Workflow log entry ID
+	Id openapi_types.UUID `json:"id"`
+
+	// LastStep Last step ran, if the workflow ended early
+	LastStep *struct {
+		// Index Index of the step in the workflow
+		Index int `json:"index"`
+
+		// Method Method of the step
+		Method string `json:"method"`
+	} `json:"lastStep,omitempty"`
+
+	// Result Workflow run result
+	Result WorkflowResult `json:"result"`
+
+	// TriggerDataId Workflow trigger data ID
+	TriggerDataId *openapi_types.UUID `json:"triggerDataId,omitempty"`
+}
+
 // WorkflowResponseDto defines model for WorkflowResponseDto.
 type WorkflowResponseDto struct {
 	// CreatedAt Creation date
@@ -2158,6 +2205,9 @@ type WorkflowResponseDto struct {
 	// UpdatedAt Update date
 	UpdatedAt string `json:"updatedAt"`
 }
+
+// WorkflowResult Workflow run result
+type WorkflowResult string
 
 // WorkflowStepDto defines model for WorkflowStepDto.
 type WorkflowStepDto struct {
@@ -2271,6 +2321,18 @@ type SearchWorkflowsParams struct {
 
 	// Trigger Workflow trigger type
 	Trigger *WorkflowTrigger `form:"trigger,omitempty" json:"trigger,omitempty"`
+}
+
+// GetWorkflowLogsParams defines parameters for GetWorkflowLogs.
+type GetWorkflowLogsParams struct {
+	// Before Filter by runs before a date/time
+	Before *time.Time `form:"before,omitempty" json:"before,omitempty"`
+
+	// Limit Maximum number of logs
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Result Filter by run result
+	Result *WorkflowResult `form:"result,omitempty" json:"result,omitempty"`
 }
 
 // CreateAlbumJSONRequestBody defines body for CreateAlbum for application/json ContentType.
@@ -2726,6 +2788,13 @@ type ClientInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetWorkflowLogs Retrieve workflow logs
+	//
+	// Retrieve logs of a workflows runs by ID.
+	//
+	// Corresponds with GET /workflows/{id}/logs (the `GetWorkflowLogs` operationId).
+	GetWorkflowLogs(ctx context.Context, id openapi_types.UUID, params *GetWorkflowLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // GetAllAlbums List all albums
@@ -3437,6 +3506,23 @@ func (c *Client) UpdateWorkflowWithBody(ctx context.Context, id openapi_types.UU
 // Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 func (c *Client) UpdateWorkflow(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateWorkflowRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetWorkflowLogs Retrieve workflow logs
+//
+// Retrieve logs of a workflows runs by ID.
+//
+// Corresponds with GET /workflows/{id}/logs (the `GetWorkflowLogs` operationId).
+func (c *Client) GetWorkflowLogs(ctx context.Context, id openapi_types.UUID, params *GetWorkflowLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkflowLogsRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4749,6 +4835,91 @@ func NewUpdateWorkflowRequestWithBody(server string, id openapi_types.UUID, cont
 	return req, nil
 }
 
+// NewGetWorkflowLogsRequest constructs an http.Request for the GetWorkflowLogs method
+func NewGetWorkflowLogsRequest(server string, id openapi_types.UUID, params *GetWorkflowLogsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/workflows/%s/logs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Before != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "before", *params.Before, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Result != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "result", *params.Result, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -5155,6 +5326,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	UpdateWorkflowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWorkflowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWorkflowResponse, error)
+
+	// GetWorkflowLogsWithResponse Retrieve workflow logs
+	//
+	// Retrieve logs of a workflows runs by ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /workflows/{id}/logs (the `GetWorkflowLogs` operationId).
+	GetWorkflowLogsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetWorkflowLogsParams, reqEditors ...RequestEditorFn) (*GetWorkflowLogsResponse, error)
 }
 
 type GetAllAlbumsResponse struct {
@@ -6243,6 +6423,47 @@ func (r UpdateWorkflowResponse) ContentType() string {
 	return ""
 }
 
+type GetWorkflowLogsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]WorkflowLogEntryDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetWorkflowLogsResponse) GetJSON200() *[]WorkflowLogEntryDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetWorkflowLogsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWorkflowLogsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWorkflowLogsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetWorkflowLogsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // GetAllAlbumsWithResponse List all albums
 //
 // Retrieve a list of albums available to the authenticated user.
@@ -6835,6 +7056,21 @@ func (c *ClientWithResponses) UpdateWorkflowWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseUpdateWorkflowResponse(rsp)
+}
+
+// GetWorkflowLogsWithResponse Retrieve workflow logs
+//
+// Retrieve logs of a workflows runs by ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /workflows/{id}/logs (the `GetWorkflowLogs` operationId).
+func (c *ClientWithResponses) GetWorkflowLogsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetWorkflowLogsParams, reqEditors ...RequestEditorFn) (*GetWorkflowLogsResponse, error) {
+	rsp, err := c.GetWorkflowLogs(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWorkflowLogsResponse(rsp)
 }
 
 // ParseGetAllAlbumsResponse parses an HTTP response from a GetAllAlbumsWithResponse call
@@ -7496,6 +7732,32 @@ func ParseUpdateWorkflowResponse(rsp *http.Response) (*UpdateWorkflowResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest WorkflowResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetWorkflowLogsResponse parses an HTTP response from a GetWorkflowLogsWithResponse call
+func ParseGetWorkflowLogsResponse(rsp *http.Response) (*GetWorkflowLogsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWorkflowLogsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []WorkflowLogEntryDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

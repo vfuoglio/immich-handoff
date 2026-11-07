@@ -86,6 +86,10 @@ Before you upgrade **Immich** itself, you can run this project's whole test suit
 - **Container health:** the image checks itself every 30 seconds, so `docker ps` and `docker compose ps` show `healthy` or `unhealthy`, and tools that read Docker's health status can show or alert on it. The check asks the app's own `/healthz` (on `LISTEN_ADDR`) and passes only on `ok`. The image has no shell or `curl`, so the check is built into the program: `docker compose exec immich-handoff /immich-handoff --healthcheck` runs it by hand and exits 0 when healthy. A service that should wait for it can use `depends_on: immich-handoff: condition: service_healthy`. It does not test the connection to Immich; the page and the log show that.
 - **Health and metrics:** `GET /healthz` answers `ok`. `GET /metrics` returns counters in Prometheus text format (passes, photos by result, services, version) and needs the `X-Webhook-Secret` header with your secret.
 
+## Checking the setup
+
+`docker compose exec immich-handoff /immich-handoff doctor` tests the settings, the connection to Immich, every stored key and its permissions, and each sender's workflow, and says how to fix what fails. It is read-only, takes a few seconds, and exits 1 when anything failed, so it is safe to run on a live install and to use from a script or a scheduled job. What it checks, and how to read it, is in [Troubleshooting](troubleshooting.md#check-your-setup-first).
+
 ## Removing it
 
 1. Ask people to press **Leave** (and owners **Delete service**) on the page. That removes the API keys and workflows the app made in their Immich accounts.

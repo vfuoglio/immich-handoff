@@ -61,6 +61,8 @@ A person who joined tags a photo `share` in the Immich app. Within a few seconds
 
 ![The photos as they arrive in the receiver's Immich](images/immich-family.png)
 
+If a photo does not arrive, run the setup check: `docker compose exec immich-handoff /immich-handoff doctor`. It names what is wrong and how to fix it ([details](troubleshooting.md#check-your-setup-first)).
+
 That is the whole setup. [Using it](using.md) explains what people see on the page, and [Operations](operations.md) covers HTTPS, backups and upgrades.
 
 ## Prefer to set the accounts up yourself?

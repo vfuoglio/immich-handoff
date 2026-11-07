@@ -42,6 +42,10 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
 		os.Exit(runHealthcheck(env("LISTEN_ADDR", ":8080")))
 	}
+	// A check of the setup: `immich-handoff doctor` (run it inside the container; it reads the same settings).
+	if len(os.Args) == 2 && os.Args[1] == "doctor" {
+		os.Exit(runDoctor(context.Background(), os.Stdout))
+	}
 	level := slog.LevelInfo
 	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
 		level = slog.LevelDebug

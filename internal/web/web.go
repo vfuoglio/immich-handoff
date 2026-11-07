@@ -173,11 +173,17 @@ func (w *Server) webhook(rw http.ResponseWriter, r *http.Request) {
 	if body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10)); err == nil {
 		w.Log.Debug("webhook received", "body", string(body))
 		var ev struct {
+			// set by `immich-handoff doctor` to test the address and the secret without starting a pass
+			Test bool `json:"handoffTest"`
 			Data struct {
 				Asset struct {
 					ID uuid.UUID `json:"id"`
 				} `json:"asset"`
 			} `json:"data"`
+		}
+		if json.Unmarshal(body, &ev) == nil && ev.Test {
+			rw.WriteHeader(http.StatusOK)
+			return
 		}
 		if json.Unmarshal(body, &ev) == nil && ev.Data.Asset.ID != uuid.Nil {
 			w.S.AddHint(ev.Data.Asset.ID)

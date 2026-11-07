@@ -225,6 +225,30 @@ func TestWebhookSecret(t *testing.T) {
 	}
 }
 
+// The doctor command calls the webhook address to test it; that must answer 200 (not 202) and must not
+// need a photo, and without the secret it is still refused.
+func TestWebhookTestCallFromTheDoctor(t *testing.T) {
+	app, _ := setup(t)
+	post := func(secret string) int {
+		req, _ := http.NewRequest("POST", app.URL+"/webhook/immich", strings.NewReader(`{"handoffTest":true}`))
+		if secret != "" {
+			req.Header.Set("X-Webhook-Secret", secret)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := post(""); code != 401 {
+		t.Errorf("test call without the secret: %d", code)
+	}
+	if code := post("s3cret"); code != 200 {
+		t.Errorf("test call with the secret: %d", code)
+	}
+}
+
 func TestTheIconIsServedAsAnImageAndUsedInTheHeader(t *testing.T) {
 	app, _ := setup(t)
 	res, err := http.Get(app.URL + "/static/favicon.svg")

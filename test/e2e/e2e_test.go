@@ -86,7 +86,7 @@ func call(t *testing.T, method, path string, auth map[string]string, body any, o
 // The exact API key permissions documented in the README. The suite runs with these (not "all"),
 // so a permission the app really needs but the README omits fails the tests.
 var (
-	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update"}
+	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"}
 	destPermissions   = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload"}
 )
 
@@ -516,6 +516,46 @@ func TestEndToEnd(t *testing.T) {
 			x, code := getAsset(t, alice, aliceOrig)
 			return code == 200 && x.IsTrashed
 		})
+	})
+
+	t.Run("doctor is quiet on a healthy setup and names what is wrong otherwise", func(t *testing.T) {
+		doctor := func(extra ...string) (string, int) {
+			cmd := exec.Command(bin, "doctor")
+			cmd.Env = append(os.Environ(),
+				"IMMICH_BASE_URL="+baseURL,
+				"IMMICH_SOURCE_API_KEYS="+alice.appKey+","+bob.appKey,
+				"IMMICH_DEST_API_KEY="+family.appKey,
+				"WEBHOOK_SECRET="+secret,
+				"PUBLIC_WEBHOOK_URL=http://host.docker.internal:"+appPort+"/webhook/immich",
+				"HANDOFF_MODE=move")
+			cmd.Env = append(cmd.Env, extra...)
+			out, err := cmd.CombinedOutput()
+			code := 0
+			if ee, ok := err.(*exec.ExitError); ok {
+				code = ee.ExitCode()
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			return string(out), code
+		}
+		// Immich ran alice's workflow when she tagged the photo above, and the app answered it.
+		out, code := doctor()
+		if code != 0 || !strings.Contains(out, "Immich's last") || strings.Contains(out, "FAIL") {
+			t.Errorf("healthy setup: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("WEBHOOK_SECRET=" + secret + "-changed"); code != 1 || !strings.Contains(out, "does not match the current settings") {
+			t.Errorf("a changed secret: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("PUBLIC_WEBHOOK_URL=http://localhost:" + appPort + "/webhook/immich"); code != 1 || !strings.Contains(out, "Immich itself") {
+			t.Errorf("a loopback address: exit %d\n%s", code, out)
+		}
+		if out, code := doctor("IMMICH_BASE_URL=http://127.0.0.1:1"); code != 1 || !strings.Contains(out, "cannot reach Immich") {
+			t.Errorf("Immich not reachable: exit %d\n%s", code, out)
+		}
+		// it only reads: the real workflow is still the one the app made
+		if out, code := doctor(); code != 0 {
+			t.Errorf("after the failing checks the workflow must be untouched: exit %d\n%s", code, out)
+		}
 	})
 
 	t.Run("the trashed original is still reported as already uploaded (phone backup will skip it)", func(t *testing.T) {

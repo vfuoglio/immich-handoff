@@ -6,15 +6,16 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// SenderPermissions is everything a sender's key needs. It is also what the README tells people to
+// SenderPermissions is everything a sender's key needs. workflow.logs (reading its own workflow's run log) is
+// only used by `immich-handoff doctor`, which works without it, so a key made before it was added is still fine. It is also what the README tells people to
 // grant when they create a key by hand.
 var SenderPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset",
-	"asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update")
+	"asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
 
 // SenderPermissionsCopy is what a sender's key needs when originals are kept: no delete permission at all,
 // so the app cannot remove a photo even by mistake.
 var SenderPermissionsCopy = perms("user.read", "tag.read", "tag.create", "tag.asset",
-	"asset.read", "asset.download", "workflow.read", "workflow.create", "workflow.update")
+	"asset.read", "asset.download", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
 
 // ReceiverPermissions is everything a receiver's key needs.
 var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload")

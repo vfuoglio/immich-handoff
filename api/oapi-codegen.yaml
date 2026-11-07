@@ -35,3 +35,4 @@ output-options:
     - addAssetsToAlbum
     - getApiKey
     - updateApiKey
+    - getWorkflowLogs
