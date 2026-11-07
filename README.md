@@ -70,6 +70,7 @@ Then open `http://<your-host>:8080/`, sign in to Immich, and offer your first se
 | [Install](docs/install.md) | Ten minutes from clone to first photo |
 | [Using it](docs/using.md) | For the people who send and receive |
 | [What is carried over](docs/what-is-carried-over.md) | What travels with a photo, and what does not |
+| [The administrator's page](docs/admin.md) | See every service and member, check the connections, remove what is stuck |
 | [Fixed accounts](docs/fixed-accounts.md) | Set the accounts up yourself, or run several fixed services |
 | [Operations](docs/operations.md) | Reverse proxy, backups, upgrades, monitoring |
 | [Settings](docs/settings.md) | Every option |

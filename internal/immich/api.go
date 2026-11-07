@@ -102,9 +102,10 @@ func IsAuthError(err error) bool {
 }
 
 type User struct {
-	ID    openapi_types.UUID
-	Name  string
-	Email string
+	ID      openapi_types.UUID
+	Name    string
+	Email   string
+	IsAdmin bool // Immich says this person administers the server
 }
 
 func (a *API) Me(ctx context.Context) (User, error) {
@@ -115,7 +116,7 @@ func (a *API) Me(ctx context.Context) (User, error) {
 	if r.JSON200 == nil {
 		return User{}, statusErr("getMyUser", r.StatusCode(), r.Body)
 	}
-	return User{ID: r.JSON200.Id, Name: r.JSON200.Name, Email: string(r.JSON200.Email)}, nil
+	return User{ID: r.JSON200.Id, Name: r.JSON200.Name, Email: string(r.JSON200.Email), IsAdmin: r.JSON200.IsAdmin}, nil
 }
 
 // TagsEnabled reports whether the person has Tags switched on in their Immich account. Immich has it off by

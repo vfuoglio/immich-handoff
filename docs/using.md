@@ -102,6 +102,8 @@ You see each sender's name and, on a request, their email address. Senders see o
 
 A sender whose key was deleted presses **Clean up** and can join again; photos they tagged meanwhile are handed over once they have. An owner whose own key was deleted presses **Reconnect**, and senders resume by themselves.
 
+If an Immich administrator removes you from a service, or removes the service, you see why on this page with a **Clean up** button. Your API key in Immich stays valid until you delete it, which **Clean up** does for you ([why](admin.md#why-removal-cannot-delete-the-keys)).
+
 The page also lists recent events (joined, asked, approved, connection lost, reconnected) for the services you take part in.
 
 ## Good to know

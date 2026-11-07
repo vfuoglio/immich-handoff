@@ -43,6 +43,7 @@ type Server struct {
 	// thumbnails of photos that are waiting to be handed over.
 	PublicImmichURL string
 	Version         string
+	WebhookURL      string // PUBLIC_WEBHOOK_URL, for the administrator's connection check
 
 	limiter limiter
 }
@@ -60,6 +61,10 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /metrics", w.metrics)
 	mux.HandleFunc("GET /{$}", w.dashboard)
 	mux.HandleFunc("GET /invite/{token}", w.invite)
+	mux.HandleFunc("GET /admin", w.adminPage)
+	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
+	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
@@ -347,7 +352,8 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	Dashboard(w.dashboardData(r.Context(), me)).Render(r.Context(), rw)
+	ctx := context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin)
+	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
 }
 
 // requireMember is for fragments and streams: sign-in plus taking part in at least one service.

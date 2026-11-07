@@ -243,6 +243,23 @@ func (s *Store) SetLinkAlbum(ctx context.Context, id string, album uuid.UUID, na
 	return nil
 }
 
+// ForgetLinkKey overwrites the stored API key of a membership with nothing. The membership stays (so the person
+// still sees why it ended and can clean up), but the app no longer holds a key that works.
+func (s *Store) ForgetLinkKey(ctx context.Context, id string) error {
+	enc, err := s.vault.Seal(nil, id)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE links SET key_enc = ? WHERE id = ?`, enc, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) RemoveLink(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM links WHERE id = ?`, id)
 	return err

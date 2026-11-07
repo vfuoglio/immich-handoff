@@ -932,3 +932,119 @@ func TestAHandOverFromTheAlbumLeavesALineInTheSendersRecentEvents(t *testing.T) 
 		t.Errorf("recent events: %+v", evs)
 	}
 }
+
+func TestAnAdministratorRemovingAMemberStopsHandOversAndTellsThePerson(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	admin := immich.User{ID: uuid.New(), Name: "Root", Email: "root@x.test", IsAdmin: true}
+	links, _ := e.st.Links(ctx)
+	var id string
+	for _, l := range links {
+		if l.Role == "sender" {
+			id = l.ID
+		}
+	}
+	if err := e.h.AdminRemoveMember(ctx, admin, "nope"); !errors.Is(err, hub.ErrNoSuchEntry) {
+		t.Errorf("an unknown member: %v", err)
+	}
+	if err := e.h.AdminRemoveMember(ctx, admin, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "party").Senders; len(got) != 0 {
+		t.Errorf("a removed member must stop being used: %d senders", len(got))
+	}
+	if len(e.f.deletedKeys) != 0 {
+		t.Errorf("the app cannot delete another person's key, and must not pretend to: %v", e.f.deletedKeys)
+	}
+	b, _ := e.h.BrokenFor(ctx, bobID)
+	if len(b) != 1 || !strings.Contains(b[0].Note, "Root") || !strings.Contains(b[0].Note, "still valid") {
+		t.Errorf("bob must be told on his page: %+v", b)
+	}
+	acts, _ := e.h.Activity(ctx, bobID, 10)
+	if len(acts) == 0 || !strings.Contains(acts[0].Text, "removed from party by an administrator") {
+		t.Errorf("bob's recent events: %+v", acts)
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "Root") {
+		t.Errorf("the operator must be told: %v", told)
+	}
+	// the person can still clean up, which deletes what the app made in their account
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("clean up after a removal: %v", err)
+	}
+	if len(e.f.keys) != 1 { // only the owner's receiver key is left, which only the owner can delete
+		t.Errorf("keys left after cleaning up: %d", len(e.f.keys))
+	}
+}
+
+func TestAnAdministratorRemovingAServiceTellsOwnerAndMembers(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	admin := immich.User{ID: uuid.New(), Name: "Root", Email: "root@x.test", IsAdmin: true}
+	if err := e.h.AdminRemoveService(ctx, admin, "family"); !errors.Is(err, hub.ErrNotRemovable) {
+		t.Errorf("a service from the configuration: %v", err)
+	}
+	if err := e.h.AdminRemoveService(ctx, admin, "nope"); !errors.Is(err, hub.ErrNoSuchEntry) {
+		t.Errorf("an unknown service: %v", err)
+	}
+	if err := e.h.AdminRemoveService(ctx, admin, "party"); err != nil {
+		t.Fatal(err)
+	}
+	if service(e, "party") != nil {
+		t.Error("the service must be gone")
+	}
+	if len(e.f.deletedKeys) != 0 {
+		t.Errorf("the app cannot delete the owner's key: %v", e.f.deletedKeys)
+	}
+	if o, _ := e.h.Orphaned(ctx, bobID); len(o) != 1 {
+		t.Errorf("bob must be told the service is gone: %v", o)
+	}
+	owner, _ := e.h.Activity(ctx, annID, 10)
+	if len(owner) == 0 || !strings.Contains(owner[0].Text, "still valid in your Immich account") {
+		t.Errorf("the owner must be told their key stays: %+v", owner)
+	}
+	if len(told) != 1 {
+		t.Errorf("the operator must be told: %v", told)
+	}
+	// both can still clean up
+	if err := e.h.Leave(ctx, e.sess, bob, "party"); err != nil {
+		t.Fatalf("bob cleans up: %v", err)
+	}
+	_, left, _ := e.h.Overview(ctx)
+	if len(left) != 0 {
+		t.Errorf("nothing should be waiting to clean up: %+v", left)
+	}
+}
+
+func TestTheOverviewListsEveryServiceWithItsOwnerAndMembers(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
+	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	services, left, err := e.h.Overview(ctx)
+	if err != nil || len(left) != 0 || len(services) != 2 {
+		t.Fatalf("overview: %d services, %d leftover, %v", len(services), len(left), err)
+	}
+	var party *hub.AdminService
+	for i := range services {
+		if services[i].Name == "party" {
+			party = &services[i]
+		}
+	}
+	if party == nil || party.FromConfig || party.OwnerEmail != "ann@x.test" || len(party.Members) != 1 || party.Members[0].Email != "bob@x.test" || party.Members[0].LinkID == "" {
+		t.Errorf("party: %+v", party)
+	}
+	if services[0].Name != "family" || !services[0].FromConfig {
+		t.Errorf("the configured service must be marked: %+v", services[0])
+	}
+}

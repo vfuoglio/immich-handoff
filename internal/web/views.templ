@@ -103,6 +103,9 @@ templ Layout(title, user string) {
 					</div>
 					if user != "" {
 						<div class="who">
+							if isAdmin(ctx) {
+								<a class="adminlink" href="admin">Admin</a>
+							}
 							<span id="live" class="live off" title="Live updates" role="img" aria-label="Live updates"></span>
 							<span class="avatar" aria-hidden="true">{ initial(user) }</span>
 							<span>{ user }</span>
@@ -471,5 +474,139 @@ templ BrokenCard(b BrokenView) {
 		<p class="row">
 			<button class="primary" hx-post="leave" hx-vals={ vals("service", b.Service) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Clean up</button>
 		</p>
+	</article>
+}
+
+// AdminData is everything the administrator's page shows.
+type AdminData struct {
+	User     string
+	Services []AdminServiceView
+	Leftover []AdminMemberView
+	Activity []AdminActivityView
+	SelfOn   bool // people can join from the page, so there is a store to remove from
+}
+
+type AdminServiceView struct {
+	Name, Tag, Owner, Policy, Album string
+	InviteOnly, Copy, FromConfig    bool
+	Receivers                       int
+	Broken                          string
+	Members                         []AdminMemberView
+}
+
+type AdminMemberView struct {
+	LinkID, Name, Email, State, Note, Album string
+	Copy, FromConfig                        bool
+}
+
+type AdminActivityView struct{ When, Service, Text string }
+
+templ AdminPage(d AdminData) {
+	@Layout("Immich Handoff: admin", d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>Everything on this server</h1>
+		<p class="lead">Every service, who offers it, who sends to it, and whether the connections work. <a href="./">Back to your own page</a></p>
+		<p class="meta">Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.</p>
+		<h2>Check the connections</h2>
+		<p class="row">
+			<button class="primary" hx-post="admin/check" hx-target="#checkresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#checkresult">Check now</button>
+			<span class="meta">The same check as <code>immich-handoff doctor</code>. It only reads.</span>
+		</p>
+		<pre id="checkresult" class="card checkresult" aria-live="polite"></pre>
+		<h2>Services</h2>
+		if len(d.Services) == 0 {
+			<div class="card empty">There are no services yet.</div>
+		}
+		for _, s := range d.Services {
+			@AdminServiceCard(s, d.SelfOn)
+		}
+		if len(d.Leftover) > 0 {
+			<h2>Waiting to clean up</h2>
+			<p class="meta">Their service was removed. They still hold a key and a workflow in Immich and see a Clean up button on their page. Nothing is handed over for them.</p>
+			<section class="card">
+				<ul class="events">
+					for _, m := range d.Leftover {
+						<li>{ m.Name } <span class="meta">{ m.Email }</span></li>
+					}
+				</ul>
+			</section>
+		}
+		if len(d.Activity) > 0 {
+			<h2>Recent events</h2>
+			<section class="card" aria-label="Recent events">
+				<ul class="events">
+					for _, a := range d.Activity {
+						<li><span class="meta">{ a.When }</span> { a.Text }</li>
+					}
+				</ul>
+			</section>
+		}
+	}
+}
+
+templ AdminServiceCard(s AdminServiceView, removable bool) {
+	<article class="card">
+		<header>
+			<h3>{ s.Name }</h3>
+			<span class="chip">{ adminPolicy(s.Policy) }</span>
+			if s.InviteOnly {
+				<span class="chip">Invitation only</span>
+			}
+			if s.FromConfig {
+				<span class="chip">From configuration</span>
+			}
+			if s.Broken != "" {
+				<span class="chip bad">Disconnected</span>
+			}
+		</header>
+		<p class="meta">
+			Tag <code class="tag">{ s.Tag }</code>.
+			if s.Owner != "" {
+				Offered by { s.Owner }.
+			}
+			{ fmt.Sprint(s.Receivers) } { plural(s.Receivers, "receiver", "receivers") }.
+			if s.Copy {
+				Originals are kept.
+			} else {
+				Originals are moved to the sender's trash.
+			}
+			if s.Album != "" {
+				Arrivals go to the album <strong>{ s.Album }</strong>.
+			}
+		</p>
+		if s.Broken != "" {
+			<p class="meta"><span class="chip bad">Disconnected</span> { s.Broken }</p>
+		}
+		if len(s.Members) == 0 {
+			<p class="meta">No senders yet.</p>
+		}
+		<ul class="events">
+			for _, m := range s.Members {
+				<li>
+					<span class={ "chip", memberChip(m.State) }>{ m.Name }</span>
+					if m.Email != "" {
+						<span class="meta">{ m.Email }</span>
+					}
+					<span class="meta">{ memberSuffix(m.State, m.Copy) }</span>
+					if m.Album != "" {
+						<span class="meta">album { m.Album }</span>
+					}
+					if m.FromConfig {
+						<span class="meta">from configuration</span>
+					}
+					if m.Note != "" {
+						<br/><span class="meta">{ m.Note }</span>
+					}
+					if m.LinkID != "" && removable {
+						<button hx-post="admin/members/remove" hx-vals={ vals("link", m.LinkID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Remove " + m.Name + " from " + s.Name + "? The app stops handing over their photos. Their API key stays in their Immich account until they delete it; they are told on their page." }>Remove</button>
+					}
+				</li>
+			}
+		</ul>
+		if !s.FromConfig && removable {
+			<p class="row">
+				<button hx-post="admin/services/remove" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ "Remove the service " + s.Name + "? Nothing is handed over any more. The owner's receiver key stays in their Immich account until they delete it; members and owner are told." }>Remove this service</button>
+			</p>
+		}
 	</article>
 }

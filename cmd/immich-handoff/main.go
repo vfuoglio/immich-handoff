@@ -133,7 +133,7 @@ func run(log *slog.Logger) error {
 	s.Provider = h
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx,
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"),
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins

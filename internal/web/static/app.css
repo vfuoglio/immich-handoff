@@ -126,3 +126,9 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 .watch { margin-top: .5rem; }
 .watch .albumform:empty { display: none; }
 .watch .albumform .card { margin-top: .5rem; }
+
+.adminlink { color: var(--accent, inherit); font-weight: 600; text-decoration: none; margin-right: .25rem; }
+.adminlink:hover { text-decoration: underline; }
+.checkresult { white-space: pre-wrap; overflow-x: auto; font-size: .85rem; margin: .5rem 0 0; }
+.checkresult:empty { display: none; }
+.events li button { margin-left: .5rem; }

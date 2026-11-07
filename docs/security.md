@@ -29,6 +29,8 @@ Each key is named `handoff: <service>` in the owner's own Immich settings, so pe
 
 Anyone signed in to Immich can open the page and sees the services that are **listed**, with the owner's name (not email). An owner sees the name and email of someone asking to send, and the names of their senders. Invitation-only services appear only to people who have the link; the link is only as private as how you share it, and **New link** revokes the old one.
 
+An Immich **administrator** can also open the [administrator's page](admin.md), which lists every service, owner and member with their emails and the health of each connection, and can remove a service or a member. It never shows keys or photos, and removing something cannot revoke a key (Immich lets only its owner delete it; [why](admin.md#why-removal-cannot-delete-the-keys)). Who is an administrator is decided by Immich, for the signed-in person, each time.
+
 ## Protections in the app
 
 - Immich's events carry a shared secret (`WEBHOOK_SECRET`); the app refuses one that is missing or shorter than 16 characters.

@@ -36,7 +36,8 @@ For the curious, and for anyone changing the code.
 |---|---|
 | `cmd/immich-handoff` | Starts everything from the environment. |
 | `internal/syncer` | The engine: passes, hand-overs, tag cleanup, workflow setup. |
-| `internal/hub` | People and services: joining, offering, approval, invitations, key health. |
+| `internal/hub` | People and services: joining, offering, approval, invitations, key health, the administrator's overview and removals. |
+| `internal/doctor` | The setup check behind `immich-handoff doctor` and the admin page's **Check now**. |
 | `internal/store`, `internal/vault` | The SQLite file and the encryption of keys in it. |
 | `internal/immich` | The generated client plus a small wrapper. |
 | `internal/web` | The page: templates, handlers, styles, live updates. |

@@ -1610,3 +1610,96 @@ func TestCopyMode(t *testing.T) {
 		t.Errorf("Immich's search kept listing the photo and it was processed again:\n%s", a.log.String())
 	}
 }
+
+// TestAdmin: Immich says who is an administrator; only they see every service and member, and they can
+// remove one. Immich lets only a key's owner delete it, so the person's key stays until they clean up.
+func TestAdmin(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t) // alice owns a service, bob sends to it
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 9)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	admin, owner, sender := loginCookie(t, "admin@e2e.test"), loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	get := func(cookie, path string) (int, string) {
+		req, _ := http.NewRequest("GET", "http://localhost:"+port+path, nil)
+		req.Header.Set("Cookie", cookie)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"admin-svc"}, "tag": {"admin-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"admin-svc"}, "mode": {"copy"}}), 204, "join")
+
+	for name, c := range map[string]string{"owner": owner, "sender": sender, "signed out": ""} {
+		if code, _ := get(c, "/admin"); code != 404 {
+			t.Errorf("%s: GET /admin = %d, want 404", name, code)
+		}
+	}
+	code, body := get(admin, "/admin")
+	if code != 200 || !strings.Contains(body, "admin-svc") || !strings.Contains(body, "bob@e2e.test") || !strings.Contains(body, "alice@e2e.test") {
+		t.Fatalf("the administrator's page: %d %.600s", code, body)
+	}
+	if _, home := get(admin, "/"); !strings.Contains(home, `href="admin"`) {
+		t.Error("the administrator is not offered the admin page")
+	}
+	if res := post(t, port, "/admin/members/remove", owner, url.Values{"link": {"x"}}); res.StatusCode != 404 {
+		t.Errorf("a non-admin removing a member: %d, want 404", res.StatusCode)
+	}
+
+	req, _ := http.NewRequest("POST", "http://localhost:"+port+"/admin/check", nil) // post() discards the body, and this one is read
+	req.Header.Set("Cookie", admin)
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(b), "Settings") || !strings.Contains(string(b), "reached Immich") {
+		t.Errorf("Check now: %d %.400s", res.StatusCode, b)
+	}
+
+	m := regexp.MustCompile(`link&#34;:&#34;([0-9a-f-]+)&#34;`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatalf("no Remove button for bob in the page: %.800s", body)
+	}
+	must(post(t, port, "/admin/members/remove", admin, url.Values{"link": {m[1]}}), 204, "admin removes bob")
+
+	// the app stopped using bob's key, but cannot delete it: it is still in bob's account, and bob is told
+	if !hasName(keyNames(t, bob), "handoff: admin-svc") {
+		t.Error("Immich lets only the owner delete a key; it must still be there")
+	}
+	if p := page(t, port, sender); !strings.Contains(p, "Connection lost") || !strings.Contains(p, "still valid in your Immich account") {
+		t.Errorf("bob must be told on his page: %.800s", p)
+	}
+	// bob cleans up, which deletes what the app made in his account
+	must(post(t, port, "/leave", sender, url.Values{"service": {"admin-svc"}}), 204, "bob cleans up")
+	if hasName(keyNames(t, bob), "handoff: admin-svc") {
+		t.Error("cleaning up must delete bob's key")
+	}
+
+	// removing the whole service: the owner's receiver key stays too, and the owner is told
+	_, body = get(admin, "/admin")
+	if !strings.Contains(body, "Remove this service") {
+		t.Fatalf("no Remove this service button: %.600s", body)
+	}
+	must(post(t, port, "/admin/services/remove", admin, url.Values{"service": {"admin-svc"}}), 204, "admin removes the service")
+	if !hasName(keyNames(t, alice), "handoff: admin-svc (receiving)") {
+		t.Error("the owner's receiver key must stay: only the owner can delete it")
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "was removed by an administrator") {
+		t.Errorf("the owner must be told: %.800s", p)
+	}
+	if _, body := get(admin, "/admin"); strings.Contains(body, "Remove this service") {
+		t.Error("the removed service is still listed")
+	}
+}

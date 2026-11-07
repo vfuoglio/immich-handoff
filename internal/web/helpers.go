@@ -142,6 +142,13 @@ func policyLabel(p string) string {
 	return "You approve senders"
 }
 
+func adminPolicy(p string) string {
+	if p == "open" {
+		return "Anyone may send"
+	}
+	return "Owner approves senders"
+}
+
 func memberChip(state string) string {
 	if state == "broken" {
 		return "bad"
@@ -194,6 +201,14 @@ func reasonLabel(reason string) string {
 }
 
 type baseKey struct{}
+
+type adminKey struct{}
+
+// isAdmin is whether the signed-in person is an Immich administrator, so the header can link to the admin page.
+func isAdmin(ctx context.Context) bool {
+	b, _ := ctx.Value(adminKey{}).(bool)
+	return b
+}
 
 // baseHref is the <base> the page needs so its relative links reach the app root ("" = none needed).
 func baseHref(ctx context.Context) string {

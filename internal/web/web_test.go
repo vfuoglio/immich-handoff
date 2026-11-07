@@ -23,6 +23,7 @@ const (
 	aliceID  = "aaaaaaaa-0000-0000-0000-000000000001"
 	familyID = "aaaaaaaa-0000-0000-0000-000000000002"
 	otherID  = "aaaaaaaa-0000-0000-0000-000000000009"
+	adminID  = "aaaaaaaa-0000-0000-0000-00000000000a"
 	ts       = "2025-01-02T03:04:05.000Z"
 )
 
@@ -38,7 +39,7 @@ func fakeImmich() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
-			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"},
+			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},
 			"k-alice": {aliceID, "Alice"}, "k-family": {familyID, "Family"},
 		}
 		key := r.Header.Get("x-api-key")
@@ -50,7 +51,7 @@ func fakeImmich() http.Handler {
 			http.Error(w, "no", http.StatusUnauthorized)
 			return
 		}
-		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test"})
+		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test", "isAdmin": key == "sess=admin"})
 	})
 	// Tags are off by default in Immich; the family account has them on, "sess=other" cannot be changed.
 	var prefMu sync.Mutex
