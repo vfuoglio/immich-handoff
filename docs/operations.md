@@ -38,6 +38,8 @@ server {
 }
 ```
 
+To let people find the page from inside Immich, add a button to Immich's header with this same proxy: [Make Handoff easy to find](find-handoff.md).
+
 With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for example `https://photos.example.com`) so thumbnails load from Immich.
 
 **Which one fits your proxy.** A proxy that routes only by hostname and port (many web interfaces do) fits option 1: give the page a second external port on the same hostname. Option 2 needs a proxy that can route by URL path, such as the nginx above.

@@ -73,6 +73,7 @@ Then open `http://<your-host>:8080/`, sign in to Immich, and offer your first se
 | [The administrator's page](docs/admin.md) | See every service and member, check the connections, remove what is stuck |
 | [Fixed accounts](docs/fixed-accounts.md) | Set the accounts up yourself, or run several fixed services |
 | [Operations](docs/operations.md) | Reverse proxy, backups, upgrades, monitoring |
+| [Make Handoff easy to find](docs/find-handoff.md) | A button in Immich's own header, so nobody types the address |
 | [Settings](docs/settings.md) | Every option |
 | [Security and trust](docs/security.md) | What it can do, what is stored, who sees what |
 | [Troubleshooting](docs/troubleshooting.md) | When something does not work |
