@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"io"
 	"net/http"
 	"net/url"
@@ -139,6 +140,25 @@ func settings(r *Report, in Input) {
 	if firstOf(in.Env, "PUBLIC_IMMICH_URL") == "" {
 		r.add(Warn, "PUBLIC_IMMICH_URL is not set, so the page shows no thumbnails",
 			"Set it to Immich's address as your browser sees it (optional).")
+	}
+	backups(r, in)
+}
+
+// backups reports what is set about backups. Without a store key nothing is stored, so there is nothing to say.
+func backups(r *Report, in Input) {
+	hasStore := firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") != ""
+	if !hasStore {
+		return
+	}
+	every, keep, err := backup.ParseSchedule(in.Env)
+	switch {
+	case err != nil:
+		r.add(Fail, err.Error(), "See the Settings page in docs/settings.md.")
+	case every == 0:
+		r.add(Warn, "automatic backups are off (BACKUP_EVERY=off), so a backup exists only when you run `immich-handoff backup`",
+			"Remove BACKUP_EVERY to make one every day, or keep making them yourself.")
+	default:
+		r.add(OK, fmt.Sprintf("automatic backups: every %s, keeping the newest %d", every, keep), "")
 	}
 }
 

@@ -397,3 +397,28 @@ func TestAPausedServiceIsReported(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestBackupSettingsAreReported(t *testing.T) {
+	s := newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	out, fails, warns := s.run(t, true, nil)
+	want(t, out, fails, 0, "automatic backups: every 24h0m0s, keeping the newest 7")
+	if warns != 0 {
+		t.Errorf("by default nothing warns (%d warnings)\n%s", warns, out)
+	}
+
+	s = newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	s.env["BACKUP_EVERY"] = "off"
+	out, fails, warns = s.run(t, true, nil)
+	want(t, out, fails, 0, "automatic backups are off")
+	if warns != 1 {
+		t.Errorf("warnings %d, want 1 (automatic backups off)\n%s", warns, out)
+	}
+
+	s = newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	s.env["BACKUP_EVERY"] = "5m"
+	out, fails, _ = s.run(t, true, nil)
+	want(t, out, fails, 1, `BACKUP_EVERY="5m"`)
+}

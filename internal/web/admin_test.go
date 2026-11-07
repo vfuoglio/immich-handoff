@@ -2,12 +2,18 @@ package web_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
@@ -171,5 +177,28 @@ func TestAdminConnectionCheckRuns(t *testing.T) {
 	code, body := postForm(t, app.URL+"/admin/check", "sess=admin", "")
 	if code != 200 || !strings.Contains(body, "Settings") || !strings.Contains(body, "Immich") {
 		t.Errorf("check: %d %.300s", code, body)
+	}
+}
+
+// withBackupManager gives the page a backup manager over the store withHub made.
+func withBackupManager(st **store.Store, dir string) func(*web.Server) {
+	return func(srv *web.Server) {
+		srv.Backups = &backup.Manager{Dir: dir, Source: *st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Keep: 7, Every: 24 * time.Hour}
+	}
+}
+
+func TestTheAdminPageShowsTheBackupScheduleAndTheNewestBackup(t *testing.T) {
+	var st *store.Store
+	dir := t.TempDir()
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withBackupManager(&st, dir)(srv) })
+	_, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if !strings.Contains(body, "Automatic backups: every 24h, keeping the newest 7") || !strings.Contains(body, "No backup has been made yet.") {
+		t.Error("the page does not show the schedule and that no backup exists yet")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "handoff-auto-20261107-120000.db"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil); !strings.Contains(body, "Newest backup: handoff-auto-20261107-120000.db") {
+		t.Error("the page does not show the newest backup")
 	}
 }

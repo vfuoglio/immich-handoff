@@ -27,6 +27,12 @@ const (
 	exitStop   = 130 // with --wait: interrupted; the backup is still queued in the app
 )
 
+// backupDir is where backups go: BACKUP_DIR (a second mounted folder is safer than one beside the data), else
+// a folder in the data directory.
+func backupDir(dataDir string) string { return env("BACKUP_DIR", dataDir+"/backups") }
+
+func backupSchedule() (time.Duration, int, error) { return backup.ParseSchedule(os.Getenv) }
+
 func backupURL(listen string) string {
 	return strings.TrimSuffix(healthURL(listen), "/healthz") + "/backup"
 }
@@ -166,7 +172,7 @@ func backupDirect(ctx context.Context, dir string, out, errOut io.Writer) int {
 		return exitFailed
 	}
 	defer st.Close()
-	job, err := backup.Direct(ctx, st, dir+"/backups", time.Now())
+	job, err := backup.Direct(ctx, st, backupDir(dir), time.Now())
 	if err != nil {
 		fmt.Fprintln(errOut, "backup failed:", err)
 		return exitFailed
@@ -187,7 +193,7 @@ func storeVault() (*vault.Vault, error) {
 }
 
 func listBackups(ctx context.Context, dir string, out, errOut io.Writer) int {
-	files, err := backup.List(dir + "/backups")
+	files, err := backup.List(backupDir(dir))
 	if err != nil {
 		fmt.Fprintln(errOut, "cannot read the backups:", err)
 		return exitFailed
@@ -196,13 +202,16 @@ func listBackups(ctx context.Context, dir string, out, errOut io.Writer) int {
 		fmt.Fprintf(out, "In progress: %s (%s)\n", r.Path, r.State)
 	}
 	if len(files) == 0 {
-		fmt.Fprintln(out, "No backups yet in", dir+"/backups")
+		fmt.Fprintln(out, "No backups yet in", backupDir(dir))
 		return exitOK
 	}
 	for _, f := range files {
 		note := ""
+		if f.Auto {
+			note = "  (automatic)"
+		}
 		if f.Forced {
-			note = "  (forced: made without a quiet moment)"
+			note += "  (forced: made without a quiet moment)"
 		}
 		fmt.Fprintf(out, "%s  %10d bytes  %s%s\n", f.Name, f.Size, f.When.Local().Format("2006-01-02 15:04"), note)
 	}

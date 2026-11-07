@@ -54,7 +54,7 @@ Ask the running app for a backup:
 docker compose exec immich-handoff /immich-handoff backup
 ```
 
-The command **queues** the backup and returns at once. The app makes it at the next quiet moment between hand-overs, so a copy never catches a photo halfway through, and writes it to `/data/backups/handoff-<date>-<time>.db`. The app's log says `backup ready` when it is done, and the file also shows up in the recent events on the [administrator's page](admin.md). Asking again while one is waiting does not queue another.
+The command **queues** the backup and returns at once. The app makes it at the next quiet moment between hand-overs, so a copy never catches a photo halfway through, and writes it to `/data/backups/handoff-<date>-<time>.db` (or to `BACKUP_DIR`, see [Automatic backups](#automatic-backups)). The app's log says `backup ready` when it is done, and the file also shows up in the recent events on the [administrator's page](admin.md). Asking again while one is waiting does not queue another.
 
 If hand-overs never pause for **4 hours** (a very busy install, or a transfer that is stuck), the backup is made anyway so you are never left without one. That file is a consistent copy but may hold one hand-over caught halfway, so its name ends in `-forced` (`handoff-20261106-120000-forced.db`), and you are told: a warning in the log, a line in the recent events, and a message to `NOTIFY_URL` if you set it.
 
@@ -64,13 +64,36 @@ Useful variations:
 - `backup --list` shows the backups in the folder, and the one in progress.
 - If the app is **not running**, the command copies at once and says so.
 
+### Automatic backups
+
+The app also makes a backup **on its own**, so there is one even if nobody ever runs the command. It is on by default whenever the app keeps data (`HANDOFF_STORE_KEY` is set).
+
+- **How often:** every 24 hours (`BACKUP_EVERY`, for example `12h`; one hour at the least). A backup is made about half a minute after the app starts if there is none yet or the newest is more than that old; after a restart it waits until the newest is `BACKUP_EVERY` old, so restarting often does not make more.
+- **How many:** the newest 7 (`BACKUP_KEEP`). Older automatic backups are removed. Their names start with `handoff-auto-`. Backups you asked for with the command are never removed by the app.
+- **Quiet moment:** an automatic backup waits for a quiet moment between hand-overs, and is made anyway after 4 hours (named `-forced`), exactly like the one the command asks for.
+- **When it fails** (a full disk, a folder that cannot be written), you are told like for any failed backup: a line in the log, a line in the recent events and a message to `NOTIFY_URL`. The app tries again an hour later, and the [administrator's page](admin.md#what-it-shows) says that the last backup failed and why. `doctor` also checks the settings.
+- **Turn it off** with `BACKUP_EVERY=off`. The command keeps working.
+
+**Where they go.** By default into `/data/backups`, inside the same volume as the data. That protects you from a mistake or a damaged file, but **not from losing the volume**. Better, mount a second folder (another disk, or a network share) and point `BACKUP_DIR` at it. The command, `backup --list` and the page use that folder too:
+
+```yaml
+services:
+  immich-handoff:
+    volumes:
+      - /mnt/another-disk/handoff-backups:/backups
+    environment:
+      BACKUP_DIR: /backups
+```
+
+The folder must be writable by the app. To restore from one of these files, follow [Restoring](#restoring) with that file.
+
 Take the file out of the volume (this works without a shell in the image), and keep it, together with a separate copy of `HANDOFF_STORE_KEY`, somewhere other than this machine:
 
 ```
 docker compose cp immich-handoff:/data/backups/handoff-20261106-120000.db .
 ```
 
-The file holds the saved API keys, still encrypted with `HANDOFF_STORE_KEY`, plus names and emails in the clear, so it is no more sensitive than the volume itself. Old backups are not deleted by the app; remove the ones you do not need from `/data/backups`. It does not contain your `.env`, your routes file or the store key: keep those yourself.
+The file holds the saved API keys, still encrypted with `HANDOFF_STORE_KEY`, plus names and emails in the clear, so it is no more sensitive than the volume itself. The app removes only the old *automatic* backups ([above](#automatic-backups)); remove the others you do not need yourself. It does not contain your `.env`, your routes file or the store key: keep those yourself.
 
 ### Restoring
 

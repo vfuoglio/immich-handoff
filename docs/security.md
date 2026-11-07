@@ -39,6 +39,11 @@ An Immich **administrator** can also open the [administrator's page](admin.md), 
 - The metrics page needs the same secret.
 - A photo is only removed after every receiver holds a verified copy (checked by checksum), and never while a connection is broken or a service has no healthy receiver.
 
+## Backups
+
+- A backup is a copy of the data file: every stored API key (encrypted with `HANDOFF_STORE_KEY`, which is **not** in the file) and names and emails in the clear. Treat it like the volume itself, and keep the store key separately.
+- The app makes automatic backups into `/data/backups` by default. That is beside the data it protects, so point `BACKUP_DIR` at a second folder if you want to survive losing the volume.
+
 ## The image you run
 
 The published image is built by GitHub Actions from a tag of this repository, for amd64 and arm64, on a base with no shell or package manager (distroless). Each release is **signed** (cosign, keyless, tied to the release workflow), carries a software bill of materials and build provenance, and is checked by CI before it is published. [Releasing](releasing.md#verifying-an-image) shows how to verify an image yourself. The workflows pin every action by commit hash, and Dependabot proposes updates to the actions, the Go modules and the base images each week.

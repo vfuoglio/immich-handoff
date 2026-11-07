@@ -140,13 +140,22 @@ func run(log *slog.Logger) error {
 		}
 		defer st.Close()
 		h.Store = st
-		backups = &backup.Manager{Dir: dir + "/backups", Source: st, Idle: s, Log: log, Tell: s.Tell,
+		every, keep, err := backupSchedule()
+		if err != nil {
+			return err
+		}
+		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: s.Tell, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)
 				}
 			}}
 		log.Info("self-service joining is on", "data", dir)
+		if every > 0 {
+			go backups.Schedule(ctx)
+		} else {
+			log.Info("automatic backups are off (BACKUP_EVERY=off): make them yourself with `immich-handoff backup`")
+		}
 	}
 	if err := h.Reload(ctx); err != nil {
 		return err

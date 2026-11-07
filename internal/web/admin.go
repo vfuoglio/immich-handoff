@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/doctor"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
@@ -48,7 +49,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	if me == nil {
 		return
 	}
-	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService()}
+	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), Backup: w.backupSummary(r.Context())}
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)
@@ -90,6 +91,36 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	ctx := context.WithValue(r.Context(), adminKey{}, true)
 	AdminPage(d).Render(ctx, rw)
+}
+
+// backupSummary is what the administrator's page says about backups.
+func (w *Server) backupSummary(ctx context.Context) AdminBackup {
+	b := AdminBackup{}
+	m := w.Backups
+	if m == nil {
+		return b
+	}
+	b.Has, b.Folder, b.Keep = true, m.Dir, m.Keep
+	if m.Every > 0 {
+		b.Every = everyText(m.Every)
+	}
+	if files, err := backup.List(m.Dir); err == nil && len(files) > 0 {
+		b.Count = len(files)
+		b.Last = files[0].Name
+		b.LastWhen = loc(ctx).Stamp(files[0].When.Local())
+	}
+	if j, ok := m.Latest(); ok && j.State == backup.Failed {
+		b.Failed = j.Err
+	}
+	return b
+}
+
+// everyText is the schedule as it is written in BACKUP_EVERY ("24h"): the same in every language.
+func everyText(d time.Duration) string {
+	if d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	}
+	return d.String()
 }
 
 // adminCheck runs the setup check that `immich-handoff doctor` runs, against the services the app has now.
