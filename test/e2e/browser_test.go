@@ -78,7 +78,7 @@ func browse(t *testing.T, port, cookie string, l look) context.Context {
 	}
 	features = append(features, &emulation.MediaFeature{Name: "prefers-reduced-motion", Value: motion})
 	actions := []chromedp.Action{
-		emulation.SetDeviceMetricsOverride(l.w, l.h, 1, l.touch),
+		emulation.SetDeviceMetricsOverride(l.w, l.h, 1, l.touch), // a phone is a mobile browser: its layout window grows to fit wide content, so it must not need to
 		emulation.SetEmulatedMedia().WithFeatures(features),
 		emulation.SetTouchEmulationEnabled(l.touch),
 		network.Enable(),
@@ -487,9 +487,13 @@ func TestBrowser(t *testing.T) {
 					t.Errorf("%s view: the bar touches the edge (%.0fpx)", view, left)
 				}
 			}
+			// everything in the bar must be inside the bar, on every size (a phone's bar once pushed its buttons off the edge)
+			out := js[[]string](t, ctx, `(() => { const bar = document.querySelector('header.bar').getBoundingClientRect(); return [...document.querySelectorAll('header.bar button, header.bar summary, header.bar nav a, header.bar img, header.bar .avatar')].filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.left < bar.left - 1 || r.right > bar.right + 1 || r.right > innerWidth); }).map(e => (e.id || e.className || e.tagName) + ' ' + Math.round(e.getBoundingClientRect().right) + '>' + Math.round(Math.min(bar.right, innerWidth))); })()`)
+			if len(out) > 0 {
+				t.Errorf("the bar's contents spill out of it or off the screen: %v", out)
+			}
 			if name == "phone" {
-				// the bar keeps the icon and the three tabs; the long labels fold away
-				for _, sel := range []string{"header.bar .brand img", "nav.tabs", "#theme", "#sound"} {
+				for _, sel := range []string{"header.bar .brand img", "nav.tabs", "#theme", "#sound", "details.lang summary"} {
 					if !js[bool](t, ctx, `(() => { const e = document.querySelector('`+sel+`'); const r = e.getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth && r.left >= 0; })()`) {
 						t.Errorf("on a phone %s must fit in the window", sel)
 					}

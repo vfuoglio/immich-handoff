@@ -122,9 +122,9 @@ YAML
   CRID=$(curl -s "$APP/" -H "Cookie: $(cookie_of bob)" | python3 -c "
 import re,sys,html
 t=html.unescape(sys.stdin.read())
-blocks=re.split(r'<div class=\"row\">', t)
+blocks=re.split(r'<article', t)
 for b in blocks:
-    if 'Carol' in b:
+    if 'carol@test.local' in b:
         m=re.search(r'\"request\":\"([0-9a-f-]{36})\"', b)
         if m: print(m.group(1)); break")
   app_post bob /decide -d 'service=Holiday 2026' -d "request=$CRID" -d 'decision=approve'; echo
