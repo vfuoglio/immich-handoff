@@ -308,3 +308,49 @@ dialog.confirm::backdrop { background: color-mix(in oklab, var(--bg) 62%, transp
 dialog.confirm h3 { margin: 0 0 .5rem; font-size: 1.25rem; letter-spacing: -.01em; }
 dialog.confirm p { margin: 0 0 1.1rem; }
 .confirm-actions { justify-content: flex-end; margin: 0; }
+
+/* the live scene */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.scene { display: grid; gap: .8rem; }
+.scene.is-offline .stage { opacity: .6; filter: saturate(.6); }
+.scene-offline { margin: 0; padding: .6rem .9rem; border-radius: var(--radius-sm); border: 1px dashed color-mix(in oklab, var(--warn) 55%, var(--border)); color: var(--warn); }
+.stage { margin: 0; }
+.stage > header { align-items: baseline; }
+.stage-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(9rem, 12rem); gap: .8rem; margin-top: .4rem; }
+.lanes { display: grid; gap: .6rem; align-content: start; min-width: 0; }
+.lane { display: grid; grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr); gap: .8rem; align-items: center; padding: .6rem .7rem; border-radius: 18px; border: 1px solid var(--border); background: color-mix(in oklab, var(--bg) 40%, transparent); transition: opacity .4s, filter .4s, border-color .4s; min-width: 0; }
+.lane[data-state="paused"] { opacity: .65; filter: saturate(.55); border-style: dashed; }
+.lane[data-state="capped"] { border-color: color-mix(in oklab, var(--warn) 60%, transparent); }
+.lane[data-state="broken"] { border-color: color-mix(in oklab, var(--bad) 65%, transparent); }
+.lane-who { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.lane-who > div { min-width: 0; }
+.lane-who b { display: block; font: 700 .98rem var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane-state { display: block; font-size: .78rem; color: var(--muted); }
+.lane[data-state="paused"] .lane-state { color: var(--muted); }
+.lane[data-state="capped"] .lane-state { color: var(--warn); }
+.lane[data-state="broken"] .lane-state { color: var(--bad); }
+.lane .avatar { background: linear-gradient(140deg, hsl(var(--h) 85% 68%), hsl(calc(var(--h) + 50) 75% 52%)); }
+.track { position: relative; height: 56px; min-width: 0; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: repeating-linear-gradient(90deg, var(--border) 0 8px, transparent 8px 16px); }
+.lane[data-state="broken"] .track::after { content: "\2715"; position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%); color: var(--bad); font-weight: 800; }
+.lane[data-state="capped"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--warn); }
+.lane[data-state="paused"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); }
+.token, .landed i { background: radial-gradient(circle at 70% 30%, #fff9 0 7%, transparent 8%), linear-gradient(170deg, hsl(var(--ph) 90% 66%), hsl(calc(var(--ph) + 45) 70% 34%)); border: 1px solid #ffffff55; }
+.token { position: absolute; left: 0; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 11px; box-shadow: 0 8px 20px -6px hsl(var(--ph) 80% 50% / .7); }
+.t0 { --ph: 24; } .t1 { --ph: 190; } .t2 { --ph: 265; } .t3 { --ph: 330; } .t4 { --ph: 45; } .t5 { --ph: 150; }
+.gate { border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
+.landed { display: flex; min-height: 28px; }
+.landed i { width: 28px; height: 28px; border-radius: 8px; margin-right: -13px; animation: pop .45s cubic-bezier(.2, 1.5, .4, 1); }
+@keyframes pop { from { transform: scale(0); } }
+.gate .big { display: block; font: 800 clamp(2.2rem, 7vw, 3rem)/1 var(--font-display); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.gate .big.bump { animation: bump .5s; }
+@keyframes bump { 40% { transform: scale(1.12); color: var(--horizon); } }
+.gate .cl { display: block; font: 500 .68rem var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.scene-log { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; font-size: .88rem; color: var(--muted); }
+.scene-log li { animation: slide .35s; }
+@keyframes slide { from { opacity: 0; transform: translateY(-5px); } }
+@media (max-width: 640px) {
+  .stage-body { grid-template-columns: minmax(0, 1fr); }
+  .lane { grid-template-columns: minmax(0, 1fr); }
+  .gate { min-height: 0; flex-direction: row; align-items: center; flex-wrap: wrap; }
+}

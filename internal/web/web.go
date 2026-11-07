@@ -77,6 +77,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
+	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
@@ -257,7 +258,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 		if a := m.account(svc, "sender"); a != nil {
 			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
 				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
-				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(svc.LimitPhotos, svc.LimitMB)}
+				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(svc.LimitPhotos, svc.LimitMB), Account: a.Name}
 			switch {
 			case svc.Paused:
 				v.Hold = "The owner paused this service."
@@ -297,6 +298,37 @@ func (w *Server) limitsFor(ctx context.Context, v *ServiceView, svc *syncer.Serv
 	}
 }
 
+// ownedViews are the services the person offers, with their senders, limits and waiting requests.
+func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
+	var out []OwnedView
+	owned, err := w.Hub.Owned(ctx, me.user.ID)
+	if err != nil {
+		return nil
+	}
+	for _, o := range owned {
+		ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
+			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB}
+		if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
+			for _, m := range members {
+				mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused,
+					AtLimit: (o.Service.LimitPhotos > 0 && m.Photos >= o.Service.LimitPhotos) || (o.Service.LimitMB > 0 && m.MB >= int64(o.Service.LimitMB))}
+				if o.Service.LimitPhotos > 0 || o.Service.LimitMB > 0 {
+					mv.Used = fmt.Sprintf("%d %s, %d MB in the last 24 hours", m.Photos, plural(m.Photos, "photo", "photos"), m.MB)
+				}
+				ov.Members = append(ov.Members, mv)
+			}
+		}
+		if o.Service.AllowJoin {
+			ov.Policy = "open"
+		}
+		for _, r := range o.Requests {
+			ov.Requests = append(ov.Requests, RequestView{ID: r.ID, Name: r.Name, Email: r.Email})
+		}
+		out = append(out, ov)
+	}
+	return out
+}
+
 func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d := DashboardData{User: me.user.Name, Services: w.servicesFor(ctx, me), Last: w.S.Last()}
 	// Tags are off by default in Immich, and without them a person cannot add or see tags, which is the whole
@@ -305,6 +337,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 		d.TagsOff = !on
 	}
 	if w.Hub == nil || !w.Hub.SelfService() {
+		w.overview(ctx, me, &d) // an install with only fixed accounts has the greeting, the numbers and the scene too
 		return d
 	}
 	d.CanOffer = true
@@ -317,29 +350,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State})
 		}
 	}
-	if owned, err := w.Hub.Owned(ctx, me.user.ID); err == nil {
-		for _, o := range owned {
-			ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
-				Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB}
-			if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
-				for _, m := range members {
-					mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused,
-						AtLimit: (o.Service.LimitPhotos > 0 && m.Photos >= o.Service.LimitPhotos) || (o.Service.LimitMB > 0 && m.MB >= int64(o.Service.LimitMB))}
-					if o.Service.LimitPhotos > 0 || o.Service.LimitMB > 0 {
-						mv.Used = fmt.Sprintf("%d %s, %d MB in the last 24 hours", m.Photos, plural(m.Photos, "photo", "photos"), m.MB)
-					}
-					ov.Members = append(ov.Members, mv)
-				}
-			}
-			if o.Service.AllowJoin {
-				ov.Policy = "open"
-			}
-			for _, r := range o.Requests {
-				ov.Requests = append(ov.Requests, RequestView{ID: r.ID, Name: r.Name, Email: r.Email})
-			}
-			d.Owned = append(d.Owned, ov)
-		}
-	}
+	d.Owned = w.ownedViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
 		for _, b := range broken {
@@ -364,6 +375,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 		d.Headline = "Hello, " + first[0] + "."
 	}
 	d.Needs = needsOf(d)
+	d.Scene = sceneOf(d, w.S.Current())
 	d.ShowNumber = len(d.Services) > 0
 	if d.TagsOff {
 		return // the page is switched off until Tags are on, and so is the guide
@@ -615,6 +627,20 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Error(rw, "no such service for you", http.StatusNotFound)
+}
+
+// sceneFragment is the live scene again, asked for when the page learns it missed something or the stream came back.
+func (w *Server) sceneFragment(rw http.ResponseWriter, r *http.Request) {
+	me := w.requireMember(rw, r)
+	if me == nil {
+		return
+	}
+	d := DashboardData{Services: w.servicesFor(r.Context(), me)}
+	if w.Hub != nil && w.Hub.SelfService() {
+		d.Owned = w.ownedViews(r.Context(), me)
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	Scene(sceneOf(&d, w.S.Current())).Render(r.Context(), rw)
 }
 
 // numbersFragment is the Overview's three numbers and the week's chart, asked for when the page opens and again

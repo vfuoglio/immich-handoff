@@ -29,6 +29,7 @@ type ServiceView struct {
 	Waiting    string // sender: photos waiting because the limit was reached, and until when
 	Stopped    bool   // receiver: the owner paused this service
 	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
+	Account    string // sender: the name this person's account goes by in the service (what live events call them)
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -80,6 +81,20 @@ type ActivityView struct {
 
 // Chip is a small state label on a service row.
 type Chip struct{ Tone, Text string }
+
+// SceneLane is one sender's lane in the live scene.
+type SceneLane struct {
+	Name     string // what live events call the sender
+	State    string // flow | paused | capped | broken
+	PausedBy string // service | sender, when State is paused
+}
+
+// SceneStage is one service in the live scene: its senders' lanes and the gate they hand photos through.
+type SceneStage struct {
+	Service string
+	Where   string // one line about the receiving side
+	Lanes   []SceneLane
+}
 
 // NeedAction is a button on a card in the "Needs you" strip.
 type NeedAction struct {
@@ -140,6 +155,7 @@ type DashboardData struct {
 
 	Headline   string // the greeting, e.g. "Hello, Alice."
 	Needs      []NeedView
+	Scene      []SceneStage // one stage per service that has senders
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 }
@@ -272,6 +288,10 @@ templ Dashboard(d DashboardData) {
 				<summary>Offer a service of your own</summary>
 				@OfferForm()
 			</details>
+		}
+		if len(d.Scene) > 0 {
+			<h2>Live <span class="chip ok">as it happens</span></h2>
+			@Scene(d.Scene)
 		}
 		if len(d.Activity) > 0 {
 			<h2>Recent events</h2>
@@ -879,5 +899,47 @@ templ Guide(g GuideView) {
 			</ol>
 			<p class="row"><button hx-post="guide/dismiss" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">Hide this guide</button></p>
 		</div>
+	</section>
+}
+
+// Scene is the live scene: for each service a stage with a lane per sender and a gate into the receiving library. The
+// script (scene.ts) animates it from the live events; without script or motion the same facts are in the lane labels,
+// the counter and the log. It asks for itself again when the page learns it missed something.
+templ Scene(stages []SceneStage) {
+	<section id="scene" class="scene" hx-get="fragments/scene" hx-trigger="scene:refresh from:body" hx-swap="outerHTML" aria-label="Live hand-overs">
+		<p class="meta scene-offline" data-offline hidden>Live updates are off for now: the connection to the app dropped. They come back by themselves; the numbers above still refresh when you reload the page.</p>
+		for _, st := range stages {
+			<article class="card stage" data-stage data-service={ st.Service }>
+				<header>
+					<h3>{ st.Service }</h3>
+					<span class="meta">{ st.Where }</span>
+				</header>
+				<div class="stage-body">
+					<div class="lanes">
+						for _, l := range st.Lanes {
+							<div class="lane" data-lane data-sender={ l.Name } data-state={ l.State } data-paused={ l.PausedBy }>
+								<div class="lane-who">
+									<span class={ "avatar", hueClass(l.Name) } aria-hidden="true">{ initial(l.Name) }</span>
+									<div>
+										<b>{ l.Name }</b>
+										<span class="lane-state" data-lane-state>{ laneLabel(l) }</span>
+									</div>
+								</div>
+								<div class="track" data-track></div>
+							</div>
+						}
+					</div>
+					<aside class="gate" aria-label={ "Arrivals in " + st.Service }>
+						<div class="landed" data-landed aria-hidden="true"></div>
+						<div>
+							<span class="big" data-arrived>0</span>
+							<span class="cl">arrived while you watch</span>
+						</div>
+					</aside>
+				</div>
+			</article>
+		}
+		<ul class="scene-log" data-log aria-label="What just happened"><li class="meta" data-empty>Nothing yet. What happens next shows here.</li></ul>
+		<p class="visually-hidden" role="status" aria-live="polite" data-announce></p>
 	</section>
 }

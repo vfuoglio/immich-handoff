@@ -2001,13 +2001,24 @@ func TestLiveEvents(t *testing.T) {
 	}
 	_ = alice
 
+	// the live scene on the page: a stage for the service with a lane for bob, which follows what really happens
+	if p := page(t, port, owner); !strings.Contains(p, `data-service="live"`) || !strings.Contains(p, `data-state="flow"`) || !strings.Contains(p, "arrived while you watch") {
+		t.Errorf("the owner's page must have the live scene with bob's lane: %.600s", p)
+	}
+
 	// the sender pauses
 	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"1"}}), 204, "bob pauses")
+	if p := page(t, port, owner); !strings.Contains(p, `data-state="paused" data-paused="sender"`) || !strings.Contains(p, "Paused by the sender") {
+		t.Errorf("bob's lane must show his pause: %.800s", p)
+	}
 	for who, feed := range map[string]<-chan map[string]any{"owner": ownerFeed, "sender": senderFeed} {
 		waitEvent(t, who, feed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "paused" && e["reason"] == "sender" })
 	}
 	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"0"}}), 204, "bob resumes")
 	waitEvent(t, "owner", ownerFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "resumed" })
+	if p := page(t, port, owner); strings.Contains(p, `data-paused="sender"`) {
+		t.Errorf("after resuming the lane must not say paused: %.400s", p)
+	}
 
 	// the daily limit: one photo went today, so a limit of one holds the next
 	must(post(t, port, "/services/limits", owner, url.Values{"service": {"live"}, "photos": {"1"}}), 204, "limit")
@@ -2018,4 +2029,7 @@ func TestLiveEvents(t *testing.T) {
 		t.Errorf("held: %v", held)
 	}
 	waitEvent(t, "sender", senderFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "limit" })
+	if p := page(t, port, owner); !strings.Contains(p, `data-state="capped"`) || !strings.Contains(p, "Daily limit reached") {
+		t.Errorf("bob's lane must show the limit: %.800s", p)
+	}
 }

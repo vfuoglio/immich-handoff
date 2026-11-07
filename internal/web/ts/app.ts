@@ -3,6 +3,7 @@
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
 import { parseLive } from "./live";
+import { initScene } from "./scene";
 
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
@@ -55,9 +56,19 @@ document.addEventListener("tags-on", () => {
     const event = parseLive((message as MessageEvent<string>).data);
     if (event) document.dispatchEvent(new CustomEvent("handoff:live", { detail: event }));
   });
-  events.onopen = () => indicator?.classList.remove("off");
-  events.onerror = () => indicator?.classList.add("off");
+  const stream = (up: boolean): void => {
+    indicator?.classList.toggle("off", !up);
+    document.dispatchEvent(new CustomEvent("handoff:stream", { detail: { up } }));
+  };
+  events.onopen = () => stream(true);
+  events.onerror = () => stream(false);
 })();
+
+// The live scene at the bottom of the Overview, when the page has one.
+document.addEventListener("DOMContentLoaded", () => {
+  const scene = document.getElementById("scene");
+  if (scene) initScene(scene);
+});
 
 // Invitation links: show the full address (it depends on where this page is served) and let people copy it.
 function fillInvites(scope: ParentNode): void {

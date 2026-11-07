@@ -7,6 +7,8 @@ import (
 	"github.com/a-h/templ"
 	"net/url"
 	"strings"
+
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
 func initial(name string) string {
@@ -451,3 +453,83 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 
 // RowCount is how many service rows the page shows; with exactly one it starts open.
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
+
+// laneLabel is the words under a sender's name before any live event has changed them (scene.ts keeps them up to date).
+func laneLabel(l SceneLane) string {
+	switch l.State {
+	case "broken":
+		return "Connection lost"
+	case "paused":
+		if l.PausedBy == "service" {
+			return "Paused by the owner"
+		}
+		return "Paused by the sender"
+	case "capped":
+		return "Daily limit reached: photos wait"
+	}
+	return "Flowing"
+}
+
+// sceneOf is the live scene for the person: a stage for every service they send to (their own lane), receive from
+// (the senders from the configuration) or offer (the senders who joined), with the state each lane is in now.
+func sceneOf(d *DashboardData, current []*syncer.Service) []SceneStage {
+	var out []SceneStage
+	for _, s := range d.Sending() {
+		lane := SceneLane{Name: s.Account, State: "flow"}
+		switch {
+		case s.Paused != "":
+			lane.State = "broken"
+		case s.MinePaused:
+			lane.State, lane.PausedBy = "paused", "sender"
+		case s.Hold != "":
+			lane.State, lane.PausedBy = "paused", "service"
+		case s.Waiting != "":
+			lane.State = "capped"
+		}
+		if lane.Name != "" {
+			out = append(out, SceneStage{Service: s.Name, Where: fmt.Sprintf("%d %s receiving", s.To, plural(s.To, "receiver", "receivers")), Lanes: []SceneLane{lane}})
+		}
+	}
+	for _, s := range d.Receiving() {
+		st := SceneStage{Service: s.Name, Where: "into your library"}
+		for _, svc := range current {
+			if svc.Label() != s.Name {
+				continue
+			}
+			for _, a := range svc.Senders {
+				lane := SceneLane{Name: a.Name, State: "flow"}
+				switch {
+				case svc.Broken != "":
+					lane.State = "broken"
+				case svc.Paused:
+					lane.State, lane.PausedBy = "paused", "service"
+				}
+				st.Lanes = append(st.Lanes, lane)
+			}
+		}
+		if len(st.Lanes) > 0 {
+			out = append(out, st)
+		}
+	}
+	for _, o := range d.Owned {
+		st := SceneStage{Service: o.Name, Where: "into your library"}
+		for _, m := range o.Members {
+			lane := SceneLane{Name: m.Name, State: "flow"}
+			switch {
+			case o.Broken != "" || m.State == "broken":
+				lane.State = "broken"
+			case o.Paused:
+				lane.State, lane.PausedBy = "paused", "service"
+			case m.Paused:
+				lane.State, lane.PausedBy = "paused", "sender"
+			case m.AtLimit:
+				lane.State = "capped"
+			}
+			st.Lanes = append(st.Lanes, lane)
+		}
+		if len(st.Lanes) > 0 {
+			out = append(out, st)
+		}
+	}
+	return out
+}

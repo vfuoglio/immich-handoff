@@ -167,3 +167,12 @@ func TestTheFirstRunGuideFollowsTheStepsAndGoesAwayWhenDone(t *testing.T) {
 	// while Tags are off the whole page is switched off, and so is the guide
 	lacks(t, get(t, app.URL, "sess=other"), "Get started")
 }
+
+// An install with only fixed accounts (no data file) has no memberships to remember, but the page still opens with a
+// greeting, the numbers and the live scene, and without the guide.
+func TestAnInstallWithOnlyFixedAccountsHasTheOverviewToo(t *testing.T) {
+	app, _ := setup(t)
+	body := get(t, app.URL, "sess=alice")
+	has(t, body, "<h1>Hello, Alice.</h1>", "Nothing needs you right now.", `id="numbers"`, `id="scene"`)
+	lacks(t, body, "Get started", "<h1></h1>")
+}
