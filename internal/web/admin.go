@@ -69,7 +69,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 			}
 		}
 		v := AdminServiceView{Name: s.Name, Tag: s.Tag, Policy: s.Policy, Album: s.Album, InviteOnly: s.InviteOnly, Copy: s.Copy,
-			FromConfig: s.FromConfig, Receivers: s.Receivers, Broken: s.Broken, Paused: s.Paused, Limit: limitText(s.LimitPhotos, s.LimitMB)}
+			FromConfig: s.FromConfig, Receivers: s.Receivers, Broken: s.Broken, Paused: s.Paused, Limit: limitText(r.Context(), s.LimitPhotos, s.LimitMB)}
 		if s.OwnerName != "" {
 			v.Owner = s.OwnerName + " (" + s.OwnerEmail + ")"
 		}
@@ -84,7 +84,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	d.Attention += len(leftover)
 	if events, err := w.Hub.RecentEvents(r.Context(), 30); err == nil {
 		for _, e := range events {
-			d.Activity = append(d.Activity, AdminActivityView{When: e.At.Local().Format("2 Jan 15:04"), Service: e.Service, Text: e.Text, Tone: activityTone(e.Kind)})
+			d.Activity = append(d.Activity, AdminActivityView{When: loc(r.Context()).Stamp(e.At.Local()), Service: e.Service, Text: unpack(r.Context(), e.Text), Tone: activityTone(e.Kind)})
 		}
 	}
 	rw.Header().Set("Cache-Control", "no-store")
@@ -128,7 +128,7 @@ func (w *Server) adminChange(rw http.ResponseWriter, r *http.Request, what strin
 		w.Log.Warn("admin change failed", "action", what, "admin", me.user.Email, "err", err)
 		rw.Header().Set("HX-Reswap", "innerHTML")
 		rw.WriteHeader(status)
-		fmt.Fprint(rw, "Could not do that: ", err.Error())
+		fmt.Fprint(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())))
 		return
 	}
 	rw.Header().Set("HX-Refresh", "true")

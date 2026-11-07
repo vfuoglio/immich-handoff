@@ -2,7 +2,8 @@
    the shell, then components. Mobile first. No inline styles anywhere: the Content-Security-Policy forbids them.
    The fonts are served from the app itself (static/fonts, SIL Open Font License, licences next to them). */
 
-/* fonts: latin and latin-ext only, more scripts arrive with the translations. Bricolage Grotesque is the file with its
+/* fonts: latin and latin-ext, plus Cyrillic for Russian (Onest, which the headings and the text fall back to for those letters, and
+   JetBrains Mono). More scripts would need their own files. Bricolage Grotesque is the file with its
    optical-size axis (opsz), which is what makes large headings tighter and more characterful than small text. */
 @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-display: swap; font-weight: 200 800; src: url(fonts/bricolage-grotesque-latin-ext-opsz.woff2) format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-display: swap; font-weight: 200 800; src: url(fonts/bricolage-grotesque-latin-opsz.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
@@ -10,6 +11,8 @@
 @font-face { font-family: "Figtree"; font-style: normal; font-display: swap; font-weight: 300 900; src: url(fonts/figtree-latin.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 100 800; src: url(fonts/jetbrains-mono-latin-ext.woff2) format("woff2"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 100 800; src: url(fonts/jetbrains-mono-latin.woff2) format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Onest"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(fonts/onest-cyrillic.woff2) format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 100 800; src: url(fonts/jetbrains-mono-cyrillic.woff2) format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
 
 :root {
   /* palette: light */
@@ -34,8 +37,8 @@
   --primary: var(--accent);
   --primary-text: var(--on-accent);
   /* type, space, shape */
-  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Bricolage Grotesque", "Onest", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Figtree", "Onest", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 22px;
   --radius-sm: 12px;
@@ -463,3 +466,16 @@ details.more[open] > summary::before { content: "\2212"; }
 .member-facts { display: flex; flex-wrap: wrap; gap: .1rem .8rem; flex: 1 1 14rem; min-width: 0; }
 .member-note { flex-basis: 100%; }
 .member-list li button { margin-left: auto; padding: .35rem .8rem; font-size: .85rem; }
+
+/* the language menu in the bar */
+details.lang { position: relative; margin-left: auto; margin-right: .5rem; }
+details.lang > summary { list-style: none; cursor: pointer; }
+details.lang > summary::-webkit-details-marker { display: none; }
+details.lang > summary.icon-btn.wide { display: inline-flex; }
+.lang-code { font: 600 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
+.lang-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
+  border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+.lang-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
+.lang-menu button:hover { background: var(--surface-2); transform: none; }
+.lang-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
+.lang-menu button[aria-checked="true"]::after { content: " \2713"; }

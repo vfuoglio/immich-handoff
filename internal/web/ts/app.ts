@@ -2,10 +2,12 @@
 // (esbuild); the bundle is committed, so building the program needs nothing else. `tsc --noEmit` checks
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
+import { loadCatalog, t } from "./i18n";
 import { parseLive } from "./live";
 import { initScene } from "./scene";
 import { enhance } from "./odometer";
 import { initEffects } from "./effects";
+import { initLanguage } from "./lang";
 import { initPalette } from "./palette";
 import { initSound } from "./sound";
 import { initTabs } from "./tabs";
@@ -31,9 +33,9 @@ document.addEventListener("htmx:confirm", (e) => {
   const ok = document.getElementById("confirm-ok");
   if (!title || !text || !ok) return;
   const data = elt instanceof HTMLElement ? elt.dataset : {};
-  title.textContent = data["confirmTitle"] ?? "Please confirm";
+  title.textContent = data["confirmTitle"] ?? t("Please confirm");
   text.textContent = question;
-  ok.textContent = data["confirmLabel"] ?? "Continue";
+  ok.textContent = data["confirmLabel"] ?? t("Continue");
   ok.classList.toggle("danger", data["danger"] === "true");
   ok.classList.toggle("primary", data["danger"] !== "true");
   dialog.returnValue = "cancel";
@@ -71,6 +73,8 @@ document.addEventListener("tags-on", () => {
 
 // The live scene at the bottom of the Overview, when the page has one.
 document.addEventListener("DOMContentLoaded", () => {
+  loadCatalog();
+  initLanguage();
   initTabs();
   initEffects();
   initPalette();
@@ -107,7 +111,7 @@ document.addEventListener("click", (e) => {
   const input = button.parentElement?.querySelector<HTMLInputElement>("input.invite");
   if (input && navigator.clipboard) {
     void navigator.clipboard.writeText(input.value).then(() => {
-      button.textContent = "Copied";
+      button.textContent = t("Copied");
     });
   }
 });

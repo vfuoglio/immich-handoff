@@ -3,11 +3,11 @@ package hub
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -61,7 +61,8 @@ func (h *Hub) Record(ctx context.Context, acct *syncer.Account, bytes int64) err
 
 // LimitReached implements syncer.Reporter: the first time a sender's photos wait for the cap, both sides can see it.
 func (h *Hub) LimitReached(svc *syncer.Service, snd *syncer.Account, waiting int, until time.Time) {
-	text := fmt.Sprintf("%s reached the daily limit for %s: %d %s will wait until %s", snd.Name, svc.Label(), waiting, plural(waiting), until.Local().Format("2 Jan 15:04"))
+	text := i18n.PackN("{name} reached the daily limit for {service}: {n} photo will wait until {when}", "{name} reached the daily limit for {service}: {n} photos will wait until {when}", waiting,
+		"name", snd.Name, "service", svc.Label(), "when", until)
 	h.event(context.Background(), svc.Label(), snd.UserID, "limit", text)
 	h.showUntil(context.Background(), live.Limit, svc.Label(), snd.Name, "", waiting, until, snd.UserID)
 }
@@ -79,17 +80,18 @@ func (h *Hub) SetLimits(ctx context.Context, owner immich.User, service string, 
 	if err := h.Store.SetServiceLimits(ctx, v.Name, photos, megabytes); err != nil {
 		return err
 	}
-	text := "No daily limit for senders"
-	if photos > 0 || megabytes > 0 {
-		text = "Daily limit for each sender:"
-		if photos > 0 {
-			text += fmt.Sprintf(" %d %s", photos, plural(photos))
-		}
-		if megabytes > 0 {
-			text += fmt.Sprintf(" %d MB", megabytes)
-		}
+	var text string
+	switch {
+	case photos > 0 && megabytes > 0:
+		text = i18n.PackN("{name} set the daily limit of {service} to {n} photo and {mb} MB per sender", "{name} set the daily limit of {service} to {n} photos and {mb} MB per sender", photos, "name", owner.Name, "service", service, "mb", megabytes)
+	case photos > 0:
+		text = i18n.PackN("{name} set the daily limit of {service} to {n} photo per sender", "{name} set the daily limit of {service} to {n} photos per sender", photos, "name", owner.Name, "service", service)
+	case megabytes > 0:
+		text = i18n.Pack("{name} set the daily limit of {service} to {mb} MB per sender", "name", owner.Name, "service", service, "mb", megabytes)
+	default:
+		text = i18n.Pack("{name} removed the daily limit of {service}", "name", owner.Name, "service", service)
 	}
-	h.event(ctx, service, owner.ID, "limits", owner.Name+" changed the limits of "+service+": "+text)
+	h.event(ctx, service, owner.ID, "limits", text)
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
@@ -117,7 +119,11 @@ func (h *Hub) SetServicePaused(ctx context.Context, owner immich.User, service s
 	if paused {
 		word = "paused"
 	}
-	h.event(ctx, service, owner.ID, word, owner.Name+" "+word+" the service "+service)
+	if paused {
+		h.event(ctx, service, owner.ID, word, i18n.Pack("{name} paused the service {service}", "name", owner.Name, "service", service))
+	} else {
+		h.event(ctx, service, owner.ID, word, i18n.Pack("{name} resumed the service {service}", "name", owner.Name, "service", service))
+	}
 	h.show(ctx, live.Kind(word), service, "", "service", true)
 	if err := h.Reload(ctx); err != nil {
 		return err
@@ -144,7 +150,11 @@ func (h *Hub) SetMemberPaused(ctx context.Context, user immich.User, service str
 	if paused {
 		word = "paused"
 	}
-	h.event(ctx, service, user.ID, word, user.Name+" "+word+" sending to "+service)
+	if paused {
+		h.event(ctx, service, user.ID, word, i18n.Pack("{name} paused sending to {service}", "name", user.Name, "service", service))
+	} else {
+		h.event(ctx, service, user.ID, word, i18n.Pack("{name} resumed sending to {service}", "name", user.Name, "service", service))
+	}
 	h.show(ctx, live.Kind(word), service, user.Name, "sender", false, user.ID)
 	if err := h.Reload(ctx); err != nil {
 		return err

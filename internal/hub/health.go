@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -43,12 +44,12 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 		return // a key from the configuration: the pass already reports it
 	}
 	ctx := context.Background()
-	note := "Immich rejected the API key (it was deleted or revoked) on " + time.Now().UTC().Format("2006-01-02") + "."
+	note := i18n.Pack("Immich rejected the API key (it was deleted or revoked) on {date}.", "date", i18n.Day(time.Now()))
 	if ok, _ := h.Store.SetLinkState(ctx, id, store.StateBroken, note); ok {
 		links, _ := h.Store.Links(ctx)
 		for _, l := range links {
 			if l.ID == id {
-				h.event(ctx, l.Service, l.ImmichUserID, "broken", l.Name+"'s connection to "+l.Service+" was cut: their API key was deleted")
+				h.event(ctx, l.Service, l.ImmichUserID, "broken", i18n.Pack("{name}'s connection to {service} was cut: their API key was deleted", "name", l.Name, "service", l.Service))
 				h.show(ctx, live.Lost, l.Service, l.Name, "sender", false, l.ImmichUserID)
 				h.tell(fmt.Sprintf("%s's API key for %q was deleted in Immich; the link is paused. They can clean up and join again.", l.Name, l.Service))
 			}
@@ -57,7 +58,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 		svcs, _ := h.Store.Services(ctx)
 		for _, v := range svcs {
 			if v.ID == id {
-				h.event(ctx, v.Name, v.OwnerID, "broken", v.Name+" cannot receive: its owner's API key was deleted")
+				h.event(ctx, v.Name, v.OwnerID, "broken", i18n.Pack("{service} cannot receive: its owner's API key was deleted", "service", v.Name))
 				h.show(ctx, live.Lost, v.Name, "", "service", true)
 				h.tell(fmt.Sprintf("The receiver key of %q (owner %s) was deleted in Immich; senders are paused until the owner reconnects.", v.Name, v.OwnerName))
 			}
@@ -140,7 +141,7 @@ func (h *Hub) ReconnectService(ctx context.Context, sess *immich.API, owner immi
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
-	h.event(ctx, name, owner.ID, "reconnected", owner.Name+" reconnected "+name)
+	h.event(ctx, name, owner.ID, "reconnected", i18n.Pack("{name} reconnected {service}", "name", owner.Name, "service", name))
 	h.show(ctx, live.Restored, name, "", "service", true)
 	h.Log.Info("service reconnected", "service", name, "owner", owner.Email)
 	if h.Wake != nil {

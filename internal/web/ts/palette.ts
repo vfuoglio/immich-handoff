@@ -3,6 +3,8 @@
 // owner's commands differ from a sender's, and the administrator's page appears only for an administrator), and running
 // a command presses the very button the page has, so questions are still asked and nothing is bypassed.
 
+import { t } from "./i18n.ts";
+
 export interface Command {
   label: string;
   hint: string;
@@ -39,35 +41,36 @@ function goTo(view: string): void {
 /** The commands this person has, from what the page shows. */
 function collect(): Command[] {
   const commands: Command[] = [];
-  for (const [view, name] of [["overview", "Overview"], ["services", "Services"], ["activity", "Activity"]] as const) {
-    commands.push({ label: `Go to ${name}`, hint: "view", run: () => goTo(view) });
+  const views = [["overview", t("Overview")], ["services", t("Services")], ["activity", t("Activity")]] as const;
+  for (const [view, name] of views) {
+    commands.push({ label: t("Go to {view}", { view: name }), hint: t("view"), run: () => goTo(view) });
   }
   // what waits on the person: the buttons on the "Needs you" cards
   document.querySelectorAll<HTMLElement>("#v-overview .needs .card.need").forEach((card) => {
     const title = card.querySelector("b")?.textContent?.trim() ?? "";
     card.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-      commands.push({ label: `${button.textContent?.trim() ?? ""}: ${title}`, hint: "needs you", run: () => button.click() });
+      commands.push({ label: `${button.textContent?.trim() ?? ""}: ${title}`, hint: t("needs you"), run: () => button.click() });
     });
   });
   // each service: open it, and pause or resume it
   document.querySelectorAll<HTMLDetailsElement>("#v-services details.svc").forEach((row) => {
     const name = row.querySelector(".title b")?.textContent?.trim() ?? "";
-    commands.push({ label: `Open ${name}`, hint: "service", run: () => { goTo("services"); row.open = true; row.scrollIntoView({ block: "center" }); } });
-    row.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-      const text = button.textContent?.trim() ?? "";
-      if (/^(Pause|Resume)\b/.test(text)) commands.push({ label: `${text}: ${name}`, hint: "service", run: () => button.click() });
+    commands.push({ label: t("Open {name}", { name }), hint: t("service"), run: () => { goTo("services"); row.open = true; row.scrollIntoView({ block: "center" }); } });
+    row.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((button) => {
+      // the buttons that pause or resume say so in data-act, whatever language their words are in
+      commands.push({ label: `${button.textContent?.trim() ?? ""}: ${name}`, hint: t("service"), run: () => button.click() });
     });
   });
   const offer = document.querySelector<HTMLDetailsElement>("#v-services details.offer");
-  if (offer) commands.push({ label: "Offer a service of your own", hint: "service", run: () => { goTo("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
+  if (offer) commands.push({ label: t("Offer a service of your own"), hint: t("service"), run: () => { goTo("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
-  if (sync) commands.push({ label: "Sync now", hint: "action", run: () => sync.click() });
+  if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });
   const admin = document.querySelector<HTMLAnchorElement>("a.adminlink");
-  if (admin) commands.push({ label: "Open the administrator's page", hint: "admin", run: () => { location.href = admin.href; } });
+  if (admin) commands.push({ label: t("Open the administrator's page"), hint: t("admin"), run: () => { location.href = admin.href; } });
   const theme = document.getElementById("theme");
-  if (theme) commands.push({ label: "Switch between the light and the dark theme", hint: "theme", run: () => theme.click() });
+  if (theme) commands.push({ label: t("Switch between the light and the dark theme"), hint: t("theme"), run: () => theme.click() });
   const sound = document.getElementById("sound");
-  if (sound) commands.push({ label: "Turn the arrival chime on or off", hint: "sound", run: () => sound.click() });
+  if (sound) commands.push({ label: t("Turn the arrival chime on or off"), hint: t("sound"), run: () => sound.click() });
   return commands;
 }
 
@@ -98,7 +101,7 @@ export function initPalette(): void {
     });
     if (shown.length === 0) {
       const none = document.createElement("li");
-      none.textContent = "Nothing matches";
+      none.textContent = t("Nothing matches");
       list.appendChild(none);
     }
     input.setAttribute("aria-activedescendant", "");

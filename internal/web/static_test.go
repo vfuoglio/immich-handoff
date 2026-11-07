@@ -100,7 +100,8 @@ func TestPagesUseNoInlineStylesOrScripts(t *testing.T) {
 			t.Errorf("%s uses an inline style, which the Content-Security-Policy blocks", c.name)
 		}
 		for _, s := range regexp.MustCompile(`<script[^>]*>`).FindAllString(body, -1) {
-			if !strings.Contains(s, "src=") {
+			// a data block (the messages for the scripts) is not a script: the browser never runs it
+			if !strings.Contains(s, "src=") && !strings.Contains(s, `type="application/json"`) {
 				t.Errorf("%s has an inline script: %s", c.name, s)
 			}
 		}

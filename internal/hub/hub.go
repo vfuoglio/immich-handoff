@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -279,7 +280,11 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 	if approval != nil {
 		h.Store.RemoveRequest(ctx, approval.ID) // the approval is used up; the link is the record now
 	}
-	h.event(ctx, service, user.ID, "joined", user.Name+" started sending to "+service+" ("+modeWords(mode)+")")
+	if mode == syncer.ModeMove {
+		h.event(ctx, service, user.ID, "joined", i18n.Pack("{name} started sending to {service} (originals are moved to their trash)", "name", user.Name, "service", service))
+	} else {
+		h.event(ctx, service, user.ID, "joined", i18n.Pack("{name} started sending to {service} (originals are kept)", "name", user.Name, "service", service))
+	}
 	h.Log.Info("joined", "service", service, "user", user.Email)
 	if h.Wake != nil {
 		h.Wake("joined: " + user.Email)
@@ -339,7 +344,7 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	if err := h.Store.RemoveLink(ctx, link.ID); err != nil {
 		return err
 	}
-	h.event(ctx, service, user.ID, "left", user.Name+" stopped sending to "+service)
+	h.event(ctx, service, user.ID, "left", i18n.Pack("{name} stopped sending to {service}", "name", user.Name, "service", service))
 	h.Log.Info("left", "service", service, "user", user.Email)
 	return h.Reload(ctx)
 }

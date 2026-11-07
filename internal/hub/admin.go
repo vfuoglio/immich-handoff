@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -145,8 +146,8 @@ func (h *Hub) AdminRemoveMember(ctx context.Context, admin immich.User, linkID s
 	if link == nil {
 		return ErrNoSuchEntry
 	}
-	note := fmt.Sprintf("An administrator (%s) removed you from this service on %s. The API key named %q is still valid in your Immich account until you delete it; Clean up deletes it, and the workflow, for you.",
-		admin.Name, time.Now().Format("2 Jan 2006"), keyName(link.Service))
+	note := i18n.Pack("An administrator ({admin}) removed you from this service on {date}. The API key named \"{key}\" is still valid in your Immich account until you delete it; Clean up deletes it, and the workflow, for you.",
+		"admin", admin.Name, "date", i18n.Day(time.Now()), "key", keyName(link.Service))
 	if ok, err := h.Store.SetLinkState(ctx, link.ID, store.StateBroken, note); err != nil {
 		return err
 	} else if !ok {
@@ -155,7 +156,7 @@ func (h *Hub) AdminRemoveMember(ctx context.Context, admin immich.User, linkID s
 	if err := h.Store.ForgetLinkKey(ctx, link.ID); err != nil {
 		return err
 	}
-	h.event(ctx, link.Service, link.ImmichUserID, "removed", link.Name+" was removed from "+link.Service+" by an administrator; their key in Immich stays until they clean up")
+	h.event(ctx, link.Service, link.ImmichUserID, "removed", i18n.Pack("{name} was removed from {service} by an administrator; their key in Immich stays until they clean up", "name", link.Name, "service", link.Service))
 	h.tell(fmt.Sprintf("%s was removed from %q by an administrator (%s).", link.Name, link.Service, admin.Name))
 	h.Log.Info("member removed by an administrator", "service", link.Service, "member", link.Email, "admin", admin.Email)
 	return h.Reload(ctx)
@@ -191,7 +192,7 @@ func (h *Hub) AdminRemoveService(ctx context.Context, admin immich.User, name st
 	if err := h.Store.RemoveService(ctx, name); err != nil { // also marks every member's link orphaned
 		return err
 	}
-	note := fmt.Sprintf("An administrator (%s) removed the service %q on %s. Nothing is handed over any more and your photos were not touched.", admin.Name, name, time.Now().Format("2 Jan 2006"))
+	note := i18n.Pack("An administrator ({admin}) removed the service {service} on {date}. Nothing is handed over any more and your photos were not touched.", "admin", admin.Name, "service", name, "date", i18n.Day(time.Now()))
 	for _, l := range links {
 		if l.Service != name || l.Role != store.RoleSender {
 			continue
@@ -199,9 +200,9 @@ func (h *Hub) AdminRemoveService(ctx context.Context, admin immich.User, name st
 		if _, err := h.Store.SetLinkState(ctx, l.ID, store.StateOrphaned, note); err != nil {
 			h.Log.Warn("could not note the removal on a member", "member", l.Email, "err", err)
 		}
-		h.event(ctx, name, l.ImmichUserID, "removed", "The service "+name+" was removed by an administrator")
+		h.event(ctx, name, l.ImmichUserID, "removed", i18n.Pack("The service {service} was removed by an administrator", "service", name))
 	}
-	h.event(ctx, name, svc.OwnerID, "removed", fmt.Sprintf("Your service %s was removed by an administrator. The receiver key %q is still valid in your Immich account until you delete it (Account Settings, API Keys).", name, keyName(name)+" (receiving)"))
+	h.event(ctx, name, svc.OwnerID, "removed", i18n.Pack("Your service {service} was removed by an administrator. The receiver key \"{key}\" is still valid in your Immich account until you delete it (Account Settings, API Keys).", "service", name, "key", keyName(name)+" (receiving)"))
 	h.tell(fmt.Sprintf("The service %q (owner %s) was removed by an administrator (%s).", name, svc.OwnerName, admin.Name))
 	h.Log.Info("service removed by an administrator", "service", name, "owner", svc.OwnerEmail, "admin", admin.Email)
 	return h.Reload(ctx)

@@ -26,6 +26,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -58,6 +59,9 @@ func init() {
 	// the web app manifest is served by the file server below; not every system's table knows its type
 	mime.AddExtensionType(".webmanifest", "application/manifest+json")
 }
+
+// LanguageCookie is the cookie in which the page remembers the language its person chose.
+const LanguageCookie = "handoff-lang"
 
 func (w *Server) Handler() http.Handler {
 	return w.secure(w.routes())
@@ -123,6 +127,16 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
+		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English
+		var chosen string
+		if c, err := r.Cookie(LanguageCookie); err == nil {
+			chosen = c.Value
+		}
+		lang := i18n.Negotiate(chosen, r.Header.Get("Accept-Language"))
+		h.Set("Content-Language", string(lang))
+		h.Add("Vary", "Accept-Language")
+		h.Add("Vary", "Cookie")
+		r = r.WithContext(i18n.With(r.Context(), i18n.For(lang)))
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") {
@@ -264,12 +278,12 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 		if a := m.account(svc, "sender"); a != nil {
 			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
 				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
-				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(svc.LimitPhotos, svc.LimitMB), Account: a.Name}
+				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name}
 			switch {
 			case svc.Paused:
-				v.Hold = "The owner paused this service."
+				v.Hold = t(ctx, "The owner paused this service.")
 			case a.Paused:
-				v.Hold = "You paused sending to this service."
+				v.Hold = t(ctx, "You paused sending to this service.")
 			}
 			w.limitsFor(ctx, &v, svc, a)
 			out = append(out, v)
@@ -293,14 +307,14 @@ func (w *Server) limitsFor(ctx context.Context, v *ServiceView, svc *syncer.Serv
 	}
 	var parts []string
 	if svc.LimitPhotos > 0 {
-		parts = append(parts, fmt.Sprintf("%d of %d %s", snap.Photos, svc.LimitPhotos, plural(svc.LimitPhotos, "photo", "photos")))
+		parts = append(parts, n(ctx, "{used} of {n} photo", "{used} of {n} photos", svc.LimitPhotos, "used", snap.Photos))
 	}
 	if svc.LimitMB > 0 {
-		parts = append(parts, fmt.Sprintf("%d of %d MB", snap.Bytes>>20, svc.LimitMB))
+		parts = append(parts, t(ctx, "{used} of {max} MB", "used", snap.Bytes>>20, "max", svc.LimitMB))
 	}
-	v.Used = "Used in the last 24 hours: " + strings.Join(parts, ", ") + "."
+	v.Used = t(ctx, "Used in the last 24 hours: {parts}.", "parts", strings.Join(parts, ", "))
 	if h, ok := w.S.HeldFor(a); ok && syncer.Capped(svc, snap) {
-		v.Waiting = fmt.Sprintf("The daily limit is reached, so %d %s wait, still tagged. They are handed over from %s.", h.Waiting, plural(h.Waiting, "photo", "photos"), h.Until.Local().Format("2 Jan 15:04"))
+		v.Waiting = n(ctx, "The daily limit is reached, so {n} photo waits, still tagged. It is handed over from {when}.", "The daily limit is reached, so {n} photos wait, still tagged. They are handed over from {when}.", h.Waiting, "when", loc(ctx).Stamp(h.Until.Local()))
 	}
 }
 
@@ -319,7 +333,7 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 				mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused,
 					AtLimit: (o.Service.LimitPhotos > 0 && m.Photos >= o.Service.LimitPhotos) || (o.Service.LimitMB > 0 && m.MB >= int64(o.Service.LimitMB))}
 				if o.Service.LimitPhotos > 0 || o.Service.LimitMB > 0 {
-					mv.Used = fmt.Sprintf("%d %s, %d MB in the last 24 hours", m.Photos, plural(m.Photos, "photo", "photos"), m.MB)
+					mv.Used = t(ctx, "{photos}, {mb} MB in the last 24 hours", "photos", n(ctx, "{n} photo", "{n} photos", m.Photos), "mb", m.MB)
 				}
 				ov.Members = append(ov.Members, mv)
 			}
@@ -365,7 +379,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	if acts, err := w.Hub.Activity(ctx, me.user.ID, 12); err == nil {
 		for _, a := range acts {
-			d.Activity = append(d.Activity, ActivityView{a.At.Local().Format("2 Jan 15:04"), a.Text, activityTone(a.Kind)})
+			d.Activity = append(d.Activity, ActivityView{loc(ctx).Stamp(a.At.Local()), unpack(ctx, a.Text), activityTone(a.Kind)})
 		}
 	}
 	w.overview(ctx, me, &d)
@@ -376,13 +390,13 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 // numbers to show, and the first-run guide.
 func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	first := strings.Fields(me.user.Name)
-	d.Headline = "Hello."
+	d.Headline = t(ctx, "Hello.")
 	if len(first) > 0 {
-		d.Headline = "Hello, " + first[0] + "."
+		d.Headline = t(ctx, "Hello, {name}.", "name", first[0])
 	}
-	d.Gist = needsGist(len(needsOf(d)))
-	d.Needs = needsOf(d)
-	d.Scene = sceneOf(d, w.S.Current())
+	d.Needs = needsOf(ctx, d)
+	d.Gist = needsGist(ctx, len(d.Needs))
+	d.Scene = sceneOf(ctx, d, w.S.Current())
 	d.ShowNumber = len(d.Services) > 0
 	if d.TagsOff {
 		return // the page is switched off until Tags are on, and so is the guide
@@ -397,9 +411,9 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 		}
 	}
 	steps := []GuideStep{
-		{"Turn on Tags in Immich", true}, // the page is switched off while they are off, so reaching here means they are on
-		{"Join a service, or offer one of your own", len(d.Services) > 0 || len(d.Owned) > 0},
-		{"Hand over your first photo: add a service's tag to a photo in Immich", handed > 0},
+		{t(ctx, "Turn on Tags in Immich"), true}, // the page is switched off while they are off, so reaching here means they are on
+		{t(ctx, "Join a service, or offer one of your own"), len(d.Services) > 0 || len(d.Owned) > 0},
+		{t(ctx, "Hand over your first photo: add a service's tag to a photo in Immich"), handed > 0},
 	}
 	g := &GuideView{Steps: steps}
 	for _, s := range steps {
@@ -425,34 +439,41 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 
 // needsOf lists what waits on the person, most urgent first: connections that are lost, then requests to answer,
 // then pauses and limits that hold photos back.
-func needsOf(d *DashboardData) []NeedView {
+func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 	var lost, ask, held []NeedView
 	for _, b := range d.Broken {
-		lost = append(lost, NeedView{Tone: "bad", Chip: "Connection lost", Title: b.Service, Text: b.Note + " Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.",
-			Actions: []NeedAction{{Label: "Clean up", Path: "leave", Vals: vals("service", b.Service), Primary: true}}})
+		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Connection lost"), Title: b.Service,
+			Text:    t(ctx, "{reason} Nothing is handed over and your photos were not touched. Clean up removes what this app made in your Immich account; then you can join again.", "reason", unpack(ctx, b.Note)),
+			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", b.Service), Primary: true}}})
 	}
 	for _, name := range d.Orphaned {
-		lost = append(lost, NeedView{Tone: "bad", Chip: "Removed by its owner", Title: name, Text: "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.",
-			Actions: []NeedAction{{Label: "Clean up", Path: "leave", Vals: vals("service", name), Primary: true}}})
+		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: name,
+			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
+			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
 	}
 	for _, o := range d.Owned {
 		if o.Broken != "" {
-			lost = append(lost, NeedView{Tone: "bad", Chip: "Disconnected", Title: o.Name, Text: o.Broken + " Senders are paused until you reconnect.",
-				Actions: []NeedAction{{Label: "Reconnect", Path: "reconnect", Vals: vals("service", o.Name), Primary: true, Confirm: "Reconnecting creates a new receiver key in your Immich account."}}})
+			lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Disconnected"), Title: o.Name,
+				Text: t(ctx, "{reason} Senders are paused until you reconnect.", "reason", unpack(ctx, o.Broken)),
+				Actions: []NeedAction{{Label: t(ctx, "Reconnect"), Path: "reconnect", Vals: vals("service", o.Name), Primary: true,
+					Confirm: t(ctx, "Reconnecting creates a new receiver key in your Immich account.")}}})
 		}
 		for _, r := range o.Requests {
-			ask = append(ask, NeedView{Tone: "warn", Chip: "Request", Title: r.Name + " wants to send to " + o.Name, Text: r.Email + " asks to send. You decide.",
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Request"), Title: t(ctx, "{name} wants to send to {service}", "name", r.Name, "service", o.Name),
+				Text: t(ctx, "{email} asks to send. You decide.", "email", r.Email),
 				Actions: []NeedAction{
-					{Label: "Approve", Path: "decide", Vals: decideVals(o.Name, r.ID, "approve"), Primary: true},
-					{Label: "Decline", Path: "decide", Vals: decideVals(o.Name, r.ID, "decline")}}})
+					{Label: t(ctx, "Approve"), Path: "decide", Vals: decideVals(o.Name, r.ID, "approve"), Primary: true},
+					{Label: t(ctx, "Decline"), Path: "decide", Vals: decideVals(o.Name, r.ID, "decline")}}})
 		}
 		if o.Paused {
-			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: o.Name, Text: "You paused this service: nothing is handed over to you, and photos senders tag stay tagged, until you resume it.",
-				Actions: []NeedAction{{Label: "Resume service", Path: "services/pause", Vals: pauseVals(o.Name, false), Primary: true}}})
+			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Paused"), Title: o.Name,
+				Text:    t(ctx, "You paused this service: nothing is handed over to you, and photos senders tag stay tagged, until you resume it."),
+				Actions: []NeedAction{{Label: t(ctx, "Resume service"), Path: "services/pause", Vals: pauseVals(o.Name, false), Primary: true}}})
 		}
 		for _, m := range o.Members {
 			if m.AtLimit {
-				held = append(held, NeedView{Tone: "warn", Chip: "Limit", Title: m.Name + " reached the daily limit for " + o.Name, Text: "Their next photos wait, still tagged, and go on their own as the day moves on. You can raise the limit in the service's card below."})
+				held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Limit"), Title: t(ctx, "{name} reached the daily limit for {service}", "name", m.Name, "service", o.Name),
+					Text: t(ctx, "Their next photos wait, still tagged, and go on their own as the day moves on. You can raise the limit in the service's card below.")})
 			}
 		}
 	}
@@ -462,13 +483,15 @@ func needsOf(d *DashboardData) []NeedView {
 		}
 		switch {
 		case s.MinePaused:
-			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: s.Name, Text: "You paused sending. Photos you tag stay tagged and are handed over when you resume.",
-				Actions: []NeedAction{{Label: "Resume sending", Path: "pause", Vals: pauseVals(s.Name, false), Primary: true}}})
+			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Paused"), Title: s.Name,
+				Text:    t(ctx, "You paused sending. Photos you tag stay tagged and are handed over when you resume."),
+				Actions: []NeedAction{{Label: t(ctx, "Resume sending"), Path: "pause", Vals: pauseVals(s.Name, false), Primary: true}}})
 		case s.Hold != "":
-			held = append(held, NeedView{Tone: "warn", Chip: "Paused", Title: s.Name, Text: s.Hold + " Photos you tag stay tagged and are handed over when it resumes."})
+			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Paused"), Title: s.Name,
+				Text: t(ctx, "{hold} Photos you tag stay tagged and are handed over when it resumes.", "hold", s.Hold)})
 		}
 		if s.Waiting != "" {
-			held = append(held, NeedView{Tone: "warn", Chip: "Limit", Title: s.Name, Text: s.Waiting})
+			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Limit"), Title: s.Name, Text: s.Waiting})
 		}
 	}
 	return append(append(lost, ask...), held...)
@@ -480,12 +503,12 @@ func (w *Server) dismissGuide(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if w.Hub == nil {
-		http.Error(rw, "nothing to remember it in", http.StatusNotFound)
+		http.Error(rw, t(r.Context(), "Nothing to remember it in."), http.StatusNotFound)
 		return
 	}
 	if err := w.Hub.DismissGuide(r.Context(), me.user.ID); err != nil {
 		w.Log.Warn("could not hide the guide", "err", err)
-		http.Error(rw, "Could not do that: "+err.Error(), http.StatusInternalServerError)
+		http.Error(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())), http.StatusInternalServerError)
 		return
 	}
 	rw.Header().Set("HX-Refresh", "true")
@@ -504,8 +527,8 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 	me, code, _ := w.authenticate(r)
 	if me == nil {
 		rw.WriteHeader(code)
-		Notice("Sign in to Immich first",
-			"This invitation needs your Immich login. Sign in to Immich in this browser, then open the link again.", false).Render(r.Context(), rw)
+		Notice(t(r.Context(), "Sign in to Immich first"),
+			t(r.Context(), "This invitation needs your Immich login. Sign in to Immich in this browser, then open the link again."), false).Render(r.Context(), rw)
 		return
 	}
 	token := r.PathValue("token")
@@ -524,7 +547,7 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
-		Notice("Invitation", "This invitation is not valid any more. Ask the person who sent it for a new link.", true).Render(r.Context(), rw)
+		Notice(t(r.Context(), "Invitation"), t(r.Context(), "This invitation is not valid any more. Ask the person who sent it for a new link."), true).Render(r.Context(), rw)
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
@@ -537,8 +560,8 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 	me, code, _ := w.authenticate(r)
 	if me == nil {
 		rw.WriteHeader(code)
-		Notice("Sign in to Immich first",
-			"This page uses your Immich login. Sign in to Immich in this browser, then reload this page.", false).Render(r.Context(), rw)
+		Notice(t(r.Context(), "Sign in to Immich first"),
+			t(r.Context(), "This page uses your Immich login. Sign in to Immich in this browser, then reload this page."), false).Render(r.Context(), rw)
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
@@ -647,7 +670,7 @@ func (w *Server) sceneFragment(rw http.ResponseWriter, r *http.Request) {
 		d.Owned = w.ownedViews(r.Context(), me)
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	Scene(sceneOf(&d, w.S.Current())).Render(r.Context(), rw)
+	Scene(sceneOf(r.Context(), &d, w.S.Current())).Render(r.Context(), rw)
 }
 
 // numbersFragment is the Overview's three numbers and the week's chart, asked for when the page opens and again
@@ -672,7 +695,7 @@ func (w *Server) numbersFragment(rw http.ResponseWriter, r *http.Request) {
 	if w.Hub != nil {
 		if days, counts, err := w.Hub.Week(r.Context(), me.user.ID, time.Now()); err == nil {
 			for i := range days {
-				n.Days[i] = DayBar{Label: days[i].Format("Mon"), N: counts[i]}
+				n.Days[i] = DayBar{Label: loc(r.Context()).Weekday(days[i]), N: counts[i]}
 				n.Week += counts[i]
 			}
 		}
@@ -766,7 +789,7 @@ func (w *Server) guarded(rw http.ResponseWriter, r *http.Request) *member {
 		return nil
 	}
 	if !w.limiter.allow(me.user.ID) {
-		http.Error(rw, "too many changes in a minute; try again shortly", http.StatusTooManyRequests)
+		http.Error(rw, t(r.Context(), "Too many changes in a minute; try again shortly."), http.StatusTooManyRequests)
 		return nil
 	}
 	return me
@@ -783,7 +806,7 @@ func (w *Server) syncNow(rw http.ResponseWriter, r *http.Request) {
 	}
 	go w.S.Run(w.BackgroundCtx, "manual: "+me.user.Email, false)
 	rw.WriteHeader(http.StatusAccepted)
-	rw.Write([]byte("Sync started"))
+	rw.Write([]byte(t(r.Context(), "Sync started")))
 }
 
 // albumChoice lists the person's own albums for linking one to a service they send to. It is loaded when they
@@ -812,7 +835,7 @@ func (w *Server) albumChoice(rw http.ResponseWriter, r *http.Request) {
 	}
 	opts := make([]AlbumOption, 0, len(albums))
 	for _, a := range albums {
-		opts = append(opts, AlbumOption{ID: a.ID.String(), Label: albumLabel(a.Name, a.Count)})
+		opts = append(opts, AlbumOption{ID: a.ID.String(), Label: albumLabel(r.Context(), a.Name, a.Count)})
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	AlbumChoice(name, opts, svc.CopiesFor(me.account(svc, "sender"))).Render(r.Context(), rw)
@@ -847,12 +870,12 @@ func (w *Server) enableTags(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("HX-Retarget", "#flash") // keep the button, show the problem in the message line
 		rw.Header().Set("HX-Reswap", "innerHTML")
 		rw.WriteHeader(http.StatusBadGateway)
-		fmt.Fprint(rw, "Could not switch Tags on: ", err.Error(), ". You can do it in Immich: Account Settings, Features, Tags.")
+		fmt.Fprint(rw, t(r.Context(), "Could not switch Tags on: {reason}. You can do it in Immich: Account Settings, Features, Tags.", "reason", err.Error()))
 		return
 	}
 	w.Log.Info("tags switched on", "user", me.user.Email)
 	rw.Header().Set("HX-Trigger", "tags-on") // the page unlocks itself (app.js)
-	rw.Write([]byte("Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear."))
+	rw.Write([]byte(t(r.Context(), "Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear.")))
 }
 
 func (w *Server) join(rw http.ResponseWriter, r *http.Request) {
@@ -874,7 +897,7 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 		return
 	}
 	if w.Hub == nil || !w.Hub.SelfService() {
-		http.Error(rw, "joining from this page is not switched on", http.StatusNotFound)
+		http.Error(rw, t(r.Context(), "Joining from this page is not switched on."), http.StatusNotFound)
 		return
 	}
 	service := r.PostFormValue("service")
@@ -886,7 +909,7 @@ func (w *Server) membership(rw http.ResponseWriter, r *http.Request, done string
 		w.Log.Warn("membership change failed", "action", done, "user", me.user.Email, "service", service, "err", err)
 		rw.Header().Set("HX-Reswap", "innerHTML")
 		rw.WriteHeader(status)
-		fmt.Fprint(rw, "Could not do that: ", err.Error())
+		fmt.Fprint(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())))
 		return
 	}
 	rw.Header().Set("HX-Refresh", "true")

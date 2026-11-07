@@ -7,6 +7,7 @@
 // information is shown as text: lane labels, the arrived counter and a short log, all in a live region.
 
 import type { LiveEvent } from "./live.ts";
+import { language, n, t } from "./i18n.ts";
 import { setOdometer } from "./odometer.ts";
 
 export type LaneState = "flow" | "paused" | "capped" | "broken";
@@ -37,23 +38,23 @@ export function laneState(f: LaneFlags): LaneState {
 function clock(iso: string | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString(language(), { hour: "2-digit", minute: "2-digit" });
 }
 
 /** The words under a sender's name; colour is never the only signal. */
 export function stateText(f: LaneFlags): string {
   switch (laneState(f)) {
     case "broken":
-      return "Connection lost";
+      return t("Connection lost");
     case "paused":
-      return f.pausedService ? "Paused by the owner" : "Paused by the sender";
+      return f.pausedService ? t("Paused by the owner") : t("Paused by the sender");
     case "capped": {
       const when = clock(f.until);
-      const n = f.waiting > 0 ? `${f.waiting} ${f.waiting === 1 ? "photo waits" : "photos wait"}` : "Photos wait";
-      return when ? `Daily limit reached: ${n} until ${when}` : `Daily limit reached: ${n}`;
+      const waits = f.waiting > 0 ? n("{n} photo waits", "{n} photos wait", f.waiting) : t("Photos wait");
+      return when ? t("Daily limit reached: {waits} until {when}", { waits, when }) : t("Daily limit reached: {waits}", { waits });
     }
   }
-  return f.sending > 0 ? `Sending ${f.sending}` : "Flowing";
+  return f.sending > 0 ? t("Sending {n}", { n: f.sending }) : t("Flowing");
 }
 
 /** Whether an event is about the whole service (every lane) rather than one sender. */
@@ -110,42 +111,47 @@ export function applyEvent(old: LaneFlags, ev: LiveEvent): LaneFlags {
   return f;
 }
 
-function photos(n: number): string {
-  return `${n} ${n === 1 ? "photo" : "photos"}`;
+function photos(count: number): string {
+  return n("{n} photo", "{n} photos", count);
 }
 
 /** One sentence for the log and for screen readers. */
 export function describe(ev: LiveEvent): string {
-  const n = ev.count && ev.count > 0 ? ev.count : 1;
-  const who = ev.sender ?? "A sender";
-  const to = ev.service ? ` to ${ev.service}` : "";
-  const inService = ev.service ? ` in ${ev.service}` : "";
-  const service = ev.service ?? "The service";
+  const count = ev.count && ev.count > 0 ? ev.count : 1;
+  const who = ev.sender ?? t("A sender");
+  const service = ev.service ?? t("a service");
+  const p = photos(count);
   switch (ev.kind) {
     case "started":
-      return `${who} is handing over ${photos(n)}${to}`;
+      return t("{who} is handing over {photos} to {service}", { who, photos: p, service });
     case "handed":
-      return ev.reason === "duplicate" ? `${who}: ${photos(n)} already there${inService}` : `${who} handed over ${photos(n)}${to}`;
+      return ev.reason === "duplicate"
+        ? t("{who}: {photos} already there in {service}", { who, photos: p, service })
+        : t("{who} handed over {photos} to {service}", { who, photos: p, service });
     case "refused":
-      return `${who}: ${photos(n)} refused, the receiver has them in the trash; the originals were kept`;
+      return t("{who}: {photos} refused, the receiver has them in the trash; the originals were kept", { who, photos: p });
     case "failed":
-      return `${who}: ${photos(n)} could not be handed over; the originals were kept and it will be retried`;
+      return t("{who}: {photos} could not be handed over; the originals were kept and it will be retried", { who, photos: p });
     case "held": {
       const when = clock(ev.until);
-      return `${who}: ${photos(n)} wait for the daily limit${when ? ", until " + when : ""}`;
+      return when
+        ? t("{who}: {photos} wait for the daily limit, until {when}", { who, photos: p, when })
+        : t("{who}: {photos} wait for the daily limit", { who, photos: p });
     }
     case "limit":
-      return `${who} reached the daily limit${ev.service ? " for " + ev.service : ""}`;
+      return t("{who} reached the daily limit for {service}", { who, service });
     case "paused":
-      return ev.reason === "service" ? `${service} was paused by its owner` : `${who} paused sending${to}`;
+      return ev.reason === "service" ? t("{service} was paused by its owner", { service }) : t("{who} paused sending to {service}", { who, service });
     case "resumed":
-      return ev.reason === "service" ? `${service} was resumed` : `${who} resumed sending${to}`;
+      return ev.reason === "service" ? t("{service} was resumed", { service }) : t("{who} resumed sending to {service}", { who, service });
     case "lost":
-      return ev.reason === "service" ? `${service} lost its connection` : `${who}'s connection${to} was lost; no photo was touched`;
+      return ev.reason === "service"
+        ? t("{service} lost its connection", { service })
+        : t("{who}'s connection to {service} was lost; no photo was touched", { who, service });
     case "restored":
-      return `${service} was reconnected`;
+      return t("{service} was reconnected", { service });
     case "resync":
-      return "Some updates were missed; refreshing";
+      return t("Some updates were missed; refreshing");
   }
 }
 
@@ -224,7 +230,7 @@ function say(root: HTMLElement, text: string): void {
   if (!log) return;
   log.querySelector("[data-empty]")?.remove();
   const li = document.createElement("li");
-  li.textContent = `${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ${text}`;
+  li.textContent = `${new Date().toLocaleTimeString(language(), { hour: "2-digit", minute: "2-digit" })} ${text}`;
   log.prepend(li);
   while (log.children.length > 5) log.lastElementChild?.remove();
   const live = root.querySelector<HTMLElement>("[data-announce]");

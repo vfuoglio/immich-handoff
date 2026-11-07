@@ -45,6 +45,9 @@ func fakeImmich() http.Handler {
 		key := r.Header.Get("x-api-key")
 		if key == "" {
 			key = strings.TrimSpace(r.Header.Get("Cookie"))
+			if i := strings.Index(key, "; handoff-lang="); i >= 0 { // Immich ignores a cookie that is not its own
+				key = key[:i]
+			}
 		}
 		u, ok := who[key]
 		if !ok {
@@ -519,6 +522,48 @@ func TestASenderChoosesAnAlbumFromTheirOwnList(t *testing.T) {
 		}
 		if code, _ := do(t, "POST", app.URL+path, "sess=alice", hdr); code != 404 {
 			t.Errorf("%s without self-service switched on, got %d", path, code)
+		}
+	}
+}
+
+func TestThePageSpeaksTheLanguageTheCookieOrTheBrowserAsksFor(t *testing.T) {
+	app, _ := setup(t)
+	for _, c := range []struct {
+		cookie, accept, lang, want string
+	}{
+		{"sess=alice", "", "en", "You send to"},
+		{"sess=alice; handoff-lang=de", "", "de", "Du sendest an"},
+		{"sess=alice", "fr-CH, fr;q=0.9", "fr", "Vous envoyez à"},
+		{"sess=alice", "es-ES,es;q=0.9", "es", "Tú envías"},
+		{"sess=alice; handoff-lang=es", "de", "es", "Tú envías"}, // the person's own choice wins
+		{"sess=alice", "ja", "en", "You send to"},                // none we have
+	} {
+		req, _ := http.NewRequest("GET", app.URL+"/", nil)
+		req.Header.Set("Cookie", c.cookie)
+		if c.accept != "" {
+			req.Header.Set("Accept-Language", c.accept)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		body := string(b)
+		if !strings.Contains(body, c.want) || !strings.Contains(body, `<html lang="`+c.lang+`"`) {
+			t.Errorf("%q / %q: want %q in lang %s", c.cookie, c.accept, c.want, c.lang)
+		}
+		if got := res.Header.Get("Content-Language"); got != c.lang {
+			t.Errorf("%q / %q: Content-Language %q, want %q", c.cookie, c.accept, got, c.lang)
+		}
+		if !strings.Contains(res.Header.Get("Vary"), "Accept-Language") {
+			t.Errorf("the answer depends on the language, so Vary must say so: %q", res.Header.Get("Vary"))
+		}
+		if c.lang != "en" && strings.Contains(body, "You send to") {
+			t.Errorf("%q / %q: English left on a %s page", c.cookie, c.accept, c.lang)
+		}
+		if !strings.Contains(body, `id="i18n"`) || !strings.Contains(body, `class="lang"`) {
+			t.Errorf("the page lacks the messages for scripts or the language menu")
 		}
 	}
 }

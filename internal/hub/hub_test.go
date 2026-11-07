@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -545,7 +546,7 @@ func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	}
 	for _, who := range []uuid.UUID{bobID, annID} {
 		acts, _ := e.h.Activity(ctx, who, 10)
-		if len(acts) == 0 || !strings.Contains(acts[0].Text, "cut") {
+		if len(acts) == 0 || !strings.Contains(en(acts[0].Text), "cut") {
 			t.Errorf("both sides see it in the activity (%s): %+v", who, acts)
 		}
 	}
@@ -925,7 +926,7 @@ func TestAHandOverFromTheAlbumLeavesALineInTheSendersRecentEvents(t *testing.T) 
 	}
 	found := false
 	for _, ev := range evs {
-		if ev.Kind == "album" && strings.Contains(ev.Text, "12 photos from the album To send handed over to family") && strings.Contains(ev.Text, "1 refused") {
+		if ev.Kind == "album" && strings.Contains(en(ev.Text), "12 photos from the album To send handed over to family") && strings.Contains(en(ev.Text), "1 refused") {
 			found = true
 		}
 	}
@@ -963,11 +964,11 @@ func TestAnAdministratorRemovingAMemberStopsHandOversAndTellsThePerson(t *testin
 		t.Errorf("the app cannot delete another person's key, and must not pretend to: %v", e.f.deletedKeys)
 	}
 	b, _ := e.h.BrokenFor(ctx, bobID)
-	if len(b) != 1 || !strings.Contains(b[0].Note, "Root") || !strings.Contains(b[0].Note, "still valid") {
+	if len(b) != 1 || !strings.Contains(en(b[0].Note), "Root") || !strings.Contains(en(b[0].Note), "still valid") {
 		t.Errorf("bob must be told on his page: %+v", b)
 	}
 	acts, _ := e.h.Activity(ctx, bobID, 10)
-	if len(acts) == 0 || !strings.Contains(acts[0].Text, "removed from party by an administrator") {
+	if len(acts) == 0 || !strings.Contains(en(acts[0].Text), "removed from party by an administrator") {
 		t.Errorf("bob's recent events: %+v", acts)
 	}
 	if len(told) != 1 || !strings.Contains(told[0], "Root") {
@@ -1010,7 +1011,7 @@ func TestAnAdministratorRemovingAServiceTellsOwnerAndMembers(t *testing.T) {
 		t.Errorf("bob must be told the service is gone: %v", o)
 	}
 	owner, _ := e.h.Activity(ctx, annID, 10)
-	if len(owner) == 0 || !strings.Contains(owner[0].Text, "still valid in your Immich account") {
+	if len(owner) == 0 || !strings.Contains(en(owner[0].Text), "still valid in your Immich account") {
 		t.Errorf("the owner must be told their key stays: %+v", owner)
 	}
 	if len(told) != 1 {
@@ -1076,7 +1077,7 @@ func TestOnlyTheOwnerCanPauseAServiceAndResumingWakesAPass(t *testing.T) {
 		t.Errorf("resumed: paused %v, woken %v", service(e, "party").Paused, e.woken)
 	}
 	acts, _ := e.h.Activity(ctx, annID, 5)
-	if len(acts) < 2 || !strings.Contains(acts[0].Text, "resumed") || !strings.Contains(acts[1].Text, "paused") {
+	if len(acts) < 2 || !strings.Contains(en(acts[0].Text), "resumed") || !strings.Contains(en(acts[1].Text), "paused") {
 		t.Errorf("both must be in the activity log: %+v", acts)
 	}
 }
@@ -1246,6 +1247,9 @@ func TestTheGuideIsFinishedOnceAndOnlyWhereThereIsADataFile(t *testing.T) {
 		t.Error("with nowhere to remember it the guide must not be offered")
 	}
 }
+
+// en is stored text (a line of the log, the reason a connection is paused) in English, as a reader of English sees it.
+func en(s string) string { return i18n.For(i18n.English).Unpack(s) }
 
 // feeds opens one page for each kind of person who might be looking.
 type feeds struct{ owner, sender, other, root, receiver *live.Sub }

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -133,7 +134,7 @@ func TestAdminRemovesAMemberAndTheKeyIsForgotten(t *testing.T) {
 		t.Fatalf("remove: %d %s", code, body)
 	}
 	got, _ := st.Links(context.Background())
-	if got[0].State != store.StateBroken || got[0].Key != "" || !strings.Contains(got[0].Note, "still valid in your Immich account") || !strings.Contains(got[0].Note, "Admin") {
+	if got[0].State != store.StateBroken || got[0].Key != "" || !strings.Contains(i18n.For(i18n.English).Unpack(got[0].Note), "still valid in your Immich account") || !strings.Contains(i18n.For(i18n.English).Unpack(got[0].Note), "Admin") {
 		t.Errorf("the membership after removal: state %q key %q note %q", got[0].State, got[0].Key, got[0].Note)
 	}
 	if _, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil); !strings.Contains(body, "still valid in your Immich account") {
