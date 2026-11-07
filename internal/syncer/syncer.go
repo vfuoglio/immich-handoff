@@ -225,6 +225,33 @@ func (s *Syncer) Run(ctx context.Context, reason string, cleanup bool) {
 	}
 }
 
+// WhenIdle waits until no pass is running and then holds the passes back, so that something that must not
+// overlap a hand-over (a backup of the data file) can run. It checks every poll. When wait has passed
+// without a quiet moment it gives up waiting and reports forced = true; the caller then goes ahead without the
+// lock. release lets the passes go again and runs the one that was asked for meanwhile, so a webhook that
+// arrived during the work is not lost. It stops early (forced = true, a no-op release) if ctx ends.
+func (s *Syncer) WhenIdle(ctx context.Context, wait, poll time.Duration) (release func(), forced bool) {
+	deadline := time.Now().Add(wait)
+	for {
+		if s.mu.TryLock() {
+			return func() {
+				pending := s.rerun.Load()
+				s.mu.Unlock()
+				if pending {
+					go s.Run(ctx, "after a backup", false)
+				}
+			}, false
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			return func() {}, true
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(poll):
+		}
+	}
+}
+
 // Tidy only removes inbox tags from photos that are filed or expired. Immich sends no event when a photo
 // is added to an album, so this is called on a short timer. It skips a round when a pass is running (the
 // next tick will catch up) and, unlike a pass, leaves the "last run" record alone.

@@ -1,0 +1,348 @@
+package backup_test
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/vfuoglio/immich-handoff/internal/backup"
+	"github.com/vfuoglio/immich-handoff/internal/store"
+	"github.com/vfuoglio/immich-handoff/internal/vault"
+)
+
+const storeKey = "0123456789abcdef0123"
+
+func newStore(t *testing.T, dir string, key string) *store.Store {
+	t.Helper()
+	v, err := vault.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, backup.DataFile), v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func fill(t *testing.T, st *store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := st.AddService(ctx, store.Service{Name: "club", Tag: "club", InboxTag: "inbox", Refused: "dup", ExpiryDays: 30, OwnerID: uuid.New(), OwnerName: "Carol", OwnerEmail: "c@x.test", KeyID: uuid.New(), Key: "receiver-secret", Policy: store.PolicyOpen, Visibility: store.VisListed}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddLink(ctx, store.Link{Service: "club", Role: store.RoleSender, ImmichUserID: uuid.New(), Name: "Bob", Email: "b@x.test", KeyID: uuid.New(), Key: "sender-secret"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// fakeIdle is a syncer that is busy until told otherwise.
+type fakeIdle struct {
+	mu       sync.Mutex
+	busy     bool
+	released bool
+	waited   time.Duration
+}
+
+func (f *fakeIdle) setBusy(b bool) { f.mu.Lock(); f.busy = b; f.mu.Unlock() }
+
+func (f *fakeIdle) WhenIdle(ctx context.Context, wait, poll time.Duration) (func(), bool) {
+	deadline := time.Now().Add(wait)
+	for {
+		f.mu.Lock()
+		if !f.busy {
+			f.mu.Unlock()
+			return func() { f.mu.Lock(); f.released = true; f.mu.Unlock() }, false
+		}
+		f.mu.Unlock()
+		if !time.Now().Before(deadline) {
+			return func() { f.mu.Lock(); f.released = true; f.mu.Unlock() }, true
+		}
+		time.Sleep(poll)
+	}
+}
+
+func manager(t *testing.T, st backup.Source, idle backup.Idler) (*backup.Manager, *[]string, *[]string) {
+	t.Helper()
+	var told, events []string
+	var mu sync.Mutex
+	m := &backup.Manager{Dir: filepath.Join(t.TempDir(), "backups"), Source: st, Idle: idle, Poll: 5 * time.Millisecond, Wait: 40 * time.Millisecond,
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Tell: func(s string) { mu.Lock(); told = append(told, s); mu.Unlock() },
+		Event: func(kind, text string) {
+			mu.Lock()
+			events = append(events, kind+": "+text)
+			mu.Unlock()
+		}}
+	return m, &told, &events
+}
+
+func finish(t *testing.T, m *backup.Manager) backup.Job {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if j, ok := m.Latest(); ok && (j.State == backup.Done || j.State == backup.Failed) {
+			return j
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("the backup did not finish")
+	return backup.Job{}
+}
+
+func TestABackupWaitsForAQuietMomentThenCopiesAConsistentFile(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	idle := &fakeIdle{busy: true}
+	m, _, events := manager(t, st, idle)
+	m.Wait = time.Minute // long enough that it is not forced
+
+	job, already := m.Queue(context.Background())
+	if already || job.State != backup.Queued {
+		t.Fatalf("first request: %+v already=%v", job, already)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if j, _ := m.Latest(); j.State != backup.Queued {
+		t.Errorf("while hand-overs run it must stay queued, got %s", j.State)
+	}
+	if _, err := os.Stat(job.Path); err == nil {
+		t.Error("nothing must be copied while hand-overs run")
+	}
+	// a second request while one waits is the same backup
+	if again, already := m.Queue(context.Background()); !already || again.ID != job.ID {
+		t.Errorf("second request: %+v already=%v", again, already)
+	}
+	idle.setBusy(false)
+	done := finish(t, m)
+	if done.State != backup.Done || done.Forced || done.Size == 0 || strings.Contains(done.Path, "forced") {
+		t.Fatalf("finished job: %+v", done)
+	}
+	if !idle.released {
+		t.Error("the passes must be let go after the copy")
+	}
+	if len(*events) != 1 || !strings.HasPrefix((*events)[0], "backup:") {
+		t.Errorf("events: %v", *events)
+	}
+}
+
+func TestAfterTheWaitTheBackupIsMadeAnywayMarkedForcedAndEveryoneIsTold(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	idle := &fakeIdle{busy: true} // never quiet
+	m, told, events := manager(t, st, idle)
+	m.Queue(context.Background())
+	done := finish(t, m)
+	if done.State != backup.Done || !done.Forced || !strings.HasSuffix(done.Path, "-forced.db") {
+		t.Fatalf("forced job: %+v", done)
+	}
+	if _, err := os.Stat(done.Path); err != nil {
+		t.Errorf("the forced file must exist: %v", err)
+	}
+	if len(*told) != 1 || !strings.Contains((*told)[0], "forced") {
+		t.Errorf("the operator must be told: %v", *told)
+	}
+	if len(*events) != 1 || !strings.Contains((*events)[0], "without waiting for a quiet moment") {
+		t.Errorf("the activity log must say so: %v", *events)
+	}
+	files, _ := backup.List(m.Dir)
+	if len(files) != 1 || !files[0].Forced {
+		t.Errorf("the listing must mark it: %+v", files)
+	}
+}
+
+type failing struct{}
+
+func (failing) Backup(context.Context, string) error { return errors.New("disk full") }
+
+func TestAFailedBackupIsReported(t *testing.T) {
+	m, told, events := manager(t, failing{}, &fakeIdle{})
+	m.Queue(context.Background())
+	done := finish(t, m)
+	if done.State != backup.Failed || !strings.Contains(done.Err, "disk full") {
+		t.Fatalf("job: %+v", done)
+	}
+	if len(*told) != 1 || len(*events) != 1 {
+		t.Errorf("a failure must be told: %v %v", *told, *events)
+	}
+	// and a new request is accepted after a failure
+	if _, already := m.Queue(context.Background()); already {
+		t.Error("a failed backup must not block the next one")
+	}
+	finish(t, m)
+}
+
+func TestABackupTakenWhileTheAppWritesIsConsistent(t *testing.T) {
+	dir := t.TempDir()
+	st := newStore(t, dir, storeKey)
+	defer st.Close()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { // the app keeps adding events
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				st.AddEvent(context.Background(), store.Event{Kind: "x", Text: "busy"})
+			}
+		}
+	}()
+	time.Sleep(20 * time.Millisecond)
+	dest := filepath.Join(t.TempDir(), "copy.db")
+	err := st.Backup(context.Background(), dest)
+	close(stop)
+	wg.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the copy passes the integrity check and opens with the key
+	restoreDir := t.TempDir()
+	if err := backup.Restore(context.Background(), dest, restoreDir, mustVault(t, storeKey), false); err != nil {
+		t.Fatalf("a copy taken while writing must restore: %v", err)
+	}
+	if err := st.Backup(context.Background(), dest); err == nil {
+		t.Error("an existing file must never be overwritten")
+	}
+	if fi, _ := os.Stat(dest); fi.Mode().Perm() != 0o600 {
+		t.Errorf("a backup must be readable by its owner only: %v", fi.Mode())
+	}
+}
+
+func mustVault(t *testing.T, key string) *vault.Vault {
+	v, err := vault.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestDirectBackupWhenTheAppIsNotRunning(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	job, err := backup.Direct(context.Background(), st, filepath.Join(t.TempDir(), "b"), time.Now())
+	if err != nil || job.State != backup.Done || job.Size == 0 {
+		t.Fatalf("%+v %v", job, err)
+	}
+}
+
+func TestRestoreRoundTripsAndKeepsTheOldFile(t *testing.T) {
+	src := t.TempDir()
+	st := newStore(t, src, storeKey)
+	fill(t, st)
+	file := filepath.Join(t.TempDir(), "b.db")
+	if err := st.Backup(context.Background(), file); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	dir := t.TempDir()
+	v := mustVault(t, storeKey)
+	if err := backup.Restore(context.Background(), file, dir, v, false); err != nil {
+		t.Fatal(err)
+	}
+	got := newStore(t, dir, storeKey)
+	svcs, _ := got.Services(context.Background())
+	links, err := got.Links(context.Background())
+	if err != nil || len(svcs) != 1 || svcs[0].Key != "receiver-secret" || len(links) != 1 || links[0].Key != "sender-secret" || links[0].Email != "b@x.test" {
+		t.Fatalf("restored data: %+v %+v %v", svcs, links, err)
+	}
+	got.Close()
+
+	// data is there now: refuse without --force, replace and keep the old file with it
+	if err := backup.Restore(context.Background(), file, dir, v, false); !errors.Is(err, backup.ErrExists) {
+		t.Errorf("over existing data without --force: %v", err)
+	}
+	if err := backup.Restore(context.Background(), file, dir, v, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, backup.DataFile+".before-restore")); err != nil {
+		t.Errorf("the old file must be kept: %v", err)
+	}
+}
+
+func TestRestoreRefusesWhatItCannotTrust(t *testing.T) {
+	src := t.TempDir()
+	st := newStore(t, src, storeKey)
+	fill(t, st)
+	good := filepath.Join(t.TempDir(), "good.db")
+	st.Backup(context.Background(), good)
+	st.Close()
+	ctx := context.Background()
+
+	// the wrong store key
+	if err := backup.Restore(ctx, good, t.TempDir(), mustVault(t, "a-different-store-key-123"), false); err == nil || !strings.Contains(err.Error(), "store key") {
+		t.Errorf("wrong key: %v", err)
+	}
+	// not a database at all, and a damaged one
+	junk := filepath.Join(t.TempDir(), "junk.db")
+	os.WriteFile(junk, []byte("this is not a database, just text of some length to look like one"), 0o600)
+	if err := backup.Restore(ctx, junk, t.TempDir(), mustVault(t, storeKey), false); err == nil {
+		t.Error("junk must be refused")
+	}
+	raw, _ := os.ReadFile(good)
+	damaged := filepath.Join(t.TempDir(), "damaged.db")
+	// wreck the pages of the tables the opening check does not read (the first page and the key check are left alone)
+	for i := 4096 * 3; i < len(raw); i++ {
+		raw[i] ^= 0xFF
+	}
+	os.WriteFile(damaged, raw, 0o600)
+	if err := backup.Restore(ctx, damaged, t.TempDir(), mustVault(t, storeKey), false); err == nil {
+		t.Error("a damaged file must be refused")
+	}
+	// a database from a newer version
+	newer := filepath.Join(t.TempDir(), "newer.db")
+	raw, _ = os.ReadFile(good)
+	copy(raw[60:64], []byte{0, 0, 3, 232}) // PRAGMA user_version = 1000, stored in the header
+	os.WriteFile(newer, raw, 0o600)
+	if err := backup.Restore(ctx, newer, t.TempDir(), mustVault(t, storeKey), false); err == nil || !strings.Contains(err.Error(), "newer version") {
+		t.Errorf("newer schema: %v", err)
+	}
+	// nothing was left half done in the target
+	dir := t.TempDir()
+	backup.Restore(ctx, junk, dir, mustVault(t, storeKey), false)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || entries[0].Name() != "handoff.lock" {
+		names := []string{}
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("a refused restore left files behind: %v", names)
+	}
+}
+
+func TestRestoreRefusesWhileTheAppRuns(t *testing.T) {
+	dir := t.TempDir()
+	st := newStore(t, dir, storeKey)
+	fill(t, st)
+	file := filepath.Join(t.TempDir(), "b.db")
+	st.Backup(context.Background(), file)
+	st.Close()
+
+	release, err := backup.Lock(dir) // what the running app holds
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backup.Restore(context.Background(), file, dir, mustVault(t, storeKey), true); !errors.Is(err, backup.ErrInUse) {
+		t.Errorf("restore under a running app: %v", err)
+	}
+	if _, err := backup.Lock(dir); !errors.Is(err, backup.ErrInUse) {
+		t.Errorf("a second app on the same data: %v", err)
+	}
+	release()
+	if err := backup.Restore(context.Background(), file, dir, mustVault(t, storeKey), true); err != nil {
+		t.Errorf("after the app stopped: %v", err)
+	}
+}

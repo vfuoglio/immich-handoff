@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -147,6 +148,43 @@ func Open(path string, v *vault.Vault) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// Backup writes a consistent copy of the whole database to dest, which must not exist, while the app keeps
+// using it. The keys in it stay encrypted with the store key. The copy is readable by its owner only.
+func (s *Store) Backup(ctx context.Context, dest string) error {
+	if _, err := os.Stat(dest); err == nil {
+		return fmt.Errorf("store: %s already exists", dest)
+	}
+	// VACUUM INTO does not take parameters for the file name, so it is quoted as an SQL string
+	if _, err := s.db.ExecContext(ctx, `VACUUM INTO '`+strings.ReplaceAll(dest, `'`, `''`)+`'`); err != nil {
+		os.Remove(dest)
+		return fmt.Errorf("store: backup: %w", err)
+	}
+	return os.Chmod(dest, 0o600)
+}
+
+// Check runs SQLite's own integrity check and reports what it found when it is not "ok".
+func (s *Store) Check(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA integrity_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var problems []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return err
+		}
+		if line != "ok" {
+			problems = append(problems, line)
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("store: the file is damaged: %s", strings.Join(problems, "; "))
+	}
+	return rows.Err()
 }
 
 func (s *Store) Close() error { return s.db.Close() }

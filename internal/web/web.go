@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -43,7 +44,8 @@ type Server struct {
 	// thumbnails of photos that are waiting to be handed over.
 	PublicImmichURL string
 	Version         string
-	WebhookURL      string // PUBLIC_WEBHOOK_URL, for the administrator's connection check
+	WebhookURL      string          // PUBLIC_WEBHOOK_URL, for the administrator's connection check
+	Backups         *backup.Manager // nil without a store: nothing to back up
 
 	limiter limiter
 }
@@ -59,6 +61,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
 	mux.HandleFunc("GET /metrics", w.metrics)
+	mux.HandleFunc("POST /backup", w.queueBackup)
+	mux.HandleFunc("GET /backup", w.backupStatus)
+	mux.HandleFunc("GET /backup/{id}", w.backupStatus)
 	mux.HandleFunc("GET /{$}", w.dashboard)
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)

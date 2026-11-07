@@ -1703,3 +1703,93 @@ func TestAdmin(t *testing.T) {
 		t.Error("the removed service is still listed")
 	}
 }
+
+// TestBackupAndRestore: back up while the app runs, move the data to a fresh folder on another port, and the same
+// people and services are back and still hand photos over.
+func TestBackupAndRestore(t *testing.T) {
+	alice, bob, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 10)
+	data := t.TempDir()
+	envOf := func(port, data string) []string {
+		return []string{"IMMICH_BASE_URL=" + baseURL, "WEBHOOK_SECRET=" + secret, "LISTEN_ADDR=:" + port, "DATA_DIR=" + data,
+			"HANDOFF_STORE_KEY=an-e2e-store-key-0123456789",
+			"PUBLIC_WEBHOOK_URL=http://host.docker.internal:" + port + "/webhook/immich"}
+	}
+	cli := func(env []string, args ...string) (int, string) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return code, string(out)
+	}
+	a := launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+data)
+	owner, sender := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"moved"}, "tag": {"moved-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"moved"}, "mode": {"move"}}), 204, "join")
+
+	// the command works against the running app, and the file appears
+	code, out := cli(envOf(port, data), "backup", "--wait")
+	if code != 0 || !strings.Contains(out, "Backup ready") {
+		t.Fatalf("backup --wait: exit %d\n%s", code, out)
+	}
+	files, _ := filepath.Glob(filepath.Join(data, "backups", "handoff-*.db"))
+	if len(files) != 1 || strings.Contains(files[0], "forced") {
+		t.Fatalf("backup files: %v\n%s", files, out)
+	}
+	if code, out := cli(envOf(port, data), "backup", "--list"); code != 0 || !strings.Contains(out, filepath.Base(files[0])) {
+		t.Errorf("--list: exit %d\n%s", code, out)
+	}
+	// replacing the data of a running app is refused
+	if code, out := cli(envOf(port, data), "restore", "--force", files[0]); code != 1 || !strings.Contains(out, "running") {
+		t.Errorf("restore under a running app: exit %d\n%s", code, out)
+	}
+
+	// move to a fresh folder and another port
+	a.stop()
+	data2, port2 := t.TempDir(), fmt.Sprint(atoi(appPort)+11)
+	if code, out := cli(envOf(port2, data2), "restore", files[0]); code != 0 {
+		t.Fatalf("restore: exit %d\n%s", code, out)
+	}
+	launchApp(t, bin, port2, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+data2)
+	if p := page(t, port2, owner); !strings.Contains(p, "moved") || !strings.Contains(p, "bob") && !strings.Contains(p, "Bob") {
+		t.Errorf("the service and its member must be back: %.600s", p)
+	}
+	// the keys still work and the workflow was repaired to point at the new address
+	eventually(t, "bob's workflow points at the new app", 90*time.Second, func() bool {
+		var wfs []struct {
+			Name  string
+			Steps []struct {
+				Config map[string]any
+			}
+		}
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: moved" {
+				for _, s := range w.Steps {
+					if u, _ := s.Config["url"].(string); strings.Contains(u, ":"+port2+"/") {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	})
+	id, _ := upload(t, bob, "after-restore.jpg", jpegBytes(9200))
+	tagAsset(t, bob, "moved-tag", id)
+	eventually(t, "a photo is handed over by the restored app", 90*time.Second, func() bool {
+		x, code := getAsset(t, bob, id)
+		return code == 200 && x.IsTrashed && len(searchTag(t, alice, "inbox/moved", false)) >= 1
+	})
+}
