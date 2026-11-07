@@ -123,3 +123,32 @@ func TestTheShellHasTheIconAndAThemeSwitchAndAppliesTheSavedThemeFirst(t *testin
 		t.Errorf("theme.js: %d", res.StatusCode)
 	}
 }
+
+// The light behind the page drifts for ever, as in the agreed design. It must stay cheap: only `transform` is
+// animated (done by the graphics card, no repainting), and reduced motion stops it.
+func TestTheBackgroundDriftsCheaplyAndStopsForReducedMotion(t *testing.T) {
+	app, _ := setup(t)
+	res, err := http.Get(app.URL + "/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	css := string(b)
+	for _, name := range []string{"drift-a", "drift-b"} {
+		m := regexp.MustCompile(`@keyframes ` + name + ` \{([^}]*\{[^}]*\})\s*\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Fatalf("the %s animation is missing", name)
+		}
+		if !strings.Contains(m[1], "transform: translate3d(") || strings.Count(m[1], ":") != 1 {
+			t.Errorf("%s must animate transform and nothing else (anything else is redrawn every frame): %s", name, m[1])
+		}
+		if !regexp.MustCompile(`animation: ` + name + ` 24s linear infinite alternate`).MatchString(css) {
+			t.Errorf("%s must run for ever, slowly, back and forth", name)
+		}
+	}
+	reduced := regexp.MustCompile(`(?s)@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}`).FindStringSubmatch(css)
+	if reduced == nil || !strings.Contains(reduced[1], "animation-iteration-count: 1") || !strings.Contains(reduced[1], "*::before, *::after") {
+		t.Error("reduced motion must stop every animation, including the ones on ::before and ::after")
+	}
+}

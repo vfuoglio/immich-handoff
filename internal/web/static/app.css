@@ -91,13 +91,25 @@ body {
   font: 16px/1.5 var(--font-body);
   font-optical-sizing: auto;
 }
-/* a still wash of twilight light behind everything; motion is left to the optional effects */
+/* the twilight light behind everything, three glows. The two at the top drift slowly across the page, in opposite
+   directions, for ever (24 s there, 24 s back): they are moved with `transform` alone, which the browser does on the
+   graphics card without redrawing anything, so it costs next to nothing, and the browser stops it in a hidden tab.
+   Each also leans toward the pointer (the --px and --py that effects.ts sets). The one at the horizon follows the
+   pointer and flares when a photo lands. Reduced motion stops the drift (see the end of this file). */
+html::before, html::after { content: ""; position: fixed; inset: -4rem -14vw; z-index: -1; pointer-events: none; will-change: transform; }
+html::before {
+  background: radial-gradient(60rem 36rem at calc(12% + 14vw + (var(--px, .5) - .5) * 14%) calc(-6% + (var(--py, .3) - .3) * 14%), var(--glow-a), transparent 62%);
+  animation: drift-a 24s linear infinite alternate;
+}
+html::after {
+  background: radial-gradient(44rem 30rem at calc(96% - 14vw - (var(--px, .5) - .5) * 10%) calc(18% + (var(--py, .3) - .3) * 10%), var(--glow-b), transparent 64%);
+  animation: drift-b 24s linear infinite alternate;
+}
+@keyframes drift-a { to { transform: translate3d(14vw, 0, 0); } }
+@keyframes drift-b { to { transform: translate3d(-14vw, 0, 0); } }
 body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background:
-    radial-gradient(60rem 36rem at calc(12% + (var(--px, .5) - .5) * 14%) calc(-6% + (var(--py, .3) - .3) * 14%), var(--glow-a), transparent 62%),
-    radial-gradient(44rem 30rem at calc(96% - (var(--px, .5) - .5) * 10%) calc(14% + (var(--py, .3) - .3) * 10%), var(--glow-b), transparent 64%),
-    radial-gradient(60rem 26rem at calc(50% + (var(--px, .5) - .5) * 24%) 114%, var(--glow-c), transparent 62%);
+  background: radial-gradient(60rem 26rem at calc(50% + (var(--px, .5) - .5) * 24%) 114%, var(--glow-c), transparent 62%);
 }
 a { color: var(--accent); }
 .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1rem 3rem; }
