@@ -52,3 +52,6 @@ document.addEventListener("click", (e) => {
     });
   }
 });
+
+// makes this file a module of its own, so names in one script never clash with another
+export {};

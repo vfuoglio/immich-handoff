@@ -104,6 +104,7 @@ templ Layout(title, user string) {
 			<title>{ title }</title>
 			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
 			<link rel="stylesheet" href="static/app.css"/>
+			<script src="static/theme.js"></script>
 			<script src="static/htmx.min.js" defer></script>
 			<script src="static/app.js" defer></script>
 		</head>
@@ -120,6 +121,9 @@ templ Layout(title, user string) {
 								<a class="adminlink" href="admin">Admin</a>
 							}
 							<span id="live" class="live off" title="Live updates" role="img" aria-label="Live updates"></span>
+							<button type="button" class="icon-btn" id="theme" aria-label="Dark theme" title="Switch between the light and the dark theme" aria-pressed="false">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17" ></path><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path></svg>
+							</button>
 							<span class="avatar" aria-hidden="true">{ initial(user) }</span>
 							<span>{ user }</span>
 						</div>
@@ -417,8 +421,8 @@ templ OwnedCard(o OwnedView) {
 		}
 		<form class="row" hx-post="services/limits" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 			<input type="hidden" name="service" value={ o.Name }/>
-			<label>Photos per sender per day <input name="photos" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitPhotos) } style="width:6rem"/></label>
-			<label>MB per sender per day <input name="mb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitMB) } style="width:6rem"/></label>
+			<label>Photos per sender per day <input name="photos" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitPhotos) } class="narrow"/></label>
+			<label>MB per sender per day <input name="mb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitMB) } class="narrow"/></label>
 			<button type="submit">Save limits</button>
 			<small class="meta">0 means no limit. Photos over the limit wait, tagged, until the day moves on.</small>
 		</form>

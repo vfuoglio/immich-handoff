@@ -57,6 +57,10 @@ test/run.sh          # end-to-end: starts a throwaway Immich 3.2.0, runs the rea
 
 Generated code (`go generate ./...`: the Immich client, the templates and the page's script bundle) is committed; CI fails if it is stale.
 
+### The page's look
+
+`internal/web/static/app.css` is a small design system: colour, type, spacing and shape are CSS tokens at the top (the twilight palette of the app icon, light and dark, following the browser unless the person chose one with the icon in the bar), and the components use only those tokens. The fonts (Bricolage Grotesque, Figtree and JetBrains Mono, latin and latin-ext) are variable woff2 files in `static/fonts` with their licences beside them (SIL Open Font License), served by the app itself: the Content-Security-Policy allows fonts from the app only, and nothing is ever requested from a font service. No page may use an inline style or script (the policy blocks them), and a test checks this. The light/dark choice is a script of its own (`static/theme.js`) loaded first and without `defer`, so a saved choice applies before the first paint; it is kept in the browser's `localStorage`, never on the server.
+
 ### The page's scripts
 
 They are written in TypeScript (`internal/web/ts/*.ts`) and bundled by esbuild into `internal/web/static/app.js`, which is committed and embedded like the templates. esbuild is a pinned Go tool in `go.mod`, so `go generate ./...` rebuilds the bundle with nothing else installed, and building, running and testing the program never needs Node. esbuild strips types without checking them, so the types are checked separately: `cd tools/typecheck && npm ci && npm run check` runs `tsc --noEmit` in strict mode, and CI does the same in its `types` job. That job is the only place Node is used. Edit the `.ts` files, never `app.js`; the `.map` file next to it lets the browser's developer tools show the original source. The strict Content-Security-Policy still applies: scripts load from the app itself, never inline. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).

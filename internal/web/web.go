@@ -100,7 +100,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
 		img += " " + u.Scheme + "://" + u.Host
 	}
-	csp := "default-src 'none'; script-src 'self'; style-src 'self'; img-src " + img +
+	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src " + img +
 		"; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
