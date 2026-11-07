@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -1895,4 +1896,126 @@ func TestPauseAndLimits(t *testing.T) {
 	if p := page(t, port, owner); !strings.Contains(p, "Needs you") || !strings.Contains(p, "Nothing needs you right now.") {
 		t.Errorf("the owner's Overview must lead with the strip, all clear here: %.500s", p)
 	}
+}
+
+// openStream listens to the page's live stream as a signed-in person, and returns the events it carries.
+func openStream(t *testing.T, port, cookie string) (status int, events <-chan map[string]any) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://localhost:"+port+"/events", nil)
+	req.Header.Set("Cookie", cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(chan map[string]any, 64)
+	if res.StatusCode != 200 {
+		res.Body.Close()
+		return res.StatusCode, out
+	}
+	go func() {
+		defer res.Body.Close()
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			if l := sc.Text(); strings.HasPrefix(l, "data: {") {
+				var m map[string]any
+				if json.Unmarshal([]byte(strings.TrimPrefix(l, "data: ")), &m) == nil {
+					out <- m
+				}
+			}
+		}
+	}()
+	return 200, out
+}
+
+func waitEvent(t *testing.T, who string, events <-chan map[string]any, within time.Duration, match func(map[string]any) bool) map[string]any {
+	t.Helper()
+	deadline := time.After(within)
+	for {
+		select {
+		case ev := <-events:
+			if match(ev) {
+				return ev
+			}
+		case <-deadline:
+			t.Fatalf("%s never heard the expected live event", who)
+		}
+	}
+}
+
+// TestLiveEvents: a real hand-over, a pause and a daily limit are told to the page as they happen, to the sender, the
+// owner and the administrator, and to nobody else.
+func TestLiveEvents(t *testing.T) {
+	alice, bob, _, grandma := bootstrap(t) // alice owns the service, bob sends, grandma takes no part
+	_ = grandma
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 13)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, sender, admin, stranger := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test"), loginCookie(t, "admin@e2e.test"), loginCookie(t, "grandma@e2e.test")
+	must := func(res *http.Response, want int, what string) {
+		t.Helper()
+		if res.StatusCode != want {
+			t.Fatalf("%s: HTTP %d, want %d", what, res.StatusCode, want)
+		}
+	}
+	must(post(t, port, "/services", owner, url.Values{"name": {"live"}, "tag": {"live-tag"}, "policy": {"open"}}), 204, "create")
+	must(post(t, port, "/join", sender, url.Values{"service": {"live"}, "mode": {"move"}}), 204, "join")
+	eventually(t, "bob's workflow exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(bob), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: live" {
+				return true
+			}
+		}
+		return false
+	})
+
+	if code, _ := openStream(t, port, stranger); code != 403 {
+		t.Errorf("someone who takes part in nothing must not listen: %d", code)
+	}
+	_, ownerFeed := openStream(t, port, owner)
+	_, senderFeed := openStream(t, port, sender)
+	_, adminFeed := openStream(t, port, admin)
+	time.Sleep(500 * time.Millisecond) // the streams are open
+
+	// a real hand-over
+	id, _ := upload(t, bob, "live-1.jpg", jpegBytes(9401))
+	tagAsset(t, bob, "live-tag", id)
+	for who, feed := range map[string]<-chan map[string]any{"owner": ownerFeed, "sender": senderFeed, "administrator": adminFeed} {
+		ev := waitEvent(t, who, feed, 90*time.Second, func(e map[string]any) bool { return e["kind"] == "handed" })
+		if ev["service"] != "live" || ev["sender"] == nil || ev["count"] != float64(1) {
+			t.Errorf("%s heard %v", who, ev)
+		}
+		for k := range ev {
+			switch k {
+			case "kind", "service", "sender", "reason", "count", "until", "at":
+			default:
+				t.Errorf("%s: unexpected field %q in %v", who, k, ev)
+			}
+		}
+		if b, _ := json.Marshal(ev); strings.Contains(string(b), "live-1.jpg") || strings.Contains(string(b), id) {
+			t.Errorf("%s: an event must name no photo: %s", who, b)
+		}
+	}
+	_ = alice
+
+	// the sender pauses
+	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"1"}}), 204, "bob pauses")
+	for who, feed := range map[string]<-chan map[string]any{"owner": ownerFeed, "sender": senderFeed} {
+		waitEvent(t, who, feed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "paused" && e["reason"] == "sender" })
+	}
+	must(post(t, port, "/pause", sender, url.Values{"service": {"live"}, "paused": {"0"}}), 204, "bob resumes")
+	waitEvent(t, "owner", ownerFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "resumed" })
+
+	// the daily limit: one photo went today, so a limit of one holds the next
+	must(post(t, port, "/services/limits", owner, url.Values{"service": {"live"}, "photos": {"1"}}), 204, "limit")
+	id2, _ := upload(t, bob, "live-2.jpg", jpegBytes(9402))
+	tagAsset(t, bob, "live-tag", id2)
+	held := waitEvent(t, "owner", ownerFeed, 90*time.Second, func(e map[string]any) bool { return e["kind"] == "held" })
+	if held["reason"] != "limit" || held["count"] != float64(1) || held["until"] == nil {
+		t.Errorf("held: %v", held)
+	}
+	waitEvent(t, "sender", senderFeed, 10*time.Second, func(e map[string]any) bool { return e["kind"] == "limit" })
 }

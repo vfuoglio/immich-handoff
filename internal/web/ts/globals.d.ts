@@ -25,6 +25,8 @@ interface HtmxConfirmDetail {
 }
 
 interface DocumentEventMap {
+  /** Re-sent by app.ts for every event the server streams (see live.ts); the live scene and the numbers listen to it. */
+  "handoff:live": CustomEvent<import("./live").LiveEvent>;
   "htmx:confirm": CustomEvent<HtmxConfirmDetail>;
   "htmx:beforeSwap": CustomEvent<HtmxBeforeSwapDetail>;
   "htmx:afterSwap": CustomEvent<HtmxAfterSwapDetail>;

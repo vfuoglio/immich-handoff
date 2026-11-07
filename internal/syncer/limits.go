@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/vfuoglio/immich-handoff/internal/live"
 )
 
 // LimitWindow is how far back the daily cap looks. A variable so tests can shorten it.
@@ -57,8 +59,9 @@ func (s *Syncer) hold(ctx context.Context, log *slog.Logger, svc *Service, snd *
 	if s.held == nil {
 		s.held, s.wake = map[*Account]Held{}, map[*Account]*time.Timer{}
 	}
-	_, was := s.held[snd]
+	prev, was := s.held[snd]
 	s.held[snd] = Held{Waiting: waiting, Until: until, Photos: snap.Photos, Bytes: snap.Bytes}
+	changed := !was || prev.Waiting != waiting
 	if t := s.wake[snd]; t != nil {
 		t.Stop()
 	}
@@ -69,6 +72,9 @@ func (s *Syncer) hold(ctx context.Context, log *slog.Logger, svc *Service, snd *
 	s.wake[snd] = time.AfterFunc(delay, func() { s.Run(ctx, "daily limit window moved", false) })
 	s.heldMu.Unlock()
 	log.Info("daily limit reached; photos wait", "waiting", waiting, "until", until.Format(time.RFC3339), "handed", snap.Photos)
+	if changed {
+		s.emit(live.Held, svc, snd, "limit", waiting, &until)
+	}
 	if !was {
 		if r, ok := s.Provider.(LimitReporter); ok {
 			r.LimitReached(svc, snd, waiting, until)

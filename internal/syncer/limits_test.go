@@ -52,8 +52,11 @@ type limitRig struct {
 }
 
 func newLimitRig(t *testing.T) *limitRig {
+	return newLimitRigWith(t, &fakeImmich{uploadStatus: "created"})
+}
+
+func newLimitRigWith(t *testing.T, f *fakeImmich) *limitRig {
 	t.Helper()
-	f := &fakeImmich{uploadStatus: "created"}
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
 	alice := &syncer.Account{Name: "alice", API: newAPI(t, srv.URL, "src")}

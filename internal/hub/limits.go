@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -62,6 +63,7 @@ func (h *Hub) Record(ctx context.Context, acct *syncer.Account, bytes int64) err
 func (h *Hub) LimitReached(svc *syncer.Service, snd *syncer.Account, waiting int, until time.Time) {
 	text := fmt.Sprintf("%s reached the daily limit for %s: %d %s will wait until %s", snd.Name, svc.Label(), waiting, plural(waiting), until.Local().Format("2 Jan 15:04"))
 	h.event(context.Background(), svc.Label(), snd.UserID, "limit", text)
+	h.showUntil(context.Background(), live.Limit, svc.Label(), snd.Name, "", waiting, until, snd.UserID)
 }
 
 // SetLimits sets what each sender may hand over to the service in a day (photos, megabytes; 0 for none). Only the
@@ -116,6 +118,7 @@ func (h *Hub) SetServicePaused(ctx context.Context, owner immich.User, service s
 		word = "paused"
 	}
 	h.event(ctx, service, owner.ID, word, owner.Name+" "+word+" the service "+service)
+	h.show(ctx, live.Kind(word), service, "", "service", true)
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}
@@ -142,6 +145,7 @@ func (h *Hub) SetMemberPaused(ctx context.Context, user immich.User, service str
 		word = "paused"
 	}
 	h.event(ctx, service, user.ID, word, user.Name+" "+word+" sending to "+service)
+	h.show(ctx, live.Kind(word), service, user.Name, "sender", false, user.ID)
 	if err := h.Reload(ctx); err != nil {
 		return err
 	}

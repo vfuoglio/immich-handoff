@@ -2,6 +2,8 @@
 // (esbuild); the bundle is committed, so building the program needs nothing else. `tsc --noEmit` checks
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
+import { parseLive } from "./live";
+
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
   if (e.detail.xhr.status >= 400 && e.detail.xhr.status < 600) {
@@ -48,6 +50,11 @@ document.addEventListener("tags-on", () => {
   if (!window.EventSource) return;
   const events = new EventSource("events");
   events.addEventListener("run", () => htmx.trigger(document.body, "handoff:run"));
+  // what is happening, as it happens: handed on to whoever listens for "handoff:live" (a malformed event is ignored)
+  events.addEventListener("live", (message) => {
+    const event = parseLive((message as MessageEvent<string>).data);
+    if (event) document.dispatchEvent(new CustomEvent("handoff:live", { detail: event }));
+  });
   events.onopen = () => indicator?.classList.remove("off");
   events.onerror = () => indicator?.classList.add("off");
 })();

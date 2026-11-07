@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -38,6 +39,7 @@ type Hub struct {
 	Wake    func(reason string)
 	Retry   func()               // sets up missing workflows in the background (Immich may still be loading its plugins)
 	Notify  func(message string) // tells an admin something needs attention (optional)
+	Bus     *live.Bus            // tells the open pages what changed, as it happens (optional)
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 

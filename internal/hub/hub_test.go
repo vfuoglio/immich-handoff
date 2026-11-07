@@ -18,6 +18,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -1243,5 +1244,125 @@ func TestTheGuideIsFinishedOnceAndOnlyWhereThereIsADataFile(t *testing.T) {
 	noStore := &hub.Hub{}
 	if !noStore.GuideDone(ctx, bobID) {
 		t.Error("with nowhere to remember it the guide must not be offered")
+	}
+}
+
+// feeds opens one page for each kind of person who might be looking.
+type feeds struct{ owner, sender, other, root, receiver *live.Sub }
+
+func listen(e *env) *feeds {
+	bus := &live.Bus{Window: 10 * time.Millisecond}
+	e.h.Bus = bus
+	sub := func(id uuid.UUID, all bool) *live.Sub { s, _ := bus.Subscribe(id, all); return s }
+	return &feeds{owner: sub(annID, false), sender: sub(bobID, false), other: sub(uuid.New(), false), root: sub(uuid.New(), true), receiver: sub(familyID, false)}
+}
+
+func heard(s *live.Sub) []live.Event {
+	var out []live.Event
+	for {
+		select {
+		case ev := <-s.C:
+			out = append(out, ev)
+		case <-time.After(150 * time.Millisecond):
+			return out
+		}
+	}
+}
+
+func told(evs []live.Event, kind live.Kind, reason string) bool {
+	for _, ev := range evs {
+		if ev.Kind == kind && ev.Reason == reason {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPausingAndResumingAreToldToTheRightPeople(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+
+	e.h.SetServicePaused(ctx, ann, "party", true)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		if !told(heard(s), live.Paused, "service") {
+			t.Errorf("%s must hear that the service was paused", name)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+
+	e.h.SetMemberPaused(ctx, bob, "party", true)
+	e.h.SetMemberPaused(ctx, bob, "party", false)
+	evs := heard(f.owner)
+	if !told(evs, live.Paused, "sender") || !told(evs, live.Resumed, "sender") {
+		t.Errorf("the owner must hear bob pause and resume: %v", evs)
+	}
+	for _, ev := range evs {
+		if ev.Reason == "sender" && ev.Sender != "Bob" {
+			t.Errorf("the event names the sender: %+v", ev)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+}
+
+func TestALostConnectionAndItsRestoreAreTold(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open"})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+
+	e.f.deleteKeyOf("bob") // bob deletes his key in Immich
+	e.h.CheckKeys(ctx)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		if !told(heard(s), live.Lost, "sender") {
+			t.Errorf("%s must hear bob's connection was cut", name)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
+	}
+
+	// the owner's own key is deleted: the service cannot receive, and every sender is told too
+	e.h.Join(ctx, e.sess, bob, "party", "", "") // bob joins again after cleaning up
+	e.h.Leave(ctx, e.sess, bob, "party")
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f = listen(e)
+	e.f.deleteKeyOf("ann")
+	e.h.CheckKeys(ctx)
+	if !told(heard(f.sender), live.Lost, "service") {
+		t.Error("a sender must hear that the service lost its receiver")
+	}
+	e.h.ReconnectService(ctx, e.ann, ann, "party")
+	if !told(heard(f.owner), live.Restored, "service") || !told(heard(f.sender), live.Restored, "service") {
+		t.Error("owner and senders must hear that the service was restored")
+	}
+}
+
+func TestAReachedLimitIsToldToTheOwnerAndTheSender(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", LimitPhotos: 1})
+	e.h.Join(ctx, e.sess, bob, "party", "", "")
+	f := listen(e)
+	snd := service(e, "party").Senders[0]
+	until := time.Now().Add(3 * time.Hour)
+	e.h.LimitReached(service(e, "party"), snd, 2, until)
+	for name, s := range map[string]*live.Sub{"owner": f.owner, "sender": f.sender, "administrator": f.root} {
+		var got live.Event
+		for _, ev := range heard(s) {
+			if ev.Kind == live.Limit {
+				got = ev
+			}
+		}
+		if got.Count != 2 || got.Until == nil || got.Sender != "Bob" {
+			t.Errorf("%s: %+v", name, got)
+		}
+	}
+	if evs := heard(f.other); len(evs) != 0 {
+		t.Errorf("a stranger must hear nothing: %v", evs)
 	}
 }

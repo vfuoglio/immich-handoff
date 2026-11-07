@@ -26,6 +26,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -47,6 +48,7 @@ type Server struct {
 	Version         string
 	WebhookURL      string          // PUBLIC_WEBHOOK_URL, for the administrator's connection check
 	Backups         *backup.Manager // nil without a store: nothing to back up
+	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 
 	limiter limiter
 }
@@ -656,7 +658,14 @@ func (w *Server) lastRunFragment(rw http.ResponseWriter, r *http.Request) {
 
 // events tells the open page when a pass has finished, so it can refresh its cards.
 func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
-	if w.requireMember(rw, r) == nil {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	// people who take part in a service, and the Immich administrator (who sees everything), may listen
+	if !me.user.IsAdmin && len(w.servicesFor(r.Context(), me)) == 0 {
+		http.Error(rw, "you do not take part in any service", http.StatusForbidden)
 		return
 	}
 	fl, ok := rw.(http.Flusher)
@@ -669,6 +678,8 @@ func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("X-Accel-Buffering", "no") // do not let a reverse proxy hold the stream back
 	ch, cancel := w.S.Subscribe()
 	defer cancel()
+	feed, closeFeed := w.Bus.Subscribe(me.user.ID, me.user.IsAdmin)
+	defer closeFeed()
 	fmt.Fprint(rw, ": connected\n\n")
 	fl.Flush()
 	keepalive := time.NewTicker(25 * time.Second)
@@ -679,6 +690,12 @@ func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
 			return
 		case <-ch:
 			fmt.Fprint(rw, "event: run\ndata: 1\n\n")
+		case ev := <-feed.C:
+			b, err := json.Marshal(ev)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(rw, "event: live\ndata: %s\n\n", b)
 		case <-keepalive.C:
 			fmt.Fprint(rw, ": keepalive\n\n")
 		}

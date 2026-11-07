@@ -57,6 +57,25 @@ test/run.sh          # end-to-end: starts a throwaway Immich 3.2.0, runs the rea
 
 Generated code (`go generate ./...`: the Immich client, the templates and the page's script bundle) is committed; CI fails if it is stale.
 
+### Live events
+
+An open page listens to `GET /events` (server-sent events). Besides the old bare `run` signal (a pass finished, so the page refreshes its numbers), the stream carries typed JSON events, `event: live`, of what is happening. `internal/live` makes and routes them; `internal/web/ts/live.ts` has the matching TypeScript types and a parser that ignores anything malformed, and `app.ts` re-sends each one as a `handoff:live` event on the page for whatever listens (the live scene, later).
+
+| `kind` | When | Other fields |
+|---|---|---|
+| `started` | a photo is being handed over | `service`, `sender`, `count` |
+| `handed` | it was handed over | `reason: "duplicate"` when the receiver already had it |
+| `refused` | the receiver has it in their trash; the original was kept | |
+| `failed` | it could not be handed over; the original was kept and it is retried | |
+| `held` | photos wait for the daily limit, still tagged | `reason: "limit"`, `count` waiting, `until` when they can go |
+| `limit` | a sender reached the daily limit | `count`, `until` |
+| `paused`, `resumed` | a service (`reason: "service"`) or a sender (`reason: "sender"`) paused or resumed | `sender` for a sender |
+| `lost` | a connection was cut: a sender's key (`reason: "sender"`) or a service's receiver key (`reason: "service"`) | |
+| `restored` | an owner reconnected a service | |
+| `resync` | some events were dropped for a slow page: ask for the current state again | |
+
+Every event has `at`. **Who hears what:** an event goes to the sender it is about, the owner of the service and whoever receives from it, and to an Immich administrator (who hears everything); never to anyone else, so a sender never hears another sender's photos. **What is in an event:** no photo, no file name, no id, no key, no email; only the service, the sender's name and a count. The routing (who may hear) is kept on the server and is not part of the event. **Bursts:** the per-photo kinds (`started`, `handed`, `refused`, `failed`) are gathered for 300 ms and sent as one event with a `count`, so a big upload makes a few events, not hundreds. A pause is told when it happens (`paused`/`resumed`), not once per pass, because a paused service touches nothing; a page that opens later gets the current state from the page itself, not from the stream.
+
 ### The page's look
 
 `internal/web/static/app.css` is a small design system: colour, type, spacing and shape are CSS tokens at the top (the twilight palette of the app icon, light and dark, following the browser unless the person chose one with the icon in the bar), and the components use only those tokens. The fonts (Bricolage Grotesque, Figtree and JetBrains Mono, latin and latin-ext) are variable woff2 files in `static/fonts` with their licences beside them (SIL Open Font License), served by the app itself: the Content-Security-Policy allows fonts from the app only, and nothing is ever requested from a font service. No page may use an inline style or script (the policy blocks them), and a test checks this. The light/dark choice is a script of its own (`static/theme.js`) loaded first and without `defer`, so a saved choice applies before the first paint; it is kept in the browser's `localStorage`, never on the server.

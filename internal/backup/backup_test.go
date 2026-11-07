@@ -71,19 +71,23 @@ func (f *fakeIdle) WhenIdle(ctx context.Context, wait, poll time.Duration) (func
 	}
 }
 
-func manager(t *testing.T, st backup.Source, idle backup.Idler) (*backup.Manager, *[]string, *[]string) {
+// manager returns what the manager told and logged as functions, because it writes them from its own goroutine
+func manager(t *testing.T, st backup.Source, idle backup.Idler) (m *backup.Manager, told func() []string, events func() []string) {
 	t.Helper()
-	var told, events []string
+	var toldList, eventList []string
 	var mu sync.Mutex
-	m := &backup.Manager{Dir: filepath.Join(t.TempDir(), "backups"), Source: st, Idle: idle, Poll: 5 * time.Millisecond, Wait: 40 * time.Millisecond,
+	m = &backup.Manager{Dir: filepath.Join(t.TempDir(), "backups"), Source: st, Idle: idle, Poll: 5 * time.Millisecond, Wait: 40 * time.Millisecond,
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Tell: func(s string) { mu.Lock(); told = append(told, s); mu.Unlock() },
+		Tell: func(s string) { mu.Lock(); toldList = append(toldList, s); mu.Unlock() },
 		Event: func(kind, text string) {
 			mu.Lock()
-			events = append(events, kind+": "+text)
+			eventList = append(eventList, kind+": "+text)
 			mu.Unlock()
 		}}
-	return m, &told, &events
+	read := func(l *[]string) func() []string {
+		return func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), *l...) }
+	}
+	return m, read(&toldList), read(&eventList)
 }
 
 func finish(t *testing.T, m *backup.Manager) backup.Job {
@@ -130,8 +134,8 @@ func TestABackupWaitsForAQuietMomentThenCopiesAConsistentFile(t *testing.T) {
 	if !idle.released {
 		t.Error("the passes must be let go after the copy")
 	}
-	if len(*events) != 1 || !strings.HasPrefix((*events)[0], "backup:") {
-		t.Errorf("events: %v", *events)
+	if len(events()) != 1 || !strings.HasPrefix((events())[0], "backup:") {
+		t.Errorf("events: %v", events())
 	}
 }
 
@@ -149,11 +153,11 @@ func TestAfterTheWaitTheBackupIsMadeAnywayMarkedForcedAndEveryoneIsTold(t *testi
 	if _, err := os.Stat(done.Path); err != nil {
 		t.Errorf("the forced file must exist: %v", err)
 	}
-	if len(*told) != 1 || !strings.Contains((*told)[0], "forced") {
-		t.Errorf("the operator must be told: %v", *told)
+	if len(told()) != 1 || !strings.Contains((told())[0], "forced") {
+		t.Errorf("the operator must be told: %v", told())
 	}
-	if len(*events) != 1 || !strings.Contains((*events)[0], "without waiting for a quiet moment") {
-		t.Errorf("the activity log must say so: %v", *events)
+	if len(events()) != 1 || !strings.Contains((events())[0], "without waiting for a quiet moment") {
+		t.Errorf("the activity log must say so: %v", events())
 	}
 	files, _ := backup.List(m.Dir)
 	if len(files) != 1 || !files[0].Forced {
@@ -172,8 +176,8 @@ func TestAFailedBackupIsReported(t *testing.T) {
 	if done.State != backup.Failed || !strings.Contains(done.Err, "disk full") {
 		t.Fatalf("job: %+v", done)
 	}
-	if len(*told) != 1 || len(*events) != 1 {
-		t.Errorf("a failure must be told: %v %v", *told, *events)
+	if len(told()) != 1 || len(events()) != 1 {
+		t.Errorf("a failure must be told: %v %v", told(), events())
 	}
 	// and a new request is accepted after a failure
 	if _, already := m.Queue(context.Background()); already {

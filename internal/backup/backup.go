@@ -142,14 +142,6 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 			size = fi.Size()
 		}
 	}
-	m.set(j, func(j *Job) {
-		j.Finished, j.Size = m.now(), size
-		if err != nil {
-			j.State, j.Err = Failed, err.Error()
-		} else {
-			j.State = Done
-		}
-	})
 	switch {
 	case err != nil:
 		m.Log.Error("backup failed", "err", err)
@@ -164,6 +156,15 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 			m.Event("backup", "A backup was made: "+filepath.Base(dest))
 		}
 	}
+	// the job counts as finished only once everyone has been told, so whoever sees "done" can rely on that
+	m.set(j, func(j *Job) {
+		j.Finished, j.Size = m.now(), size
+		if err != nil {
+			j.State, j.Err = Failed, err.Error()
+		} else {
+			j.State = Done
+		}
+	})
 }
 
 func (m *Manager) tell(note, kind, event string) {

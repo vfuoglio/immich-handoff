@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 )
 
 // Config holds the options that apply to every service.
@@ -48,6 +49,7 @@ type Syncer struct {
 	Services []*Service // fixed services (used when Provider is nil)
 	Provider Provider   // optional: services that can change while running
 	Usage    Usage      // optional: records what senders hand over, so a service's daily cap can be applied
+	Bus      *live.Bus  // optional: tells the open pages what is happening, as it happens
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -464,15 +466,20 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		if fromAlbum[a.Id] {
 			tagID = uuid.Nil
 		}
+		if !s.Cfg.DryRun {
+			s.emit(live.Started, svc, snd, "", 0, nil)
+		}
 		switch out, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
 		case err != nil:
 			c.Errors++
+			s.emit(live.Failed, svc, snd, "", 0, nil)
 			if fromAlbum[a.Id] {
 				fromAlbumFailed++
 			}
 			log.Error("asset failed; original kept", "asset", a.Id, "file", a.OriginalFileName, "err", err)
 		case out == "imported":
 			c.Imported++
+			s.emit(live.Handed, svc, snd, "", 0, nil)
 			s.markJustHandled(a.Id)
 			if track {
 				size := sizeOf(nil)
@@ -493,12 +500,14 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 			}
 		case out == "duplicate":
 			c.Duplicate++
+			s.emit(live.Handed, svc, snd, "duplicate", 0, nil)
 			s.markJustHandled(a.Id)
 			if fromAlbum[a.Id] {
 				fromAlbumDone++
 			}
 		case out == "refused":
 			c.Refused++
+			s.emit(live.Refused, svc, snd, "", 0, nil)
 			s.markJustHandled(a.Id)
 			if fromAlbum[a.Id] {
 				fromAlbumRefused++

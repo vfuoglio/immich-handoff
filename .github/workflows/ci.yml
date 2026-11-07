@@ -24,18 +24,18 @@ jobs:
       - run: go test -race ./...
   types:
     # The page's scripts are TypeScript (internal/web/ts). Building and running the program needs no Node: esbuild
-    # is a Go tool and the bundle is committed. Node is used here only, to check the types.
+    # is a Go tool and the bundle is committed. Node is used here only, to check the types and run the page's few script tests.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: tools/typecheck/package-lock.json
-      - name: The page's TypeScript type-checks
+      - name: The page's TypeScript type-checks and its tests pass
         working-directory: tools/typecheck
-        run: npm ci --ignore-scripts && npm run check
+        run: npm ci --ignore-scripts && npm run check && npm test
   e2e:
     needs: test
     runs-on: ubuntu-latest

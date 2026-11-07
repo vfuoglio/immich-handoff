@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -48,6 +49,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 		for _, l := range links {
 			if l.ID == id {
 				h.event(ctx, l.Service, l.ImmichUserID, "broken", l.Name+"'s connection to "+l.Service+" was cut: their API key was deleted")
+				h.show(ctx, live.Lost, l.Service, l.Name, "sender", false, l.ImmichUserID)
 				h.tell(fmt.Sprintf("%s's API key for %q was deleted in Immich; the link is paused. They can clean up and join again.", l.Name, l.Service))
 			}
 		}
@@ -56,6 +58,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 		for _, v := range svcs {
 			if v.ID == id {
 				h.event(ctx, v.Name, v.OwnerID, "broken", v.Name+" cannot receive: its owner's API key was deleted")
+				h.show(ctx, live.Lost, v.Name, "", "service", true)
 				h.tell(fmt.Sprintf("The receiver key of %q (owner %s) was deleted in Immich; senders are paused until the owner reconnects.", v.Name, v.OwnerName))
 			}
 		}
@@ -138,6 +141,7 @@ func (h *Hub) ReconnectService(ctx context.Context, sess *immich.API, owner immi
 		return err
 	}
 	h.event(ctx, name, owner.ID, "reconnected", owner.Name+" reconnected "+name)
+	h.show(ctx, live.Restored, name, "", "service", true)
 	h.Log.Info("service reconnected", "service", name, "owner", owner.Email)
 	if h.Wake != nil {
 		h.Wake("reconnected: " + name)
