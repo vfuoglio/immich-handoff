@@ -140,13 +140,22 @@ func run(log *slog.Logger) error {
 		}
 		defer st.Close()
 		h.Store = st
-		backups = &backup.Manager{Dir: dir + "/backups", Source: st, Idle: s, Log: log, Tell: s.Tell,
+		every, keep, err := backupSchedule()
+		if err != nil {
+			return err
+		}
+		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: s.Tell, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)
 				}
 			}}
 		log.Info("self-service joining is on", "data", dir)
+		if every > 0 {
+			go backups.Schedule(ctx)
+		} else {
+			log.Info("automatic backups are off (BACKUP_EVERY=off): make them yourself with `immich-handoff backup`")
+		}
 	}
 	if err := h.Reload(ctx); err != nil {
 		return err
@@ -155,7 +164,7 @@ func run(log *slog.Logger) error {
 	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
-		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus,
+		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins

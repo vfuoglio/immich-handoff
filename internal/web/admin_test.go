@@ -2,12 +2,19 @@ package web_test
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
@@ -171,5 +178,119 @@ func TestAdminConnectionCheckRuns(t *testing.T) {
 	code, body := postForm(t, app.URL+"/admin/check", "sess=admin", "")
 	if code != 200 || !strings.Contains(body, "Settings") || !strings.Contains(body, "Immich") {
 		t.Errorf("check: %d %.300s", code, body)
+	}
+}
+
+// withBackups gives the page a backup manager over the store withHub made, and says what it told.
+func withDownload(st **store.Store, download bool, gap time.Duration, told *[]string, mu *sync.Mutex, dir string) func(*web.Server) {
+	return func(srv *web.Server) {
+		srv.BackupDownload, srv.DownloadGap = download, gap
+		srv.Backups = &backup.Manager{Dir: dir, Source: *st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Keep: 7, Every: 24 * time.Hour,
+			Tell: func(s string) { mu.Lock(); *told = append(*told, s); mu.Unlock() },
+			Event: func(kind, text string) {
+				(*st).AddEvent(context.Background(), store.Event{Service: "club", Kind: kind, Text: text})
+			}}
+	}
+}
+
+func TestTheBackupDownloadIsOffUnlessSwitchedOn(t *testing.T) {
+	var st *store.Store
+	var told []string
+	var mu sync.Mutex
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withDownload(&st, false, 0, &told, &mu, t.TempDir())(srv) })
+	if code, _ := do(t, "POST", app.URL+"/admin/backup/download", "sess=admin", change); code != 404 {
+		t.Errorf("download while switched off: %d, want 404", code)
+	}
+	code, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if code != 200 || strings.Contains(body, "data-backup-download") || !strings.Contains(body, "Downloading a backup from this page is off") {
+		t.Errorf("the page must say the download is off and show no button: %d", code)
+	}
+	if !strings.Contains(body, "Automatic backups: every 24h, keeping the newest 7") {
+		t.Error("the page does not show the automatic backup schedule")
+	}
+	if len(told) != 0 {
+		t.Errorf("a refused download told someone: %v", told)
+	}
+}
+
+func TestTheBackupDownloadIsLimitedLoggedAndLeavesNothingBehind(t *testing.T) {
+	var st *store.Store
+	var told []string
+	var mu sync.Mutex
+	dir := t.TempDir()
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withDownload(&st, true, 300*time.Millisecond, &told, &mu, dir)(srv) })
+	url := app.URL + "/admin/backup/download"
+
+	if code, _ := do(t, "POST", url, "sess=admin", nil); code != 400 {
+		t.Errorf("without the CSRF header: %d, want 400", code)
+	}
+	if code, _ := do(t, "GET", url, "sess=admin", change); code != 405 {
+		t.Errorf("as a plain link (GET): %d, want 405", code)
+	}
+	for _, c := range []string{"", "sess=alice"} {
+		if code, _ := do(t, "POST", url, c, change); code != 401 && code != 404 {
+			t.Errorf("as %q: %d, want it refused", c, code)
+		}
+	}
+
+	req, _ := http.NewRequest("POST", url, nil)
+	req.Header.Set("Cookie", "sess=admin")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.HasPrefix(string(file), "SQLite format 3") {
+		t.Fatalf("download: %d, %d bytes", res.StatusCode, len(file))
+	}
+	if cd := res.Header.Get("Content-Disposition"); !strings.HasPrefix(cd, "attachment; filename=\"handoff-") {
+		t.Errorf("Content-Disposition %q", cd)
+	}
+	if res.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("Cache-Control %q, want no-store", res.Header.Get("Cache-Control"))
+	}
+	mu.Lock()
+	if len(told) != 1 || !strings.Contains(told[0], "downloaded by") {
+		t.Errorf("whoever runs the app was not told: %v", told)
+	}
+	mu.Unlock()
+	if _, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil); !strings.Contains(body, "A backup was downloaded by") {
+		t.Error("the download is not in the recent events")
+	}
+
+	// the next one is refused for a while, and is not counted as a failure
+	if code, _ := do(t, "POST", url, "sess=admin", change); code != 429 {
+		t.Errorf("a second download at once: %d, want 429", code)
+	}
+	time.Sleep(350 * time.Millisecond)
+	if code, _ := do(t, "POST", url, "sess=admin", change); code != 200 {
+		t.Errorf("a download after the gap: %d, want 200", code)
+	}
+	// the app removes its copy when the handler returns, a moment after the last byte reached us
+	var entries []os.DirEntry
+	for i := 0; i < 100; i++ {
+		if entries, _ = os.ReadDir(dir); len(entries) == 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for _, e := range entries {
+		t.Errorf("a download left %s in the backup folder", filepath.Join(dir, e.Name()))
+	}
+}
+
+func TestTheAdminPageOffersTheDownloadWhenItIsOn(t *testing.T) {
+	var st *store.Store
+	var told []string
+	var mu sync.Mutex
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withDownload(&st, true, 0, &told, &mu, t.TempDir())(srv) })
+	_, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if !strings.Contains(body, `data-backup-download="admin/backup/download"`) || strings.Contains(body, "Downloading a backup from this page is off") {
+		t.Error("the page does not offer the download")
+	}
+	if !strings.Contains(body, "No backup has been made yet.") {
+		t.Error("the page does not say that no backup exists yet")
 	}
 }

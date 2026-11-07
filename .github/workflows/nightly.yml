@@ -1,0 +1,241 @@
+name: nightly
+# Every night at 09:00 UTC (4 AM in winter, in New York) the container image is built from `main` and published to
+# Docker Hub and GitHub's registry, but only if `main` has changed since the last nightly image was built.
+#   - tags: the dated one, 20261107-nightly, and `nightly`, which always points at the newest
+#   - never touches `latest`, `X.Y` or any release tag
+#   - the same tests as a release run first; if anything fails nothing is published and `nightly` stays where it was
+#   - only the newest 14 dated nightly tags are kept (see .github/scripts/prune_nightly.sh)
+#   - run by hand from the Actions tab to try it: untick "publish" to build and smoke-test only (works from any
+#     branch), or tick "force" to build although `main` has not changed
+# Scheduled runs happen only for the workflow file on the default branch, and GitHub switches them off after 60 days
+# without repository activity (re-enable it on the Actions tab). See docs/releasing.md.
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Build even if main has not changed since the last nightly"
+        type: boolean
+        default: false
+      publish:
+        description: "Publish the images (only allowed from main). Untick to build and smoke-test only"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+env:
+  # the same image goes to both registries; Docker Hub is the one the documentation names
+  DOCKERHUB_IMAGE: vfuoglio/immich-handoff
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  KEEP: "14"   # how many dated nightly tags stay
+jobs:
+  changed:
+    # decides whether there is anything to build: the commit the last nightly image was built from is on the image
+    # itself (the org.opencontainers.image.revision annotation and label), so no other state is kept anywhere
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Has main changed since the last nightly?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          FORCE: ${{ inputs.force }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          publish=false
+          if [ "$EVENT" = schedule ] || [ "$INPUT_PUBLISH" = true ]; then publish=true; fi
+          if [ "$publish" = true ] && [ "$REF" != refs/heads/main ]; then
+            echo "::error::Only main may publish a nightly image (this run is on $REF). Untick \"publish\" to build and smoke-test only."; exit 1
+          fi
+          version="$(date -u +%Y%m%d)-nightly"
+          # read from the index the image was published with (an annotation); the image's own label is the fallback.
+          # Both were checked against an image built with attestations in a local registry.
+          last="$(docker buildx imagetools inspect "$GHCR_IMAGE:nightly" --raw 2>/dev/null \
+            | jq -r '.annotations["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)"
+          if [ -z "$last" ] && out="$(docker buildx imagetools inspect "$GHCR_IMAGE:nightly" --format '{{json .Image}}' 2>/dev/null)"; then
+            last="$(jq -r '[.. | .Labels? // empty | .["org.opencontainers.image.revision"]? // empty] | first // ""' <<<"$out" 2>/dev/null || true)"
+          fi
+          build=true
+          if [ "$FORCE" != true ] && [ -n "$last" ] && [ "$last" = "$GITHUB_SHA" ]; then build=false; fi
+          {
+            echo "build=$build"; echo "publish=$publish"; echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "- version: \`$version\`"
+            echo "- this commit: \`$GITHUB_SHA\`"
+            echo "- the last nightly was built from: \`${last:-none yet}\`"
+            echo "- build: **$build**, publish: **$publish**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: [changed, test]
+    if: needs.changed.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # for signing the image without a key of ours (cosign, keyless)
+    env:
+      VERSION: ${{ needs.changed.outputs.version }}
+      PUBLISH: ${{ needs.changed.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # the same checks as the release workflow
+      - name: Build each architecture and smoke-test it
+        run: |
+          v="$VERSION"
+          for arch in amd64 arm64; do
+            docker buildx build --platform linux/$arch --build-arg VERSION="$v" -t smoke:$arch --load .
+            got="$(docker run --rm --platform linux/$arch smoke:$arch --version)"
+            [ "$got" = "$v" ] || { echo "::error::$arch reports version '$got', expected '$v'"; exit 1; }
+            # with no configuration it must refuse to start and say why; this proves the binary runs as the
+            # unprivileged user on that architecture
+            set +e; out="$(docker run --rm --platform linux/$arch smoke:$arch 2>&1)"; code=$?; set -e
+            [ "$code" -ne 0 ] && grep -q WEBHOOK_SECRET <<<"$out" || { echo "::error::$arch did not fail cleanly without configuration: $out"; exit 1; }
+            # the image declares its health check, and the check says so (non-zero) when the app is not running
+            [ "$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' smoke:$arch)" = yes ] || { echo "::error::$arch image has no HEALTHCHECK"; exit 1; }
+            set +e; out="$(docker run --rm --platform linux/$arch smoke:$arch --healthcheck 2>&1)"; code=$?; set -e
+            [ "$code" -ne 0 ] && grep -q "healthcheck failed" <<<"$out" || { echo "::error::$arch --healthcheck did not fail cleanly with no app running: $out"; exit 1; }
+          done
+
+      - name: Nothing is published from this run
+        if: env.PUBLISH != 'true'
+        run: echo "Built and smoke-tested both architectures; publishing was switched off for this run." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: env.PUBLISH == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: meta
+        if: env.PUBLISH == 'true'
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          # the dated tag and the moving one; metadata-action also labels the image with this commit
+          # (org.opencontainers.image.revision), and the index is annotated with it below: the next night compares with it
+          tags: |
+            type=raw,value=${{ env.VERSION }}
+            type=raw,value=nightly
+
+      - name: Publish the multi-architecture image
+        id: push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: index:org.opencontainers.image.revision=${{ github.sha }}   # what the next night compares with
+          build-args: VERSION=${{ env.VERSION }}
+          sbom: true              # a software bill of materials, attached to the image
+          provenance: mode=max    # and how and from what it was built
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+
+      - name: Sign the image, then check the signature and the attached SBOM
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          [ -n "$DIGEST" ] || { echo "::error::the publish step gave no image digest"; exit 1; }
+          for img in "$DOCKERHUB_IMAGE" "$GHCR_IMAGE"; do
+            # keyless: the signature is tied to this workflow by GitHub's identity token
+            cosign sign --yes "$img@$DIGEST"
+            cosign verify \
+              --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/nightly\.yml@" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$img@$DIGEST" > /dev/null
+            docker buildx imagetools inspect "$img@$DIGEST" --format '{{json .SBOM}}' \
+              | jq -e '[.. | .packages? // empty | length] | add > 0' > /dev/null \
+              || { echo "::error::$img has no SBOM"; exit 1; }
+            echo "$img: signed, signature verified, SBOM present"
+          done
+          echo "Published \`$VERSION\` and \`nightly\` to Docker Hub and GitHub's registry (digest \`$DIGEST\`)." >> "$GITHUB_STEP_SUMMARY"
+
+      # Tidying must never fail a night that already published: both steps only warn. Only dated nightly tags are
+      # ever removed (prune_nightly.sh ignores everything else). Not tried against the real registries yet.
+      - name: Keep only the newest dated nightly tags on GitHub's registry
+        if: env.PUBLISH == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          pkg="${GHCR_IMAGE##*/}"
+          api="/users/$OWNER/packages/container/$pkg/versions"   # the owner is a user account, not an organisation
+          gh api --paginate "$api?per_page=100" --jq '.[] | [(.id|tostring), ((.metadata.container.tags // [])|join(","))] | @tsv' > versions.tsv \
+            || { echo "::warning::could not list the package versions on GitHub's registry"; exit 0; }
+          cut -f2 versions.tsv | tr ',' '\n' | .github/scripts/prune_nightly.sh "$KEEP" > old.txt
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            id="$(awk -F'\t' -v t="$tag" '{n=split($2,a,","); for(i=1;i<=n;i++) if(a[i]==t) print $1}' versions.tsv | head -n1)"
+            [ -n "$id" ] || continue
+            if gh api -X DELETE "$api/$id" > /dev/null; then echo "removed $tag from GitHub's registry"; else echo "::warning::could not remove $tag from GitHub's registry"; fi
+          done < old.txt
+
+      - name: Keep only the newest dated nightly tags on Docker Hub
+        if: env.PUBLISH == 'true'
+        continue-on-error: true
+        env:
+          HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          # deleting a tag needs a token with delete rights; if it only has read and write this warns and goes on
+          jwt="$(jq -n --arg u "$HUB_USER" --arg p "$HUB_TOKEN" '{username:$u,password:$p}' \
+            | curl -fsS -H 'Content-Type: application/json' -d @- https://hub.docker.com/v2/users/login | jq -r .token)" \
+            || { echo "::warning::could not log in to Docker Hub's API to remove old nightly tags"; exit 0; }
+          url="https://hub.docker.com/v2/repositories/$DOCKERHUB_IMAGE/tags?page_size=100"
+          : > hub-tags.txt
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            page="$(curl -fsS -H "Authorization: JWT $jwt" "$url")" || { echo "::warning::could not list the tags on Docker Hub"; exit 0; }
+            jq -r '.results[].name' <<<"$page" >> hub-tags.txt
+            url="$(jq -r '.next // empty' <<<"$page")"
+            [ -n "$url" ] || break
+          done
+          .github/scripts/prune_nightly.sh "$KEEP" < hub-tags.txt | while IFS= read -r tag; do
+            if curl -fsS -X DELETE -H "Authorization: JWT $jwt" "https://hub.docker.com/v2/repositories/$DOCKERHUB_IMAGE/tags/$tag/" > /dev/null; then
+              echo "removed $tag from Docker Hub"
+            else
+              echo "::warning::could not remove $tag from Docker Hub (the token may lack delete rights)"
+            fi
+          done

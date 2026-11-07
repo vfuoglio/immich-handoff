@@ -3,16 +3,22 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/cdproto/network"
@@ -151,7 +157,7 @@ func theWorld(t *testing.T) world {
 	_ = grandma
 	bin := buildApp(t)
 	port := fmt.Sprint(atoi(appPort) + 20)
-	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "HANDOFF_ADMIN_BACKUP_DOWNLOAD=true")
 	w := world{port: port, alice: alice, bob: bob,
 		owner: loginCookie(t, "alice@e2e.test"), sender: loginCookie(t, "bob@e2e.test"), grandma: loginCookie(t, "grandma@e2e.test")}
 	must := func(res *http.Response, want int, what string) {
@@ -557,6 +563,137 @@ func TestBrowser(t *testing.T) {
 		// and back
 		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-services details.svc[open] button[data-act="resume"]').click()`, nil))
 		until(t, ctx, "the lane to flow again", `document.querySelector('#scene [data-lane]').dataset.state === 'flow'`, 10*time.Second)
+	})
+
+	t.Run("an administrator downloads a backup from the page, after the dialog", func(t *testing.T) {
+		dir := t.TempDir()
+		ctx := browse(t, w.port, loginCookie(t, "admin@e2e.test"), look{})
+		run(t, ctx,
+			browser.SetDownloadBehavior(browser.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(dir),
+			chromedp.Navigate(w.url()+"admin"), chromedp.WaitVisible("#backups", chromedp.ByQuery))
+		until(t, ctx, "the page's scripts started", `document.querySelector('#backups') !== null`, 10*time.Second)
+		if got := js[string](t, ctx, `document.querySelector('#backups').textContent`); !strings.Contains(got, "Automatic backups: every 24h, keeping the newest 7") {
+			t.Errorf("the schedule is not on the page: %q", got)
+		}
+		// Cancel downloads nothing
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		if got := js[string](t, ctx, `document.getElementById('confirm-title').textContent`); got != "Download a backup?" {
+			t.Errorf("the dialog's title: %q", got)
+		}
+		run(t, ctx, chromedp.Click(`#confirm button[value="cancel"]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog to close", `!document.getElementById('confirm').open`, 3*time.Second)
+		time.Sleep(700 * time.Millisecond)
+		if files, _ := os.ReadDir(dir); len(files) != 0 {
+			t.Fatalf("Cancel downloaded something: %v", files)
+		}
+		// OK downloads the file
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		run(t, ctx, chromedp.Click(`#confirm-ok`, chromedp.ByQuery))
+		var saved string
+		eventually(t, "the file to arrive", 15*time.Second, func() bool {
+			files, _ := os.ReadDir(dir)
+			for _, f := range files {
+				if strings.HasPrefix(f.Name(), "handoff-") && strings.HasSuffix(f.Name(), ".db") {
+					saved = filepath.Join(dir, f.Name())
+					return true
+				}
+			}
+			return false
+		})
+		head := make([]byte, 15)
+		f, err := os.Open(saved)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		if _, err := io.ReadFull(f, head); err != nil || string(head) != "SQLite format 3" {
+			t.Errorf("the downloaded file is not a database: %q %v", head, err)
+		}
+		until(t, ctx, "the page to say it was downloaded", `document.getElementById('flash').textContent.includes('downloaded')`, 5*time.Second)
+		// a second one at once is refused, and the page says why
+		run(t, ctx, chromedp.Click(`#backups button[data-backup-download]`, chromedp.ByQuery))
+		until(t, ctx, "the dialog", `document.getElementById('confirm').open`, 3*time.Second)
+		run(t, ctx, chromedp.Click(`#confirm-ok`, chromedp.ByQuery))
+		until(t, ctx, "the refusal", `document.getElementById('flash').textContent.includes('only one is handed out')`, 10*time.Second)
+		// and it is in the recent events, with who did it
+		admin := loginCookie(t, "admin@e2e.test")
+		eventually(t, "the download in the recent events", 10*time.Second, func() bool {
+			req, _ := http.NewRequest("GET", "http://localhost:"+w.port+"/admin", nil)
+			req.Header.Set("Cookie", admin)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return false
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return strings.Contains(string(b), "A backup was downloaded by admin")
+		})
+	})
+
+	t.Run("the link a proxy adds to Immich's own header sits between the bell and the avatar", func(t *testing.T) {
+		// what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
+		// and this app under /handoff/ on the same address. This is also the check that Immich's header still has
+		// the shape the script looks for.
+		immich, _ := url.Parse(baseURL)
+		toImmich := httputil.NewSingleHostReverseProxy(immich)
+		director := toImmich.Director
+		toImmich.Director = func(r *http.Request) { director(r); r.Header.Del("Accept-Encoding") }
+		toImmich.ModifyResponse = func(res *http.Response) error {
+			if !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || !strings.Contains(res.Request.Header.Get("Cookie"), "immich_is_authenticated=true") {
+				return nil
+			}
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
+			body = bytes.Replace(body, []byte("</body>"), []byte(`<script src="/handoff/static/immich-button.js" defer></script></body>`), 1)
+			res.Body = io.NopCloser(bytes.NewReader(body))
+			res.ContentLength = int64(len(body))
+			res.Header.Set("Content-Length", fmt.Sprint(len(body)))
+			return nil
+		}
+		appURL, _ := url.Parse("http://localhost:" + w.port)
+		toApp := httputil.NewSingleHostReverseProxy(appURL)
+		mux := http.NewServeMux()
+		mux.Handle("/handoff/", http.StripPrefix("/handoff", toApp))
+		mux.Handle("/", toImmich)
+		front := httptest.NewServer(mux)
+		t.Cleanup(front.Close) // after the browsers (cleanups run last in, first out): their open connections would hold it
+		// the browser's sign-in cookies are set for "localhost", not for the address the test server prints
+		address := strings.Replace(front.URL, "127.0.0.1", "localhost", 1)
+
+		for _, phone := range []bool{false, true} {
+			l := look{}
+			if phone {
+				l = look{w: 390, h: 800, touch: true}
+			}
+			ctx := browse(t, w.port, w.sender, l)
+			run(t, ctx, chromedp.Navigate(address+"/photos"), chromedp.WaitVisible("#handoff-link", chromedp.ByQuery))
+			until(t, ctx, "the link to take its place", `document.getElementById('handoff-link') !== null && !document.getElementById('handoff-link').classList.contains('floating')`, 10*time.Second)
+			got := js[string](t, ctx, `(() => {
+				const x = (e) => Math.round(e.getBoundingClientRect().x);
+				const link = document.getElementById('handoff-link');
+				const bell = document.querySelector('button[aria-label=Notifications]');
+				const avatar = document.querySelector("[title*='@']");
+				return [x(bell) < x(link), x(link) < x(avatar), link.getBoundingClientRect().height, link.querySelector('img').naturalWidth > 0].join(',');
+			})()`)
+			if got != "true,true,40,true" {
+				t.Errorf("phone=%v: the link between the bell and the avatar, 40 px high, with the app's icon: %q", phone, got)
+			}
+		}
+		// it stays when the person moves around Immich, and it opens the app's page on the same address
+		ctx := browse(t, w.port, w.sender, look{})
+		run(t, ctx, chromedp.Navigate(address+"/photos"), chromedp.WaitVisible("#handoff-link", chromedp.ByQuery))
+		run(t, ctx, chromedp.Click(`a[href="/explore"]`, chromedp.ByQuery))
+		until(t, ctx, "Immich's Explore page", `location.pathname === '/explore'`, 10*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		if !js[bool](t, ctx, `document.getElementById('handoff-link') !== null && !document.getElementById('handoff-link').classList.contains('floating')`) {
+			t.Error("the link was lost when the person moved to another page of Immich")
+		}
+		run(t, ctx, chromedp.Click(`#handoff-link`, chromedp.ByQuery))
+		until(t, ctx, "the app's page", `location.pathname === '/handoff/' && document.querySelector('header.bar') !== null`, 15*time.Second)
 	})
 
 	t.Run("the request is approved from the page", func(t *testing.T) {

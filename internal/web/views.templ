@@ -730,9 +730,23 @@ type AdminData struct {
 	Services []AdminServiceView
 	Leftover []AdminMemberView
 	Activity []AdminActivityView
+	Backup   AdminBackup
 	SelfOn   bool // people can join from the page, so there is a store to remove from
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+}
+
+// AdminBackup is what the administrator's page says about backups.
+type AdminBackup struct {
+	Has      bool   // there is a store, so there is something to back up
+	Download bool   // the download button is switched on (HANDOFF_ADMIN_BACKUP_DOWNLOAD)
+	Every    string // how often, as written in BACKUP_EVERY, or "" when automatic backups are off
+	Keep     int
+	Folder   string
+	Count    int
+	Last     string // the newest backup's file name
+	LastWhen string
+	Failed   string // why the last backup failed, if it did
 }
 
 type AdminServiceView struct {
@@ -794,6 +808,9 @@ templ AdminPage(d AdminData) {
 				</ul>
 			</section>
 		}
+		if d.Backup.Has {
+			@AdminBackups(d.Backup)
+		}
 		if len(d.Activity) > 0 {
 			<h2>{ t(ctx, "Recent events") }</h2>
 			<section class="card timeline-card" aria-label={ t(ctx, "Recent events") }>
@@ -805,6 +822,40 @@ templ AdminPage(d AdminData) {
 			</section>
 		}
 	}
+}
+
+// AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
+templ AdminBackups(b AdminBackup) {
+	<h2>{ t(ctx, "Backups") }</h2>
+	<section class="card" id="backups">
+		<p>
+			if b.Every != "" {
+				{ t(ctx, "Automatic backups: every {every}, keeping the newest {keep}, in {folder}.", "every", b.Every, "keep", fmt.Sprint(b.Keep), "folder", b.Folder) }
+			} else {
+				{ t(ctx, "Automatic backups are off. Backups are made only when you run the backup command.") }
+			}
+		</p>
+		<p class="meta">
+			switch {
+				case b.Failed != "":
+					{ t(ctx, "The last backup failed: {reason}", "reason", b.Failed) }
+				case b.Last != "":
+					{ t(ctx, "Newest backup: {name}, made {when}.", "name", b.Last, "when", b.LastWhen) }
+				default:
+					{ t(ctx, "No backup has been made yet.") }
+			}
+		</p>
+		if b.Download {
+			<p class="row">
+				<button class="primary" data-backup-download="admin/backup/download" hx-post="admin/backup/download" hx-swap="none" hx-disabled-elt="this" hx-confirm={ t(ctx, "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.") } data-confirm-title={ t(ctx, "Download a backup?") } data-confirm-label={ t(ctx, "Download") }>{ t(ctx, "Download backup") }</button>
+				<span class="meta">{ t(ctx, "A copy of the app's data, made now. It is written to the recent events.") }</span>
+			</p>
+		} else {
+			<p class="meta">
+				@templ.Raw(h(ctx, "Downloading a backup from this page is off. To turn it on, and what to know first, see <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Backups</a>.", "url", backupDocsURL))
+			</p>
+		}
+	</section>
 }
 
 // AdminServiceCard is one service for the administrator, as a row that opens to its facts, senders and (apart) its removal.

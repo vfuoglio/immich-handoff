@@ -50,9 +50,12 @@ type Server struct {
 	Version         string
 	WebhookURL      string          // PUBLIC_WEBHOOK_URL, for the administrator's connection check
 	Backups         *backup.Manager // nil without a store: nothing to back up
+	BackupDownload  bool            // HANDOFF_ADMIN_BACKUP_DOWNLOAD: the administrator's page may hand out a backup (off by default)
+	DownloadGap     time.Duration   // the least time between two downloads (default 10 minutes)
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 
 	limiter limiter
+	gate    downloadGate
 }
 
 func init() {
@@ -81,6 +84,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/backup/download", w.adminBackupDownload)
 	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
 	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)

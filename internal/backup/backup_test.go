@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -348,5 +349,162 @@ func TestRestoreRefusesWhileTheAppRuns(t *testing.T) {
 	release()
 	if err := backup.Restore(context.Background(), file, dir, mustVault(t, storeKey), true); err != nil {
 		t.Errorf("after the app stopped: %v", err)
+	}
+}
+
+func autoFiles(t *testing.T, dir string) []backup.File {
+	t.Helper()
+	files, err := backup.List(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []backup.File
+	for _, f := range files {
+		if f.Auto {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for " + what)
+}
+
+func TestAutomaticBackupsAreMadeOnTheScheduleAndOnlyTheNewestAreKept(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	m, _, events := manager(t, st, &fakeIdle{})
+	m.Every, m.Keep, m.Delay = 1100*time.Millisecond, 2, 20*time.Millisecond // the id has one-second resolution
+
+	// a backup someone asked for is never removed
+	asked, _ := m.Queue(context.Background())
+	finish(t, m)
+
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go m.Schedule(ctx)
+	waitFor(t, "three automatic backups", func() bool { return len(events()) >= 4 })
+	stop()
+	time.Sleep(50 * time.Millisecond)
+
+	autos := autoFiles(t, m.Dir)
+	if len(autos) != 2 {
+		t.Fatalf("kept %d automatic backups, want 2: %+v", len(autos), autos)
+	}
+	if _, err := os.Stat(asked.Path); err != nil {
+		t.Fatalf("the backup that was asked for was removed: %v", err)
+	}
+	for _, e := range events() {
+		if strings.Contains(e, "automatic") {
+			return
+		}
+	}
+	t.Fatalf("the activity log never says a backup was automatic: %v", events())
+}
+
+func TestTheNextAutomaticBackupWaitsEveryAfterTheNewestOne(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	m, _, _ := manager(t, st, &fakeIdle{})
+	m.Every, m.Keep, m.Delay = time.Hour, 3, 20*time.Millisecond
+
+	ctx, stop := context.WithCancel(context.Background())
+	go m.Schedule(ctx)
+	waitFor(t, "the first automatic backup", func() bool { j, ok := m.Latest(); return ok && j.State == backup.Done })
+	stop()
+
+	// a second run, a moment later, finds the newest one still fresh and makes nothing
+	ctx2, stop2 := context.WithCancel(context.Background())
+	defer stop2()
+	go m.Schedule(ctx2)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(autoFiles(t, m.Dir)); n != 1 {
+		t.Fatalf("%d automatic backups after a restart within the hour, want 1", n)
+	}
+}
+
+type countingFailure struct{ calls atomic.Int32 }
+
+func (f *countingFailure) Backup(ctx context.Context, dest string) error {
+	f.calls.Add(1)
+	return errors.New("the disk is full")
+}
+
+func TestAFailedAutomaticBackupIsReportedAndTriedAgainLater(t *testing.T) {
+	src := &countingFailure{}
+	m, told, _ := manager(t, src, &fakeIdle{})
+	m.Every, m.Keep, m.Delay, m.Retry = time.Hour, 3, 10*time.Millisecond, 40*time.Millisecond
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go m.Schedule(ctx)
+	waitFor(t, "a second try", func() bool { return src.calls.Load() >= 2 })
+	if len(told()) < 2 || !strings.Contains(told()[0], "the disk is full") {
+		t.Fatalf("a failed backup was not reported: %v", told())
+	}
+}
+
+func TestADownloadIsACopyMadeAtOnceThatLeavesNothingBehind(t *testing.T) {
+	st := newStore(t, t.TempDir(), storeKey)
+	defer st.Close()
+	fill(t, st)
+	busy := &fakeIdle{busy: true} // a download does not wait for a quiet moment
+	m, told, events := manager(t, st, busy)
+
+	f, name, cleanup, err := m.Download(context.Background(), "Alice (a@x.test)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(name, "handoff-") || !strings.HasSuffix(name, ".db") {
+		t.Fatalf("name %q", name)
+	}
+	head := make([]byte, 15)
+	if _, err := io.ReadFull(f, head); err != nil || string(head) != "SQLite format 3" {
+		t.Fatalf("not a SQLite file: %q %v", head, err)
+	}
+	if len(told()) != 1 || !strings.Contains(told()[0], "Alice (a@x.test)") {
+		t.Fatalf("whoever runs the app was not told: %v", told())
+	}
+	if len(events()) != 1 || !strings.Contains(events()[0], "downloaded by Alice") {
+		t.Fatalf("the activity log: %v", events())
+	}
+	cleanup()
+	entries, _ := os.ReadDir(m.Dir)
+	if len(entries) != 0 {
+		t.Fatalf("a download left files in the backup folder: %v", entries)
+	}
+	if files, _ := backup.List(m.Dir); len(files) != 0 {
+		t.Fatalf("a download shows up as a backup: %v", files)
+	}
+}
+
+func TestTheScheduleIsReadFromTheEnvironment(t *testing.T) {
+	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	every, keep, err := backup.ParseSchedule(get(nil))
+	if err != nil || every != 24*time.Hour || keep != 7 {
+		t.Errorf("defaults: %v %d %v", every, keep, err)
+	}
+	every, keep, err = backup.ParseSchedule(get(map[string]string{"BACKUP_EVERY": "6h", "BACKUP_KEEP": "30"}))
+	if err != nil || every != 6*time.Hour || keep != 30 {
+		t.Errorf("6h/30: %v %d %v", every, keep, err)
+	}
+	for _, off := range []string{"off", "OFF", "0", "no"} {
+		if every, _, err := backup.ParseSchedule(get(map[string]string{"BACKUP_EVERY": off})); err != nil || every != 0 {
+			t.Errorf("%q: %v %v, want off", off, every, err)
+		}
+	}
+	for _, bad := range []map[string]string{{"BACKUP_EVERY": "5m"}, {"BACKUP_EVERY": "daily"}, {"BACKUP_KEEP": "0"}, {"BACKUP_KEEP": "many"}} {
+		if _, _, err := backup.ParseSchedule(get(bad)); err == nil {
+			t.Errorf("%v was accepted", bad)
+		}
 	}
 }

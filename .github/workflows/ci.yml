@@ -20,6 +20,8 @@ jobs:
         run: go generate ./... && git diff --exit-code
       - name: The release script that decides which version gets the latest tag
         run: .github/scripts/latest_test.sh
+      - name: The script that decides which nightly tags are removed
+        run: .github/scripts/prune_nightly_test.sh
       - run: go vet ./... && go vet -tags e2e ./...
       - run: go test -race ./...
   types:

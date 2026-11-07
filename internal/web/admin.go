@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/doctor"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
@@ -48,7 +51,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	if me == nil {
 		return
 	}
-	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService()}
+	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), Backup: w.backupSummary(r.Context())}
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)
@@ -90,6 +93,103 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	ctx := context.WithValue(r.Context(), adminKey{}, true)
 	AdminPage(d).Render(ctx, rw)
+}
+
+// downloadGate lets one backup out at a time and no more often than a set gap, for the whole app: this is the
+// one action that takes data away, so a stolen session can take it only slowly.
+type downloadGate struct {
+	mu   sync.Mutex
+	last time.Time
+}
+
+// take reserves the next download, or says how long until it is allowed. give returns the reservation when the
+// copy could not be made, so a failure does not use up the turn.
+func (g *downloadGate) take(gap time.Duration) (wait time.Duration, give func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if left := gap - time.Since(g.last); !g.last.IsZero() && left > 0 {
+		return left, nil
+	}
+	before := g.last
+	g.last = time.Now()
+	return 0, func() { g.mu.Lock(); g.last = before; g.mu.Unlock() }
+}
+
+// adminBackupDownload hands an administrator a copy of the data file. It exists only when the person who runs the
+// app switched it on (HANDOFF_ADMIN_BACKUP_DOWNLOAD=true); otherwise, and for everyone who is not an administrator,
+// it is "not found". It is a POST with the CSRF header, never a link, and every download is written to the recent
+// events and sent to NOTIFY_URL.
+func (w *Server) adminBackupDownload(rw http.ResponseWriter, r *http.Request) {
+	if !w.BackupDownload || w.Backups == nil {
+		notFound(rw)
+		return
+	}
+	me := w.adminGuarded(rw, r)
+	if me == nil {
+		return
+	}
+	gap := w.DownloadGap
+	if gap <= 0 {
+		gap = 10 * time.Minute
+	}
+	wait, give := w.gate.take(gap)
+	if give == nil {
+		rw.Header().Set("Retry-After", fmt.Sprint(int(wait.Seconds())+1))
+		http.Error(rw, t(r.Context(), "A backup was downloaded a moment ago. To limit what a stolen session could take, only one is handed out every few minutes. Try again shortly."), http.StatusTooManyRequests)
+		return
+	}
+	f, name, cleanup, err := w.Backups.Download(r.Context(), me.user.Name+" ("+me.user.Email+")")
+	if err != nil {
+		give()
+		w.Log.Error("backup download", "err", err)
+		http.Error(rw, t(r.Context(), "The backup could not be made. See the app's log."), http.StatusInternalServerError)
+		return
+	}
+	defer cleanup()
+	size := int64(-1)
+	if fi, err := f.Stat(); err == nil {
+		size = fi.Size()
+	}
+	h := rw.Header()
+	h.Set("Content-Type", "application/octet-stream")
+	h.Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	h.Set("Cache-Control", "no-store")
+	if size >= 0 {
+		h.Set("Content-Length", fmt.Sprint(size))
+	}
+	if _, err := io.Copy(rw, f); err != nil {
+		w.Log.Warn("backup download interrupted", "err", err)
+	}
+}
+
+// backupSummary is what the administrator's page says about backups.
+func (w *Server) backupSummary(ctx context.Context) AdminBackup {
+	b := AdminBackup{Download: w.BackupDownload}
+	m := w.Backups
+	if m == nil {
+		return b
+	}
+	b.Has, b.Folder, b.Keep = true, m.Dir, m.Keep
+	if m.Every > 0 {
+		b.Every = everyText(m.Every)
+	}
+	if files, err := backup.List(m.Dir); err == nil && len(files) > 0 {
+		b.Count = len(files)
+		b.Last = files[0].Name
+		b.LastWhen = loc(ctx).Stamp(files[0].When.Local())
+	}
+	if j, ok := m.Latest(); ok && j.State == backup.Failed {
+		b.Failed = j.Err
+	}
+	return b
+}
+
+// everyText is the schedule as it is written in BACKUP_EVERY ("24h"): the same in every language.
+func everyText(d time.Duration) string {
+	if d%time.Hour == 0 {
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	}
+	return d.String()
 }
 
 // adminCheck runs the setup check that `immich-handoff doctor` runs, against the services the app has now.

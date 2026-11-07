@@ -397,3 +397,46 @@ func TestAPausedServiceIsReported(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestBackupSettingsAreReported(t *testing.T) {
+	s := newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	out, fails, warns := s.run(t, true, nil)
+	want(t, out, fails, 0, "automatic backups: every 24h0m0s, keeping the newest 7")
+	if warns != 0 || strings.Contains(out, "HANDOFF_ADMIN_BACKUP_DOWNLOAD") {
+		t.Errorf("by default nothing is said about the download and nothing warns (%d warnings)\n%s", warns, out)
+	}
+
+	s = newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	s.env["BACKUP_EVERY"] = "off"
+	s.env["HANDOFF_ADMIN_BACKUP_DOWNLOAD"] = "true"
+	out, fails, warns = s.run(t, true, nil)
+	want(t, out, fails, 0, "automatic backups are off", "an Immich administrator can download a backup")
+	if warns != 1 {
+		t.Errorf("warnings %d, want 1 (automatic backups off)\n%s", warns, out)
+	}
+
+	s = newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	s.env["BACKUP_EVERY"] = "5m"
+	out, fails, _ = s.run(t, true, nil)
+	want(t, out, fails, 1, `BACKUP_EVERY="5m"`)
+
+	s = newScenario(t)
+	s.env["HANDOFF_ADMIN_BACKUP_DOWNLOAD"] = "true"
+	out, _, warns = s.run(t, true, nil)
+	want(t, out, 0, 0, "nothing is stored and there is nothing to download")
+	if warns != 1 {
+		t.Errorf("a download switched on without a store key must warn once, got %d\n%s", warns, out)
+	}
+
+	s = newScenario(t)
+	s.env["HANDOFF_STORE_KEY"] = "0123456789abcdef0123"
+	s.env["HANDOFF_ADMIN_BACKUP_DOWNLOAD"] = "yes"
+	out, _, warns = s.run(t, true, nil)
+	want(t, out, 0, 0, "only the value true switches the download on")
+	if warns != 1 {
+		t.Errorf("warnings %d, want 1\n%s", warns, out)
+	}
+}

@@ -9,6 +9,7 @@ Start with the page that matches what you are doing.
 | Set up the accounts and keys myself, or run several fixed services | [Fixed accounts](fixed-accounts.md) |
 | Know what travels with a photo, and what does not | [What is carried over](what-is-carried-over.md) |
 | Look up a setting | [Settings](settings.md) |
+| **Make it easy to find** (a button in Immich's header, a login-page message) | [Make Handoff easy to find](find-handoff.md) |
 | **Look after the whole installation** (I administer the Immich server) | [The administrator's page](admin.md) |
 | Know what I am trusting, and what is stored | [Security and trust](security.md) |
 | Fix something that is not working | [Troubleshooting](troubleshooting.md) |

@@ -29,12 +29,18 @@ interface HtmxConfirmDetail {
   issueRequest(skipConfirmation?: boolean): void;
 }
 
+/** The parts of htmx's `htmx:beforeRequest` event the page reads. */
+interface HtmxBeforeRequestDetail {
+  elt: Element;
+}
+
 interface DocumentEventMap {
   /** Re-sent by app.ts for every event the server streams (see live.ts); the live scene and the numbers listen to it. */
   "handoff:live": CustomEvent<import("./live").LiveEvent>;
   /** Re-sent by app.ts when the live stream goes down or comes back. */
   "handoff:stream": CustomEvent<{ up: boolean }>;
   "htmx:confirm": CustomEvent<HtmxConfirmDetail>;
+  "htmx:beforeRequest": CustomEvent<HtmxBeforeRequestDetail>;
   "htmx:beforeSwap": CustomEvent<HtmxBeforeSwapDetail>;
   "htmx:afterSwap": CustomEvent<HtmxAfterSwapDetail>;
   "htmx:oobAfterSwap": CustomEvent<unknown>;
