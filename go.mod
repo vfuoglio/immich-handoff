@@ -4,6 +4,7 @@ go 1.27.3
 
 tool (
 	github.com/a-h/templ/cmd/templ
+	github.com/evanw/esbuild/cmd/esbuild
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 )
 
@@ -23,6 +24,7 @@ require (
 	github.com/cli/browser v1.3.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/evanw/esbuild v0.28.2 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/getkin/kin-openapi v0.142.0 // indirect

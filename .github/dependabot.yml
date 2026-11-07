@@ -20,6 +20,12 @@ updates:
     schedule: { interval: weekly, day: monday }
     groups:
       screenshot-tool: { patterns: ["*"] }
+  - package-ecosystem: npm               # only the TypeScript checker used by CI (tools/typecheck)
+    directory: /tools/typecheck
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      typecheck: { patterns: ["*"] }
   - package-ecosystem: docker            # the base images in the Dockerfile
     directory: /
     target-branch: develop

@@ -40,9 +40,10 @@ For the curious, and for anyone changing the code.
 | `internal/doctor` | The setup check behind `immich-handoff doctor` and the admin page's **Check now**. |
 | `internal/store`, `internal/vault` | The SQLite file and the encryption of keys in it. |
 | `internal/immich` | The generated client plus a small wrapper. |
-| `internal/web` | The page: templates, handlers, styles, live updates. |
+| `internal/web` | The page: templates, handlers, styles, live updates. Its scripts are TypeScript in `internal/web/ts`, bundled into `static/app.js` (see below). |
 | `internal/config` | Environment and routes file. |
 | `test/` | The end-to-end suite and the throwaway Immich it runs against. |
+| `tools/typecheck` | Type-checks the page's TypeScript. Used by CI only. |
 | `tools/screenshots` | Makes the pictures in `docs/images` from a real running demo. |
 
 ## Testing
@@ -54,7 +55,11 @@ test/run.sh          # end-to-end: starts a throwaway Immich 3.2.0, runs the rea
 
 `test/run.sh` creates users with the exact API-key permissions the docs list and checks the whole flow against a real Immich: workflow creation, a tag arriving through the real workflow, duplicates, trashed copies, the inbox tidy-up, one-to-many routes, joining and leaving, offering services with approval and invitation links, move and copy, tagging the way the phone app does, and keys deleted on either side. `keep=1 test/run.sh` leaves Immich running afterwards, and `test/dev.sh` starts the app against it. `IMMICH_VERSION=<tag> test/run.sh` tests another Immich release. `E2E_PORT` and `E2E_APP_PORT` move the test ports if the defaults are taken.
 
-Generated code (`go generate ./...`: the Immich client and the templates) is committed; CI fails if it is stale. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).
+Generated code (`go generate ./...`: the Immich client, the templates and the page's script bundle) is committed; CI fails if it is stale.
+
+### The page's scripts
+
+They are written in TypeScript (`internal/web/ts/*.ts`) and bundled by esbuild into `internal/web/static/app.js`, which is committed and embedded like the templates. esbuild is a pinned Go tool in `go.mod`, so `go generate ./...` rebuilds the bundle with nothing else installed, and building, running and testing the program never needs Node. esbuild strips types without checking them, so the types are checked separately: `cd tools/typecheck && npm ci && npm run check` runs `tsc --noEmit` in strict mode, and CI does the same in its `types` job. That job is the only place Node is used. Edit the `.ts` files, never `app.js`; the `.map` file next to it lets the browser's developer tools show the original source. The strict Content-Security-Policy still applies: scripts load from the app itself, never inline. Notes on the Immich behaviour this project relies on are in [immich-api-notes.md](immich-api-notes.md).
 
 ## Documentation images
 
