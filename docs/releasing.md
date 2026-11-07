@@ -63,7 +63,20 @@ docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json 
 docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json .Provenance}}'
 ```
 
-`cosign verify` prints the signature's details and fails if the image was not signed by that workflow. The SBOM lists the Go modules the program was built from; the provenance says which commit and workflow run built the image. The same works for `ghcr.io/vfuoglio/immich-handoff`.
+`cosign verify` prints the signature's details and fails if the image was not signed by that workflow. (A nightly image is signed by `nightly.yml`, so change `release` to `nightly` in the identity for those.) The SBOM lists the Go modules the program was built from; the provenance says which commit and workflow run built the image. The same works for `ghcr.io/vfuoglio/immich-handoff`.
+
+## Nightly images
+
+`.github/workflows/nightly.yml` publishes an image every night, for people who want to follow `main` (see [Operations](operations.md#upgrading)).
+
+- **When:** every night at 09:00 UTC (4 AM in New York in winter, 5 AM in summer; GitHub's schedule is in UTC and ignores daylight saving). GitHub sometimes starts scheduled runs late.
+- **Only if something changed.** The commit each nightly image was built from is written on the image itself (an annotation on its index, and its label `org.opencontainers.image.revision`). The first job compares it with the head of `main` and stops there if they are the same, so a night with no new commits builds and publishes nothing. If a night fails, the image still names the older commit, so the next night tries again.
+- **Tags, on Docker Hub and GitHub's registry:** the dated `20261107-nightly` (the UTC date of the run) and `nightly`, which always points at the newest. It never touches `latest`, `X.Y` or a release tag. A manual run on the same date replaces that date's tag.
+- **Checks:** the whole CI first (the same as a release), then both architectures are built and smoke-tested, then the image is published, signed, and the signature and SBOM are checked. If anything fails nothing is published and `nightly` stays on the last good image. GitHub emails whoever last changed the workflow about a failed scheduled run.
+- **Retention:** only the newest 14 dated nightly tags are kept. After a publish, two tidying steps remove older ones (`.github/scripts/prune_nightly.sh` decides which; it can only ever pick dated nightly tags, and CI tests it). They only warn when they cannot: Docker Hub's needs a token with **delete** rights (the release token only needs Read & Write), and on GitHub's registry removing a tag removes its image index, so the per-architecture and attestation entries it pointed to may stay behind as untagged versions on the package page, where you can delete them. **Neither step has been tried against the real registries yet.**
+- **Verifying a nightly:** the signature names this workflow, so use the `cosign verify` command below with `nightly` in place of `release` in the identity.
+
+**Trying it.** The workflow file has to be on `main` before GitHub lists it or runs it on a schedule. After that: Actions, **nightly**, **Run workflow**. First untick **publish** (build and smoke-test only, allowed from any branch), then run once from `main` with **force** ticked to publish, and check both registries, the signature and the cleanup steps' output. GitHub switches scheduled workflows off after 60 days without any repository activity; if nightlies stop, look at the Actions tab and re-enable it.
 
 ## Dependency updates
 
