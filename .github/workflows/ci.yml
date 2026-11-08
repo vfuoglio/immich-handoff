@@ -22,6 +22,8 @@ jobs:
         run: .github/scripts/latest_test.sh
       - name: The script that decides which nightly tags are removed
         run: .github/scripts/prune_nightly_test.sh
+      - name: Every end-to-end test is in exactly one group (see e2e below)
+        run: .github/scripts/e2e_groups_test.sh
       - run: go vet ./... && go vet -tags e2e ./...
       - run: go test -race ./...
   types:
@@ -38,12 +40,32 @@ jobs:
       - name: The page's TypeScript type-checks and its tests pass
         working-directory: tools/typecheck
         run: npm ci --ignore-scripts && npm run check && npm test
-  e2e:
-    needs: test
+  e2e-groups:
+    # The end-to-end tests take about five minutes one after another, so they run as three groups at the same time
+    # (test/groups.sh), each against its own throwaway Immich. They do not wait for the unit tests: a failure there
+    # shows up on its own, and the wall time is the longest group, not the sum.
+    name: e2e (${{ matrix.group }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [browser, core, hub]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - name: End-to-end tests against a throwaway Immich
-        run: test/run.sh
+        run: test/run.sh ${{ matrix.group }}
+  e2e:
+    # The one result that branch protection asks for (it used to be a single job of this name): green only when
+    # every group is.
+    needs: e2e-groups
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every end-to-end group passed
+        env:
+          RESULT: ${{ needs.e2e-groups.result }}
+        run: |
+          echo "the end-to-end groups: $RESULT"
+          [ "$RESULT" = success ]

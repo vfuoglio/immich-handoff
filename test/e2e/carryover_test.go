@@ -236,6 +236,11 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		mustOK(t, call(t, "PUT", "/assets/"+id, keyAuth(alice), map[string]any{
 			"isFavorite": true, "description": "Sunset at the pier", "rating": 4,
 			"latitude": 48.8584, "longitude": 2.2945, "dateTimeOriginal": "2020-06-15T18:30:00.000Z"}, nil), "edit details")
+		// Immich applies a changed date a moment after the edit; a person would not tag the photo that quickly, and on a busy
+		// machine the hand-over could otherwise carry the date from before the edit
+		eventually(t, "Immich to settle the changed date", 60*time.Second, func() bool {
+			return strings.HasPrefix(getFull(t, alice, id).FileCreatedAt, "2020-06-15")
+		})
 		mustOK(t, call(t, "POST", "/albums", keyAuth(alice), map[string]any{"albumName": "Trip", "assetIds": []string{id}}, nil), "album")
 		tagAsset(t, alice, "keepsake", id)
 		cp := handOver(id)
