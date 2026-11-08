@@ -89,6 +89,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
 	mux.HandleFunc("POST /services/invite", w.newInvite)
+	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)

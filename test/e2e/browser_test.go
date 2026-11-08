@@ -632,6 +632,22 @@ func TestBrowser(t *testing.T) {
 		})
 	})
 
+	t.Run("the administrator's page can show a QR code of its address, and hide it again", func(t *testing.T) {
+		ctx := browse(t, w.port, loginCookie(t, "admin@e2e.test"), look{})
+		run(t, ctx, chromedp.Navigate(w.url()+"admin"), chromedp.WaitVisible("#share-page", chromedp.ByQuery))
+		until(t, ctx, "the address to be filled in", `document.getElementById('share-page').value.startsWith('http')`, 10*time.Second)
+		if got := js[string](t, ctx, `document.getElementById('share-page').value`); got != w.url() {
+			t.Errorf("the address shown is %q, want %q", got, w.url())
+		}
+		run(t, ctx, chromedp.Click(`button.show-qr[data-for="share-page"]`, chromedp.ByQuery))
+		until(t, ctx, "the code to be drawn", `(() => { const i = document.querySelector('#qr-share-page img'); return !!i && i.complete && i.naturalWidth > 0 })()`, 10*time.Second)
+		if js[bool](t, ctx, `document.getElementById('qr-share-page').hidden`) {
+			t.Error("the code is not shown")
+		}
+		run(t, ctx, chromedp.Click(`button.show-qr[data-for="share-page"]`, chromedp.ByQuery))
+		until(t, ctx, "the code to be hidden", `document.getElementById('qr-share-page').hidden`, 3*time.Second)
+	})
+
 	t.Run("the link a proxy adds to Immich's own header sits between the bell and the avatar", func(t *testing.T) {
 		// what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
 		// and this app under /handoff/ on the same address. This is also the check that Immich's header still has

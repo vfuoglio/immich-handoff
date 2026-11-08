@@ -125,7 +125,7 @@ Your services appear on the page with who is waiting and who is connected:
 ![A service you offer, with a pending request](images/owner-service.png)
 
 - **Approve** or **Decline** each request. Anyone you approve then activates their own side.
-- For an invitation-only service the card shows an **invitation link**. Whoever opens it, signed in to Immich, lands on a page for exactly that service. **New link** makes a fresh link and the old one stops working at once; people already approved or joined are not affected. The link is only as private as the way you share it.
+- For an invitation-only service the card shows an **invitation link**. Whoever opens it, signed in to Immich, lands on a page for exactly that service. **New link** makes a fresh link and the old one stops working at once; people already approved or joined are not affected. **Copy a message** copies a short invitation with the link in it, and **QR code** shows a code a phone can scan from your screen. The link is only as private as the way you share it. The administrator's page has a **Share this page** box with the same three, for the address people use to join.
 - **List for everyone** and **Make invitation-only** switch between the two. **Delete service** ends it.
 
 You see each sender's name and, on a request, their email address. Senders see only your name.

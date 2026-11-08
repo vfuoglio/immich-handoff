@@ -642,8 +642,11 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					<div class="row">
 						<input id={ "inv-" + id } class="invite" readonly data-invite={ o.Invite }/>
 						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="copy-message" data-for={ "inv-" + id } data-message={ t(ctx, "Hello! Open this link while you are signed in to Immich to join {name} and send me photos: {link}", "name", o.Name, "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
+						<button type="button" class="show-qr" data-for={ "inv-" + id } data-alt={ t(ctx, "QR code of the invitation link") }>{ t(ctx, "QR code") }</button>
 						<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current link will stop working. Continue?") } data-confirm-title={ t(ctx, "Make a new link?") } data-confirm-label={ t(ctx, "New link") }>{ t(ctx, "New link") }</button>
 					</div>
+					<div class="qr" id={ "qr-inv-" + id } hidden></div>
 				</div>
 			}
 			<p class="row">
@@ -780,6 +783,20 @@ templ AdminPage(d AdminData) {
 			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Need attention") }</span><span class="num">{ fmt.Sprint(d.Attention) }</span><span class="sub">{ t(ctx, "paused, limited or disconnected") }</span></article>
 		</div>
 		<p class="meta">{ t(ctx, "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.") }</p>
+		<h2>{ t(ctx, "Share this page") }</h2>
+		<section class="card">
+			<p class="meta">{ t(ctx, "This is the address people use to join. Send it, or put the button in Immich's own header (see the guide on finding this page).") }</p>
+			<div class="field">
+				<label for="share-page">{ t(ctx, "Address of this page") }</label>
+				<div class="row">
+					<input id="share-page" class="invite" readonly data-link="./"/>
+					<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+					<button type="button" class="copy-message" data-for="share-page" data-message={ t(ctx, "Hello! Open this link while you are signed in to Immich to send photos with immich-handoff: {link}", "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
+					<button type="button" class="show-qr" data-for="share-page" data-alt={ t(ctx, "QR code of this page's address") }>{ t(ctx, "QR code") }</button>
+				</div>
+				<div class="qr" id="qr-share-page" hidden></div>
+			</div>
+		</section>
 		<h2>{ t(ctx, "Check the connections") }</h2>
 		<section class="card">
 			<p class="row">
