@@ -54,7 +54,7 @@ If any check fails nothing is published. After the publish step, one more check 
 Every released image is signed with [cosign](https://github.com/sigstore/cosign), without a key of ours: the signature is tied to this repository's release workflow by GitHub's identity token. It also carries a software bill of materials (SBOM) and build provenance. To check one:
 
 ```
-cosign verify \
+cosign verify --new-bundle-format=false \
   --certificate-identity-regexp '^https://github\.com/vfuoglio/immich-handoff/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   vfuoglio/immich-handoff:1.2.0
@@ -63,7 +63,7 @@ docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json 
 docker buildx imagetools inspect vfuoglio/immich-handoff:1.2.0 --format '{{json .Provenance}}'
 ```
 
-`cosign verify` prints the signature's details and fails if the image was not signed by that workflow. (A nightly image is signed by `nightly.yml`, so change `release` to `nightly` in the identity for those.) The SBOM lists the Go modules the program was built from; the provenance says which commit and workflow run built the image. The same works for `ghcr.io/vfuoglio/immich-handoff`.
+The signature is stored as a tag next to the image (`sha256-<digest>.sig`), the classic form that Docker Hub and GitHub's registry both list; with cosign 3 the flag `--new-bundle-format=false` tells `verify` to look for it (cosign 2 does not have the flag and does not need it). `cosign verify` prints the signature's details and fails if the image was not signed by that workflow. (A nightly image is signed by `nightly.yml`, so change `release` to `nightly` in the identity for those.) The SBOM lists the Go modules the program was built from; the provenance says which commit and workflow run built the image. The same works for `ghcr.io/vfuoglio/immich-handoff`.
 
 ## Nightly images
 
