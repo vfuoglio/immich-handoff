@@ -21,22 +21,31 @@ The sample photos are generated landscapes (`go run . gen <dir>`), so no real pi
 
 Every picture is taken in English: the tool sends `Accept-Language: en` and sets the page's language cookie to English, whatever language the machine uses. The pictures belong to the English documentation.
 
-## The animation
+## The animations
 
-`docs/images/live-scene.gif` (the README's moving picture) films Bob's live scene while photos are handed over for real. It needs `ffmpeg` too. A fresh Immich is best, because the photos must not have been handed over before (`FIRST` moves to unused sample photos for a second take).
+The moving pictures in `docs/images/*.gif` (the README's live scene at the top and the "See it move" table) are filmed from the real page, in Chrome, while the demo does what a person would: tags photos, presses Ctrl K, switches the theme. They need `ffmpeg` too. Six scenes are defined in `film.go`; `go run . film` with no valid name lists them:
+
+| Scene | Who, look | What happens |
+|---|---|---|
+| `live-scene` | Bob, light | His Holiday 2026 scene while Alice's and Carol's photos are handed over: squares travel the lanes, the counter ticks up |
+| `arrival-dark` | Alice, dark | Her Overview while her photos go: Waiting jumps up, then Handed over rolls up, the chart climbs |
+| `phone-dark` | Alice, dark, phone | The same on a 390 px phone, scrolled to the numbers and the live scene |
+| `palette-dark` | Bob, dark | Ctrl K: type, move down, choose; the service opens in place |
+| `theme-switch` | Bob | The theme button: light, dark, light |
+| `services-light` | Bob, light | The Services tab, a row that opens in place, the cards tilting toward a moving pointer, the Activity tab |
+| `invite-qr` | Bob, light | An invitation row: scroll to the link, the QR code opens, Copy a message says Copied |
+
+The scenes that hand photos over (`live-scene`, `arrival-dark`, `phone-dark`) use up the photos `seed.sh prepare` left untagged, so run `prepare` before each of them, with `FIRST` moved on (Immich ignores a photo it already has). Do the other scenes afterwards, so the pages have numbers to show.
 
 ```
 cd tools/screenshots && export IMMICH_URL=http://localhost:2294 APP_URL=http://localhost:8090/
 ./seed.sh reset && ./seed.sh setup           # the app runs for real this time, no DRY
-./seed.sh prepare                            # Alice joins Holiday 2026 as well; 6 untagged photos each for Alice and Carol
-(go run . record bob 36 /tmp/frames &)       # films the scene as JPEG frames
-sleep 7 && ./seed.sh fire                    # tag them: the hand-overs run and the scene moves
+FIRST=12 ./seed.sh prepare                   # Alice joins Holiday 2026 as well; 6 untagged photos each for Alice and Carol
+go run . film arrival-dark /tmp/film/arrival-dark     # tags the photos itself a few seconds in (seed.sh fire)
+FIRST=24 ./seed.sh prepare && go run . film live-scene /tmp/film/live-scene
+FIRST=36 ./seed.sh prepare && go run . film phone-dark /tmp/film/phone-dark
+for s in palette-dark theme-switch services-light invite-qr; do go run . film $s /tmp/film/$s; done
+./gifs.sh /tmp/film ../../docs/images
 ```
 
-Then cut it to the hand-overs (here from 5.8 s to 25.5 s, 1.6 times faster, with the last frame held for 2 s) and make the GIF, 760 px wide and 96 colours to keep it under 1 MB:
-
-```
-cd /tmp/frames && ffmpeg -f concat -safe 0 -i frames.txt -vf "trim=start=5.8:end=25.5,setpts=(PTS-STARTPTS)/1.6,crop=984:256:0:0,fps=10,scale=760:-1:flags=lanczos,tpad=stop_mode=clone:stop_duration=2,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -loop 0 live-scene.gif
-```
-
-Look at a few frames before keeping it (`ffmpeg -i live-scene.gif -vf "select='eq(n,0)+eq(n,60)'" -vsync 0 f-%d.png`), and adjust the cut so it ends when the counter has reached the number of photos. The crop removes the log lines under the card, which grow while it runs.
+`film` writes JPEG frames and `frames.txt` (each frame with how long it stays), and for a scene that shows only an element, `crop.txt`. `gif.sh` cuts them into a GIF (start and end second, speed, width; `COLORS`, `FPS`, `DITHER` and `CROP` shrink or crop it) and `gifs.sh` holds the cuts that were chosen by looking at each recording; a new recording needs its own times, so look at a few frames first (`ffmpeg -f concat -safe 0 -i frames.txt -vf "fps=0.5,scale=300:-1,tile=5x3" -frames:v 1 sheet.png`). Light pages are small as GIFs; the dark ones, with their drifting light, are the heavy ones, so they use no dithering and a crop where they can. Keep each under about 1.5 MB.
