@@ -180,11 +180,19 @@ jobs:
           [ -n "$DIGEST" ] || { echo "::error::the publish step gave no image digest"; exit 1; }
           for img in "$DOCKERHUB_IMAGE" "$GHCR_IMAGE"; do
             # keyless: the signature is tied to this workflow by GitHub's identity token
-            cosign sign --yes "$img@$DIGEST"
-            cosign verify \
-              --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/nightly\.yml@" \
-              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              "$img@$DIGEST" > /dev/null
+            # The signature is stored as a tag (sha256-<digest>.sig) next to the image: cosign 3's default, a bundle
+            # attached as an OCI referrer, is accepted by Docker Hub but cannot be listed there again, so the check
+            # found "no signatures". The tag form works on Docker Hub and on GitHub's registry.
+            cosign sign --yes --new-bundle-format=false --use-signing-config=false "$img@$DIGEST"
+            ok=false
+            for attempt in 1 2 3 4 5; do # a registry can take a moment to list what was just pushed
+              if cosign verify --new-bundle-format=false \
+                --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/nightly\.yml@" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                "$img@$DIGEST" > /dev/null; then ok=true; break; fi
+              echo "::warning::signature of $img not found yet (attempt $attempt of 5)"; sleep 10
+            done
+            $ok || { echo "::error::the signature of $img could not be verified"; exit 1; }
             docker buildx imagetools inspect "$img@$DIGEST" --format '{{json .SBOM}}' \
               | jq -e '[.. | .packages? // empty | length] | add > 0' > /dev/null \
               || { echo "::error::$img has no SBOM"; exit 1; }

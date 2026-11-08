@@ -16,6 +16,11 @@
 [![Immich 3.2.0+](https://img.shields.io/badge/Immich-3.2.0%2B-4250af)](docs/install.md#before-you-start)
 [![License: MIT](https://img.shields.io/github/license/vfuoglio/immich-handoff)](LICENSE)
 
+<p align="center">
+  <img src="docs/images/live-scene.gif" alt="The live scene on the Overview: photos that two senders tagged travel along their lanes and arrive in the receiving library while a counter ticks up to twelve" width="760"><br>
+  <sub>The live scene, recorded from the real page: every tagged photo travels along its sender's lane into the library.</sub>
+</p>
+
 Immich keeps every photo in the account that uploaded it. There is no built-in way to hand one to someone else's library: shared albums leave ownership with the person who uploaded, and partner sharing is read-only. **immich-handoff adds the missing step.** You tag a photo in the Immich app, and a few seconds later it is in another account, checked and ready to file.
 
 > **Not affiliated with Immich.** immich-handoff is an independent, community project. It is not made, endorsed or supported by the Immich team. It is a companion that talks to your own Immich server through its public API. "Immich" is the name of that project and belongs to its authors. For help with Immich itself, use [Immich's own channels](https://immich.app).

@@ -7,6 +7,8 @@
 #   tools/screenshots/seed.sh waiting    tag photos so some are waiting (run the app in dry-run mode first: DRY=1 ... setup)
 #   tools/screenshots/seed.sh handover   restart the app for real so the waiting photos are handed over
 #   tools/screenshots/seed.sh lost       Carol deletes her key; restart so the app notices
+#   tools/screenshots/seed.sh prepare    (for the animation) Alice joins Holiday 2026 too; photos wait, untagged, in Alice's and Carol's libraries
+#   tools/screenshots/seed.sh fire       (for the animation) tag those photos now, with the app running for real, so the live scene moves
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 IMMICH_PORT="${IMMICH_PORT:-2294}"      # a throwaway Immich of its own, so a demo on :2284 is left alone
@@ -151,11 +153,39 @@ handover)
   done
   echo "hand-overs logged: $n"
   ;;
+prepare)
+  # Bob approves Alice's request too, so his Holiday 2026 scene has two lanes; then photos are uploaded but not tagged
+  RID=$(curl -s "$APP/" -H "Cookie: $(cookie_of bob)" | python3 -c "
+import re,sys,html
+t=html.unescape(sys.stdin.read())
+for b in re.split(r'<article', t):
+    if 'alice@test.local' in b:
+        m=re.search(r'\"request\":\"([0-9a-f-]{36})\"', b)
+        if m: print(m.group(1)); break")
+  [ -n "$RID" ] && { app_post bob /decide -d 'service=Holiday 2026' -d "request=$RID" -d 'decision=approve'; echo; app_post alice /join -d 'service=Holiday 2026' -d 'mode=copy'; echo; }
+  sleep 8
+  # FIRST says where in the sample photos to start (Immich ignores a photo it already has), so a second take uses new ones
+  FIRST="${FIRST:-12}"
+  [ -d "$DEMO/photos" ] && [ "$(ls "$DEMO"/photos/IMG_*.jpg | wc -l)" -lt $((FIRST + 12)) ] && ( cd tools/screenshots && go run . gen "$DEMO/photos" $((FIRST + 12)) )
+  mapfile -t P < <(ls "$DEMO"/photos/IMG_*.jpg)
+  : > "$DEMO/rec-alice"; : > "$DEMO/rec-carol"
+  for k in $(seq "$FIRST" $((FIRST + 5))); do echo "$(upload alice "${P[$k]}")" >> "$DEMO/rec-alice"; done
+  for k in $(seq $((FIRST + 6)) $((FIRST + 11))); do echo "$(upload carol "${P[$k]}")" >> "$DEMO/rec-carol"; done
+  while read -r id; do processed alice "$id"; done < "$DEMO/rec-alice"
+  while read -r id; do processed carol "$id"; done < "$DEMO/rec-carol"
+  echo "6 photos each are ready and untagged"
+  ;;
+fire)
+  mapfile -t A < "$DEMO/rec-alice"; mapfile -t C < "$DEMO/rec-carol"
+  tag_assets alice holiday "${A[@]}" &
+  tag_assets carol holiday "${C[@]}" &
+  wait
+  ;;
 lost)
   T=$(login_token carol)
   KID=$(curl -s "$B/api-keys" -H "Authorization: Bearer $T" | python3 -c "import sys,json;print(next(k['id'] for k in json.load(sys.stdin) if k['name']=='handoff: Holiday 2026'))")
   curl -s -XDELETE "$B/api-keys/$KID" -H "Authorization: Bearer $T" -o /dev/null -w 'key deleted: HTTP %{http_code}\n'
   start_app; sleep 6
   ;;
-*) echo "usage: $0 reset|setup|waiting|handover|lost" >&2; exit 2 ;;
+*) echo "usage: $0 reset|setup|waiting|handover|lost|prepare|fire" >&2; exit 2 ;;
 esac

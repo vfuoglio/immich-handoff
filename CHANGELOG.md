@@ -32,7 +32,7 @@
 
 ### Tests and documentation
 - **The page is tested in a real browser.** The end-to-end run also opens the real page in headless Chrome, including a phone-sized window, and checks what a person sees and does (see [How it works inside](docs/architecture.md#testing)). It found and fixed three faults: the numbers on the Overview refreshed in a loop for as long as the page was open, the rolling digits never rolled after the first paint, and an open service row closed itself after every action. A test also checks what is carried over against a real Immich (`test/e2e/carryover_test.go`).
-- **The pictures in the README and the documentation are remade** for the new design (all in English), and on a phone the bar's buttons no longer spill off the right edge.
+- **The pictures in the README and the documentation are remade** for the new design (all in English), and on a phone the bar's buttons no longer spill off the right edge. A short animation of the live scene, recorded from the real page, sits near the top of the README; [how it is made](tools/screenshots/README.md#the-animation).
 
 ### Fixes
 - **A large video no longer fails because moving it took more than two minutes.** A transfer now has no total limit and is given up only after three minutes without any data moving.
