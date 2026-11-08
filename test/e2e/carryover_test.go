@@ -153,7 +153,17 @@ func TestWhatIsCarriedOver(t *testing.T) {
 	// The copies this test makes sit in the receiver's inbox. Other tests count that inbox, so take the tag
 	// off them when this test is done: the photos stay, the shared state is left as it was found.
 	var copies []string
+	already := map[string]bool{}
+	for _, id := range searchTag(t, family, "inbox", false) {
+		already[id] = true
+	}
 	t.Cleanup(func() {
+		// every photo that arrived, including the others of a stack, not only the one a subtest followed
+		for _, id := range searchTag(t, family, "inbox", false) {
+			if !already[id] {
+				copies = append(copies, id)
+			}
+		}
 		if len(copies) == 0 {
 			return
 		}
@@ -248,6 +258,9 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		if !dst.IsFavorite || dst.OriginalFileName != "pier.jpg" || dst.FileCreatedAt != src.FileCreatedAt {
 			t.Errorf("the app promises the file, its name, its dates and the favourite mark: %+v", dst)
 		}
+		if sd != "Sunset at the pier" || dd != sd || dr != sr || dg != sg || sr == "" {
+			t.Errorf("the description, rating and location a person adds in Immich must arrive: sender %q %q %q, receiver %q %q %q", sd, sr, sg, dd, dr, dg)
+		}
 	})
 
 	t.Run("a photo whose details are written inside the file", func(t *testing.T) {
@@ -290,7 +303,11 @@ func TestWhatIsCarriedOver(t *testing.T) {
 			row("archived photo", "archive", "NOT HANDED OVER (the app did not find it)")
 			return
 		}
-		row("archived photo", "archive", "visibility "+getFull(t, family, cp).Visibility)
+		got := getFull(t, family, cp).Visibility
+		row("archived photo", "archive", "visibility "+got)
+		if got != "archive" {
+			t.Errorf("an archived photo must stay archived at the receiver: %q", got)
+		}
 	})
 
 	t.Run("a photo that was edited (rotated) in Immich", func(t *testing.T) {
@@ -334,6 +351,13 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		motion := "none"
 		if dst.LivePhotoVideoID != nil {
 			motion = "has a motion clip"
+			// the app promises this: the clip arrives hidden, as a video, and the still is linked to it
+			clipCopy := getFull(t, family, *dst.LivePhotoVideoID)
+			if clipCopy.Type != "VIDEO" || clipCopy.Visibility != "hidden" {
+				t.Errorf("the receiver's motion clip is type %q, visibility %q; want a hidden VIDEO", clipCopy.Type, clipCopy.Visibility)
+			}
+		} else {
+			t.Error("the receiver's copy of a live photo has no motion clip")
 		}
 		sv := getFull(t, alice, video)
 		row("live photo: motion clip", "paired with the still", motion)
@@ -350,22 +374,43 @@ func TestWhatIsCarriedOver(t *testing.T) {
 			row("stack", fmt.Sprintf("could not be made (HTTP %d)", code), "not tested")
 			return
 		}
+		defer func() {
+			if t.Failed() { // what the app says is the quickest way to see why
+				t.Logf("app log:\n%s", a.log.String())
+			}
+		}()
 		cp := handOver(first) // only the cover is tagged
 		if cp == "" {
 			row("stack (cover tagged)", "stacked", "NOT HANDED OVER")
 			return
 		}
-		sib := getFull(t, alice, second)
-		stk := "no stack"
-		if sib.Stack != nil {
-			stk = fmt.Sprintf("still in a stack of %d", sib.Stack.AssetCount)
+		// the app promises the whole stack: both photos arrive, as a stack again, and (this sender moves) both go
+		var recv *struct {
+			ID           string `json:"id"`
+			AssetCount   int    `json:"assetCount"`
+			PrimaryAsset string `json:"primaryAssetId"`
 		}
-		recv := "not in a stack"
-		if getFull(t, family, cp).Stack != nil {
-			recv = "in a stack"
+		eventually(t, "the receiver's copy to be in a stack of 2", 60*time.Second, func() bool {
+			recv = getFull(t, family, cp).Stack
+			return recv != nil && recv.AssetCount == 2
+		})
+		// both copies carry the inbox tag, so the one handOver saw first may be either: find the cover's copy by name
+		coverCopy := ""
+		for _, id := range searchTag(t, family, "inbox", false) {
+			if getFull(t, family, id).OriginalFileName == "stack-1.jpg" {
+				coverCopy = id
+			}
 		}
-		row("stack: the tagged cover", "stack of 2", recv)
-		row("stack: the other photo", stk, "not handed over (it was not tagged)")
+		if coverCopy == "" || recv.PrimaryAsset != coverCopy {
+			t.Errorf("the cover of the sender's stack must stay the cover at the receiver: primary %s, copy of the cover %q", recv.PrimaryAsset, coverCopy)
+		}
+		for _, id := range []string{first, second} {
+			if !getFull(t, alice, id).IsTrashed {
+				t.Errorf("the sender's photo %s of the stack was not removed after the hand-over", id)
+			}
+		}
+		row("stack: the tagged cover", "stack of 2", fmt.Sprintf("in a stack of %d, cover kept", recv.AssetCount))
+		row("stack: the other photo", "in the same stack", "handed over with it")
 	})
 
 	t.Run("a video", func(t *testing.T) {

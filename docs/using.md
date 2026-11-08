@@ -18,7 +18,7 @@ This page is for the people who send and receive photos. Everything happens on t
 
 The bar at the top has three tabs: **Overview** (what needs you, the week's numbers, the live scene), **Services** (all your services, what you can join, offering your own) and **Activity** (what happened, the last run, Sync now). The address remembers the tab (`#services`), so you can bookmark it and the page comes back to it after an action. Next to them: **Search** (also **Ctrl K**, or **Cmd K** on a Mac) opens a command palette: type a few letters to jump to a tab or a service, or to do what you can do (approve a request, pause or resume, sync); it lists only what you are allowed to do, and it presses the same button the page has, so questions are still asked. On a phone you can add the page to the home screen so it opens like an app (see [Operations](operations.md#installing-the-page-on-a-phone)). The half-moon icon switches the light and the dark theme, and the speaker icon turns the soft chime (and a short phone buzz) off and on when a photo lands (the first click or key press wakes the sound, a browser rule). ![The command palette listing views, a request to approve and the services](images/palette.png)
 
-Both choices are kept in this browser. The code next to them (en, de, fr, es) is the language menu: the pages follow your browser's language and this picks another for good; only the pages are translated, not the log or the documentation.
+Both choices are kept in this browser. The code next to them (en, de, fr, es, it, pt, ru) is the language menu: the pages follow your browser's language and this picks another for good; only the pages are translated, not the log or the documentation.
 
 A few small touches make it feel alive and can be ignored: the light behind the page drifts slowly, leans toward your pointer and flares when a photo lands, cards tilt a little toward a mouse, and numbers roll like a departures board. They are skipped with a touch screen or when your browser asks for reduced motion, and nothing moves while the page is idle.
 
@@ -125,7 +125,7 @@ Your services appear on the page with who is waiting and who is connected:
 ![A service you offer, with a pending request](images/owner-service.png)
 
 - **Approve** or **Decline** each request. Anyone you approve then activates their own side.
-- For an invitation-only service the card shows an **invitation link**. Whoever opens it, signed in to Immich, lands on a page for exactly that service. **New link** makes a fresh link and the old one stops working at once; people already approved or joined are not affected. The link is only as private as the way you share it.
+- For an invitation-only service the card shows an **invitation link**. Whoever opens it, signed in to Immich, lands on a page for exactly that service. **New link** makes a fresh link and the old one stops working at once; people already approved or joined are not affected. **Copy a message** copies a short invitation with the link in it, and **QR code** shows a code a phone can scan from your screen. The link is only as private as the way you share it. The administrator's page has a **Share this page** box with the same three, for the address people use to join.
 - **List for everyone** and **Make invitation-only** switch between the two. **Delete service** ends it.
 
 You see each sender's name and, on a request, their email address. Senders see only your name.

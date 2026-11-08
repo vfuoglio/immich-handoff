@@ -85,7 +85,9 @@ func TestTheLanguageIsChosenFromTheCookieThenTheBrowserThenEnglish(t *testing.T)
 		{"", "*", i18n.English},
 		{"", "garbage;;;q=x,,", i18n.English},
 		{" es ", "", i18n.Spanish},
-		{"", "it, ru;q=0.9", i18n.English}, // Italian and Russian are not offered yet
+		{"", "it, ru;q=0.9", i18n.Italian},
+		{"", "ru, pt;q=0.9", i18n.Russian},
+		{"", "pt-BR, en;q=0.5", i18n.Portuguese},
 	} {
 		if got := i18n.Negotiate(c.cookie, c.accept); got != c.want {
 			t.Errorf("cookie %q accept %q: %s, want %s", c.cookie, c.accept, got, c.want)
@@ -125,8 +127,8 @@ func TestEveryLanguageHasAName(t *testing.T) {
 			t.Errorf("%s has no name for the menu", l)
 		}
 	}
-	if len(i18n.All) != 4 {
-		t.Errorf("English and three others: %d", len(i18n.All))
+	if len(i18n.All) != 7 {
+		t.Errorf("English and six others: %d", len(i18n.All))
 	}
 }
 

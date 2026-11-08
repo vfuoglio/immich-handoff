@@ -10,11 +10,11 @@ In Immich, sign in to each account in turn and go to **Account Settings -> API K
 
 | Account | Permissions |
 |---|---|
-| Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `workflow.read` `workflow.create` `workflow.update` `workflow.logs` |
-| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` |
+| Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `stack.read` `workflow.read` `workflow.create` `workflow.update` `workflow.logs` |
+| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` `stack.create` |
 | The **receiving** account, if the service puts arrivals in an album (`album`, see below) | the above, plus `album.read` `album.create` `albumAsset.create` |
 
-The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out. `workflow.logs` is optional: it only lets the [setup check](troubleshooting.md#check-your-setup-first) see how Immich's runs of the workflow ended, and everything else works without it.
+The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out. `workflow.logs` is optional: it only lets the [setup check](troubleshooting.md#check-your-setup-first) see how Immich's runs of the workflow ended, and everything else works without it. `stack.read` and `stack.create` are optional too: without them only the tagged photo of a stack is handed over (the sender's key lacks `stack.read`), or the photos of a stack arrive separately (the receiver's key lacks `stack.create`). The [setup check](troubleshooting.md#check-your-setup-first) warns about both.
 
 ### 2. Put them in `.env`
 

@@ -98,6 +98,9 @@ function fillInvites(scope: ParentNode): void {
   scope.querySelectorAll<HTMLInputElement>("input.invite[data-invite]").forEach((input) => {
     input.value = new URL("invite/" + input.dataset.invite, document.baseURI).href;
   });
+  scope.querySelectorAll<HTMLInputElement>("input.invite[data-link]").forEach((input) => {
+    input.value = new URL(input.dataset.link ?? "./", document.baseURI).href;
+  });
 }
 document.addEventListener("DOMContentLoaded", () => fillInvites(document));
 document.addEventListener("htmx:afterSwap", (e) => {
@@ -118,6 +121,49 @@ document.addEventListener("click", (e) => {
       button.textContent = t("Copied");
     });
   }
+});
+
+// "Copy a message": the link inside a short, ready-written invitation, in the language of the page.
+document.addEventListener("click", (e) => {
+  const button = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button.copy-message") : null;
+  if (!button) return;
+  const input = document.getElementById(button.dataset.for ?? "");
+  if (!(input instanceof HTMLInputElement) || !navigator.clipboard) return;
+  const message = (button.dataset.message ?? "{link}").replace("{link}", input.value);
+  void navigator.clipboard.writeText(message).then(() => {
+    button.textContent = t("Copied");
+  });
+});
+
+// "QR code": the app draws it (so a phone can scan it from the screen); the page shows it, or hides it again.
+document.addEventListener("click", (e) => {
+  const button = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button.show-qr") : null;
+  if (!button) return;
+  const input = document.getElementById(button.dataset.for ?? "");
+  const box = document.getElementById("qr-" + (button.dataset.for ?? ""));
+  if (!(input instanceof HTMLInputElement) || !box) return;
+  if (!box.hidden) {
+    box.hidden = true;
+    return;
+  }
+  void fetch("qr", {
+    method: "POST",
+    headers: { "X-Requested-With": "immich-handoff", "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ text: input.value }),
+  })
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+    .then((svg) => {
+      const img = document.createElement("img");
+      img.alt = button.dataset.alt ?? "";
+      img.width = img.height = 220;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+      box.replaceChildren(img);
+      box.hidden = false;
+    })
+    .catch(() => {
+      box.textContent = t("The QR code could not be made.");
+      box.hidden = false;
+    });
 });
 
 // makes this file a module of its own, so names in one script never clash with another

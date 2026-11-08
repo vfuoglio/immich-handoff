@@ -123,8 +123,8 @@ func (s *scenario) api(t *testing.T, key string) *immich.API {
 }
 
 var good = map[string][]string{
-	"recv":   {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload"},
-	"sender": {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"},
+	"recv":   {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create"},
+	"sender": {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "stack.read", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"},
 }
 
 // newScenario builds a healthy install; a test then breaks one thing and runs the check.
@@ -438,5 +438,17 @@ func TestBackupSettingsAreReported(t *testing.T) {
 	want(t, out, 0, 0, "only the value true switches the download on")
 	if warns != 1 {
 		t.Errorf("warnings %d, want 1\n%s", warns, out)
+	}
+}
+
+func TestAKeyWithoutTheStackPermissionsWorksAndIsOnlyAWarning(t *testing.T) {
+	s := newScenario(t)
+	s.f.perms["sender"] = slices.DeleteFunc(slices.Clone(good["sender"]), func(p string) bool { return p == "stack.read" })
+	s.f.perms["recv"] = slices.DeleteFunc(slices.Clone(good["recv"]), func(p string) bool { return p == "stack.create" })
+	out, fails, warns := s.run(t, true, nil)
+	want(t, out, fails, 0, "sender alice: the key works but lacks stack.read (without it: only the tagged photo of a stack is handed over",
+		"receiver bob: the key works but lacks stack.create (without it: photos that arrive as a stack arrive as separate photos")
+	if warns != 2 {
+		t.Errorf("warnings %d, want one for each key\n%s", warns, out)
 	}
 }

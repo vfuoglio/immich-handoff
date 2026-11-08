@@ -1914,6 +1914,23 @@ type SharedLinksUpdate struct {
 	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
+// StackCreateDto defines model for StackCreateDto.
+type StackCreateDto struct {
+	// AssetIds Asset IDs (first becomes primary, min 2)
+	AssetIds []openapi_types.UUID `json:"assetIds"`
+}
+
+// StackResponseDto Stack response
+type StackResponseDto struct {
+	Assets []AssetResponseDto `json:"assets"`
+
+	// Id Stack ID
+	Id openapi_types.UUID `json:"id"`
+
+	// PrimaryAssetId Primary asset ID
+	PrimaryAssetId openapi_types.UUID `json:"primaryAssetId"`
+}
+
 // StringFilter defines model for StringFilter.
 type StringFilter struct {
 	Eq    *string   `json:"eq,omitempty"`
@@ -2358,6 +2375,9 @@ type UploadAssetMultipartRequestBody = AssetMediaCreateDto
 // SearchAssetsJSONRequestBody defines body for SearchAssets for application/json ContentType.
 type SearchAssetsJSONRequestBody = MetadataSearchDto
 
+// CreateStackJSONRequestBody defines body for CreateStack for application/json ContentType.
+type CreateStackJSONRequestBody = StackCreateDto
+
 // UpsertTagsJSONRequestBody defines body for UpsertTags for application/json ContentType.
 type UpsertTagsJSONRequestBody = TagUpsertDto
 
@@ -2630,6 +2650,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateStackWithBody Create a stack
+	//
+	// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /stacks (the `CreateStack` operationId).
+	CreateStackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateStack Create a stack
+	//
+	// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /stacks (the `CreateStack` operationId).
+	CreateStack(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetStack Retrieve a stack
+	//
+	// Retrieve a specific stack by its ID.
+	//
+	// Corresponds with GET /stacks/{id} (the `GetStack` operationId).
+	GetStack(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAllTags Retrieve tags
 	//
@@ -3172,6 +3217,61 @@ func (c *Client) SearchAssets(ctx context.Context, params *SearchAssetsParams, b
 // Corresponds with GET /server/version (the `GetServerVersion` operationId).
 func (c *Client) GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetServerVersionRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateStackWithBody Create a stack
+//
+// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /stacks (the `CreateStack` operationId).
+func (c *Client) CreateStackWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateStackRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateStack Create a stack
+//
+// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /stacks (the `CreateStack` operationId).
+func (c *Client) CreateStack(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateStackRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetStack Retrieve a stack
+//
+// Retrieve a specific stack by its ID.
+//
+// Corresponds with GET /stacks/{id} (the `GetStack` operationId).
+func (c *Client) GetStack(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetStackRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -4318,6 +4418,80 @@ func NewGetServerVersionRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewCreateStackRequest calls the generic CreateStack builder with application/json body
+func NewCreateStackRequest(server string, body CreateStackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateStackRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateStackRequestWithBody constructs an http.Request for the CreateStack method, with any body, and a specified content type
+func NewCreateStackRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/stacks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetStackRequest constructs an http.Request for the GetStack method
+func NewGetStackRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/stacks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAllTagsRequest constructs an http.Request for the GetAllTags method
 func NewGetAllTagsRequest(server string) (*http.Request, error) {
 	var err error
@@ -5157,6 +5331,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetServerVersionResponse, error)
 
+	// CreateStackWithBodyWithResponse Create a stack
+	//
+	// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /stacks (the `CreateStack` operationId).
+	CreateStackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateStackResponse, error)
+
+	// CreateStackWithResponse Create a stack
+	//
+	// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /stacks (the `CreateStack` operationId).
+	CreateStackWithResponse(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateStackResponse, error)
+
+	// GetStackWithResponse Retrieve a stack
+	//
+	// Retrieve a specific stack by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /stacks/{id} (the `GetStack` operationId).
+	GetStackWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetStackResponse, error)
+
 	// GetAllTagsWithResponse Retrieve tags
 	//
 	// Retrieve a list of all tags.
@@ -5932,6 +6133,88 @@ func (r GetServerVersionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetServerVersionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateStackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *StackResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateStackResponse) GetJSON201() *StackResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateStackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateStackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateStackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateStackResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetStackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StackResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetStackResponse) GetJSON200() *StackResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetStackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetStackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetStackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetStackResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6782,6 +7065,51 @@ func (c *ClientWithResponses) GetServerVersionWithResponse(ctx context.Context, 
 	return ParseGetServerVersionResponse(rsp)
 }
 
+// CreateStackWithBodyWithResponse Create a stack
+//
+// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /stacks (the `CreateStack` operationId).
+func (c *ClientWithResponses) CreateStackWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateStackResponse, error) {
+	rsp, err := c.CreateStackWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateStackResponse(rsp)
+}
+
+// CreateStackWithResponse Create a stack
+//
+// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /stacks (the `CreateStack` operationId).
+func (c *ClientWithResponses) CreateStackWithResponse(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateStackResponse, error) {
+	rsp, err := c.CreateStack(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateStackResponse(rsp)
+}
+
+// GetStackWithResponse Retrieve a stack
+//
+// Retrieve a specific stack by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /stacks/{id} (the `GetStack` operationId).
+func (c *ClientWithResponses) GetStackWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetStackResponse, error) {
+	rsp, err := c.GetStack(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetStackResponse(rsp)
+}
+
 // GetAllTagsWithResponse Retrieve tags
 //
 // Retrieve a list of all tags.
@@ -7430,6 +7758,58 @@ func ParseGetServerVersionResponse(rsp *http.Response) (*GetServerVersionRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ServerVersionResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateStackResponse parses an HTTP response from a CreateStackWithResponse call
+func ParseCreateStackResponse(rsp *http.Response) (*CreateStackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateStackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest StackResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetStackResponse parses an HTTP response from a GetStackWithResponse call
+func ParseGetStackResponse(rsp *http.Response) (*GetStackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetStackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StackResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -30,9 +30,8 @@ const (
 	Russian    Lang = "ru"
 )
 
-// All is every language the pages come in, English first. Italian, Portuguese and Russian have their tables
-// (plural rules, months, weekdays) ready but no catalog yet, so they are not offered until they have one.
-var All = []Lang{English, German, French, Spanish}
+// All is every language the pages come in, English first.
+var All = []Lang{English, German, French, Spanish, Italian, Portuguese, Russian}
 
 // Names are the languages' own names, as they appear in the language menu.
 var Names = map[Lang]string{English: "English", German: "Deutsch", French: "Français", Spanish: "Español", Italian: "Italiano", Portuguese: "Português", Russian: "Русский"}

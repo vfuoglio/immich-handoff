@@ -66,7 +66,7 @@ It is only seen while signing in, and Immich keeps people signed in for a long t
 
 ## When you invite someone
 
-An owner's **invitation link** (on their service's card, **Copy**) already takes the person straight to that service, so it needs no address at all: send it by message. Installing the page on the phone from that link keeps it on the home screen for next time.
+An owner's **invitation link** (on their service's card, **Copy**) already takes the person straight to that service, so it needs no address at all: send it by message (**Copy a message** writes one for you) or show its **QR code**; both are next to the link. Installing the page on the phone from that link keeps it on the home screen for next time.
 
 ## What was tried and does not work
 

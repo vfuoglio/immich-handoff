@@ -492,3 +492,6 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 .lang-menu button:hover { background: var(--surface-2); transform: none; }
 .lang-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
 .lang-menu button[aria-checked="true"]::after { content: " \2713"; }
+
+.qr { margin-top: .8rem; }
+.qr img { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }

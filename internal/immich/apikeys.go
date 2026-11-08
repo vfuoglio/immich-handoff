@@ -7,23 +7,32 @@ import (
 )
 
 // SenderPermissions is everything a sender's key needs. workflow.logs (reading its own workflow's run log) is
-// only used by `immich-handoff doctor`, which works without it, so a key made before it was added is still fine. It is also what the README tells people to
-// grant when they create a key by hand.
+// only used by `immich-handoff doctor`, which works without it, so a key made before it was added is still fine.
+// stack.read (reading which photos make up a stack) is optional too: without it only the tagged photo of a stack is
+// handed over. It is also what the README tells people to grant when they create a key by hand.
 var SenderPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset",
-	"asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
+	"asset.read", "asset.download", "asset.delete", "stack.read", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
 
 // SenderPermissionsCopy is what a sender's key needs when originals are kept: no delete permission at all,
 // so the app cannot remove a photo even by mistake.
 var SenderPermissionsCopy = perms("user.read", "tag.read", "tag.create", "tag.asset",
-	"asset.read", "asset.download", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
+	"asset.read", "asset.download", "stack.read", "workflow.read", "workflow.create", "workflow.update", "workflow.logs")
 
-// ReceiverPermissions is everything a receiver's key needs.
-var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload")
+// ReceiverPermissions is everything a receiver's key needs. stack.create (making a stack of the photos that arrive
+// together) is optional: without it they arrive as separate photos.
+var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create")
 
 // ReceiverPermissionsAlbum is what a receiver's key needs when handed-over photos are also put in an album:
 // ReceiverPermissions plus finding, creating and adding to albums. It cannot change or delete an album.
-var ReceiverPermissionsAlbum = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload",
+var ReceiverPermissionsAlbum = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create",
 	"album.read", "album.create", "albumAsset.create")
+
+// Optional are the permissions that add a convenience: a key without them still works, and the app carries on without
+// that convenience (and `doctor` says so as a warning, not a failure). (workflow.logs is optional too, see above.)
+var Optional = map[Permission]string{
+	"stack.read":   "only the tagged photo of a stack is handed over, not the whole stack",
+	"stack.create": "photos that arrive as a stack arrive as separate photos",
+}
 
 func perms(names ...string) []Permission {
 	out := make([]Permission, len(names))

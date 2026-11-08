@@ -36,3 +36,5 @@ output-options:
     - getApiKey
     - updateApiKey
     - getWorkflowLogs
+    - getStack
+    - createStack

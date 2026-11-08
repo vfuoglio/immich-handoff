@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -292,5 +293,40 @@ func TestTheAdminPageOffersTheDownloadWhenItIsOn(t *testing.T) {
 	}
 	if !strings.Contains(body, "No backup has been made yet.") {
 		t.Error("the page does not say that no backup exists yet")
+	}
+}
+
+func TestTheQRCodeIsDrawnForAWebAddressAndOnlyForSignedInPeopleWhoAskFromThePage(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st))
+	post := func(cookie, text string, hdr map[string]string) (int, string) {
+		req, _ := http.NewRequest("POST", app.URL+"/qr", strings.NewReader("text="+url.QueryEscape(text)))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Cookie", cookie)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	code, body := post("sess=admin", "https://photos.example/handoff/invite/abc", change)
+	if code != 200 || !strings.HasPrefix(body, "<svg") || !strings.Contains(body, `fill="#fff"`) || !strings.Contains(body, "<path") {
+		t.Errorf("a QR code was expected: %d %.80s", code, body)
+	}
+	if code, _ := post("sess=admin", "https://photos.example/", nil); code != 400 {
+		t.Errorf("without the cross-site header: %d, want 400", code)
+	}
+	if code, _ := post("", "https://photos.example/", change); code == 200 {
+		t.Errorf("a QR code must not be drawn for someone who is not signed in")
+	}
+	for _, bad := range []string{"", "javascript:alert(1)", "not an address", "https://x/" + strings.Repeat("a", 600)} {
+		if code, _ := post("sess=admin", bad, change); code != 400 {
+			t.Errorf("%.30q must be refused: %d", bad, code)
+		}
 	}
 }
