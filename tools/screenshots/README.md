@@ -23,7 +23,7 @@ Every picture is taken in English: the tool sends `Accept-Language: en` and sets
 
 ## The animations
 
-The moving pictures in `docs/images/*.gif` (the README's live scene at the top and the "See it move" table) are filmed from the real page, in Chrome, while the demo does what a person would: tags photos, presses Ctrl K, switches the theme. They need `ffmpeg` too. Six scenes are defined in `film.go`; `go run . film` with no valid name lists them:
+The moving pictures in `docs/images/*.gif` (the README's live scene at the top and the "In action" table) are filmed from the real page, in Chrome, while the demo does what a person would: tags photos, presses Ctrl K, switches the theme. They need `ffmpeg` too. Six scenes are defined in `film.go`; `go run . film` with no valid name lists them:
 
 | Scene | Who, look | What happens |
 |---|---|---|
