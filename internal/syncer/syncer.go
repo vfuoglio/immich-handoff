@@ -76,6 +76,7 @@ type Syncer struct {
 
 	albumMu     sync.Mutex
 	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
+	warned      map[string]bool // other once-only warnings (a key that lacks an optional permission), by key
 	lastPublish atomic.Int64    // when the open pages were last told something changed (see publishSoon)
 }
 
@@ -470,7 +471,7 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		if !s.Cfg.DryRun {
 			s.emit(live.Started, svc, snd, "", 0, nil)
 		}
-		switch out, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
+		switch out, handed, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
 		case err != nil:
 			c.Errors++
 			s.emit(live.Failed, svc, snd, "", 0, nil)
@@ -483,17 +484,19 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 			s.emit(live.Handed, svc, snd, "", 0, nil)
 			s.markJustHandled(a.Id)
 			if track {
-				size := sizeOf(nil)
-				if a.ExifInfo != nil {
-					size = sizeOf(a.ExifInfo.FileSizeInByte)
-				}
-				if err := s.Usage.Record(ctx, snd, size); err != nil {
-					log.Warn("could not record the hand-over for the daily cap", "err", err)
-				}
-				snap.Photos++
-				snap.Bytes += size
-				if snap.Oldest.IsZero() {
-					snap.Oldest = time.Now()
+				for _, m := range handed { // every photo of a stack counts, with its own size
+					size := sizeOf(nil)
+					if m.ExifInfo != nil {
+						size = sizeOf(m.ExifInfo.FileSizeInByte)
+					}
+					if err := s.Usage.Record(ctx, snd, size); err != nil {
+						log.Warn("could not record the hand-over for the daily cap", "err", err)
+					}
+					snap.Photos++
+					snap.Bytes += size
+					if snap.Oldest.IsZero() {
+						snap.Oldest = time.Now()
+					}
 				}
 			}
 			if fromAlbum[a.Id] {
@@ -525,97 +528,236 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 	return
 }
 
-// process hands one asset to every receiver. The original is deleted last, and only after every
-// receiver holds a verified copy. Any failure keeps the original; because Immich recognises
-// duplicates by checksum, a later retry is safe for receivers that already have their copy.
-func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID) (string, error) {
+// process hands a tagged photo to every receiver. When it is part of a stack (a burst, or a RAW and JPEG pair) the
+// whole stack goes, the cover first, and the stack is made again on the receiver's side. The originals are deleted
+// last, and only after every receiver holds a verified copy of every photo. Any failure keeps the originals; because
+// Immich recognises duplicates by checksum, a later retry is safe for receivers that already have their copies. It
+// returns what it handed over (the tagged photo, and the rest of its stack).
+func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID) (string, []immich.AssetResponseDto, error) {
 	if s.Cfg.DryRun {
 		log.Info("[dry-run] would hand over and remove original", "asset", a.Id, "file", a.OriginalFileName)
-		return "dryrun", nil
+		return "dryrun", nil, nil
+	}
+	members := s.stackOf(ctx, log, snd, a)
+	// A live photo is a still plus a separate hidden motion clip, which goes with it (see handOne).
+	clips := map[uuid.UUID]*immich.AssetResponseDto{}
+	clipOK := map[uuid.UUID]bool{} // false once a receiver's still is found not to be linked to its clip
+	for _, m := range members {
+		if clip := s.motionClipOf(ctx, log, snd, m); clip != nil {
+			clips[m.Id], clipOK[m.Id] = clip, true
+		}
 	}
 	outcome := "duplicate"
-	// A live photo is a still plus a separate hidden motion clip. The clip goes first, hidden, and the still is
-	// uploaded linked to it, so the receiver's copy plays too. Without a readable clip only the still goes.
-	clip := s.motionClipOf(ctx, log, snd, a)
-	clipHandedOver := clip != nil // false once a receiver's still is found not to be linked to its clip
 	for _, r := range rs {
-		var motion *uuid.UUID
-		if clip != nil {
-			cup, csum, err := immich.TransferWith(ctx, snd.API, r.acct.API, *clip, immich.UploadOptions{Hidden: true})
+		var copies []handedCopy
+		for _, m := range members {
+			c, err := s.handOne(ctx, log, svc, snd, r, m, clips[m.Id])
 			if err != nil {
-				return "", fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
+				return "", nil, err
 			}
-			cc, err := r.acct.API.Asset(ctx, cup.Id)
-			if err != nil {
-				return "", fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
-			}
-			if cc.IsTrashed {
-				log.Warn("the motion clip exists in a receiver's trash; handover refused, original kept and retagged",
-					"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
+			if c.refused {
 				if err := s.markRefused(ctx, svc, snd.API, a.Id, shareTag); err != nil {
-					return "", fmt.Errorf("handover refused but could not retag the original: %w", err)
+					return "", nil, fmt.Errorf("handover refused but could not retag the original: %w", err)
 				}
-				return "refused", nil
+				return "refused", nil, nil
 			}
-			if !immich.ChecksumMatches(cc.Checksum, csum) {
-				return "", fmt.Errorf("checksum mismatch on %s's copy %s of the motion clip", r.acct.Name, cup.Id)
+			if clips[m.Id] != nil && !c.linked {
+				clipOK[m.Id] = false
 			}
-			id := cup.Id
-			motion = &id
-		}
-		up, sum, err := immich.TransferWith(ctx, snd.API, r.acct.API, a, immich.UploadOptions{MotionClip: motion})
-		if err != nil {
-			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
-		}
-		copy_, err := r.acct.API.Asset(ctx, up.Id)
-		if err != nil {
-			return "", fmt.Errorf("to %s: %w", r.acct.Name, err)
-		}
-		if motion != nil && (copy_.LivePhotoVideoId == nil || !strings.EqualFold(*copy_.LivePhotoVideoId, motion.String())) {
-			// The still was already there without its clip (handed over earlier, as a plain photo), so Immich kept
-			// that copy as it was. The clip stays with the sender: nothing that is not linked is deleted.
-			log.Warn("the receiver's copy of the still is not linked to the motion clip; the clip is not removed from the sender",
-				"file", a.OriginalFileName, "receiver", r.acct.Name)
-			clipHandedOver = false
-		}
-		if copy_.IsTrashed {
-			log.Warn("a copy exists in a receiver's trash; handover refused, original kept and retagged",
-				"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
-			if err := s.markRefused(ctx, svc, snd.API, a.Id, shareTag); err != nil {
-				return "", fmt.Errorf("handover refused but could not retag the original: %w", err)
+			if c.created {
+				outcome = "imported"
 			}
-			return "refused", nil
+			copies = append(copies, c)
 		}
-		if !immich.ChecksumMatches(copy_.Checksum, sum) {
-			return "", fmt.Errorf("checksum mismatch on %s's copy %s", r.acct.Name, up.Id)
-		}
-		if up.Status == immich.AssetMediaStatusCreated {
-			// Immich can drop a tag added before it has finished reading a new upload, so wait for that
-			// first, then add the tag and check it stuck (a copy without it would arrive unnoticed).
-			s.waitProcessed(ctx, r.acct.API, up.Id)
-			if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
-				if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
-					return "", fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
-				}
-			}
-			outcome = "imported"
-		}
+		s.restack(ctx, log, svc, r, copies)
 	}
 	if svc.CopiesFor(snd) {
 		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
-			return "", fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
+			return "", nil, fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
 		}
 	} else {
-		ids := []uuid.UUID{a.Id}
-		if clip != nil && clipHandedOver {
-			ids = append(ids, clip.Id) // the hidden clip goes with its still, or it would stay behind unseen
+		var ids []uuid.UUID
+		for _, m := range members {
+			ids = append(ids, m.Id)
+			if clips[m.Id] != nil && clipOK[m.Id] {
+				ids = append(ids, clips[m.Id].Id) // a hidden clip goes with its still, or it would stay behind unseen
+			}
 		}
 		if err := snd.API.DeleteAssets(ctx, ids, s.Cfg.DeleteForce); err != nil {
-			return "", fmt.Errorf("copies verified but original not removed: %w", err)
+			return "", nil, fmt.Errorf("copies verified but original not removed: %w", err)
 		}
 	}
-	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs))
-	return outcome, nil
+	for _, m := range members { // the others of a stack (the cover too) must not be handed over again by a search that still lists them
+		s.markJustHandled(m.Id)
+	}
+	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs), "photos", len(members))
+	return outcome, members, nil
+}
+
+// handedCopy is one photo's copy in one receiver's account.
+type handedCopy struct {
+	id      uuid.UUID
+	created bool    // it is new (not a duplicate of a copy that was already there)
+	refused bool    // the receiver has it in their trash: nothing is handed over
+	linked  bool    // a live photo's copy is linked to its motion clip (true for a photo without one)
+	stack   *string // the stack the copy is in at the receiver, if any
+}
+
+// handOne gives one photo to one receiver: its motion clip first when it is a live photo (hidden), then the photo
+// itself, checks both by checksum, and tags the copy (or files it in the album). Nothing here touches the original.
+func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, r receiver, a immich.AssetResponseDto, clip *immich.AssetResponseDto) (handedCopy, error) {
+	var motion *uuid.UUID
+	if clip != nil {
+		cup, csum, err := immich.TransferWith(ctx, snd.API, r.acct.API, *clip, immich.UploadOptions{Hidden: true})
+		if err != nil {
+			return handedCopy{}, fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
+		}
+		cc, err := r.acct.API.Asset(ctx, cup.Id)
+		if err != nil {
+			return handedCopy{}, fmt.Errorf("motion clip to %s: %w", r.acct.Name, err)
+		}
+		if cc.IsTrashed {
+			log.Warn("the motion clip exists in a receiver's trash; handover refused, original kept and retagged",
+				"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
+			return handedCopy{refused: true}, nil
+		}
+		if !immich.ChecksumMatches(cc.Checksum, csum) {
+			return handedCopy{}, fmt.Errorf("checksum mismatch on %s's copy %s of the motion clip", r.acct.Name, cup.Id)
+		}
+		id := cup.Id
+		motion = &id
+	}
+	up, sum, err := immich.TransferWith(ctx, snd.API, r.acct.API, a, immich.UploadOptions{MotionClip: motion})
+	if err != nil {
+		return handedCopy{}, fmt.Errorf("to %s: %w", r.acct.Name, err)
+	}
+	copy_, err := r.acct.API.Asset(ctx, up.Id)
+	if err != nil {
+		return handedCopy{}, fmt.Errorf("to %s: %w", r.acct.Name, err)
+	}
+	linked := true
+	if motion != nil && (copy_.LivePhotoVideoId == nil || !strings.EqualFold(*copy_.LivePhotoVideoId, motion.String())) {
+		// The still was already there without its clip (handed over earlier, as a plain photo), so Immich kept
+		// that copy as it was. The clip stays with the sender: nothing that is not linked is deleted.
+		log.Warn("the receiver's copy of the still is not linked to the motion clip; the clip is not removed from the sender",
+			"file", a.OriginalFileName, "receiver", r.acct.Name)
+		linked = false
+	}
+	if copy_.IsTrashed {
+		log.Warn("a copy exists in a receiver's trash; handover refused, original kept and retagged",
+			"file", a.OriginalFileName, "receiver", r.acct.Name, "tag", svc.RefusedTag)
+		return handedCopy{refused: true}, nil
+	}
+	if !immich.ChecksumMatches(copy_.Checksum, sum) {
+		return handedCopy{}, fmt.Errorf("checksum mismatch on %s's copy %s", r.acct.Name, up.Id)
+	}
+	c := handedCopy{id: up.Id, linked: linked}
+	if copy_.Stack != nil {
+		id := copy_.Stack.Id.String()
+		c.stack = &id
+	}
+	if up.Status == immich.AssetMediaStatusCreated {
+		// Immich can drop a tag added before it has finished reading a new upload, so wait for that
+		// first, then add the tag and check it stuck (a copy without it would arrive unnoticed).
+		s.waitProcessed(ctx, r.acct.API, up.Id)
+		if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
+			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
+				return handedCopy{}, fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			}
+		}
+		c.created = true
+	}
+	return c, nil
+}
+
+// stackOf is the photos that go together with a tagged one: itself, or when it is part of a stack the whole stack,
+// the cover first. Without the permission to read stacks (a key made before stacks were handed over), or when the
+// stack cannot be read, only the tagged photo goes, as it always did, and the log says so.
+func (s *Syncer) stackOf(ctx context.Context, log *slog.Logger, snd *Account, a immich.AssetResponseDto) []immich.AssetResponseDto {
+	one := []immich.AssetResponseDto{a}
+	if a.Stack == nil { // a search does not say whether a photo is in a stack; the photo itself does
+		if full, err := snd.API.Asset(ctx, a.Id); err == nil && full != nil {
+			a = *full
+		}
+	}
+	if a.Stack == nil || a.Stack.AssetCount < 2 {
+		return one
+	}
+	st, err := snd.API.Stack(ctx, a.Stack.Id)
+	if err != nil {
+		if immich.IsForbidden(err) {
+			s.warnOnce("stack.read/"+snd.Name, log, "this sender's key may not read stacks, so only the tagged photo of a stack is handed over; opening the page gives the key that permission",
+				fmt.Sprintf("immich-handoff: %s's key may not read stacks, so only the tagged photo of a stack is handed over. The key needs stack.read: they get it by opening the page once, or add it to a key made by hand.", snd.Name))
+		} else {
+			log.Warn("could not read the photo's stack; only the tagged photo is handed over", "file", a.OriginalFileName, "err", err)
+		}
+		return one
+	}
+	out := make([]immich.AssetResponseDto, 0, len(st.Assets))
+	for _, m := range st.Assets { // the cover first
+		if m.Id == st.PrimaryAssetId && !m.IsTrashed {
+			out = append(out, m)
+		}
+	}
+	for _, m := range st.Assets {
+		if m.Id != st.PrimaryAssetId && !m.IsTrashed {
+			out = append(out, m)
+		}
+	}
+	found := false
+	for _, m := range out {
+		found = found || m.Id == a.Id
+	}
+	if !found || len(out) < 2 { // the tagged photo is not in what Immich lists: do the one thing that is certain
+		return one
+	}
+	return out
+}
+
+// restack makes the stack again in a receiver's account: the copies of a stack that arrived together, the cover
+// first. It does nothing when they are already one stack (a hand-over that is repeated), and when the receiver's key
+// may not create stacks the photos stay separate, which is said once. It never fails a hand-over: the photos are
+// already there.
+func (s *Syncer) restack(ctx context.Context, log *slog.Logger, svc *Service, r receiver, copies []handedCopy) {
+	if len(copies) < 2 {
+		return
+	}
+	same := copies[0].stack != nil
+	for _, c := range copies {
+		same = same && c.stack != nil && *c.stack == *copies[0].stack
+	}
+	if same {
+		return
+	}
+	ids := make([]uuid.UUID, len(copies))
+	for i, c := range copies {
+		ids[i] = c.id
+	}
+	if _, err := r.acct.API.CreateStack(ctx, ids); err != nil {
+		if immich.IsForbidden(err) {
+			s.warnOnce("stack.create/"+svc.Label()+"/"+r.acct.Name, log, "the receiver's key may not create stacks, so the photos of a stack arrive as separate photos; opening the page gives the key that permission",
+				fmt.Sprintf("immich-handoff: %s's key may not create stacks, so photos that were a stack arrive as separate photos. The key needs stack.create: its owner gets it by opening the page once, or add it to a key made by hand.", r.acct.Name))
+		} else {
+			log.Warn("could not make the stack again at the receiver; the photos arrived separately", "receiver", r.acct.Name, "err", err)
+		}
+	}
+}
+
+// warnOnce logs a warning and notifies whoever runs the app, once for each key until the process restarts.
+func (s *Syncer) warnOnce(key string, log *slog.Logger, logMsg, notifyMsg string) {
+	s.albumMu.Lock()
+	first := !s.warned[key]
+	if first {
+		if s.warned == nil {
+			s.warned = map[string]bool{}
+		}
+		s.warned[key] = true
+	}
+	s.albumMu.Unlock()
+	if first {
+		log.Warn(logMsg)
+		s.notify(notifyMsg)
+	}
 }
 
 // motionClipOf is the sender's motion clip of a live photo, or nil when the photo has none (or it cannot be read:

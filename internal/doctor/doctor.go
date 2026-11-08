@@ -313,16 +313,26 @@ func account(ctx context.Context, r *Report, a *syncer.Account, role string, wan
 		r.add(OK, who+": key works (all permissions)", "")
 		return true
 	}
-	var missing []string
+	var missing, optional []string
 	for _, p := range want {
-		if !held[p] && p != optionalPermission {
-			missing = append(missing, string(p))
+		if held[p] || p == optionalPermission {
+			continue
 		}
+		if note, ok := immich.Optional[p]; ok {
+			optional = append(optional, fmt.Sprintf("%s (without it: %s)", p, note))
+			continue
+		}
+		missing = append(missing, string(p))
 	}
 	if len(missing) > 0 {
 		r.add(Fail, who+": the key lacks "+strings.Join(missing, ", "),
 			"Create a new key with the full list in docs/fixed-accounts.md. A person who joined from the page can press Clean up and join again.")
 		return false
+	}
+	if len(optional) > 0 {
+		r.add(Warn, who+": the key works but lacks "+strings.Join(optional, "; "),
+			"A person who joined from the page, or who owns the service, gets it by opening the page once. For a key made by hand, add it (docs/fixed-accounts.md).")
+		return true
 	}
 	r.add(OK, who+": key works and has every permission it needs", "")
 	return true

@@ -87,8 +87,8 @@ func call(t *testing.T, method, path string, auth map[string]string, body any, o
 // The exact API key permissions documented in the README. The suite runs with these (not "all"),
 // so a permission the app really needs but the README omits fails the tests.
 var (
-	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"}
-	destPermissions   = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload"}
+	sourcePermissions = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "asset.delete", "stack.read", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"}
+	destPermissions   = []string{"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create"}
 )
 
 func keyAuth(u user) map[string]string { return map[string]string{"x-api-key": u.key} }

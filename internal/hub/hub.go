@@ -47,6 +47,7 @@ type Hub struct {
 	mu       sync.RWMutex
 	snapshot []*syncer.Service
 	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
+	granted  map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
 }
 
 // SelfService reports whether people can join and leave from the web page.

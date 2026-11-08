@@ -29,6 +29,16 @@ type twoAccounts struct {
 	next     int
 	dropLink bool   // the receiver ignores the link to the motion clip
 	noClip   string // the sender cannot read this asset (its motion clip)
+
+	stacks        map[string]*fakeStack // stack id -> stack, for both accounts
+	noStackRead   bool                  // the sender's key may not read stacks
+	noStackCreate bool                  // the receiver's key may not create stacks
+	stackCreates  [][]string            // each createStack request at the receiver, as the ids it named, in order
+}
+
+type fakeStack struct {
+	id, primary string
+	members     []string
 }
 
 type fakeAsset struct {
@@ -37,6 +47,7 @@ type fakeAsset struct {
 	motion   string
 	hidden   bool
 	trashed  bool
+	stack    string // the id of the stack it belongs to, if any
 	tags     map[string]bool
 }
 
@@ -75,6 +86,9 @@ func (f *twoAccounts) handler() http.Handler {
 		}
 		if a.hidden {
 			d["visibility"] = "hidden"
+		}
+		if st := f.stacks[a.stack]; a.stack != "" && st != nil {
+			d["stack"] = map[string]any{"id": st.id, "primaryAssetId": st.primary, "assetCount": len(st.members)}
 		}
 		var tags []any
 		for name := range a.tags {
@@ -164,6 +178,45 @@ func (f *twoAccounts) handler() http.Handler {
 			}
 		}
 		j(w, 200, map[string]any{"assets": map[string]any{"items": items, "count": len(items), "total": len(items), "facets": []any{}}})
+	})
+	mux.HandleFunc("GET /api/stacks/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		st := f.stacks[r.PathValue("id")]
+		if f.noStackRead || st == nil {
+			j(w, map[bool]int{true: 403, false: 404}[f.noStackRead], map[string]any{"message": "Missing required permission: stack.read"})
+			return
+		}
+		var members []any
+		for _, id := range st.members {
+			members = append(members, dto(who(r), f.assets[who(r)][id]))
+		}
+		j(w, 200, map[string]any{"id": st.id, "primaryAssetId": st.primary, "assets": members})
+	})
+	mux.HandleFunc("POST /api/stacks", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AssetIds []string `json:"assetIds"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.noStackCreate {
+			j(w, 403, map[string]any{"message": "Missing required permission: stack.create"})
+			return
+		}
+		f.stackCreates = append(f.stackCreates, body.AssetIds)
+		f.next++
+		st := &fakeStack{id: fmt.Sprintf("e0000000-0000-4000-8000-%012d", f.next), primary: body.AssetIds[0], members: body.AssetIds}
+		if f.stacks == nil {
+			f.stacks = map[string]*fakeStack{}
+		}
+		f.stacks[st.id] = st
+		var members []any
+		for _, id := range body.AssetIds {
+			f.assets["dest"][id].stack = st.id
+			members = append(members, dto("dest", f.assets["dest"][id]))
+		}
+		j(w, 201, map[string]any{"id": st.id, "primaryAssetId": st.primary, "assets": members})
 	})
 	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -388,5 +441,169 @@ func TestHandingALivePhotoOverAgainDoesNotMakeASecondCopy(t *testing.T) {
 	still, _ := f.destCopies()
 	if still.motion != clip.id {
 		t.Errorf("the link survived the second hand-over: %q vs %q", still.motion, clip.id)
+	}
+}
+
+const (
+	stackCover = "b1000000-0000-4000-8000-000000000001"
+	stackB     = "b1000000-0000-4000-8000-000000000002"
+	stackC     = "b1000000-0000-4000-8000-000000000003"
+	stackID    = "e1000000-0000-4000-8000-000000000001"
+)
+
+// aStack is a burst of three: the cover, and two more. Only the member named by tagged carries the service tag.
+func aStack(tagged ...string) *twoAccounts {
+	f := newTwoAccounts()
+	f.stacks = map[string]*fakeStack{stackID: {id: stackID, primary: stackCover, members: []string{stackCover, stackB, stackC}}}
+	for i, id := range []string{stackCover, stackB, stackC} {
+		a := &fakeAsset{id: id, name: fmt.Sprintf("burst-%d.jpg", i+1), data: []byte(fmt.Sprintf("burst photo %d", i+1)), stack: stackID, tags: map[string]bool{}}
+		if slices.Contains(tagged, id) {
+			a.tags["share"] = true
+		}
+		f.addSender(a)
+	}
+	return f
+}
+
+// destNames is the names of the photos the receiver has, by the order the cover comes first in a stack request.
+func (f *twoAccounts) destNames(ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		out = append(out, f.assets["dest"][id].name)
+	}
+	return out
+}
+
+func TestTaggingTheCoverOfAStackHandsOverTheWholeStackAndMakesItAgain(t *testing.T) {
+	f := aStack(stackCover)
+	c := f.hand(t, nil)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts: %+v", c)
+	}
+	if len(f.assets["dest"]) != 3 {
+		t.Fatalf("the receiver has %d photos, want the whole stack of 3", len(f.assets["dest"]))
+	}
+	for _, a := range f.assets["dest"] {
+		if !a.tags["inbox"] {
+			t.Errorf("%s arrived without the inbox tag", a.name)
+		}
+	}
+	if len(f.stackCreates) != 1 || !slices.Equal(f.destNames(f.stackCreates[0]), []string{"burst-1.jpg", "burst-2.jpg", "burst-3.jpg"}) {
+		t.Errorf("one stack, the cover first: %v", f.stackCreates)
+	}
+	if len(f.deleted) != 1 || len(f.deleted[0]) != 3 {
+		t.Errorf("moving removes the whole stack in one request: %v", f.deleted)
+	}
+}
+
+func TestTaggingAnotherPhotoOfAStackHandsOverTheWholeStackWithTheCoverFirst(t *testing.T) {
+	f := aStack(stackC) // the last photo of the burst, not the cover
+	f.hand(t, nil)
+	if len(f.assets["dest"]) != 3 || len(f.stackCreates) != 1 {
+		t.Fatalf("receiver has %d photos and %d stacks, want 3 and 1", len(f.assets["dest"]), len(f.stackCreates))
+	}
+	if got := f.destNames(f.stackCreates[0]); got[0] != "burst-1.jpg" {
+		t.Errorf("the cover must stay the cover: %v", got)
+	}
+}
+
+func TestPhotosOfAStackThatAreAllTaggedAreHandedOverOnce(t *testing.T) {
+	f := aStack(stackCover, stackB, stackC)
+	c := f.hand(t, nil)
+	if c.Errors != 0 {
+		t.Fatalf("counts: %+v (the second and third photo are already gone with the stack)", c)
+	}
+	if len(f.assets["dest"]) != 3 || len(f.stackCreates) != 1 {
+		t.Errorf("receiver has %d photos, %d stacks; want 3 and 1", len(f.assets["dest"]), len(f.stackCreates))
+	}
+	if len(f.deleted) != 1 {
+		t.Errorf("one removal for the whole stack: %v", f.deleted)
+	}
+}
+
+func TestWithoutThePermissionToReadStacksOnlyTheTaggedPhotoGoes(t *testing.T) {
+	f := aStack(stackB)
+	f.noStackRead = true
+	c := f.hand(t, nil)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("counts: %+v", c)
+	}
+	if len(f.assets["dest"]) != 1 || len(f.stackCreates) != 0 {
+		t.Errorf("receiver has %d photos, %d stacks; want just the tagged photo", len(f.assets["dest"]), len(f.stackCreates))
+	}
+	if len(f.deleted) != 1 || len(f.deleted[0]) != 1 || f.deleted[0][0] != stackB {
+		t.Errorf("only the tagged photo is removed from the sender: %v", f.deleted)
+	}
+	for _, id := range []string{stackCover, stackC} {
+		if f.assets["src"][id].trashed {
+			t.Errorf("%s was removed although it was not handed over", id)
+		}
+	}
+}
+
+func TestWithoutThePermissionToMakeStacksThePhotosArriveSeparately(t *testing.T) {
+	f := aStack(stackCover)
+	f.noStackCreate = true
+	c := f.hand(t, nil)
+	if c.Imported != 1 || c.Errors != 0 {
+		t.Fatalf("a refused stack must not fail the hand-over: %+v", c)
+	}
+	if len(f.assets["dest"]) != 3 {
+		t.Errorf("all three photos arrive: %d", len(f.assets["dest"]))
+	}
+	for _, a := range f.assets["dest"] {
+		if a.stack != "" {
+			t.Errorf("%s is in a stack although none could be made", a.name)
+		}
+	}
+	if len(f.deleted) != 1 || len(f.deleted[0]) != 3 {
+		t.Errorf("every photo arrived, so the whole stack is removed: %v", f.deleted)
+	}
+}
+
+func TestHandingAStackOverAgainDoesNotMakeASecondStack(t *testing.T) {
+	copyMode := func(s *syncer.Service) { s.Mode, s.SentTag = syncer.ModeCopy, "handed-over" }
+	f := aStack(stackCover)
+	f.hand(t, copyMode)
+	f.assets["src"][stackCover].tags = map[string]bool{"share": true} // tagged again
+	f.hand(t, copyMode)
+	if len(f.assets["dest"]) != 3 {
+		t.Errorf("the receiver has %d photos, want 3", len(f.assets["dest"]))
+	}
+	if len(f.stackCreates) != 1 {
+		t.Errorf("the stack was made %d times, want once", len(f.stackCreates))
+	}
+}
+
+func TestACopiedStackLeavesTheOriginalsWhereTheyAre(t *testing.T) {
+	f := aStack(stackCover)
+	f.hand(t, func(s *syncer.Service) { s.Mode, s.SentTag = syncer.ModeCopy, "handed-over" })
+	if len(f.deleted) != 0 {
+		t.Errorf("copy mode removed %v", f.deleted)
+	}
+	if !f.assets["src"][stackCover].tags["handed-over"] {
+		t.Error("the tagged photo is marked as handed over")
+	}
+	if len(f.assets["dest"]) != 3 || len(f.stackCreates) != 1 {
+		t.Errorf("the whole stack is handed over in copy mode too: %d photos, %d stacks", len(f.assets["dest"]), len(f.stackCreates))
+	}
+}
+
+func TestALivePhotoInAStackBringsItsClipToo(t *testing.T) {
+	f := aStack(stackCover)
+	f.assets["src"][stackCover].motion = liveClip
+	f.addSender(&fakeAsset{id: liveClip, name: "burst-1.MOV", data: []byte("the clip"), hidden: true})
+	f.hand(t, nil)
+	var clip *fakeAsset
+	for _, a := range f.assets["dest"] {
+		if a.name == "burst-1.MOV" {
+			clip = a
+		}
+	}
+	if clip == nil || !clip.hidden {
+		t.Fatalf("the hidden clip of the cover arrives: %+v", clip)
+	}
+	if len(f.deleted) != 1 || len(f.deleted[0]) != 4 {
+		t.Errorf("three photos and a clip are removed together: %v", f.deleted)
 	}
 }

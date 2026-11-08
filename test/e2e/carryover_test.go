@@ -357,22 +357,36 @@ func TestWhatIsCarriedOver(t *testing.T) {
 			row("stack", fmt.Sprintf("could not be made (HTTP %d)", code), "not tested")
 			return
 		}
+		defer func() {
+			if t.Failed() { // what the app says is the quickest way to see why
+				t.Logf("app log:\n%s", a.log.String())
+			}
+		}()
 		cp := handOver(first) // only the cover is tagged
 		if cp == "" {
 			row("stack (cover tagged)", "stacked", "NOT HANDED OVER")
 			return
 		}
-		sib := getFull(t, alice, second)
-		stk := "no stack"
-		if sib.Stack != nil {
-			stk = fmt.Sprintf("still in a stack of %d", sib.Stack.AssetCount)
+		// the app promises the whole stack: both photos arrive, as a stack again, and (this sender moves) both go
+		var recv *struct {
+			ID           string `json:"id"`
+			AssetCount   int    `json:"assetCount"`
+			PrimaryAsset string `json:"primaryAssetId"`
 		}
-		recv := "not in a stack"
-		if getFull(t, family, cp).Stack != nil {
-			recv = "in a stack"
+		eventually(t, "the receiver's copy to be in a stack of 2", 60*time.Second, func() bool {
+			recv = getFull(t, family, cp).Stack
+			return recv != nil && recv.AssetCount == 2
+		})
+		if recv.PrimaryAsset != cp {
+			t.Errorf("the cover of the tagged photo must stay the cover at the receiver: primary %s, copy %s", recv.PrimaryAsset, cp)
 		}
-		row("stack: the tagged cover", "stack of 2", recv)
-		row("stack: the other photo", stk, "not handed over (it was not tagged)")
+		for _, id := range []string{first, second} {
+			if !getFull(t, alice, id).IsTrashed {
+				t.Errorf("the sender's photo %s of the stack was not removed after the hand-over", id)
+			}
+		}
+		row("stack: the tagged cover", "stack of 2", fmt.Sprintf("in a stack of %d, cover kept", recv.AssetCount))
+		row("stack: the other photo", "in the same stack", "handed over with it")
 	})
 
 	t.Run("a video", func(t *testing.T) {

@@ -1370,3 +1370,53 @@ func TestAReachedLimitIsToldToTheOwnerAndTheSender(t *testing.T) {
 		t.Errorf("a stranger must hear nothing: %v", evs)
 	}
 }
+
+func TestKeysMadeBeforeStacksGetTheStackPermissionsOnceTheirOwnerOpensThePage(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "holiday", Tag: "hol", Policy: "open", Visibility: "listed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.Join(ctx, e.sess, bob, "holiday", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// make the keys look like the ones made before stacks were handed over
+	for id, perms := range e.f.keyPerms {
+		var kept []string
+		for _, p := range perms {
+			if p != "stack.read" && p != "stack.create" {
+				kept = append(kept, p)
+			}
+		}
+		e.f.keyPerms[id] = kept
+	}
+	links, _ := e.st.Links(ctx)
+	svcs, _ := e.st.Services(ctx)
+	if len(links) != 1 || len(svcs) != 1 {
+		t.Fatalf("setup: %d links, %d services", len(links), len(svcs))
+	}
+	has := func(key, perm string) bool {
+		for _, p := range e.f.keyPerms[key] {
+			if p == perm {
+				return true
+			}
+		}
+		return false
+	}
+	e.h.EnsureStackPermissions(ctx, e.sess, bob)
+	if !has(links[0].KeyID.String(), "stack.read") {
+		t.Errorf("the sender's key must be able to read stacks: %v", e.f.keyPerms[links[0].KeyID.String()])
+	}
+	if has(svcs[0].KeyID.String(), "stack.create") {
+		t.Errorf("a person's session must not touch the key of a service someone else owns")
+	}
+	e.h.EnsureStackPermissions(ctx, e.ann, ann)
+	if !has(svcs[0].KeyID.String(), "stack.create") {
+		t.Errorf("the owner's receiver key must be able to make stacks: %v", e.f.keyPerms[svcs[0].KeyID.String()])
+	}
+	updates := e.f.keyUpdates
+	e.h.EnsureStackPermissions(ctx, e.sess, bob)
+	e.h.EnsureStackPermissions(ctx, e.ann, ann)
+	if e.f.keyUpdates != updates {
+		t.Errorf("the second visit must change nothing")
+	}
+}

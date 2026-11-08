@@ -569,6 +569,13 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
+	if w.Hub != nil && w.Hub.SelfService() { // keys made before stacks were handed over get the two permissions they need
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			w.Hub.EnsureStackPermissions(ctx, me.sess, me.user)
+		}()
+	}
 	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)
 	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
 }

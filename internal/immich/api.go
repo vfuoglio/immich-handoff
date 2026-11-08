@@ -395,6 +395,38 @@ func (a *API) DeleteAssets(ctx context.Context, ids []openapi_types.UUID, force 
 	return nil
 }
 
+// --- stacks ---
+
+// Stack reads a stack (a burst, or a RAW and JPEG pair): its members and which one is the cover.
+func (a *API) Stack(ctx context.Context, id openapi_types.UUID) (*StackResponseDto, error) {
+	r, err := a.c.GetStackWithResponse(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getStack", r.StatusCode(), r.Body)
+	}
+	return r.JSON200, nil
+}
+
+// CreateStack puts assets of this account in one stack; the first becomes the cover.
+func (a *API) CreateStack(ctx context.Context, ids []openapi_types.UUID) (*StackResponseDto, error) {
+	r, err := a.c.CreateStackWithResponse(ctx, CreateStackJSONRequestBody{AssetIds: ids})
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON201 == nil {
+		return nil, statusErr("createStack", r.StatusCode(), r.Body)
+	}
+	return r.JSON201, nil
+}
+
+// IsForbidden reports whether Immich refused the call for want of a permission the key does not have.
+func IsForbidden(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && he.Code == http.StatusForbidden
+}
+
 // --- transfer ---
 
 // Transfer streams the original of srcID from src into dst as a new upload, without touching
