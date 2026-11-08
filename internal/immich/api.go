@@ -185,6 +185,50 @@ func (a *API) AddKeyPermission(ctx context.Context, key openapi_types.UUID, perm
 	return nil
 }
 
+// RestoreAssets brings photos back from the account's trash (the key needs asset.delete, as for moving them there).
+func (a *API) RestoreAssets(ctx context.Context, ids []openapi_types.UUID) error {
+	r, err := a.c.RestoreAssetsWithResponse(ctx, RestoreAssetsJSONRequestBody{Ids: ids})
+	if err != nil {
+		return err
+	}
+	if c := r.StatusCode(); c < 200 || c > 299 {
+		return statusErr("restoreAssets", c, r.Body)
+	}
+	return nil
+}
+
+// RemoveKeyPermission takes one permission off an API key, keeping the others. Like AddKeyPermission it acts with the
+// person's own session. A key that does not have it is left as it is.
+func (a *API) RemoveKeyPermission(ctx context.Context, key openapi_types.UUID, perm Permission) error {
+	r, err := a.c.GetApiKeyWithResponse(ctx, key)
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("getApiKey", r.StatusCode(), r.Body)
+	}
+	var keep []Permission
+	found := false
+	for _, p := range r.JSON200.Permissions {
+		if p == perm {
+			found = true
+			continue
+		}
+		keep = append(keep, p)
+	}
+	if !found {
+		return nil
+	}
+	u, err := a.c.UpdateApiKeyWithResponse(ctx, key, UpdateApiKeyJSONRequestBody{Permissions: &keep})
+	if err != nil {
+		return err
+	}
+	if u.JSON200 == nil {
+		return statusErr("updateApiKey", u.StatusCode(), u.Body)
+	}
+	return nil
+}
+
 // --- albums ---
 
 // FindAlbum returns an album this account owns with exactly this name, and how many photos it holds, or
@@ -213,6 +257,19 @@ type AlbumInfo struct {
 	ID    openapi_types.UUID
 	Name  string
 	Count int
+}
+
+// InAnAlbum reports whether the photo is in at least one album of the account (a person who filed it somewhere has
+// kept it). It asks a search for the photo among those that are in no album, which needs no more than asset.read; a key
+// that cannot read albums (a receiver's key) can ask. The photo must exist and not be in the trash, or the answer is
+// "in an album" for want of an answer.
+func (a *API) InAnAlbum(ctx context.Context, id openapi_types.UUID) (bool, error) {
+	unfiled := true
+	found, err := a.Search(ctx, MetadataSearchDto{Id: &id, IsNotInAlbum: &unfiled})
+	if err != nil {
+		return false, err
+	}
+	return len(found) == 0, nil
 }
 
 // OwnedAlbums lists the albums this account owns (not ones shared with it).
@@ -299,6 +356,28 @@ func (a *API) FindTag(ctx context.Context, name string, create bool) (*openapi_t
 	}
 	id := (*u.JSON200)[0].Id
 	return &id, nil
+}
+
+// TagInfo is a tag of an account: its id, its name and its full value (for a tag inside another, "parent/child").
+type TagInfo struct {
+	ID          openapi_types.UUID
+	Name, Value string
+}
+
+// Tags lists every tag of the account.
+func (a *API) Tags(ctx context.Context) ([]TagInfo, error) {
+	r, err := a.c.GetAllTagsWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getAllTags", r.StatusCode(), r.Body)
+	}
+	out := make([]TagInfo, 0, len(*r.JSON200))
+	for _, t := range *r.JSON200 {
+		out = append(out, TagInfo{ID: t.Id, Name: t.Name, Value: t.Value})
+	}
+	return out, nil
 }
 
 // TagAssets returns an error unless every asset ended up tagged.
@@ -419,6 +498,12 @@ func (a *API) CreateStack(ctx context.Context, ids []openapi_types.UUID) (*Stack
 		return nil, statusErr("createStack", r.StatusCode(), r.Body)
 	}
 	return r.JSON201, nil
+}
+
+// IsNotFound reports whether Immich answered that the thing is not there.
+func IsNotFound(err error) bool {
+	var he *HTTPError
+	return errors.As(err, &he) && he.Code == http.StatusNotFound
 }
 
 // IsForbidden reports whether Immich refused the call for want of a permission the key does not have.

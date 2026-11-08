@@ -44,6 +44,7 @@ type fakeStack struct {
 type fakeAsset struct {
 	exif     map[string]any // what the sender's Immich knows about it (description, rating, location), if anything
 	archived bool
+	kind     string // IMAGE (the default) or VIDEO
 	id, name string
 	data     []byte
 	motion   string
@@ -73,6 +74,7 @@ func newTwoAccounts() *twoAccounts {
 }
 
 func (f *twoAccounts) addSender(a *fakeAsset) { f.assets["src"][a.id] = a }
+func (f *twoAccounts) addDest(a *fakeAsset)   { f.assets["dest"][a.id] = a }
 
 func (f *twoAccounts) handler() http.Handler {
 	j := func(w http.ResponseWriter, code int, v any) {
@@ -86,6 +88,10 @@ func (f *twoAccounts) handler() http.Handler {
 			"isTrashed": a.trashed, "checksum": sum(a.data), "hasMetadata": true, "exifInfo": map[string]any{"fileSizeInByte": len(a.data)}}
 		if a.motion != "" {
 			d["livePhotoVideoId"] = a.motion
+		}
+		d["type"] = "IMAGE"
+		if a.kind != "" {
+			d["type"] = a.kind
 		}
 		if a.hidden {
 			d["visibility"] = "hidden"

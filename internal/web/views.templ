@@ -27,6 +27,10 @@ type ServiceView struct {
 	Limit      string // the daily limit for each sender ("20 photos and 500 MB a day"); empty: none
 	Used       string // sender: how much of it they have used in the last day
 	Waiting    string // sender: photos waiting because the limit was reached, and until when
+	Rules      string // sender: the service's quiet hours and what it accepts, in words; empty: no rules
+	QuietWait  string // sender: photos waiting for the quiet hours, and until when
+	Lifetime   string // sender: that the copies expire at the receiver, in words; empty: they stay
+	TakeBack   string // sender: what the last hand-over holds, when it can be taken back ("3 photos handed over ..."); empty: nothing to take back
 	Stopped    bool   // receiver: the owner paused this service
 	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
 	Account    string // sender: the name this person's account goes by in the service (what live events call them)
@@ -57,6 +61,15 @@ type OwnedView struct {
 	Paused            bool // the owner paused it
 	LimitPhotos       int  // daily cap per sender, 0: none
 	LimitMB           int
+	QuietFrom         string // quiet hours as HH:MM, empty: none
+	QuietTo           string
+	QuietLargeMB      int
+	AcceptRating      int
+	AcceptPhotos      bool
+	AcceptOrient      string
+	AcceptMaxMB       int
+	LifetimeDays      int  // copies that arrive are moved to the owner's trash after this many days, 0: they stay
+	DeleteOK          bool // the administrator allows it (RECEIVER_DELETE)
 }
 
 // MemberView is a sender of a service the person owns.
@@ -152,6 +165,7 @@ type DashboardData struct {
 	Activity []ActivityView
 	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
+	DeleteOK bool // new receiver keys may move copies to their owner's trash (RECEIVER_DELETE), which the dialog that makes a key says
 	Last     *syncer.RunInfo
 
 	Headline   string // the greeting, e.g. "Hello, Alice."
@@ -334,7 +348,7 @@ templ Dashboard(d DashboardData) {
 			if d.CanOffer {
 				<details class="offer">
 					<summary>{ t(ctx, "Offer a service of your own") }</summary>
-					@OfferForm()
+					@OfferForm(d.DeleteOK)
 				</details>
 			}
 		</section>
@@ -444,6 +458,21 @@ templ SendRow(s ServiceView, id string, open bool) {
 			}
 			if s.Waiting != "" {
 				<p class="meta"><span class="chip warn">{ t(ctx, "Waiting") }</span> { s.Waiting }</p>
+			}
+			if s.QuietWait != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Waiting") }</span> { s.QuietWait }</p>
+			}
+			if s.Rules != "" {
+				<p class="meta">{ s.Rules }</p>
+			}
+			if s.Lifetime != "" {
+				<p class="meta">{ s.Lifetime }</p>
+			}
+			if s.TakeBack != "" {
+				<p class="row">
+					<button data-act="takeback" hx-post="services/takeback" hx-vals={ vals("service", s.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The copies in the receiver's library go to their trash, except the ones they have already filed in an album, and your originals come back from your trash (if you moved them) without the service tag. Nothing is deleted for good.") } data-confirm-title={ t(ctx, "Take back the last hand-over?") } data-confirm-label={ t(ctx, "Take back") }>{ t(ctx, "Take back the last hand-over") }</button>
+					<span class="meta">{ s.TakeBack }</span>
+				</p>
 			}
 			<p class="meta">
 				@templ.Raw(h(ctx, `Add the tag <code class="tag">{tag}</code> to a photo in Immich to send it.`, "tag", s.Tag))
@@ -636,6 +665,45 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 				<button type="submit">{ t(ctx, "Save limits") }</button>
 				<small class="meta">{ t(ctx, "0 means no limit. Photos over the limit wait, tagged, until the day moves on.") }</small>
 			</form>
+			<form class="limits rules" hx-post="services/rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="service" value={ o.Name }/>
+				<div class="rule-row">
+					<label>{ t(ctx, "Hand over only between") } <input name="from" type="time" value={ o.QuietFrom }/> { t(ctx, "and") } <input name="to" type="time" value={ o.QuietTo }/></label>
+					<label>{ t(ctx, "Only files larger than (MB) wait for those hours") } <input name="largemb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.QuietLargeMB) } class="narrow"/></label>
+				</div>
+				<div class="rule-row">
+					<label>{ t(ctx, "Accept photos rated") }
+						<select name="rating">
+							for i := 0; i <= 5; i++ {
+								<option value={ fmt.Sprint(i) } selected?={ o.AcceptRating == i }>{ ratingLabel(ctx, i) }</option>
+							}
+						</select>
+					</label>
+					<label>{ t(ctx, "Orientation") }
+						<select name="orientation">
+							<option value="" selected?={ o.AcceptOrient == "" }>{ t(ctx, "Any orientation") }</option>
+							<option value="landscape" selected?={ o.AcceptOrient == "landscape" }>{ t(ctx, "Landscape only") }</option>
+							<option value="portrait" selected?={ o.AcceptOrient == "portrait" }>{ t(ctx, "Portrait only") }</option>
+						</select>
+					</label>
+					<label>{ t(ctx, "Largest file (MB)") } <input name="maxmb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.AcceptMaxMB) } class="narrow"/></label>
+					<label><input name="photos" type="checkbox" value="1" checked?={ o.AcceptPhotos }/> { t(ctx, "Photos only (no videos)") }</label>
+				</div>
+				<div class="rule-row">
+					<button type="submit">{ t(ctx, "Save rules") }</button>
+				</div>
+				<small class="meta">{ t(ctx, "Outside the hours, photos wait, still tagged, and go when they open; leave the hours empty for any time. The time zone is the app's (TZ). A photo that does not match the rules is not handed over and gets the refused tag. The tagged photo is the one judged: a stack or a live photo goes or stays as one.") }</small>
+			</form>
+			<form class="limits" hx-post="services/lifetime" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="service" value={ o.Name }/>
+				if o.DeleteOK {
+					<label>{ t(ctx, "Move copies to my trash after (days)") } <input name="days" type="number" min="0" max="3650" value={ fmt.Sprint(o.LifetimeDays) } class="narrow"/></label>
+					<button type="submit">{ t(ctx, "Save lifetime") }</button>
+					<small class="meta">{ t(ctx, "Photos handed over to this service are moved to your trash, never deleted for good, after this many days, unless you file them in an album or take the inbox tag off. Empty or 0: they stay.") }</small>
+				} else {
+					<small class="meta">{ t(ctx, "Copies that expire, and taking a hand-over back, are switched off by the administrator (RECEIVER_DELETE).") }</small>
+				}
+			</form>
 			if o.Invite != "" {
 				<div class="field">
 					<label for={ "inv-" + id }>{ t(ctx, "Invitation link (only people with it can find this service)") }</label>
@@ -669,8 +737,8 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 	</details>
 }
 
-templ OfferForm() {
-	<form class="card offer-form" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.") } data-confirm-title={ t(ctx, "Create this service?") } data-confirm-label={ t(ctx, "Create service") }>
+templ OfferForm(deleteOK bool) {
+	<form class="card offer-form" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ createConfirm(ctx, deleteOK) } data-confirm-title={ t(ctx, "Create this service?") } data-confirm-label={ t(ctx, "Create service") }>
 		<p class="meta">{ t(ctx, "Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.") }</p>
 		<div class="form-grid">
 			<div class="field">

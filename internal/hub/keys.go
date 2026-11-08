@@ -9,12 +9,14 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// EnsureStackPermissions gives the person's keys the two permissions that handing over a whole stack needs, once per
-// person per run: their sender keys read stacks, and the receiver keys of the services they own create them. Keys made
+// EnsureKeyPermissions brings the person's keys in line with what this version of the app wants of them, once per person
+// per run: their sender keys read stacks, and the receiver keys of the services they own create them (a whole stack is
+// handed over) and, when the administrator allows it (RECEIVER_DELETE, on by default), move copies to the trash (copies
+// that expire, a hand-over taken back). When the administrator has switched that off, the permission is taken off again. Keys made
 // before stacks were handed over lack both, and a key cannot change itself, so this acts with the person's own session
 // when they open the page. Without the permissions nothing breaks: only the tagged photo of a stack goes, and a
 // receiver's photos arrive separately (the app says so in its log).
-func (h *Hub) EnsureStackPermissions(ctx context.Context, sess *immich.API, user immich.User) {
+func (h *Hub) EnsureKeyPermissions(ctx context.Context, sess *immich.API, user immich.User) {
 	if !h.SelfService() {
 		return
 	}
@@ -54,6 +56,15 @@ func (h *Hub) EnsureStackPermissions(ctx context.Context, sess *immich.API, user
 				h.Log.Debug("could not add stack.create to a receiver key", "service", v.Name, "err", err)
 				ok = false
 			}
+			if h.ReceiverDelete {
+				if err := sess.AddKeyPermission(ctx, v.KeyID, "asset.delete"); err != nil {
+					h.Log.Debug("could not add asset.delete to a receiver key", "service", v.Name, "err", err)
+					ok = false
+				}
+			} else if err := sess.RemoveKeyPermission(ctx, v.KeyID, "asset.delete"); err != nil {
+				h.Log.Debug("could not take asset.delete off a receiver key", "service", v.Name, "err", err)
+				ok = false
+			}
 		}
 	}
 	if !ok { // try again the next time the page opens
@@ -61,4 +72,11 @@ func (h *Hub) EnsureStackPermissions(ctx context.Context, sess *immich.API, user
 		delete(h.granted, user.ID)
 		h.mu.Unlock()
 	}
+}
+
+// ForgetGranted makes EnsureKeyPermissions do its work again for everyone, as it does after a restart (for tests).
+func (h *Hub) ForgetGranted() {
+	h.mu.Lock()
+	h.granted = nil
+	h.mu.Unlock()
 }

@@ -21,11 +21,17 @@ type Config struct {
 	DeleteForce bool // delete originals permanently instead of trashing them
 	DryRun      bool
 	NotifyURL   string
-	NoDetails   bool // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
+	Quiet       Quiet // the app-wide quiet hours, for services that set none of their own (QUIET_HOURS)
+	NoDetails   bool  // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
+
+	// ReceiverDelete: receiver keys may move copies to their owner's trash (RECEIVER_DELETE, on by default). It is what
+	// lets copies expire (a service's lifetime) and lets a sender take their last hand-over back.
+	ReceiverDelete bool
 }
 
 type Counts struct {
 	Imported, Duplicate, Refused, DryRun, Errors int
+	NotAccepted                                  int // photos a service does not take in (its rules), left with the refused tag
 }
 
 func (c *Counts) add(o Counts) {
@@ -34,6 +40,7 @@ func (c *Counts) add(o Counts) {
 	c.Refused += o.Refused
 	c.DryRun += o.DryRun
 	c.Errors += o.Errors
+	c.NotAccepted += o.NotAccepted
 }
 
 // RunInfo is the in-memory record of the last pass (the app is stateless by design).
@@ -74,6 +81,8 @@ type Syncer struct {
 	heldMu sync.Mutex
 	held   map[*Account]Held        // senders whose photos wait for the daily cap
 	wake   map[*Account]*time.Timer // when to look again, per waiting sender
+	quiet  map[*Account]QuietWait   // senders whose photos wait for the quiet hours
+	timers map[wakeKey]*time.Timer  // other times to look again (quiet hours open, a scheduled date comes)
 
 	albumMu     sync.Mutex
 	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
@@ -404,6 +413,9 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 		assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	}
+	now := time.Now()
+	var datedTag map[uuid.UUID]immich.TagInfo // photos tagged for a date that has come, with the tag that says so
+	assets, datedTag = s.scheduled(ctx, log, snd, svc, assets, now)
 	ids := make([]string, 0, len(assets))
 	for _, a := range assets {
 		ids = append(ids, a.Id.String())
@@ -447,6 +459,9 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 	}
 	held := false
+	quiet := s.quietOf(svc)
+	quietWaiting, notAccepted := 0, 0
+	batch := uuid.NewString() // what this pass hands over for this sender, so a sender can take it back as one
 	for i, a := range assets {
 		if capped && Capped(svc, snap) {
 			waiting := 0
@@ -465,14 +480,36 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
 			continue
 		}
-		tagID := shareTag
+		if quiet.Holds(sizeOfPhoto(a), now) {
+			quietWaiting++
+			continue
+		}
+		tagID, procSvc := shareTag, svc
 		if fromAlbum[a.Id] {
 			tagID = uuid.Nil
+		}
+		if t, ok := datedTag[a.Id]; ok { // tagged for a date: that tag is the one to take off afterwards
+			tagID = t.ID
+			local := *svc
+			local.Tag = t.Value
+			procSvc = &local
+		}
+		if svc.Accept.Active() && !s.accepted(ctx, log, snd, svc, &a) {
+			if err := s.markRefused(ctx, procSvc, snd.API, a.Id, tagID); err != nil {
+				log.Error("a photo the service does not take could not be marked; it will be looked at again", "asset", a.Id, "err", err)
+				c.Errors++
+				continue
+			}
+			log.Info("not handed over: the service does not take it in", "service", svc.Label(), "file", a.OriginalFileName)
+			notAccepted++
+			c.NotAccepted++
+			s.markJustHandled(a.Id)
+			continue
 		}
 		if !s.Cfg.DryRun {
 			s.emit(live.Started, svc, snd, "", 0, nil)
 		}
-		switch out, handed, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
+		switch out, handed, err := s.process(ctx, log, procSvc, snd, rs, a, tagID, batch); {
 		case err != nil:
 			c.Errors++
 			s.emit(live.Failed, svc, snd, "", 0, nil)
@@ -525,6 +562,12 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 	if !held {
 		s.release(snd)
 	}
+	s.quietWait(ctx, log, snd, quiet, quietWaiting, now)
+	if notAccepted > 0 {
+		if r, ok := s.Provider.(AcceptReporter); ok {
+			r.NotAccepted(svc, snd, notAccepted)
+		}
+	}
 	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
 	return
 }
@@ -534,7 +577,7 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 // last, and only after every receiver holds a verified copy of every photo. Any failure keeps the originals; because
 // Immich recognises duplicates by checksum, a later retry is safe for receivers that already have their copies. It
 // returns what it handed over (the tagged photo, and the rest of its stack).
-func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID) (string, []immich.AssetResponseDto, error) {
+func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID, batch string) (string, []immich.AssetResponseDto, error) {
 	if s.Cfg.DryRun {
 		log.Info("[dry-run] would hand over and remove original", "asset", a.Id, "file", a.OriginalFileName)
 		return "dryrun", nil, nil
@@ -567,6 +610,10 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			}
 			if c.created {
 				outcome = "imported"
+				s.remember(ctx, snd, batch, m.Id, c.id, false)
+			}
+			if c.clipNew && clips[m.Id] != nil {
+				s.remember(ctx, snd, batch, clips[m.Id].Id, c.clip, true)
 			}
 			copies = append(copies, c)
 		}
@@ -598,16 +645,20 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 // handedCopy is one photo's copy in one receiver's account.
 type handedCopy struct {
 	id      uuid.UUID
-	created bool    // it is new (not a duplicate of a copy that was already there)
-	refused bool    // the receiver has it in their trash: nothing is handed over
-	linked  bool    // a live photo's copy is linked to its motion clip (true for a photo without one)
-	stack   *string // the stack the copy is in at the receiver, if any
+	created bool      // it is new (not a duplicate of a copy that was already there)
+	refused bool      // the receiver has it in their trash: nothing is handed over
+	linked  bool      // a live photo's copy is linked to its motion clip (true for a photo without one)
+	stack   *string   // the stack the copy is in at the receiver, if any
+	clip    uuid.UUID // a live photo: the receiver's copy of the motion clip, and whether it is new
+	clipNew bool
 }
 
 // handOne gives one photo to one receiver: its motion clip first when it is a live photo (hidden), then the photo
 // itself, checks both by checksum, and tags the copy (or files it in the album). Nothing here touches the original.
 func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, r receiver, a immich.AssetResponseDto, clip *immich.AssetResponseDto) (handedCopy, error) {
 	var motion *uuid.UUID
+	var clipCopy uuid.UUID
+	var clipNew bool
 	if clip != nil {
 		cup, csum, err := immich.TransferWith(ctx, snd.API, r.acct.API, *clip, immich.UploadOptions{Hidden: true})
 		if err != nil {
@@ -627,6 +678,7 @@ func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, sn
 		}
 		id := cup.Id
 		motion = &id
+		clipCopy, clipNew = cup.Id, cup.Status == immich.AssetMediaStatusCreated
 	}
 	if e := a.ExifInfo; !s.Cfg.NoDetails && (e == nil || (e.Description == nil && e.Rating == nil && e.Latitude == nil)) {
 		// a search and a stack list give only part of what Immich knows; the photo itself has the description,
@@ -659,7 +711,7 @@ func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, sn
 	if !immich.ChecksumMatches(copy_.Checksum, sum) {
 		return handedCopy{}, fmt.Errorf("checksum mismatch on %s's copy %s", r.acct.Name, up.Id)
 	}
-	c := handedCopy{id: up.Id, linked: linked}
+	c := handedCopy{id: up.Id, linked: linked, clip: clipCopy, clipNew: clipNew}
 	if copy_.Stack != nil {
 		id := copy_.Stack.Id.String()
 		c.stack = &id
@@ -847,26 +899,33 @@ func (s *Syncer) fileInAlbum(ctx context.Context, log *slog.Logger, svc *Service
 func (s *Syncer) cleanupAll(ctx context.Context) (untagged, errs int) {
 	type key struct{ acct, tag string }
 	type job struct {
-		acct   *Account
-		tag    string
-		expiry int
+		acct     *Account
+		tag      string
+		expiry   int
+		lifetime int // copies unfiled this long are moved to the trash (0: not)
+		service  string
 	}
 	jobs := map[key]*job{}
 	var order []key
 	for _, svc := range s.Current() {
 		for _, r := range svc.Receivers {
 			k := key{r.Name, svc.InboxTag}
-			if j, ok := jobs[k]; ok {
+			j, ok := jobs[k]
+			if !ok {
+				j = &job{acct: r, tag: svc.InboxTag, expiry: svc.ExpiryDays, service: svc.Label()}
+				jobs[k] = j
+				order = append(order, k)
+			} else {
 				j.expiry = min(j.expiry, svc.ExpiryDays)
-				continue
 			}
-			jobs[k] = &job{r, svc.InboxTag, svc.ExpiryDays}
-			order = append(order, k)
+			if svc.LifetimeDays > 0 && s.Cfg.ReceiverDelete && (j.lifetime == 0 || svc.LifetimeDays < j.lifetime) {
+				j.lifetime, j.service = svc.LifetimeDays, svc.Label()
+			}
 		}
 	}
 	for _, k := range order {
 		j := jobs[k]
-		n, err := s.cleanup(ctx, j.acct, j.tag, j.expiry)
+		n, err := s.cleanup(ctx, j.acct, j.tag, j.expiry, j.lifetime, j.service)
 		untagged += n
 		if err != nil {
 			errs++
@@ -876,8 +935,7 @@ func (s *Syncer) cleanupAll(ctx context.Context) (untagged, errs int) {
 	return
 }
 
-// cleanup removes the inbox tag from assets filed in an album or unfiled for expiryDays.
-func (s *Syncer) cleanup(ctx context.Context, rcv *Account, inboxTag string, expiryDays int) (int, error) {
+func (s *Syncer) cleanup(ctx context.Context, rcv *Account, inboxTag string, expiryDays, lifetimeDays int, service string) (int, error) {
 	inbox, err := rcv.API.FindTag(ctx, inboxTag, false)
 	if err != nil || inbox == nil {
 		return 0, err
@@ -893,9 +951,19 @@ func (s *Syncer) cleanup(ctx context.Context, rcv *Account, inboxTag string, exp
 		return 0, err
 	}
 	cutoff := time.Now().AddDate(0, 0, -expiryDays)
-	expired, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, CreatedBefore: &cutoff})
-	if err != nil {
-		return 0, err
+	var expired []immich.AssetResponseDto
+	if lifetimeDays > 0 { // the copies live out their lifetime with the tag; then they go to the trash, not just lose the tag
+		lifeCutoff := time.Now().AddDate(0, 0, -lifetimeDays)
+		ended, err := rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, CreatedBefore: &lifeCutoff})
+		if err != nil {
+			return 0, err
+		}
+		s.expire(ctx, rcv, service, ended)
+	} else {
+		var err error
+		if expired, err = rcv.API.Search(ctx, immich.MetadataSearchDto{TagIds: tags, IsNotInAlbum: &yes, CreatedBefore: &cutoff}); err != nil {
+			return 0, err
+		}
 	}
 	unfiledSet := map[uuid.UUID]bool{}
 	for _, a := range unfiled {

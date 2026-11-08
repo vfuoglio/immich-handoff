@@ -236,6 +236,11 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		mustOK(t, call(t, "PUT", "/assets/"+id, keyAuth(alice), map[string]any{
 			"isFavorite": true, "description": "Sunset at the pier", "rating": 4,
 			"latitude": 48.8584, "longitude": 2.2945, "dateTimeOriginal": "2020-06-15T18:30:00.000Z"}, nil), "edit details")
+		// Immich applies a changed date a moment after the edit; a person would not tag the photo that quickly, and on a busy
+		// machine the hand-over could otherwise carry the date from before the edit
+		eventually(t, "Immich to settle the changed date", 60*time.Second, func() bool {
+			return strings.HasPrefix(getFull(t, alice, id).FileCreatedAt, "2020-06-15")
+		})
 		mustOK(t, call(t, "POST", "/albums", keyAuth(alice), map[string]any{"albumName": "Trip", "assetIds": []string{id}}, nil), "album")
 		tagAsset(t, alice, "keepsake", id)
 		cp := handOver(id)
@@ -411,6 +416,46 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		}
 		row("stack: the tagged cover", "stack of 2", fmt.Sprintf("in a stack of %d, cover kept", recv.AssetCount))
 		row("stack: the other photo", "in the same stack", "handed over with it")
+	})
+
+	t.Run("photos tagged for a date", func(t *testing.T) {
+		defer func() {
+			if t.Failed() {
+				t.Logf("app log:\n%s", a.log.String())
+			}
+		}()
+		past := uploadFile(t, alice, "past.jpg", jpegBytes(310), "image/jpeg", nil)
+		future := uploadFile(t, alice, "future.jpg", jpegBytes(311), "image/jpeg", nil)
+		waitProcessed(alice, past)
+		waitProcessed(alice, future)
+		before := map[string]bool{}
+		for _, x := range searchTag(t, family, "inbox", false) {
+			before[x] = true
+		}
+		arrivals := func() int {
+			n := 0
+			for _, x := range searchTag(t, family, "inbox", false) {
+				if !before[x] {
+					n++
+				}
+			}
+			return n
+		}
+		// Immich sends its tag event for a tag with a date too (a tag inside "share"), so the app looks at once
+		tagAsset(t, alice, "share/2000-01-01", past)
+		eventually(t, "the photo tagged for a past date to arrive", 120*time.Second, func() bool { return arrivals() == 1 })
+		eventually(t, "the sender's photo tagged for a past date to be moved", 60*time.Second, func() bool { return getFull(t, alice, past).IsTrashed })
+		tagAsset(t, alice, "share/2999-01-01", future)
+		time.Sleep(10 * time.Second) // the app has had its look; a search for "share" lists this photo too, and it must wait
+		f := getFull(t, alice, future)
+		if f.IsTrashed || arrivals() != 1 {
+			t.Errorf("a photo tagged for 2999-01-01 must wait for its day: trashed=%v, arrivals=%d", f.IsTrashed, arrivals())
+		}
+		if !strings.Contains(tagNames(f), "2999-01-01") {
+			t.Errorf("the future photo must keep its dated tag: %s", tagNames(f))
+		}
+		row("photo tagged for a past date", "tagged share/2000-01-01", "handed over at once")
+		row("photo tagged for a future date", "tagged share/2999-01-01", "waits, still tagged")
 	})
 
 	t.Run("a video", func(t *testing.T) {

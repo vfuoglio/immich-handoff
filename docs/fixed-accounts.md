@@ -11,10 +11,12 @@ In Immich, sign in to each account in turn and go to **Account Settings -> API K
 | Account | Permissions |
 |---|---|
 | Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `stack.read` `workflow.read` `workflow.create` `workflow.update` `workflow.logs` |
-| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` `stack.create` |
+| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` `stack.create` (and `asset.delete`, optional: see below) |
 | The **receiving** account, if the service puts arrivals in an album (`album`, see below) | the above, plus `album.read` `album.create` `albumAsset.create` |
 
 The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out. `workflow.logs` is optional: it only lets the [setup check](troubleshooting.md#check-your-setup-first) see how Immich's runs of the workflow ended, and everything else works without it. `stack.read` and `stack.create` are optional too: without them only the tagged photo of a stack is handed over (the sender's key lacks `stack.read`), or the photos of a stack arrive separately (the receiver's key lacks `stack.create`). The [setup check](troubleshooting.md#check-your-setup-first) warns about both.
+
+`asset.delete` on the **receiving** key is optional too. It lets the app move to the receiver's trash the copies it handed over: copies that expire (a service's lifetime) and a sender's "take back the last hand-over". Without it those two do nothing (the log says so once and the setup check warns), and everything else works. A key made by the page has it unless the administrator sets `RECEIVER_DELETE=off`; for a key you make by hand, add it if you want those two, and leave it out if you do not (and set `RECEIVER_DELETE=off`, so the setup check does not remind you).
 
 ### 2. Put them in `.env`
 
@@ -43,6 +45,27 @@ To run more than one service, or to send the same photo to several accounts, des
 3. In `docker-compose.yml` uncomment the `routes.yaml` volume line, then `docker compose up -d`.
 
 With several receivers on one service, the original is touched only after **every** receiver holds a verified copy. If one receiver refuses (its trash holds that photo) or fails, the original stays and nothing is lost. An account that sends in one service and receives in another needs both permission lists above. Each service gets its own workflow in the sender's account, named `immich-handoff: <service>`.
+
+## Quiet hours and what a service accepts
+
+A service in the routes file can say when it hands photos over and what it takes in, as a service made on the page can ([Using it](using.md#quiet-hours-and-what-a-service-accepts)):
+
+```yaml
+services:
+  - name: frame
+    tag: frame
+    senders: [alice]
+    receivers: [grandma]
+    quiet_hours: "01:00-06:00"   # outside these hours photos wait, still tagged (time zone: TZ)
+    quiet_large_mb: 200          # optional: only files larger than this wait for the hours
+    accept:
+      min_rating: 4              # 1 to 5 stars
+      photos_only: true          # no videos
+      orientation: landscape     # or portrait
+      max_mb: 20                 # the largest file
+```
+
+All keys are optional. A photo that does not match `accept` is not handed over and gets the refused tag. In a plain `.env` install the same rules are `QUIET_HOURS`, `QUIET_LARGE_MB` and `ACCEPT_MIN_RATING`, `ACCEPT_PHOTOS_ONLY`, `ACCEPT_ORIENTATION`, `ACCEPT_MAX_MB` ([Settings](settings.md)).
 
 ## Letting people join a fixed service
 

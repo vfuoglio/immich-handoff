@@ -56,6 +56,17 @@ func fakeImmich() http.Handler {
 		}
 		j(w, map[string]any{"id": u[0], "name": u[1], "email": strings.ToLower(u[1]) + "@x.test", "isAdmin": key == "sess=admin"})
 	})
+	// an API key's permissions can be read and changed with a person's session (to give a key a permission, or take one off)
+	mux.HandleFunc("GET /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": []string{"user.read", "asset.upload"}, "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z"})
+	})
+	mux.HandleFunc("PUT /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		j(w, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": body.Permissions, "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z"})
+	})
 	// Tags are off by default in Immich; the family account has them on, "sess=other" cannot be changed.
 	var prefMu sync.Mutex
 	tagsOn := map[string]bool{"sess=family": true}

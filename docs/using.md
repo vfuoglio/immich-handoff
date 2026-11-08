@@ -151,6 +151,48 @@ When anyone on the Immich server may send, one person could fill the receiver's 
 - It applies to photos from a linked album too. It applies to people who joined from the page; senders set up in `.env` or the routes file have no stored membership and are not limited.
 - What was handed over is recorded from the start, so a limit set today already counts today's photos. Records older than eight days are forgotten (the Overview's weekly chart uses them too).
 
+## Quiet hours, and what a service accepts
+
+An owner can set two kinds of rules for a service (**Hand over only between** and the rules under it, in the service's settings), and the administrator can set quiet hours for the whole app (`QUIET_HOURS`, see [Settings](settings.md)).
+
+**Quiet hours.** "Hand over only between 01:00 and 06:00": outside those hours photos **wait, still tagged**, and go when the hours begin (a window that ends before it starts, such as 22:00 to 06:00, crosses midnight). With **Only files larger than (MB)** set, only big files wait and small ones go at once, which suits a slow line: photos now, long videos at night. The time zone is the app's (`TZ`). The sender's card says "The quiet hours are not open, so N photos wait... They are handed over from <time>", and the card of every sender shows the hours. A service's own hours replace the app-wide ones.
+
+**What a service accepts.** An owner can say that a service takes only photos rated at least 1 to 5 stars, only photos (no videos), only landscape or only portrait pictures, and nothing larger than a number of megabytes. This turns a service into a feed for a photo frame or a relative's tablet. Whatever does not match is **not handed over**: its service tag comes off and the **refused tag** (`share-duplicate` unless set otherwise) goes on, so the sender finds it in Immich, and the activity says "N photos were not handed over to <service>: they do not match what the service accepts". The sender's card lists what the service accepts, in words. Some details:
+
+- The **tagged photo** is the one judged: a stack or a live photo goes, or stays, as one.
+- The rating and the size come from Immich. A rule the app cannot check because Immich does not say (no dimensions, no size) lets the photo through; an unrated photo is below any minimum rating.
+- Changing the rules looks at waiting photos again at once. A photo that was refused stays refused: tag it again.
+- A service in a routes file sets these in the file ([routes example](fixed-accounts.md#fixed-accounts)); a plain `.env` install sets them with `ACCEPT_*`.
+
+## Tagging a photo for a date
+
+To hand a photo over **on a day** (a surprise, an anniversary, Christmas morning), tag it with the service's tag, a separator and the date: `share/2027-06-01` (in the Immich app type the slash and Immich makes a tag inside `share`), or `share 2027-06-01`, `share-2027-06-01` or `share_2027-06-01`. The photo waits, still tagged, and is handed over from the start of that day in the app's time zone (`TZ`). Details:
+
+- Immich tells the app when you tag, as it does for any tag, so a date that has already come (today or in the past) hands the photo over at once. For a future date the app arranges a pass for that day, and the daily sweep is the safety net (also after a restart).
+- A photo with both the plain tag and a future date waits for the date. A photo with only the plain tag goes at once, as always.
+- To cancel, take the dated tag off. The receiver is not told that something is on its way.
+- Photos tagged only for a date are **not counted** in the page's "Waiting to go" until their day.
+- Checked against a real Immich 3.2.0: a tag inside `share` (such as `share/2999-01-01`) is also found by a search for `share`, which is why the app skips photos whose day has not come.
+
+## Hand-overs that expire
+
+An owner can make the copies that arrive **expire**: "Move copies to my trash after N days" in the service's settings. A copy that is still **unfiled** (in no album) and still has the inbox tag when its time is up goes to the owner's **trash**, never deleted for good, so it can be put back for as long as Immich keeps the trash. To keep a copy, file it in an album or take the inbox tag off; both leave it alone. It is meant for photos that should not stay, such as a school picture sent to a teacher, or for a service that is only ever a place to look at things.
+
+- The time is counted from the day the copy arrived. A service with a lifetime does not take the inbox tag off at the usual inbox expiry first; the lifetime decides.
+- Senders are told on their card that photos expire ("moved to the receiver's trash after N days unless they file them in an album"), and the owner's activity says when copies expired.
+- It needs the administrator to allow it (`RECEIVER_DELETE`, on by default; see [Settings](settings.md)). A service made before that existed gets the permission when its owner opens the page, which is also when they set a lifetime.
+- Without the permission (a key made by hand, see [Fixed accounts](fixed-accounts.md)) the setting does nothing, and the log says so once.
+
+## Taking back the last hand-over
+
+A sender who joined from the page sees **Take back the last hand-over** on a service's card for 24 hours after handing photos over. It undoes what the last pass handed over to that service, as far as it can be undone:
+
+- The receiver's **copies** go to the receiver's trash (not deleted for good).
+- Your **originals** come back from your trash, if you moved them, and lose the service tag so they are not handed over again. With **keep my originals** nothing was in the trash; the "handed over" tag comes off.
+- A copy the receiver has **already filed in an album** is theirs now: it stays, and so does your original's state. The page says how many stayed.
+- A stack and a live photo (with its motion clip) are taken back whole.
+- It takes back the most recent hand-over not yet taken back, so pressing it again takes back the one before. Only people who joined from the page have it (accounts set up in `.env` or the routes file are not recorded). It needs `RECEIVER_DELETE` (on by default); if the owner's key cannot move photos to the trash yet, the page asks the sender to tell the owner to open the page once.
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.

@@ -141,3 +141,94 @@ func TestAlbumInTheRoutesFileAndTheEnvironment(t *testing.T) {
 		t.Errorf("ALBUM = %q", d.Album)
 	}
 }
+
+func TestQuietHoursAndAcceptRulesInTheRoutesFile(t *testing.T) {
+	routes := `
+accounts:
+  alice:  { key: ${ALICE} }
+  family: { key: ${FAMILY} }
+services:
+  - name: frame
+    tag: frame
+    senders: [alice]
+    receivers: [family]
+    quiet_hours: "01:00-06:00"
+    quiet_large_mb: 200
+    accept:
+      min_rating: 4
+      photos_only: true
+      orientation: Landscape
+      max_mb: 20
+  - name: plain
+    tag: plain
+    senders: [alice]
+    receivers: [family]
+`
+	svcs, err := parseRoutes([]byte(routes), env(goodEnv), DefaultsFrom(env(nil)), connect, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := svcs[0]
+	if f.Quiet.From != 60 || f.Quiet.To != 360 || f.Quiet.LargeMB != 200 {
+		t.Errorf("quiet hours: %+v", f.Quiet)
+	}
+	if f.Accept.MinRating != 4 || !f.Accept.PhotosOnly || f.Accept.Orientation != "landscape" || f.Accept.MaxMB != 20 {
+		t.Errorf("accept rules: %+v", f.Accept)
+	}
+	if svcs[1].Quiet.Set() || svcs[1].Accept.Active() {
+		t.Errorf("a service with no settings has no rules: %+v %+v", svcs[1].Quiet, svcs[1].Accept)
+	}
+}
+
+func TestBadQuietHoursAndAcceptRulesAreReportedWithTheirService(t *testing.T) {
+	routes := `
+accounts:
+  alice:  { key: ${ALICE} }
+  family: { key: ${FAMILY} }
+services:
+  - name: one
+    tag: one
+    senders: [alice]
+    receivers: [family]
+    quiet_hours: "night"
+  - name: two
+    tag: two
+    senders: [alice]
+    receivers: [family]
+    accept: { min_rating: 9 }
+  - name: three
+    tag: three
+    senders: [alice]
+    receivers: [family]
+    accept: { orientation: square }
+`
+	_, err := parseRoutes([]byte(routes), env(goodEnv), DefaultsFrom(env(nil)), connect, false)
+	if err == nil || !strings.Contains(err.Error(), "quiet_hours") || !strings.Contains(err.Error(), "minimum rating") || !strings.Contains(err.Error(), "orientation") {
+		t.Errorf("each problem must be reported: %v", err)
+	}
+}
+
+func TestTheAppWideQuietHoursAndThePlainInstallsRulesComeFromTheEnvironment(t *testing.T) {
+	q, err := QuietFrom(env(map[string]string{"QUIET_HOURS": "22:00-06:00", "QUIET_LARGE_MB": "100"}))
+	if err != nil || q.From != 22*60 || q.To != 360 || q.LargeMB != 100 {
+		t.Errorf("%+v %v", q, err)
+	}
+	if q, err := QuietFrom(env(nil)); err != nil || q.Set() {
+		t.Errorf("nothing set is no window: %+v %v", q, err)
+	}
+	for _, bad := range []map[string]string{{"QUIET_HOURS": "late"}, {"QUIET_HOURS": "01:00-06:00", "QUIET_LARGE_MB": "big"}} {
+		if _, err := QuietFrom(env(bad)); err == nil {
+			t.Errorf("%v must be refused", bad)
+		}
+	}
+	svcs, err := Load(env(map[string]string{"IMMICH_DEST_API_KEY": "d", "IMMICH_SOURCE_API_KEYS": "s", "ACCEPT_MIN_RATING": "3", "ACCEPT_PHOTOS_ONLY": "true", "ACCEPT_ORIENTATION": "portrait", "ACCEPT_MAX_MB": "50"}), connect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := svcs[0].Accept; a.MinRating != 3 || !a.PhotosOnly || a.Orientation != "portrait" || a.MaxMB != 50 {
+		t.Errorf("the plain install's rules: %+v", a)
+	}
+	if _, err := Load(env(map[string]string{"IMMICH_DEST_API_KEY": "d", "IMMICH_SOURCE_API_KEYS": "s", "ACCEPT_MIN_RATING": "8"}), connect); err == nil {
+		t.Error("a rating of 8 must be refused")
+	}
+}

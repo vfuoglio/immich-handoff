@@ -325,6 +325,14 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 form.limits { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .8rem .9rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: color-mix(in oklab, var(--bg) 40%, transparent); }
 form.limits label { font-weight: 600; font-size: .9rem; display: flex; align-items: center; gap: .4rem; }
 form.limits small { flex-basis: 100%; }
+form.rules { flex-direction: column; align-items: stretch; gap: .8rem; }
+form.rules .rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.6rem; }
+form.rules small { flex-basis: auto; }
+form.rules input[type=time] { width: 8.5rem; }
+form.rules select { max-width: 100%; }
+form.rules label { white-space: nowrap; }
+form.rules input[type=checkbox] { width: 1.1rem; height: 1.1rem; flex: none; }
+@media (max-width: 640px) { form.rules label { white-space: normal; } }
 @media (max-width: 560px) {
   .svc > summary { grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .svc .chips { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }

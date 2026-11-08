@@ -630,3 +630,53 @@ func numbersTrigger(n NumbersView) string {
 	}
 	return "handoff:run from:body"
 }
+
+// ratingLabel is a choice in the form's list of minimum ratings.
+func ratingLabel(ctx context.Context, stars int) string {
+	if stars == 0 {
+		return t(ctx, "Any rating")
+	}
+	return n(ctx, "{n} star or more", "{n} stars or more", stars)
+}
+
+// rulesText says in words when a service hands photos over and what it takes in, for the people who send to it.
+func (w *Server) rulesText(ctx context.Context, svc *syncer.Service) string {
+	var out []string
+	if q := w.S.QuietOf(svc); q.Set() {
+		if q.LargeMB > 0 {
+			out = append(out, t(ctx, "Files over {mb} MB are handed over only between {from} and {to}.", "mb", q.LargeMB, "from", syncer.Clock(q.From), "to", syncer.Clock(q.To)))
+		} else {
+			out = append(out, t(ctx, "Everything is handed over only between {from} and {to}.", "from", syncer.Clock(q.From), "to", syncer.Clock(q.To)))
+		}
+	}
+	a := svc.Accept
+	var parts []string
+	if a.MinRating > 0 {
+		parts = append(parts, t(ctx, "a rating of {n} or more", "n", a.MinRating))
+	}
+	if a.PhotosOnly {
+		parts = append(parts, t(ctx, "photos only"))
+	}
+	switch a.Orientation {
+	case "landscape":
+		parts = append(parts, t(ctx, "landscape only"))
+	case "portrait":
+		parts = append(parts, t(ctx, "portrait only"))
+	}
+	if a.MaxMB > 0 {
+		parts = append(parts, t(ctx, "files up to {mb} MB", "mb", a.MaxMB))
+	}
+	if len(parts) > 0 {
+		out = append(out, t(ctx, "Accepts: {parts}.", "parts", strings.Join(parts, ", ")))
+	}
+	return strings.Join(out, " ")
+}
+
+// createConfirm is what the dialog that makes a service says about the key it makes.
+func createConfirm(ctx context.Context, deleteOK bool) string {
+	msg := t(ctx, "Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.")
+	if deleteOK {
+		msg += " " + t(ctx, "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.")
+	}
+	return msg
+}
