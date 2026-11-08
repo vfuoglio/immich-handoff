@@ -27,6 +27,8 @@ type ServiceView struct {
 	Limit      string // the daily limit for each sender ("20 photos and 500 MB a day"); empty: none
 	Used       string // sender: how much of it they have used in the last day
 	Waiting    string // sender: photos waiting because the limit was reached, and until when
+	Rules      string // sender: the service's quiet hours and what it accepts, in words; empty: no rules
+	QuietWait  string // sender: photos waiting for the quiet hours, and until when
 	Stopped    bool   // receiver: the owner paused this service
 	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
 	Account    string // sender: the name this person's account goes by in the service (what live events call them)
@@ -57,6 +59,13 @@ type OwnedView struct {
 	Paused            bool // the owner paused it
 	LimitPhotos       int  // daily cap per sender, 0: none
 	LimitMB           int
+	QuietFrom         string // quiet hours as HH:MM, empty: none
+	QuietTo           string
+	QuietLargeMB      int
+	AcceptRating      int
+	AcceptPhotos      bool
+	AcceptOrient      string
+	AcceptMaxMB       int
 }
 
 // MemberView is a sender of a service the person owns.
@@ -445,6 +454,12 @@ templ SendRow(s ServiceView, id string, open bool) {
 			if s.Waiting != "" {
 				<p class="meta"><span class="chip warn">{ t(ctx, "Waiting") }</span> { s.Waiting }</p>
 			}
+			if s.QuietWait != "" {
+				<p class="meta"><span class="chip warn">{ t(ctx, "Waiting") }</span> { s.QuietWait }</p>
+			}
+			if s.Rules != "" {
+				<p class="meta">{ s.Rules }</p>
+			}
 			<p class="meta">
 				@templ.Raw(h(ctx, `Add the tag <code class="tag">{tag}</code> to a photo in Immich to send it.`, "tag", s.Tag))
 				{ originalsNote(ctx, s.Copy) }
@@ -635,6 +650,35 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 				<label>{ t(ctx, "MB per sender per day") } <input name="mb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.LimitMB) } class="narrow"/></label>
 				<button type="submit">{ t(ctx, "Save limits") }</button>
 				<small class="meta">{ t(ctx, "0 means no limit. Photos over the limit wait, tagged, until the day moves on.") }</small>
+			</form>
+			<form class="limits rules" hx-post="services/rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="service" value={ o.Name }/>
+				<div class="rule-row">
+					<label>{ t(ctx, "Hand over only between") } <input name="from" type="time" value={ o.QuietFrom }/> { t(ctx, "and") } <input name="to" type="time" value={ o.QuietTo }/></label>
+					<label>{ t(ctx, "Only files larger than (MB) wait for those hours") } <input name="largemb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.QuietLargeMB) } class="narrow"/></label>
+				</div>
+				<div class="rule-row">
+					<label>{ t(ctx, "Accept photos rated") }
+						<select name="rating">
+							for i := 0; i <= 5; i++ {
+								<option value={ fmt.Sprint(i) } selected?={ o.AcceptRating == i }>{ ratingLabel(ctx, i) }</option>
+							}
+						</select>
+					</label>
+					<label>{ t(ctx, "Orientation") }
+						<select name="orientation">
+							<option value="" selected?={ o.AcceptOrient == "" }>{ t(ctx, "Any orientation") }</option>
+							<option value="landscape" selected?={ o.AcceptOrient == "landscape" }>{ t(ctx, "Landscape only") }</option>
+							<option value="portrait" selected?={ o.AcceptOrient == "portrait" }>{ t(ctx, "Portrait only") }</option>
+						</select>
+					</label>
+					<label>{ t(ctx, "Largest file (MB)") } <input name="maxmb" type="number" min="0" max="1000000" value={ fmt.Sprint(o.AcceptMaxMB) } class="narrow"/></label>
+					<label><input name="photos" type="checkbox" value="1" checked?={ o.AcceptPhotos }/> { t(ctx, "Photos only (no videos)") }</label>
+				</div>
+				<div class="rule-row">
+					<button type="submit">{ t(ctx, "Save rules") }</button>
+				</div>
+				<small class="meta">{ t(ctx, "Outside the hours, photos wait, still tagged, and go when they open; leave the hours empty for any time. The time zone is the app's (TZ). A photo that does not match the rules is not handed over and gets the refused tag. The tagged photo is the one judged: a stack or a live photo goes or stays as one.") }</small>
 			</form>
 			if o.Invite != "" {
 				<div class="field">

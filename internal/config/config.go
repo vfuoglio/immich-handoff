@@ -25,7 +25,8 @@ type Defaults struct {
 	SentTag    string
 	Mode       string
 	ExpiryDays int
-	Album      string // ALBUM: used by the single service of a plain .env install only
+	Album      string        // ALBUM: used by the single service of a plain .env install only
+	Accept     syncer.Accept // ACCEPT_*: used by the single service of a plain .env install only
 }
 
 // Env reads a variable (os.Getenv in production, a map in tests).
@@ -55,6 +56,49 @@ func DefaultsFrom(env Env) Defaults {
 		}
 	}
 	return d
+}
+
+// QuietFrom reads the app-wide quiet hours: QUIET_HOURS ("01:00-06:00") and QUIET_LARGE_MB (0, or empty: every file
+// waits outside the window; a number: only files larger than that). Services that set their own are not affected.
+func QuietFrom(env Env) (syncer.Quiet, error) {
+	q, err := syncer.ParseQuiet(env("QUIET_HOURS"))
+	if err != nil {
+		return q, fmt.Errorf("QUIET_HOURS: %w", err)
+	}
+	if v := strings.TrimSpace(env("QUIET_LARGE_MB")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return q, fmt.Errorf("QUIET_LARGE_MB must be a whole number of megabytes, not %q", v)
+		}
+		q.LargeMB = n
+	}
+	return q, q.Validate()
+}
+
+// acceptFrom reads the rules of the single service of a plain .env install: ACCEPT_MIN_RATING, ACCEPT_PHOTOS_ONLY,
+// ACCEPT_ORIENTATION and ACCEPT_MAX_MB.
+func acceptFrom(env Env) (syncer.Accept, error) {
+	var a syncer.Accept
+	if v := strings.TrimSpace(env("ACCEPT_MIN_RATING")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return a, fmt.Errorf("ACCEPT_MIN_RATING must be a whole number from 0 to 5, not %q", v)
+		}
+		a.MinRating = n
+	}
+	a.PhotosOnly = env("ACCEPT_PHOTOS_ONLY") == "true"
+	a.Orientation = strings.ToLower(strings.TrimSpace(env("ACCEPT_ORIENTATION")))
+	if v := strings.TrimSpace(env("ACCEPT_MAX_MB")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return a, fmt.Errorf("ACCEPT_MAX_MB must be a whole number of megabytes, not %q", v)
+		}
+		a.MaxMB = n
+	}
+	if err := a.Validate(); err != nil {
+		return a, fmt.Errorf("ACCEPT_*: %w", err)
+	}
+	return a, nil
 }
 
 // Connect builds an API client for a key.
@@ -91,7 +135,11 @@ func fromEnv(env Env, d Defaults, connect Connect, selfService bool) ([]*syncer.
 	if dest == "" || len(srcKeys) == 0 {
 		return nil, errors.New("IMMICH_DEST_API_KEY and IMMICH_SOURCE_API_KEYS are required (or set ROUTES_FILE)")
 	}
-	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, SentTag: d.SentTag, Mode: d.Mode, ExpiryDays: d.ExpiryDays, AllowJoin: env("ALLOW_JOIN") == "true", Album: d.Album}
+	accept, err := acceptFrom(env)
+	if err != nil {
+		return nil, err
+	}
+	svc := &syncer.Service{Tag: d.Tag, InboxTag: d.InboxTag, RefusedTag: d.RefusedTag, SentTag: d.SentTag, Mode: d.Mode, ExpiryDays: d.ExpiryDays, AllowJoin: env("ALLOW_JOIN") == "true", Album: d.Album, Accept: accept}
 	if err := checkAlbum(d.Album); err != nil {
 		return nil, fmt.Errorf("ALBUM: %w", err)
 	}
@@ -126,6 +174,14 @@ type routesFile struct {
 		Mode       string   `yaml:"mode"`
 		SentTag    string   `yaml:"sent_tag"`
 		Album      string   `yaml:"album"`
+		QuietHours string   `yaml:"quiet_hours"`
+		QuietLarge int      `yaml:"quiet_large_mb"`
+		Accept     struct {
+			MinRating   int    `yaml:"min_rating"`
+			PhotosOnly  bool   `yaml:"photos_only"`
+			Orientation string `yaml:"orientation"`
+			MaxMB       int    `yaml:"max_mb"`
+		} `yaml:"accept"`
 	} `yaml:"services"`
 }
 
@@ -181,6 +237,19 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect, selfService b
 		svc := &syncer.Service{Name: s.Name, Tag: s.Tag, InboxTag: s.InboxTag, RefusedTag: s.RefusedTag, SentTag: s.SentTag, Mode: s.Mode, ExpiryDays: s.ExpiryDays, AllowJoin: s.AllowJoin, Album: strings.TrimSpace(s.Album)}
 		if err := checkAlbum(svc.Album); err != nil {
 			problems = append(problems, where+": album: "+err.Error())
+		}
+		if q, err := syncer.ParseQuiet(s.QuietHours); err != nil {
+			problems = append(problems, where+": quiet_hours: "+err.Error())
+		} else {
+			q.LargeMB = s.QuietLarge
+			svc.Quiet = q
+			if err := q.Validate(); err != nil {
+				problems = append(problems, where+": quiet_large_mb: "+err.Error())
+			}
+		}
+		svc.Accept = syncer.Accept{MinRating: s.Accept.MinRating, PhotosOnly: s.Accept.PhotosOnly, Orientation: strings.ToLower(strings.TrimSpace(s.Accept.Orientation)), MaxMB: s.Accept.MaxMB}
+		if err := svc.Accept.Validate(); err != nil {
+			problems = append(problems, where+": accept: "+err.Error())
 		}
 		if svc.Tag == "" {
 			problems = append(problems, where+": tag is required")

@@ -52,6 +52,8 @@ type Service struct {
 	Paused        bool      // the owner paused the service: nothing is handed over, and tagged photos stay tagged, until they resume
 	LimitPhotos   int       // most photos one sender may hand over in a day; 0: no limit
 	LimitMB       int       // most megabytes one sender may hand over in a day; 0: no limit
+	Quiet         Quiet     // when the service hands photos over (empty: any time); the app-wide default applies when this is empty
+	Accept        Accept    // what the service takes in
 	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
 }
 

@@ -21,11 +21,13 @@ type Config struct {
 	DeleteForce bool // delete originals permanently instead of trashing them
 	DryRun      bool
 	NotifyURL   string
-	NoDetails   bool // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
+	Quiet       Quiet // the app-wide quiet hours, for services that set none of their own (QUIET_HOURS)
+	NoDetails   bool  // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
 }
 
 type Counts struct {
 	Imported, Duplicate, Refused, DryRun, Errors int
+	NotAccepted                                  int // photos a service does not take in (its rules), left with the refused tag
 }
 
 func (c *Counts) add(o Counts) {
@@ -34,6 +36,7 @@ func (c *Counts) add(o Counts) {
 	c.Refused += o.Refused
 	c.DryRun += o.DryRun
 	c.Errors += o.Errors
+	c.NotAccepted += o.NotAccepted
 }
 
 // RunInfo is the in-memory record of the last pass (the app is stateless by design).
@@ -74,6 +77,8 @@ type Syncer struct {
 	heldMu sync.Mutex
 	held   map[*Account]Held        // senders whose photos wait for the daily cap
 	wake   map[*Account]*time.Timer // when to look again, per waiting sender
+	quiet  map[*Account]QuietWait   // senders whose photos wait for the quiet hours
+	timers map[wakeKey]*time.Timer  // other times to look again (quiet hours open, a scheduled date comes)
 
 	albumMu     sync.Mutex
 	albumBroken map[string]bool // album problems already reported, so each is reported once, not every pass
@@ -404,6 +409,9 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 		assets = s.withHinted(ctx, log, snd.API, svc.Tag, assets, hints, resolved)
 	}
+	now := time.Now()
+	var datedTag map[uuid.UUID]immich.TagInfo // photos tagged for a date that has come, with the tag that says so
+	assets, datedTag = s.scheduled(ctx, log, snd, svc, assets, now)
 	ids := make([]string, 0, len(assets))
 	for _, a := range assets {
 		ids = append(ids, a.Id.String())
@@ -447,6 +455,8 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 	}
 	held := false
+	quiet := s.quietOf(svc)
+	quietWaiting, notAccepted := 0, 0
 	for i, a := range assets {
 		if capped && Capped(svc, snap) {
 			waiting := 0
@@ -465,14 +475,36 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 			log.Debug("skipping a photo handled a moment ago that Immich's search still lists", "asset", a.Id)
 			continue
 		}
-		tagID := shareTag
+		if quiet.Holds(sizeOfPhoto(a), now) {
+			quietWaiting++
+			continue
+		}
+		tagID, procSvc := shareTag, svc
 		if fromAlbum[a.Id] {
 			tagID = uuid.Nil
+		}
+		if t, ok := datedTag[a.Id]; ok { // tagged for a date: that tag is the one to take off afterwards
+			tagID = t.ID
+			local := *svc
+			local.Tag = t.Value
+			procSvc = &local
+		}
+		if svc.Accept.Active() && !s.accepted(ctx, log, snd, svc, &a) {
+			if err := s.markRefused(ctx, procSvc, snd.API, a.Id, tagID); err != nil {
+				log.Error("a photo the service does not take could not be marked; it will be looked at again", "asset", a.Id, "err", err)
+				c.Errors++
+				continue
+			}
+			log.Info("not handed over: the service does not take it in", "service", svc.Label(), "file", a.OriginalFileName)
+			notAccepted++
+			c.NotAccepted++
+			s.markJustHandled(a.Id)
+			continue
 		}
 		if !s.Cfg.DryRun {
 			s.emit(live.Started, svc, snd, "", 0, nil)
 		}
-		switch out, handed, err := s.process(ctx, log, svc, snd, rs, a, tagID); {
+		switch out, handed, err := s.process(ctx, log, procSvc, snd, rs, a, tagID); {
 		case err != nil:
 			c.Errors++
 			s.emit(live.Failed, svc, snd, "", 0, nil)
@@ -524,6 +556,12 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 	}
 	if !held {
 		s.release(snd)
+	}
+	s.quietWait(ctx, log, snd, quiet, quietWaiting, now)
+	if notAccepted > 0 {
+		if r, ok := s.Provider.(AcceptReporter); ok {
+			r.NotAccepted(svc, snd, notAccepted)
+		}
 	}
 	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
 	return

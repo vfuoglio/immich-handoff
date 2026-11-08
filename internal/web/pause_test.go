@@ -158,3 +158,38 @@ func TestTheAdminPageShowsPausesAndLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestTheOwnerSetsQuietHoursAndWhatTheServiceAcceptsAndTheSenderSeesThem(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	form := "service=club&from=01:00&to=06:00&largemb=200&rating=4&photos=1&orientation=landscape&maxmb=20"
+	if code, body := postForm(t, app.URL+"/services/rules", "sess=family", form); code != 204 {
+		t.Fatalf("rules: %d %s", code, body)
+	}
+	sender := get(t, app.URL, "sess=other")
+	for _, want := range []string{"Files over 200 MB are handed over only between 01:00 and 06:00.", "Accepts: a rating of 4 or more, photos only, landscape only, files up to 20 MB."} {
+		if !strings.Contains(sender, want) {
+			t.Errorf("the sender's page lacks %q", want)
+		}
+	}
+	owner := get(t, app.URL, "sess=family")
+	for _, want := range []string{`value="01:00"`, `value="06:00"`, `value="landscape" selected`, `value="4" selected`, `name="photos" type="checkbox" value="1" checked`} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's form does not show the current rules: lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"from=01:00&to=", "from=late&to=06:00", "rating=9", "orientation=square", "maxmb=-5"} {
+		if code, _ := postForm(t, app.URL+"/services/rules", "sess=family", "service=club&"+bad); code != 409 {
+			t.Errorf("%s: %d, want 409", bad, code)
+		}
+	}
+	if code, _ := postForm(t, app.URL+"/services/rules", "sess=other", "service=club&rating=2"); code != 409 {
+		t.Errorf("a sender setting rules: %d, want 409", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/rules", "sess=family", "service=club&from=&to=&largemb=&rating=0&orientation=&maxmb="); code != 204 {
+		t.Errorf("empty means no rules: %d", code)
+	}
+	if sender := get(t, app.URL, "sess=other"); strings.Contains(sender, "Accepts:") || strings.Contains(sender, "handed over only between") {
+		t.Error("with the rules cleared the sender is told nothing")
+	}
+}

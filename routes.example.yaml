@@ -22,3 +22,16 @@ services:
     # optional per service: album (put arrivals in this album of each receiver instead of tagging them inbox;
     # the receiving key then needs album.read, album.create and albumAsset.create), inbox_tag, refused_tag, inbox_expiry_days, sent_tag,
     # mode: copy (keep the senders' originals; default is move), allow_join: true
+
+  # A feed for a photo frame: only well-rated landscape photos, handed over at night.
+  - name: frame
+    tag: for-frame
+    senders: [alice]
+    receivers: [dave]
+    quiet_hours: "01:00-06:00"   # outside these hours photos wait, still tagged (time zone: TZ)
+    # quiet_large_mb: 200        # optional: only files larger than this wait for the hours
+    accept:
+      min_rating: 4              # 1 to 5 stars
+      photos_only: true          # no videos
+      orientation: landscape     # or portrait
+      max_mb: 20                 # the largest file

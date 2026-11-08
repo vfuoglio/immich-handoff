@@ -328,7 +328,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules} {
 		if errors.Is(err, e) {
 			return true
 		}

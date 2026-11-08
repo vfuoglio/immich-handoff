@@ -222,3 +222,37 @@ func (h *Hub) DismissGuide(ctx context.Context, user uuid.UUID) error {
 	}
 	return h.Store.SetGuideDone(ctx, user)
 }
+
+// ErrBadRules is quiet hours or accept rules that make no sense (the form keeps to sensible values, so this is rare).
+var ErrBadRules = errors.New("those rules do not make sense: the hours are times like 01:00, the rating is from 0 to 5 and the sizes are whole numbers of megabytes")
+
+// SetRules sets a service's quiet hours (when it hands photos over) and what it accepts. Only the owner may. Photos
+// that waited are looked at again at once, since new rules may let them go.
+func (h *Hub) SetRules(ctx context.Context, owner immich.User, service string, q syncer.Quiet, a syncer.Accept) error {
+	if q.Validate() != nil || a.Validate() != nil {
+		return ErrBadRules
+	}
+	v, err := h.ownedService(ctx, owner, service)
+	if err != nil {
+		return err
+	}
+	v.QuietFrom, v.QuietTo, v.QuietLargeMB = q.From, q.To, q.LargeMB
+	v.AcceptRating, v.AcceptPhotos, v.AcceptOrient, v.AcceptMaxMB = a.MinRating, a.PhotosOnly, a.Orientation, a.MaxMB
+	if err := h.Store.SetServiceRules(ctx, v.Name, *v); err != nil {
+		return err
+	}
+	h.event(ctx, service, owner.ID, "rules", i18n.Pack("{name} changed the rules of {service}", "name", owner.Name, "service", service))
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	h.wake("rules changed")
+	return nil
+}
+
+// NotAccepted implements syncer.AcceptReporter: the sender's photos that the service does not take in were left
+// where they are, with the refused tag, and both sides can see it.
+func (h *Hub) NotAccepted(svc *syncer.Service, snd *syncer.Account, n int) {
+	text := i18n.PackN("{name}: {n} photo was not handed over to {service}: it does not match what the service accepts", "{name}: {n} photos were not handed over to {service}: they do not match what the service accepts", n,
+		"name", snd.Name, "service", svc.Label())
+	h.event(context.Background(), svc.Label(), snd.UserID, "notaccepted", text)
+}

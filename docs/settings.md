@@ -41,4 +41,8 @@ These apply to services you define yourself ([Fixed accounts](fixed-accounts.md)
 | `SENT_TAG` | `handed-over` | Copy mode: tag put on an original after it was copied. |
 | `HANDOFF_MODE` | `copy` | `copy` keeps the senders' originals; `move` sends them to the sender's trash. |
 | `CARRY_DETAILS` | `on` | `off` stops the app from carrying what Immich keeps only in its database: the archived state and a photo's description, rating and location. With `off` an archived photo arrives in the receiver's timeline and the other details are not sent. See [what is carried over](what-is-carried-over.md). |
+| `TZ` | `UTC` | The time zone of quiet hours and of the dates in tags (for example `Europe/Rome`). |
+| `QUIET_HOURS` | | Hand photos over only between these times, `HH:MM-HH:MM` (for example `01:00-06:00`; `22:00-06:00` crosses midnight). Outside them photos wait, still tagged, and go when the hours begin. A service that sets its own hours keeps them. See [Quiet hours](using.md#quiet-hours-and-what-a-service-accepts). |
+| `QUIET_LARGE_MB` | | With `QUIET_HOURS`: only files larger than this many megabytes wait for the hours; smaller ones go at once. Empty or `0`: every file waits. |
+| `ACCEPT_MIN_RATING`, `ACCEPT_PHOTOS_ONLY`, `ACCEPT_ORIENTATION`, `ACCEPT_MAX_MB` | | What the single service of a plain `.env` install takes in: at least this rating (1 to 5), `true` for no videos, `landscape` or `portrait`, and the largest file in megabytes. Services made on the page set them there, and services in a routes file under `accept:`. See [Quiet hours and what a service accepts](using.md#quiet-hours-and-what-a-service-accepts). |
 | `DELETE_FORCE` | `false` | `true` deletes moved originals permanently instead of trashing them. |

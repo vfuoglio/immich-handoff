@@ -1420,3 +1420,30 @@ func TestKeysMadeBeforeStacksGetTheStackPermissionsOnceTheirOwnerOpensThePage(t 
 		t.Errorf("the second visit must change nothing")
 	}
 }
+
+func TestTheOwnerSetsQuietHoursAndWhatTheServiceAcceptsAndNobodyElseCan(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "frame", Tag: "frame", Policy: "open", Visibility: "listed"}); err != nil {
+		t.Fatal(err)
+	}
+	q, a := syncer.Quiet{From: 60, To: 360, LargeMB: 200}, syncer.Accept{MinRating: 4, PhotosOnly: true, Orientation: "landscape", MaxMB: 20}
+	if err := e.h.SetRules(ctx, ann, "frame", q, a); err != nil {
+		t.Fatal(err)
+	}
+	svc := service(e, "frame")
+	if svc.Quiet != q || svc.Accept != a {
+		t.Errorf("the running service must carry the rules: %+v %+v", svc.Quiet, svc.Accept)
+	}
+	if err := e.h.SetRules(ctx, bob, "frame", syncer.Quiet{}, syncer.Accept{}); err == nil {
+		t.Error("only the owner may set rules")
+	}
+	if err := e.h.SetRules(ctx, ann, "frame", syncer.Quiet{}, syncer.Accept{MinRating: 9}); !errors.Is(err, hub.ErrBadRules) {
+		t.Errorf("a rating of 9 must be refused: %v", err)
+	}
+	if err := e.h.SetRules(ctx, ann, "frame", syncer.Quiet{}, syncer.Accept{}); err != nil {
+		t.Fatal(err)
+	}
+	if svc := service(e, "frame"); svc.Quiet.Set() || svc.Accept.Active() {
+		t.Errorf("clearing the rules clears them: %+v %+v", svc.Quiet, svc.Accept)
+	}
+}

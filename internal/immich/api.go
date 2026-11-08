@@ -301,6 +301,28 @@ func (a *API) FindTag(ctx context.Context, name string, create bool) (*openapi_t
 	return &id, nil
 }
 
+// TagInfo is a tag of an account: its id, its name and its full value (for a tag inside another, "parent/child").
+type TagInfo struct {
+	ID          openapi_types.UUID
+	Name, Value string
+}
+
+// Tags lists every tag of the account.
+func (a *API) Tags(ctx context.Context) ([]TagInfo, error) {
+	r, err := a.c.GetAllTagsWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getAllTags", r.StatusCode(), r.Body)
+	}
+	out := make([]TagInfo, 0, len(*r.JSON200))
+	for _, t := range *r.JSON200 {
+		out = append(out, TagInfo{ID: t.Id, Name: t.Name, Value: t.Value})
+	}
+	return out, nil
+}
+
 // TagAssets returns an error unless every asset ended up tagged.
 func (a *API) TagAssets(ctx context.Context, tag openapi_types.UUID, ids ...openapi_types.UUID) error {
 	r, err := a.c.TagAssetsWithResponse(ctx, tag, TagAssetsJSONRequestBody{Ids: ids})

@@ -89,6 +89,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
 	mux.HandleFunc("POST /services/invite", w.newInvite)
+	mux.HandleFunc("POST /services/rules", w.setRules)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
@@ -283,7 +284,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 		if a := m.account(svc, "sender"); a != nil {
 			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
 				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
-				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name}
+				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name, Rules: w.rulesText(ctx, svc)}
 			switch {
 			case svc.Paused:
 				v.Hold = t(ctx, "The owner paused this service.")
@@ -291,6 +292,9 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 				v.Hold = t(ctx, "You paused sending to this service.")
 			}
 			w.limitsFor(ctx, &v, svc, a)
+			if qw, ok := w.S.QuietFor(a); ok {
+				v.QuietWait = n(ctx, "The quiet hours are not open, so {n} photo waits, still tagged. It is handed over from {when}.", "The quiet hours are not open, so {n} photos wait, still tagged. They are handed over from {when}.", qw.Waiting, "when", loc(ctx).Stamp(qw.Until.Local()))
+			}
 			out = append(out, v)
 		}
 		if m.account(svc, "receiver") != nil {
@@ -332,7 +336,12 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 	}
 	for _, o := range owned {
 		ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
-			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB}
+			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB,
+			QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
+			AcceptOrient: o.Service.Accept.Orientation, AcceptMaxMB: o.Service.Accept.MaxMB}
+		if o.Service.Quiet.Set() {
+			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
+		}
 		if members, err := w.Hub.MembersOf(ctx, o.Service.Label()); err == nil {
 			for _, m := range members {
 				mv := MemberView{Name: m.Name, State: m.State, Copy: m.Mode != "move", Paused: m.Paused,
@@ -970,6 +979,33 @@ func (w *Server) setLimits(rw http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		return w.Hub.SetLimits(ctx, me.user, service, photos, mb)
+	})
+}
+
+// setRules reads the owner's form of quiet hours and what the service accepts.
+func (w *Server) setRules(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "rules", func(ctx context.Context, me *member, service string) error {
+		num := func(name string) int {
+			n, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue(name)))
+			if err != nil {
+				return 0
+			}
+			return n
+		}
+		var q syncer.Quiet
+		from, to := strings.TrimSpace(r.PostFormValue("from")), strings.TrimSpace(r.PostFormValue("to"))
+		if from != "" || to != "" {
+			var err1, err2 error
+			q.From, err1 = syncer.ParseClock(from)
+			q.To, err2 = syncer.ParseClock(to)
+			if err1 != nil || err2 != nil {
+				return hub.ErrBadRules
+			}
+		}
+		q.LargeMB = num("largemb")
+		a := syncer.Accept{MinRating: num("rating"), PhotosOnly: r.PostFormValue("photos") == "1",
+			Orientation: strings.TrimSpace(r.PostFormValue("orientation")), MaxMB: num("maxmb")}
+		return w.Hub.SetRules(ctx, me.user, service, q, a)
 	})
 }
 

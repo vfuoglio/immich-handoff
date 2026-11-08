@@ -44,6 +44,27 @@ To run more than one service, or to send the same photo to several accounts, des
 
 With several receivers on one service, the original is touched only after **every** receiver holds a verified copy. If one receiver refuses (its trash holds that photo) or fails, the original stays and nothing is lost. An account that sends in one service and receives in another needs both permission lists above. Each service gets its own workflow in the sender's account, named `immich-handoff: <service>`.
 
+## Quiet hours and what a service accepts
+
+A service in the routes file can say when it hands photos over and what it takes in, as a service made on the page can ([Using it](using.md#quiet-hours-and-what-a-service-accepts)):
+
+```yaml
+services:
+  - name: frame
+    tag: frame
+    senders: [alice]
+    receivers: [grandma]
+    quiet_hours: "01:00-06:00"   # outside these hours photos wait, still tagged (time zone: TZ)
+    quiet_large_mb: 200          # optional: only files larger than this wait for the hours
+    accept:
+      min_rating: 4              # 1 to 5 stars
+      photos_only: true          # no videos
+      orientation: landscape     # or portrait
+      max_mb: 20                 # the largest file
+```
+
+All keys are optional. A photo that does not match `accept` is not handed over and gets the refused tag. In a plain `.env` install the same rules are `QUIET_HOURS`, `QUIET_LARGE_MB` and `ACCEPT_MIN_RATING`, `ACCEPT_PHOTOS_ONLY`, `ACCEPT_ORIENTATION`, `ACCEPT_MAX_MB` ([Settings](settings.md)).
+
 ## Letting people join a fixed service
 
 Set `HANDOFF_STORE_KEY`, and `ALLOW_JOIN=true` (or `allow_join: true` on a service in the routes file). People then see the service on the page and join it like any other. A service defined this way may start with no senders at all.

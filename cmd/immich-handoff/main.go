@@ -78,12 +78,16 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	quiet, err := config.QuietFrom(os.Getenv)
+	if err != nil {
+		return err
+	}
 	bus := &live.Bus{} // what is happening, told to the pages that are open (nobody else)
 	s := &syncer.Syncer{
 		Services: services, Log: log, Bus: bus,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
-			NotifyURL: os.Getenv("NOTIFY_URL"), NoDetails: env("CARRY_DETAILS", "on") == "off",
+			NotifyURL: os.Getenv("NOTIFY_URL"), Quiet: quiet, NoDetails: env("CARRY_DETAILS", "on") == "off",
 		},
 	}
 

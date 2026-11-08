@@ -124,6 +124,8 @@ func (h *Hub) Reload(ctx context.Context) error {
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
 			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag, Album: v.Album,
 			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB,
+			Quiet:   syncer.Quiet{From: v.QuietFrom, To: v.QuietTo, LargeMB: v.QuietLargeMB},
+			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
 		if v.State == store.StateBroken {
