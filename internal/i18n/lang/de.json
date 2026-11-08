@@ -41,6 +41,7 @@
  "Connection lost": "Verbindung verloren",
  "Continue": "Weiter",
  "Copied": "Kopiert",
+ "Copies that expire, and taking a hand-over back, are switched off by the administrator (RECEIVER_DELETE).": "Kopien, die ablaufen, und das Zurückholen einer Übergabe sind vom Administrator abgeschaltet (RECEIVER_DELETE).",
  "Copy": "Kopieren",
  "Copy a message": "Nachricht kopieren",
  "Could not do that: {reason}": "Das ging nicht: {reason}",
@@ -131,6 +132,7 @@
  "More options": "Weitere Optionen",
  "Most megabytes each sender may hand over in a day (optional)": "Höchstens so viele Megabyte darf jeder Absender pro Tag übergeben (optional)",
  "Most photos each sender may hand over in a day (optional)": "Höchstens so viele Fotos darf jeder Absender pro Tag übergeben (optional)",
+ "Move copies to my trash after (days)": "Kopien in meinen Papierkorb verschieben nach (Tagen)",
  "Need attention": "Aufmerksamkeit nötig",
  "Needs approval": "Braucht Genehmigung",
  "Needs you": "Aktion nötig",
@@ -183,12 +185,17 @@
  "Photos arrive in the album <strong>{album}</strong>.": "Fotos landen im Album <strong>{album}</strong>.",
  "Photos arrive tagged <code class=\"tag\">{tag}</code>.": "Fotos kommen mit dem Tag <code class=\"tag\">{tag}</code> an.",
  "Photos handed over per day, oldest first: {days}": "Pro Tag übergebene Fotos, älteste zuerst: {days}",
+ "Photos handed over to this service are moved to your trash, never deleted for good, after this many days, unless you file them in an album or take the inbox tag off. Empty or 0: they stay.": "Fotos, die diesem Dienst übergeben werden, kommen nach dieser Zahl von Tagen in deinen Papierkorb (nie endgültig gelöscht), außer du legst sie in ein Album oder nimmst den Eingangs-Tag ab. Leer oder 0: sie bleiben.",
  "Photos only (no videos)": "Nur Fotos (keine Videos)",
  "Photos over a limit wait, tagged, until the day moves on. You can change the limits later.": "Fotos über einem Limit warten mit ihrem Tag, bis der Tag vorbei ist. Du kannst die Limits später ändern.",
  "Photos per sender per day": "Fotos pro Absender und Tag",
  "Photos stay where they are until it is fixed.": "Fotos bleiben, wo sie sind, bis es behoben ist.",
  "Photos tagged meanwhile stay tagged and are handed over when it resumes.": "Fotos, die in der Zwischenzeit getaggt werden, behalten ihren Tag und werden übergeben, sobald es weitergeht.",
  "Photos wait": "Fotos warten",
+ "Photos you hand over to this service are moved to the receiver's trash after {n} day unless they file them in an album.": {
+  "one": "Fotos, die du diesem Dienst übergibst, kommen nach {n} Tag in den Papierkorb des Empfängers, außer er legt sie in ein Album.",
+  "other": "Fotos, die du diesem Dienst übergibst, kommen nach {n} Tagen in den Papierkorb des Empfängers, außer er legt sie in ein Album."
+ },
  "Photos you tag in Immich are handed over automatically.": "Fotos, die du in Immich taggst, werden automatisch übergeben.",
  "Photos you tag in Immich are handed over to them. You choose what happens to your own originals, and you can stop at any time.": "Fotos, die du in Immich taggst, werden an sie übergeben. Du entscheidest, was mit deinen eigenen Originalen passiert, und kannst jederzeit aufhören.",
  "Please confirm": "Bitte bestätigen",
@@ -214,6 +221,7 @@
  "Request": "Anfrage",
  "Resume sending": "Senden fortsetzen",
  "Resume service": "Dienst fortsetzen",
+ "Save lifetime": "Lebensdauer speichern",
  "Save limits": "Limits speichern",
  "Save rules": "Regeln speichern",
  "Search": "Suchen",
@@ -237,16 +245,21 @@
  "Tags are off": "Tags sind aus",
  "Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear.": "Tags sind an. Lade jetzt den Immich-Tab oder das Fenster neu (auf dem Handy die App schließen und wieder öffnen); bis dahin erscheinen die Tag-Optionen nicht.",
  "Tags are switched off in your Immich account": "Tags sind in deinem Immich-Konto ausgeschaltet",
+ "Take back": "Zurückholen",
+ "Take back the last hand-over": "Die letzte Übergabe zurückholen",
+ "Take back the last hand-over?": "Die letzte Übergabe zurückholen?",
  "The QR code could not be made.": "Der QR-Code konnte nicht erstellt werden.",
  "The backup could not be downloaded.": "Das Backup konnte nicht heruntergeladen werden.",
  "The backup could not be made. See the app's log.": "Das Backup konnte nicht erstellt werden. Siehe das Protokoll der App.",
  "The backup was downloaded.": "Das Backup wurde heruntergeladen.",
+ "The copies in the receiver's library go to their trash, except the ones they have already filed in an album, and your originals come back from your trash (if you moved them) without the service tag. Nothing is deleted for good.": "Die Kopien in der Bibliothek des Empfängers kommen in dessen Papierkorb, außer denen, die er schon in ein Album gelegt hat, und deine Originale kommen aus deinem Papierkorb zurück (falls du sie verschoben hast), ohne den Dienst-Tag. Nichts wird endgültig gelöscht.",
  "The current link will stop working. Continue?": "Der aktuelle Link funktioniert dann nicht mehr. Fortfahren?",
  "The daily limit is reached, so {n} photo waits, still tagged. It is handed over from {when}.": {
   "one": "Das Tageslimit ist erreicht, deshalb wartet {n} Foto, weiterhin getaggt. Es wird ab {when} übergeben.",
   "other": "Das Tageslimit ist erreicht, deshalb warten {n} Fotos, weiterhin getaggt. Sie werden ab {when} übergeben."
  },
  "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.": "Die Datei enthält jeden gespeicherten API-Schlüssel, weiterhin verschlüsselt, und Namen und E-Mail-Adressen aller. Lade sie nur herunter, um sie sicher aufzubewahren.",
+ "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.": "Der Schlüssel kann außerdem Fotos, die die App übergeben hat, in deinen Papierkorb verschieben (Kopien, die ablaufen; eine zurückgeholte Übergabe), aber nie endgültig löschen.",
  "The last backup failed: {reason}": "Das letzte Backup ist fehlgeschlagen: {reason}",
  "The latest events across your services. Nothing here changes a photo.": "Die neuesten Ereignisse in deinen Diensten. Hier ändert sich kein Foto.",
  "The owner approved {name} for {service}": "Der Besitzer hat {name} für {service} genehmigt",
@@ -357,13 +370,17 @@
  "that album is not one of your own albums": "dieses Album gehört nicht zu deinen eigenen Alben",
  "the album name must be at most 100 characters and have no line breaks": "der Albumname darf höchstens 100 Zeichen haben und keine Zeilenumbrüche enthalten",
  "the app started": "die App wurde gestartet",
+ "the key of the service's owner cannot move photos to the trash yet: ask the owner to open this page once": "der Schlüssel des Dienstinhabers darf noch keine Fotos in den Papierkorb verschieben: bitte den Inhaber, diese Seite einmal zu öffnen",
+ "the lifetime is a whole number of days from 1 to 3650, or empty for none": "die Lebensdauer ist eine ganze Zahl von Tagen von 1 bis 3650, oder leer für keine",
  "the number of days must be between 1 and 3650": "die Anzahl der Tage muss zwischen 1 und 3650 liegen",
  "the owner of this service has not approved you yet": "der Besitzer dieses Dienstes hat dich noch nicht genehmigt",
  "theme": "Design",
  "there is no such request": "diese Anfrage gibt es nicht",
  "there is no such service or member (it may already have been removed)": "diesen Dienst oder dieses Mitglied gibt es nicht (vielleicht wurde er oder es schon entfernt)",
+ "there is nothing to take back: nothing was handed over to this service in the last 24 hours, or it was already taken back": "es gibt nichts zurückzuholen: in den letzten 24 Stunden wurde diesem Dienst nichts übergeben, oder es wurde schon zurückgeholt",
  "this entry comes from the configuration (.env or the routes file): change it there": "dieser Eintrag stammt aus der Konfiguration (.env oder die Routen-Datei): ändere ihn dort",
  "this invitation is not valid any more": "diese Einladung ist nicht mehr gültig",
+ "this is switched off by the administrator (RECEIVER_DELETE)": "das ist vom Administrator abgeschaltet (RECEIVER_DELETE)",
  "this service does not accept new senders": "dieser Dienst nimmt keine neuen Absender an",
  "those rules do not make sense: the hours are times like 01:00, the rating is from 0 to 5 and the sizes are whole numbers of megabytes": "diese Regeln ergeben keinen Sinn: die Zeiten sind Uhrzeiten wie 01:00, die Bewertung geht von 0 bis 5 und die Größen sind ganze Megabyte",
  "to them in Immich.": "ihnen in Immich.",
@@ -395,6 +412,10 @@
  "{name} removed the service {service}": "{name} hat den Dienst {service} entfernt",
  "{name} resumed sending to {service}": "{name} hat das Senden an {service} fortgesetzt",
  "{name} resumed the service {service}": "{name} hat den Dienst {service} fortgesetzt",
+ "{name} set the copies handed over to {service} to expire after {n} day": {
+  "one": "{name} hat festgelegt, dass die an {service} übergebenen Kopien nach {n} Tag ablaufen",
+  "other": "{name} hat festgelegt, dass die an {service} übergebenen Kopien nach {n} Tagen ablaufen"
+ },
  "{name} set the daily limit of {service} to {mb} MB per sender": "{name} hat das Tageslimit von {service} auf {mb} MB pro Absender gesetzt",
  "{name} set the daily limit of {service} to {n} photo and {mb} MB per sender": {
   "one": "{name} hat das Tageslimit von {service} auf {n} Foto und {mb} MB pro Absender gesetzt",
@@ -409,6 +430,11 @@
  "{name} started sending to {service} (originals are moved to their trash)": "{name} sendet jetzt an {service} (Originale werden in den Papierkorb verschoben)",
  "{name} stopped handing over the album {album} to {service}": "{name} übergibt das Album {album} nicht mehr an {service}",
  "{name} stopped sending to {service}": "{name} sendet nicht mehr an {service}",
+ "{name} took back {n} photo handed over to {service}": {
+  "one": "{name} hat {n} an {service} übergebenes Foto zurückgeholt",
+  "other": "{name} hat {n} an {service} übergebene Fotos zurückgeholt"
+ },
+ "{name} turned off expiry for {service}": "{name} hat das Ablaufen für {service} abgeschaltet",
  "{name} wants to send to {service}": "{name} möchte an {service} senden",
  "{name} was removed from {service} by an administrator; their key in Immich stays until they clean up": "{name} wurde von einem Administrator aus {service} entfernt; der Schlüssel in Immich bleibt, bis aufgeräumt wird",
  "{name}'s connection to {service} was cut: their API key was deleted": "Die Verbindung von {name} zu {service} wurde getrennt: Der API-Schlüssel wurde gelöscht",
@@ -428,6 +454,14 @@
  "{n} photo from the album {album} handed over to {service}": {
   "one": "{n} Foto aus dem Album {album} an {service} übergeben",
   "other": "{n} Fotos aus dem Album {album} an {service} übergeben"
+ },
+ "{n} photo handed over to {service} reached the end of its lifetime and was moved to your trash": {
+  "one": "{n} an {service} übergebenes Foto hat das Ende seiner Lebensdauer erreicht und wurde in deinen Papierkorb verschoben",
+  "other": "{n} an {service} übergebene Fotos haben das Ende ihrer Lebensdauer erreicht und wurden in deinen Papierkorb verschoben"
+ },
+ "{n} photo handed over {when}": {
+  "one": "{n} Foto übergeben {when}",
+  "other": "{n} Fotos übergeben {when}"
  },
  "{n} photo waits": {
   "one": "{n} Foto wartet",
@@ -451,6 +485,7 @@
   "one": "{n} Stern oder mehr",
   "other": "{n} Sterne oder mehr"
  },
+ "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.": "{n} zurückgeholt. {kept} sind beim Empfänger geblieben, der sie in ein Album gelegt hatte.",
  "{n} things need you.": "{n} Dinge brauchen dich.",
  "{n} waiting": "{n} wartend",
  "{photos} a day": "{photos} pro Tag",

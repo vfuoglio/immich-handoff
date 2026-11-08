@@ -11,10 +11,12 @@ In Immich, sign in to each account in turn and go to **Account Settings -> API K
 | Account | Permissions |
 |---|---|
 | Each person who **sends** photos | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.download` `asset.delete` `stack.read` `workflow.read` `workflow.create` `workflow.update` `workflow.logs` |
-| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` `stack.create` |
+| The **receiving** account | `user.read` `tag.read` `tag.create` `tag.asset` `asset.read` `asset.upload` `stack.create` (and `asset.delete`, optional: see below) |
 | The **receiving** account, if the service puts arrivals in an album (`album`, see below) | the above, plus `album.read` `album.create` `albumAsset.create` |
 
 The sender list includes `asset.delete` so the service can move originals. For a service that only copies, leave it out. `workflow.logs` is optional: it only lets the [setup check](troubleshooting.md#check-your-setup-first) see how Immich's runs of the workflow ended, and everything else works without it. `stack.read` and `stack.create` are optional too: without them only the tagged photo of a stack is handed over (the sender's key lacks `stack.read`), or the photos of a stack arrive separately (the receiver's key lacks `stack.create`). The [setup check](troubleshooting.md#check-your-setup-first) warns about both.
+
+`asset.delete` on the **receiving** key is optional too. It lets the app move to the receiver's trash the copies it handed over: copies that expire (a service's lifetime) and a sender's "take back the last hand-over". Without it those two do nothing (the log says so once and the setup check warns), and everything else works. A key made by the page has it unless the administrator sets `RECEIVER_DELETE=off`; for a key you make by hand, add it if you want those two, and leave it out if you do not (and set `RECEIVER_DELETE=off`, so the setup check does not remind you).
 
 ### 2. Put them in `.env`
 

@@ -2012,6 +2012,12 @@ type TagsUpdate struct {
 	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
+// TrashResponseDto defines model for TrashResponseDto.
+type TrashResponseDto struct {
+	// Count Number of items in trash
+	Count int `json:"count"`
+}
+
 // UserAdminResponseDto defines model for UserAdminResponseDto.
 type UserAdminResponseDto struct {
 	// AvatarColor User avatar color
@@ -2387,6 +2393,9 @@ type UntagAssetsJSONRequestBody = BulkIdsDto
 // TagAssetsJSONRequestBody defines body for TagAssets for application/json ContentType.
 type TagAssetsJSONRequestBody = BulkIdsDto
 
+// RestoreAssetsJSONRequestBody defines body for RestoreAssets for application/json ContentType.
+type RestoreAssetsJSONRequestBody = BulkIdsDto
+
 // UpdateMyPreferencesJSONRequestBody defines body for UpdateMyPreferences for application/json ContentType.
 //
 // Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -2736,6 +2745,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /tags/{id}/assets (the `TagAssets` operationId).
 	TagAssets(ctx context.Context, id openapi_types.UUID, body TagAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RestoreAssetsWithBody Restore assets
+	//
+	// Restore specific assets from the trash.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+	RestoreAssetsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RestoreAssets Restore assets
+	//
+	// Restore specific assets from the trash.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+	RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMyUser Get current user
 	//
@@ -3403,6 +3430,44 @@ func (c *Client) TagAssetsWithBody(ctx context.Context, id openapi_types.UUID, c
 // Corresponds with PUT /tags/{id}/assets (the `TagAssets` operationId).
 func (c *Client) TagAssets(ctx context.Context, id openapi_types.UUID, body TagAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTagAssetsRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RestoreAssetsWithBody Restore assets
+//
+// Restore specific assets from the trash.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+func (c *Client) RestoreAssetsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreAssetsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RestoreAssets Restore assets
+//
+// Restore specific assets from the trash.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+func (c *Client) RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRestoreAssetsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4653,6 +4718,46 @@ func NewTagAssetsRequestWithBody(server string, id openapi_types.UUID, contentTy
 	return req, nil
 }
 
+// NewRestoreAssetsRequest calls the generic RestoreAssets builder with application/json body
+func NewRestoreAssetsRequest(server string, body RestoreAssetsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRestoreAssetsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewRestoreAssetsRequestWithBody constructs an http.Request for the RestoreAssets method, with any body, and a specified content type
+func NewRestoreAssetsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/trash/restore/assets")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetMyUserRequest constructs an http.Request for the GetMyUser method
 func NewGetMyUserRequest(server string) (*http.Request, error) {
 	var err error
@@ -5420,6 +5525,24 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /tags/{id}/assets (the `TagAssets` operationId).
 	TagAssetsWithResponse(ctx context.Context, id openapi_types.UUID, body TagAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*TagAssetsResponse, error)
+
+	// RestoreAssetsWithBodyWithResponse Restore assets
+	//
+	// Restore specific assets from the trash.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+	RestoreAssetsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error)
+
+	// RestoreAssetsWithResponse Restore assets
+	//
+	// Restore specific assets from the trash.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+	RestoreAssetsWithResponse(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error)
 
 	// GetMyUserWithResponse Get current user
 	//
@@ -6385,6 +6508,47 @@ func (r TagAssetsResponse) ContentType() string {
 	return ""
 }
 
+type RestoreAssetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TrashResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RestoreAssetsResponse) GetJSON200() *TrashResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r RestoreAssetsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RestoreAssetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RestoreAssetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RestoreAssetsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetMyUserResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7215,6 +7379,36 @@ func (c *ClientWithResponses) TagAssetsWithResponse(ctx context.Context, id open
 	return ParseTagAssetsResponse(rsp)
 }
 
+// RestoreAssetsWithBodyWithResponse Restore assets
+//
+// Restore specific assets from the trash.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+func (c *ClientWithResponses) RestoreAssetsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error) {
+	rsp, err := c.RestoreAssetsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRestoreAssetsResponse(rsp)
+}
+
+// RestoreAssetsWithResponse Restore assets
+//
+// Restore specific assets from the trash.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
+func (c *ClientWithResponses) RestoreAssetsWithResponse(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error) {
+	rsp, err := c.RestoreAssets(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRestoreAssetsResponse(rsp)
+}
+
 // GetMyUserWithResponse Get current user
 //
 // Retrieve information about the user making the API request.
@@ -7914,6 +8108,32 @@ func ParseTagAssetsResponse(rsp *http.Response) (*TagAssetsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []BulkIdResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRestoreAssetsResponse parses an HTTP response from a RestoreAssetsWithResponse call
+func ParseRestoreAssetsResponse(rsp *http.Response) (*RestoreAssetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RestoreAssetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TrashResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

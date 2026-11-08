@@ -267,7 +267,9 @@ func services(ctx context.Context, r *Report, in Input) {
 			if svc.Album != "" {
 				want = immich.ReceiverPermissionsAlbum
 			}
-			account(ctx, r, rc, "receiver", want)
+			if account(ctx, r, rc, "receiver", want) {
+				deletePermission(ctx, r, rc, in.Env == nil || in.Env("RECEIVER_DELETE") != "off")
+			}
 			tags(ctx, r, rc, "receiver")
 		}
 		if len(svc.Senders) == 0 {
@@ -285,6 +287,42 @@ func services(ctx context.Context, r *Report, in Input) {
 			workflow(ctx, r, in, svc, snd)
 		}
 	}
+}
+
+// deletePermission says whether a receiver key has what RECEIVER_DELETE asks of it. On (the default), it should be able to
+// move copies to the owner's trash, which is what expiring copies and taking a hand-over back need; off, it should not.
+// Neither is a failure: the app works either way, and a key made by the page is brought in line when its owner opens it.
+func deletePermission(ctx context.Context, r *Report, a *syncer.Account, enabled bool) {
+	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	alive, have, err := a.API.KeyAlive(cctx)
+	if err != nil || !alive {
+		return // account() has said so
+	}
+	held := false
+	for _, p := range have {
+		if p == "asset.delete" || p == "all" {
+			held = true
+		}
+	}
+	who := "receiver " + a.Name
+	switch {
+	case enabled && !held:
+		r.add(Warn, who+": the key may not move photos to the trash (asset.delete), so copies cannot expire and a hand-over cannot be taken back",
+			"A person's key made by the page gets the permission when its owner next opens the page. For a key in .env or the routes file, add asset.delete (docs/fixed-accounts.md), or set RECEIVER_DELETE=off to stop asking for it.")
+	case !enabled && held && !contains(have, "all"):
+		r.add(Warn, who+": the key may move photos to the trash (asset.delete) although RECEIVER_DELETE=off",
+			"The app does not use it. A key made by the page loses the permission when its owner next opens the page; for a key in .env or the routes file, remove asset.delete from it in Immich.")
+	}
+}
+
+func contains(ps []immich.Permission, name string) bool {
+	for _, p := range ps {
+		if string(p) == name {
+			return true
+		}
+	}
+	return false
 }
 
 // optionalPermission is one the check can do without: it is only used to read a workflow's run log.

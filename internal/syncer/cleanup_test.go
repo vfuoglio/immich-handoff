@@ -28,9 +28,11 @@ type tidyAsset struct {
 // fails if the app stops sending the right ones: isNotInAlbum, and createdBefore (the upload date, not the date the
 // photo was taken).
 type tidyImmich struct {
-	mu       sync.Mutex
-	assets   []*tidyAsset
-	searches []map[string]json.RawMessage // every search body, as sent
+	mu         sync.Mutex
+	assets     []*tidyAsset
+	searches   []map[string]json.RawMessage // every search body, as sent
+	trashed    []string                     // what was moved to the trash
+	denyDelete bool                         // the key may not delete (HTTP 403)
 }
 
 func (f *tidyImmich) handler() http.Handler {
@@ -74,6 +76,34 @@ func (f *tidyImmich) handler() http.Handler {
 		}
 		j(w, map[string]any{"assets": map[string]any{"items": items, "count": len(items), "total": len(items), "facets": []any{}}})
 	})
+	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids   []string
+			Force bool
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.denyDelete {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(403)
+			w.Write([]byte(`{"message":"Missing required permission: asset.delete"}`))
+			return
+		}
+		if body.Force {
+			w.WriteHeader(400) // a copy is only ever moved to the trash
+			return
+		}
+		for _, id := range body.Ids {
+			f.trashed = append(f.trashed, id)
+			for _, a := range f.assets {
+				if a.id == id {
+					a.tagged = false // a trashed photo is not listed any more
+				}
+			}
+		}
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("DELETE /api/tags/"+inboxTag+"/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Ids []string }
 		json.NewDecoder(r.Body).Decode(&body)
@@ -108,6 +138,12 @@ func (f *tidyImmich) stillTagged() []string {
 
 func tidy(t *testing.T, f *tidyImmich, expiry ...int) {
 	t.Helper()
+	tidyWith(t, f, nil, nil, expiry...)
+}
+
+// tidyWith is tidy with the app-wide settings and each service changed too.
+func tidyWith(t *testing.T, f *tidyImmich, config func(*syncer.Config), tune func(*syncer.Service), expiry ...int) {
+	t.Helper()
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
 	rcv := &syncer.Account{Name: "family", API: newAPI(t, srv.URL, "dest")}
@@ -115,9 +151,15 @@ func tidy(t *testing.T, f *tidyImmich, expiry ...int) {
 	for _, days := range expiry {
 		svc := service([]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}}, []*syncer.Account{rcv})
 		svc.ExpiryDays = days
+		if tune != nil {
+			tune(svc)
+		}
 		services = append(services, svc)
 	}
 	s := &syncer.Syncer{Services: services, Log: quiet()}
+	if config != nil {
+		config(&s.Cfg)
+	}
 	s.Tidy(context.Background())
 }
 
@@ -215,5 +257,66 @@ func TestNothingIsUntaggedWhenNothingHasExpired(t *testing.T) {
 	tidy(t, f, 30)
 	if got := f.stillTagged(); !slices.Equal(got, []string{a5}) {
 		t.Errorf("still tagged: %v", got)
+	}
+}
+
+func (f *tidyImmich) trashedIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := append([]string{}, f.trashed...)
+	slices.Sort(out)
+	return out
+}
+
+func withDelete(c *syncer.Config) { c.ReceiverDelete = true }
+func lifetime(days int) func(*syncer.Service) {
+	return func(s *syncer.Service) { s.LifetimeDays = days }
+}
+
+func TestCopiesThatOutliveTheirLifetimeGoToTheTrashUnlessFiled(t *testing.T) {
+	f := &tidyImmich{assets: []*tidyAsset{
+		{id: a1, uploaded: daysAgo(5), taken: daysAgo(5), tagged: true},                // unfiled, past the 3 days: to the trash
+		{id: a2, uploaded: daysAgo(1), taken: daysAgo(1), tagged: true},                // unfiled, inside the lifetime: stays
+		{id: a3, uploaded: daysAgo(5), taken: daysAgo(5), inAlbum: true, tagged: true}, // filed: kept, loses the inbox tag
+	}}
+	tidyWith(t, f, withDelete, lifetime(3), 30)
+	if got := f.trashedIDs(); len(got) != 1 || got[0] != a1 {
+		t.Errorf("only the old unfiled copy goes to the trash: %v", got)
+	}
+	if got := f.stillTagged(); len(got) != 1 || got[0] != a2 {
+		t.Errorf("the young copy keeps its tag and the filed one loses it: %v", got)
+	}
+}
+
+func TestWithALifetimeTheInboxExpiryDoesNotTakeTheTagOffFirst(t *testing.T) {
+	f := &tidyImmich{assets: []*tidyAsset{
+		{id: a1, uploaded: daysAgo(35), taken: daysAgo(35), tagged: true}, // past the 30-day inbox expiry, inside the 40-day lifetime
+	}}
+	tidyWith(t, f, withDelete, lifetime(40), 30)
+	if got := f.stillTagged(); len(got) != 1 {
+		t.Errorf("the copy must keep its tag until its lifetime ends: %v", got)
+	}
+	if len(f.trashedIDs()) != 0 {
+		t.Errorf("nothing is trashed yet: %v", f.trashedIDs())
+	}
+}
+
+func TestWithoutTheAdministratorsSayTheLifetimeDoesNothing(t *testing.T) {
+	f := &tidyImmich{assets: []*tidyAsset{
+		{id: a1, uploaded: daysAgo(31), taken: daysAgo(31), tagged: true},
+	}}
+	tidyWith(t, f, nil, lifetime(3), 30) // RECEIVER_DELETE is off: the old behaviour, the tag comes off, nothing is trashed
+	if len(f.trashedIDs()) != 0 || len(f.stillTagged()) != 0 {
+		t.Errorf("with deleting off the copy only loses its tag: trashed %v, tagged %v", f.trashedIDs(), f.stillTagged())
+	}
+}
+
+func TestAKeyThatMayNotDeleteLeavesTheCopiesWhereTheyAre(t *testing.T) {
+	f := &tidyImmich{denyDelete: true, assets: []*tidyAsset{
+		{id: a1, uploaded: daysAgo(5), taken: daysAgo(5), tagged: true},
+	}}
+	tidyWith(t, f, withDelete, lifetime(3), 30)
+	if got := f.stillTagged(); len(got) != 1 {
+		t.Errorf("a refused delete must not cost the copy its tag: %v", got)
 	}
 }

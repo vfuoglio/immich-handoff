@@ -193,3 +193,73 @@ func TestTheOwnerSetsQuietHoursAndWhatTheServiceAcceptsAndTheSenderSeesThem(t *t
 		t.Error("with the rules cleared the sender is told nothing")
 	}
 }
+
+func TestTheOwnerSetsHowLongCopiesLiveWhenTheAdministratorAllowsIt(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st), func(srv *web.Server) { srv.Hub.ReceiverDelete = true })
+	if code, body := postForm(t, app.URL+"/services/lifetime", "sess=family", "service=club&days=7"); code != 204 {
+		t.Fatalf("lifetime: %d %s", code, body)
+	}
+	owner := get(t, app.URL, "sess=family")
+	if !strings.Contains(owner, `name="days" type="number" min="0" max="3650" value="7"`) {
+		t.Error("the owner's form must show the current lifetime")
+	}
+	if !strings.Contains(owner, "The key can also move photos the app handed over to your trash") {
+		t.Error("the dialog that makes a service must say that the key can move photos to the trash")
+	}
+	if sender := get(t, app.URL, "sess=other"); !strings.Contains(sender, "trash after 7 days unless they file them in an album") {
+		t.Error("the sender must be told that copies expire")
+	}
+	for _, bad := range []string{"days=abc", "days=-1", "days=9999"} {
+		if code, _ := postForm(t, app.URL+"/services/lifetime", "sess=family", "service=club&"+bad); code != 409 {
+			t.Errorf("%s: %d, want 409", bad, code)
+		}
+	}
+	if code, _ := postForm(t, app.URL+"/services/lifetime", "sess=other", "service=club&days=3"); code != 409 {
+		t.Errorf("a sender setting a lifetime: %d, want 409", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/lifetime", "sess=family", "service=club&days="); code != 204 {
+		t.Errorf("empty turns it off: %d", code)
+	}
+	if sender := get(t, app.URL, "sess=other"); strings.Contains(sender, "trash after") {
+		t.Error("with no lifetime the sender is told nothing")
+	}
+}
+
+func TestWithDeletingSwitchedOffTheOwnerIsToldAndNothingIsOfferedToSenders(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st)) // RECEIVER_DELETE off: the hub's default in tests
+	owner := get(t, app.URL, "sess=family")
+	if strings.Contains(owner, "The key can also move photos") {
+		t.Error("with deleting off the dialog must not say the key can move photos to the trash")
+	}
+	if !strings.Contains(owner, "switched off by the administrator (RECEIVER_DELETE)") || strings.Contains(owner, `name="days"`) {
+		t.Error("the owner must be told it is off, with no field to fill in")
+	}
+	if code, _ := postForm(t, app.URL+"/services/lifetime", "sess=family", "service=club&days=7"); code != 409 {
+		t.Errorf("setting a lifetime while it is switched off: %d, want 409", code)
+	}
+	if code, body := postForm(t, app.URL+"/services/takeback", "sess=other", "service=club"); code != 409 || !strings.Contains(body, "switched off by the administrator") {
+		t.Errorf("taking back while it is switched off: %d %s", code, body)
+	}
+}
+
+func TestTakingBackWithNothingHandedOverIsRefusedWithAReason(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st), func(srv *web.Server) { srv.Hub.ReceiverDelete = true })
+	if sender := get(t, app.URL, "sess=other"); strings.Contains(sender, "Take back the last hand-over") {
+		t.Error("no button when nothing was handed over")
+	}
+	if code, body := postForm(t, app.URL+"/services/takeback", "sess=other", "service=club"); code != 409 || !strings.Contains(body, "there is nothing to take back") {
+		t.Errorf("%d %s", code, body)
+	}
+	// once something was handed over, the button is there
+	links, _ := st.Links(context.Background())
+	if err := st.AddHandoverItem(context.Background(), links[0].ID, "b1", uuid.New(), uuid.New(), false); err != nil {
+		t.Fatal(err)
+	}
+	sender := get(t, app.URL, "sess=other")
+	if !strings.Contains(sender, "Take back the last hand-over") || !strings.Contains(sender, "1 photo handed over") {
+		t.Errorf("the sender must be offered to take back the last hand-over")
+	}
+}

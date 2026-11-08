@@ -27,6 +27,21 @@ var ReceiverPermissions = perms("user.read", "tag.read", "tag.create", "tag.asse
 var ReceiverPermissionsAlbum = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create",
 	"album.read", "album.create", "albumAsset.create")
 
+// ReceiverPermissionsFor is what a new receiver key gets: ReceiverPermissions, with the album permissions when the
+// service puts arrivals in an album, and asset.delete when the administrator allows it (RECEIVER_DELETE, on by default).
+// asset.delete lets the app move to the receiver's trash the copies it handed over: a hand-over that expires, or one a
+// sender takes back. It never touches a photo the receiver put in an album, and only ever the trash is used.
+func ReceiverPermissionsFor(album, canDelete bool) []Permission {
+	out := append([]Permission{}, ReceiverPermissions...)
+	if album {
+		out = append([]Permission{}, ReceiverPermissionsAlbum...)
+	}
+	if canDelete {
+		out = append(out, "asset.delete")
+	}
+	return out
+}
+
 // Optional are the permissions that add a convenience: a key without them still works, and the app carries on without
 // that convenience (and `doctor` says so as a warning, not a failure). (workflow.logs is optional too, see above.)
 var Optional = map[Permission]string{

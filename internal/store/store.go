@@ -155,6 +155,20 @@ var migrations = []string{
 	 ALTER TABLE services ADD COLUMN accept_photos INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE services ADD COLUMN accept_orient TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE services ADD COLUMN accept_max_mb INTEGER NOT NULL DEFAULT 0;`,
+	// An owner may let the copies that arrive expire (lifetime in days; 0: they stay). item rows remember which copy
+	// came from which photo, so a sender can take back their last hand-over.
+	`ALTER TABLE services ADD COLUMN lifetime_days INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE handover_items (
+	   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+	   link_id        TEXT NOT NULL,
+	   batch          TEXT NOT NULL,
+	   sender_asset   TEXT NOT NULL,
+	   receiver_asset TEXT NOT NULL,
+	   clip           INTEGER NOT NULL DEFAULT 0,
+	   at             TEXT NOT NULL,
+	   taken_back     INTEGER NOT NULL DEFAULT 0
+	 );
+	 CREATE INDEX handover_items_link ON handover_items (link_id, at);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -356,6 +370,18 @@ func (s *Store) SetServicePaused(ctx context.Context, name string, paused bool) 
 	return nil
 }
 
+// SetServiceLifetime sets how long the copies that arrive stay before they are moved to the owner's trash (0: for ever).
+func (s *Store) SetServiceLifetime(ctx context.Context, name string, days int) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE services SET lifetime_days = ? WHERE name = ?`, days, name)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetServiceRules sets a service's quiet hours and what it accepts.
 func (s *Store) SetServiceRules(ctx context.Context, name string, v Service) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE services SET quiet_from = ?, quiet_to = ?, quiet_large_mb = ?, accept_rating = ?, accept_photos = ?, accept_orient = ?, accept_max_mb = ? WHERE name = ?`,
@@ -476,6 +502,7 @@ type Service struct {
 	AcceptPhotos           bool   // no videos
 	AcceptOrient           string // "", "landscape" or "portrait"
 	AcceptMaxMB            int    // the largest file (0: no limit)
+	LifetimeDays           int    // copies that arrive are moved to the owner's trash after this many days unless filed (0: they stay)
 	CreatedAt              time.Time
 }
 
@@ -513,7 +540,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 
 func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, paused, limit_photos, limit_mb, quiet_from, quiet_to, quiet_large_mb, accept_rating, accept_photos, accept_orient, accept_max_mb, created_at FROM services ORDER BY created_at, id`)
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, paused, limit_photos, limit_mb, quiet_from, quiet_to, quiet_large_mb, accept_rating, accept_photos, accept_orient, accept_max_mb, lifetime_days, created_at FROM services ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +550,7 @@ func (s *Store) Services(ctx context.Context) ([]Service, error) {
 		var v Service
 		var owner, keyID, created string
 		var enc []byte
-		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &v.Paused, &v.LimitPhotos, &v.LimitMB, &v.QuietFrom, &v.QuietTo, &v.QuietLargeMB, &v.AcceptRating, &v.AcceptPhotos, &v.AcceptOrient, &v.AcceptMaxMB, &created); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &v.Paused, &v.LimitPhotos, &v.LimitMB, &v.QuietFrom, &v.QuietTo, &v.QuietLargeMB, &v.AcceptRating, &v.AcceptPhotos, &v.AcceptOrient, &v.AcceptMaxMB, &v.LifetimeDays, &created); err != nil {
 			return nil, err
 		}
 		v.OwnerID, _ = uuid.Parse(owner)
@@ -728,4 +755,65 @@ func (s *Store) GuideDone(ctx context.Context, user uuid.UUID) (bool, error) {
 func (s *Store) SetGuideDone(ctx context.Context, user uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO guide (user_id, done_at) VALUES (?, ?)`, user.String(), time.Now().UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// HandoverItem is one photo of a hand-over: the sender's original and the receiver's copy of it.
+type HandoverItem struct {
+	ID                         int64
+	Batch                      string
+	SenderAsset, ReceiverAsset uuid.UUID
+	Clip                       bool // a live photo's motion clip (not counted as a photo)
+	At                         time.Time
+}
+
+// AddHandoverItem remembers that the receiver's copy came from the sender's photo, in the hand-over named batch (one
+// per sender per pass), so the sender can take it back. Only a few days are kept.
+func (s *Store) AddHandoverItem(ctx context.Context, linkID, batch string, sender, receiver uuid.UUID, clip bool) error {
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO handover_items (link_id, batch, sender_asset, receiver_asset, clip, at) VALUES (?,?,?,?,?,?)`,
+		linkID, batch, sender.String(), receiver.String(), b2i(clip), now.Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM handover_items WHERE at < ?`, now.Add(-HandoverRetention).Format(time.RFC3339Nano))
+	return err
+}
+
+// LastHandover is the photos of the sender's most recent hand-over since the given time that were not taken back yet.
+func (s *Store) LastHandover(ctx context.Context, linkID string, since time.Time) ([]HandoverItem, error) {
+	var batch sql.NullString
+	if err := s.db.QueryRowContext(ctx, `SELECT batch FROM handover_items WHERE link_id = ? AND at >= ? AND taken_back = 0 ORDER BY at DESC, id DESC LIMIT 1`,
+		linkID, since.UTC().Format(time.RFC3339Nano)).Scan(&batch); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if !batch.Valid {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, batch, sender_asset, receiver_asset, clip, at FROM handover_items WHERE link_id = ? AND batch = ? AND taken_back = 0 ORDER BY id`, linkID, batch.String)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []HandoverItem
+	for rows.Next() {
+		var it HandoverItem
+		var snd, rcv, at string
+		if err := rows.Scan(&it.ID, &it.Batch, &snd, &rcv, &it.Clip, &at); err != nil {
+			return nil, err
+		}
+		it.SenderAsset, _ = uuid.Parse(snd)
+		it.ReceiverAsset, _ = uuid.Parse(rcv)
+		it.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// MarkTakenBack records that these items were taken back, so they are not offered again.
+func (s *Store) MarkTakenBack(ctx context.Context, ids []int64) error {
+	for _, id := range ids {
+		if _, err := s.db.ExecContext(ctx, `UPDATE handover_items SET taken_back = 1 WHERE id = ?`, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }

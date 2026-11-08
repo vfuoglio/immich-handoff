@@ -82,12 +82,13 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	bus := &live.Bus{} // what is happening, told to the pages that are open (nobody else)
+	receiverDelete := env("RECEIVER_DELETE", "on") != "off" // may a receiver's key move copies to its owner's trash: copies that expire, a hand-over taken back
+	bus := &live.Bus{}                                      // what is happening, told to the pages that are open (nobody else)
 	s := &syncer.Syncer{
 		Services: services, Log: log, Bus: bus,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
-			NotifyURL: os.Getenv("NOTIFY_URL"), Quiet: quiet, NoDetails: env("CARRY_DETAILS", "on") == "off",
+			NotifyURL: os.Getenv("NOTIFY_URL"), Quiet: quiet, ReceiverDelete: receiverDelete, NoDetails: env("CARRY_DETAILS", "on") == "off",
 		},
 	}
 
@@ -118,7 +119,7 @@ func run(log *slog.Logger) error {
 
 	// Self-service joining needs a place to keep keys, protected by a key of its own.
 	defaults := config.DefaultsFrom(os.Getenv)
-	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus,
+	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus, ReceiverDelete: receiverDelete,
 		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) }}

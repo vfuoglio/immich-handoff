@@ -671,3 +671,12 @@ func (w *Server) rulesText(ctx context.Context, svc *syncer.Service) string {
 	}
 	return strings.Join(out, " ")
 }
+
+// createConfirm is what the dialog that makes a service says about the key it makes.
+func createConfirm(ctx context.Context, deleteOK bool) string {
+	msg := t(ctx, "Creating a service makes an API key named for it in your Immich account. The app uses it to upload the photos senders hand to you. Nobody can see the key.")
+	if deleteOK {
+		msg += " " + t(ctx, "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.")
+	}
+	return msg
+}

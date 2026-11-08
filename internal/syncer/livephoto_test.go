@@ -74,6 +74,7 @@ func newTwoAccounts() *twoAccounts {
 }
 
 func (f *twoAccounts) addSender(a *fakeAsset) { f.assets["src"][a.id] = a }
+func (f *twoAccounts) addDest(a *fakeAsset)   { f.assets["dest"][a.id] = a }
 
 func (f *twoAccounts) handler() http.Handler {
 	j := func(w http.ResponseWriter, code int, v any) {

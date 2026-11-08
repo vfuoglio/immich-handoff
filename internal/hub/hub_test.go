@@ -1402,20 +1402,20 @@ func TestKeysMadeBeforeStacksGetTheStackPermissionsOnceTheirOwnerOpensThePage(t 
 		}
 		return false
 	}
-	e.h.EnsureStackPermissions(ctx, e.sess, bob)
+	e.h.EnsureKeyPermissions(ctx, e.sess, bob)
 	if !has(links[0].KeyID.String(), "stack.read") {
 		t.Errorf("the sender's key must be able to read stacks: %v", e.f.keyPerms[links[0].KeyID.String()])
 	}
 	if has(svcs[0].KeyID.String(), "stack.create") {
 		t.Errorf("a person's session must not touch the key of a service someone else owns")
 	}
-	e.h.EnsureStackPermissions(ctx, e.ann, ann)
+	e.h.EnsureKeyPermissions(ctx, e.ann, ann)
 	if !has(svcs[0].KeyID.String(), "stack.create") {
 		t.Errorf("the owner's receiver key must be able to make stacks: %v", e.f.keyPerms[svcs[0].KeyID.String()])
 	}
 	updates := e.f.keyUpdates
-	e.h.EnsureStackPermissions(ctx, e.sess, bob)
-	e.h.EnsureStackPermissions(ctx, e.ann, ann)
+	e.h.EnsureKeyPermissions(ctx, e.sess, bob)
+	e.h.EnsureKeyPermissions(ctx, e.ann, ann)
 	if e.f.keyUpdates != updates {
 		t.Errorf("the second visit must change nothing")
 	}
@@ -1445,5 +1445,86 @@ func TestTheOwnerSetsQuietHoursAndWhatTheServiceAcceptsAndNobodyElseCan(t *testi
 	}
 	if svc := service(e, "frame"); svc.Quiet.Set() || svc.Accept.Active() {
 		t.Errorf("clearing the rules clears them: %+v %+v", svc.Quiet, svc.Accept)
+	}
+}
+
+func hasPerm(perms []string, name string) bool {
+	for _, p := range perms {
+		if p == name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestANewReceiverKeyCanDeleteOnlyWhenTheAdministratorAllowsIt(t *testing.T) {
+	for _, allowed := range []bool{true, false} {
+		e, ctx := setup(t, false), context.Background()
+		e.h.ReceiverDelete = allowed
+		if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "frame", Tag: "frame", Policy: "open", Visibility: "listed"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := hasPerm(e.f.lastPerms, "asset.delete"); got != allowed {
+			t.Errorf("RECEIVER_DELETE=%v: the new receiver key has asset.delete = %v (%v)", allowed, got, e.f.lastPerms)
+		}
+	}
+}
+
+func TestKeysGetOrLoseTheDeletePermissionWhenTheirOwnerOpensThePage(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.ReceiverDelete = false
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "frame", Tag: "frame", Policy: "open", Visibility: "listed"}); err != nil {
+		t.Fatal(err)
+	}
+	svcs, _ := e.st.Services(ctx)
+	key := svcs[0].KeyID.String()
+	if hasPerm(e.f.keyPerms[key], "asset.delete") {
+		t.Fatal("a key made while deleting is off has no delete permission")
+	}
+	// the administrator switches it on and restarts: the key is upgraded when its owner opens the page
+	e.h.ReceiverDelete = true
+	e.h.EnsureKeyPermissions(ctx, e.ann, ann)
+	if !hasPerm(e.f.keyPerms[key], "asset.delete") {
+		t.Errorf("the key must get asset.delete: %v", e.f.keyPerms[key])
+	}
+	// and switched off again after another restart: it is taken away, and the key keeps what else it had
+	e.h.ReceiverDelete = false
+	e.h.ForgetGranted()
+	e.h.EnsureKeyPermissions(ctx, e.ann, ann)
+	if hasPerm(e.f.keyPerms[key], "asset.delete") || !hasPerm(e.f.keyPerms[key], "asset.upload") {
+		t.Errorf("the key loses asset.delete and keeps the rest: %v", e.f.keyPerms[key])
+	}
+}
+
+func TestTheOwnerSetsHowLongCopiesLiveAndNobodyElseCan(t *testing.T) {
+	e, ctx := setup(t, false), context.Background()
+	e.h.ReceiverDelete = true
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "frame", Tag: "frame", Policy: "open", Visibility: "listed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.SetLifetime(ctx, e.ann, ann, "frame", 7); err != nil {
+		t.Fatal(err)
+	}
+	if got := service(e, "frame").LifetimeDays; got != 7 {
+		t.Errorf("the running service carries the lifetime: %d", got)
+	}
+	svcs, _ := e.st.Services(ctx)
+	if !hasPerm(e.f.keyPerms[svcs[0].KeyID.String()], "asset.delete") {
+		t.Error("setting a lifetime gives the receiver key the permission it needs, with the owner's own session")
+	}
+	if err := e.h.SetLifetime(ctx, e.sess, bob, "frame", 3); err == nil {
+		t.Error("only the owner may set a lifetime")
+	}
+	for _, bad := range []int{-1, 5000} {
+		if err := e.h.SetLifetime(ctx, e.ann, ann, "frame", bad); !errors.Is(err, hub.ErrBadLifetime) {
+			t.Errorf("%d days must be refused: %v", bad, err)
+		}
+	}
+	if err := e.h.SetLifetime(ctx, e.ann, ann, "frame", 0); err != nil || service(e, "frame").LifetimeDays != 0 {
+		t.Errorf("0 turns it off: %v", err)
+	}
+	e.h.ReceiverDelete = false
+	if err := e.h.SetLifetime(ctx, e.ann, ann, "frame", 7); !errors.Is(err, hub.ErrDeleteOff) {
+		t.Errorf("with deleting switched off a lifetime cannot be set: %v", err)
 	}
 }

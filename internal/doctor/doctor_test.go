@@ -123,7 +123,7 @@ func (s *scenario) api(t *testing.T, key string) *immich.API {
 }
 
 var good = map[string][]string{
-	"recv":   {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create"},
+	"recv":   {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.upload", "stack.create", "asset.delete"},
 	"sender": {"user.read", "tag.read", "tag.create", "tag.asset", "asset.read", "asset.download", "stack.read", "workflow.read", "workflow.create", "workflow.update", "workflow.logs"},
 }
 
@@ -450,5 +450,42 @@ func TestAKeyWithoutTheStackPermissionsWorksAndIsOnlyAWarning(t *testing.T) {
 		"receiver bob: the key works but lacks stack.create (without it: photos that arrive as a stack arrive as separate photos")
 	if warns != 2 {
 		t.Errorf("warnings %d, want one for each key\n%s", warns, out)
+	}
+}
+
+func TestTheDeletePermissionOfAReceiverKeyIsCheckedAgainstReceiverDelete(t *testing.T) {
+	without := slices.DeleteFunc(slices.Clone(good["recv"]), func(p string) bool { return p == "asset.delete" })
+	cases := []struct {
+		name  string
+		env   string
+		perms []string
+		warn  string // what the warning says; empty: none
+	}{
+		{"on and the key can", "", good["recv"], ""},
+		{"on and the key cannot", "", without, "may not move photos to the trash"},
+		{"off and the key cannot", "off", without, ""},
+		{"off and the key can", "off", good["recv"], "although RECEIVER_DELETE=off"},
+	}
+	for _, c := range cases {
+		s := newScenario(t)
+		s.f.perms["recv"] = c.perms
+		out, fails, warns := s.run(t, true, func(in *Input) {
+			prev := in.Env
+			in.Env = func(k string) string {
+				if k == "RECEIVER_DELETE" {
+					return c.env
+				}
+				if prev != nil {
+					return prev(k)
+				}
+				return ""
+			}
+		})
+		if fails != 0 {
+			t.Errorf("%s: a mismatch is never a failure\n%s", c.name, out)
+		}
+		if (c.warn == "") != (warns == 0) || (c.warn != "" && !strings.Contains(out, c.warn)) {
+			t.Errorf("%s: warnings %d, want %q\n%s", c.name, warns, c.warn, out)
+		}
 	}
 }

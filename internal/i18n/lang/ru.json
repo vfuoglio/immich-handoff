@@ -41,6 +41,7 @@
  "Connection lost": "Соединение потеряно",
  "Continue": "Продолжить",
  "Copied": "Скопировано",
+ "Copies that expire, and taking a hand-over back, are switched off by the administrator (RECEIVER_DELETE).": "Копии с истекающим сроком и отзыв передачи отключены администратором (RECEIVER_DELETE).",
  "Copy": "Копировать",
  "Copy a message": "Скопировать сообщение",
  "Could not do that: {reason}": "Не удалось выполнить: {reason}",
@@ -131,6 +132,7 @@
  "More options": "Дополнительные параметры",
  "Most megabytes each sender may hand over in a day (optional)": "Максимум мегабайт, которые каждый отправитель может передать за день (необязательно)",
  "Most photos each sender may hand over in a day (optional)": "Максимум фото, которые каждый отправитель может передать за день (необязательно)",
+ "Move copies to my trash after (days)": "Перемещать копии в мою корзину через (дней)",
  "Need attention": "Требуют внимания",
  "Needs approval": "Требует одобрения",
  "Needs you": "Ждёт вас",
@@ -183,12 +185,19 @@
  "Photos arrive in the album <strong>{album}</strong>.": "Фото попадают в альбом <strong>{album}</strong>.",
  "Photos arrive tagged <code class=\"tag\">{tag}</code>.": "Фото приходят с меткой <code class=\"tag\">{tag}</code>.",
  "Photos handed over per day, oldest first: {days}": "Передано фото по дням, начиная с самого раннего: {days}",
+ "Photos handed over to this service are moved to your trash, never deleted for good, after this many days, unless you file them in an album or take the inbox tag off. Empty or 0: they stay.": "Фото, переданные в этот сервис, перемещаются в вашу корзину (но не удаляются навсегда) через указанное число дней, если вы не положите их в альбом и не снимете метку входящих. Пусто или 0: они остаются.",
  "Photos only (no videos)": "Только фото (без видео)",
  "Photos over a limit wait, tagged, until the day moves on. You can change the limits later.": "Фото сверх лимита ждут с меткой, пока не наступит новый день. Лимиты можно изменить позже.",
  "Photos per sender per day": "Фото на отправителя в день",
  "Photos stay where they are until it is fixed.": "Фото остаются на месте, пока это не будет исправлено.",
  "Photos tagged meanwhile stay tagged and are handed over when it resumes.": "Фото, отмеченные за это время, остаются с меткой и будут переданы после возобновления.",
  "Photos wait": "Фото ждут",
+ "Photos you hand over to this service are moved to the receiver's trash after {n} day unless they file them in an album.": {
+  "few": "Фото, которые вы передаёте в этот сервис, перемещаются в корзину получателя через {n} дня, если он не положит их в альбом.",
+  "many": "Фото, которые вы передаёте в этот сервис, перемещаются в корзину получателя через {n} дней, если он не положит их в альбом.",
+  "one": "Фото, которые вы передаёте в этот сервис, перемещаются в корзину получателя через {n} день, если он не положит их в альбом.",
+  "other": "Фото, которые вы передаёте в этот сервис, перемещаются в корзину получателя через {n} дней, если он не положит их в альбом."
+ },
  "Photos you tag in Immich are handed over automatically.": "Фото, которые вы отмечаете в Immich, передаются автоматически.",
  "Photos you tag in Immich are handed over to them. You choose what happens to your own originals, and you can stop at any time.": "Фото, которые вы отмечаете в Immich, передаются им. Вы выбираете, что будет с вашими оригиналами, и можете остановиться в любой момент.",
  "Please confirm": "Подтвердите, пожалуйста",
@@ -214,6 +223,7 @@
  "Request": "Запрос",
  "Resume sending": "Возобновить отправку",
  "Resume service": "Возобновить сервис",
+ "Save lifetime": "Сохранить срок жизни",
  "Save limits": "Сохранить лимиты",
  "Save rules": "Сохранить правила",
  "Search": "Поиск",
@@ -237,10 +247,14 @@
  "Tags are off": "Метки отключены",
  "Tags are on. Now refresh the Immich tab or window (on the phone, close and reopen the app); until then the tag options do not appear.": "Теги включены. Теперь обновите вкладку или окно Immich (на телефоне закройте и снова откройте приложение); до этого параметры меток не появятся.",
  "Tags are switched off in your Immich account": "Теги отключены в вашей учётной записи Immich",
+ "Take back": "Отозвать",
+ "Take back the last hand-over": "Отозвать последнюю передачу",
+ "Take back the last hand-over?": "Отозвать последнюю передачу?",
  "The QR code could not be made.": "Не удалось создать QR-код.",
  "The backup could not be downloaded.": "Не удалось скачать резервную копию.",
  "The backup could not be made. See the app's log.": "Не удалось сделать резервную копию. Смотрите журнал приложения.",
  "The backup was downloaded.": "Резервная копия скачана.",
+ "The copies in the receiver's library go to their trash, except the ones they have already filed in an album, and your originals come back from your trash (if you moved them) without the service tag. Nothing is deleted for good.": "Копии в библиотеке получателя попадут в его корзину, кроме тех, которые он уже положил в альбом, а ваши оригиналы вернутся из вашей корзины (если вы их перемещали) без метки сервиса. Ничего не удаляется навсегда.",
  "The current link will stop working. Continue?": "Текущая ссылка перестанет работать. Продолжить?",
  "The daily limit is reached, so {n} photo waits, still tagged. It is handed over from {when}.": {
   "few": "Дневной лимит достигнут, поэтому {n} фото ждут, всё ещё с меткой. Они будут переданы с {when}.",
@@ -249,6 +263,7 @@
   "other": "Дневной лимит достигнут, поэтому {n} фото ждут, всё ещё с меткой. Они будут переданы с {when}."
  },
  "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.": "Файл содержит все сохранённые ключи API (всё ещё зашифрованные), а также имя и электронную почту каждого. Скачивайте его только чтобы сохранить в надёжном месте.",
+ "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.": "Ключ также может перемещать в вашу корзину фото, переданные приложением (копии с истекающим сроком, отозванная передача), но никогда не удаляет их навсегда.",
  "The last backup failed: {reason}": "Последняя резервная копия не удалась: {reason}",
  "The latest events across your services. Nothing here changes a photo.": "Последние события ваших сервисов. Здесь ничто не меняет фото.",
  "The owner approved {name} for {service}": "Владелец одобрил {name} для {service}",
@@ -363,13 +378,17 @@
  "that album is not one of your own albums": "этот альбом не ваш собственный",
  "the album name must be at most 100 characters and have no line breaks": "название альбома — не более 100 символов, без переносов строк",
  "the app started": "приложение запустилось",
+ "the key of the service's owner cannot move photos to the trash yet: ask the owner to open this page once": "ключ владельца сервиса пока не может перемещать фото в корзину: попросите владельца один раз открыть эту страницу",
+ "the lifetime is a whole number of days from 1 to 3650, or empty for none": "срок жизни — целое число дней от 1 до 3650, либо пусто, если срока нет",
  "the number of days must be between 1 and 3650": "число дней должно быть от 1 до 3650",
  "the owner of this service has not approved you yet": "владелец этого сервиса ещё не одобрил вас",
  "theme": "тема",
  "there is no such request": "такого запроса нет",
  "there is no such service or member (it may already have been removed)": "такого сервиса или участника нет (возможно, он уже удалён)",
+ "there is nothing to take back: nothing was handed over to this service in the last 24 hours, or it was already taken back": "отзывать нечего: за последние 24 часа в этот сервис ничего не передавали, или это уже отозвано",
  "this entry comes from the configuration (.env or the routes file): change it there": "эта запись взята из конфигурации (.env или файла маршрутов): измените её там",
  "this invitation is not valid any more": "это приглашение больше недействительно",
+ "this is switched off by the administrator (RECEIVER_DELETE)": "это отключено администратором (RECEIVER_DELETE)",
  "this service does not accept new senders": "этот сервис не принимает новых отправителей",
  "those rules do not make sense: the hours are times like 01:00, the rating is from 0 to 5 and the sizes are whole numbers of megabytes": "эти правила лишены смысла: часы — это время вроде 01:00, оценка от 0 до 5, а размеры — целые числа мегабайт",
  "to them in Immich.": "им в Immich.",
@@ -403,6 +422,12 @@
  "{name} removed the service {service}": "{name} удалил(а) сервис {service}",
  "{name} resumed sending to {service}": "{name} возобновил(а) отправку в {service}",
  "{name} resumed the service {service}": "{name} возобновил(а) сервис {service}",
+ "{name} set the copies handed over to {service} to expire after {n} day": {
+  "few": "{name} задал(а) для копий, переданных в {service}, срок {n} дня",
+  "many": "{name} задал(а) для копий, переданных в {service}, срок {n} дней",
+  "one": "{name} задал(а) для копий, переданных в {service}, срок {n} день",
+  "other": "{name} задал(а) для копий, переданных в {service}, срок {n} дней"
+ },
  "{name} set the daily limit of {service} to {mb} MB per sender": "{name} установил(а) дневной лимит для {service}: {mb} МБ на отправителя",
  "{name} set the daily limit of {service} to {n} photo and {mb} MB per sender": {
   "few": "{name} установил(а) дневной лимит для {service}: {n} фото и {mb} МБ на отправителя",
@@ -421,6 +446,13 @@
  "{name} started sending to {service} (originals are moved to their trash)": "{name} начал(а) отправлять в {service} (оригиналы перемещаются в корзину)",
  "{name} stopped handing over the album {album} to {service}": "{name} перестал(а) передавать альбом {album} в {service}",
  "{name} stopped sending to {service}": "{name} перестал(а) отправлять в {service}",
+ "{name} took back {n} photo handed over to {service}": {
+  "few": "{name} отозвал(а) {n} фото, переданные в {service}",
+  "many": "{name} отозвал(а) {n} фото, переданные в {service}",
+  "one": "{name} отозвал(а) {n} фото, переданное в {service}",
+  "other": "{name} отозвал(а) {n} фото, переданные в {service}"
+ },
+ "{name} turned off expiry for {service}": "{name} отключил(а) истечение срока для {service}",
  "{name} wants to send to {service}": "{name} хочет отправлять в {service}",
  "{name} was removed from {service} by an administrator; their key in Immich stays until they clean up": "{name} удалён(а) из {service} администратором; его (её) ключ в Immich остаётся, пока он (она) не очистит",
  "{name}'s connection to {service} was cut: their API key was deleted": "Соединение {name} с {service} разорвано: его (её) ключ API удалён",
@@ -446,6 +478,18 @@
   "many": "{n} фото из альбома {album} передано в {service}",
   "one": "{n} фото из альбома {album} передано в {service}",
   "other": "{n} фото из альбома {album} передано в {service}"
+ },
+ "{n} photo handed over to {service} reached the end of its lifetime and was moved to your trash": {
+  "few": "{n} фото, переданные в {service}, достигли конца срока жизни и перемещены в вашу корзину",
+  "many": "{n} фото, переданные в {service}, достигли конца срока жизни и перемещены в вашу корзину",
+  "one": "{n} фото, переданное в {service}, достигло конца срока жизни и перемещено в вашу корзину",
+  "other": "{n} фото, переданные в {service}, достигли конца срока жизни и перемещены в вашу корзину"
+ },
+ "{n} photo handed over {when}": {
+  "few": "{n} фото передано {when}",
+  "many": "{n} фото передано {when}",
+  "one": "{n} фото передано {when}",
+  "other": "{n} фото передано {when}"
  },
  "{n} photo waits": {
   "few": "{n} фото ждут",
@@ -479,6 +523,7 @@
   "one": "{n} звезда или больше",
   "other": "{n} звёзд или больше"
  },
+ "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.": "Отозвано: {n}. У получателя остались {kept}: он положил их в альбом.",
  "{n} things need you.": "Вас ждут дела: {n}.",
  "{n} waiting": "{n} ждут",
  "{photos} a day": "{photos} в день",

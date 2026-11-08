@@ -44,6 +44,10 @@ type Hub struct {
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 
+	// ReceiverDelete: new receiver keys may move copies to their owner's trash, and existing ones get or lose the permission
+	// when their owner opens the page (RECEIVER_DELETE, on by default).
+	ReceiverDelete bool
+
 	mu       sync.RWMutex
 	snapshot []*syncer.Service
 	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
@@ -123,7 +127,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
 			OwnerID: v.OwnerID, AllowJoin: v.Policy == store.PolicyOpen, NeedsApproval: v.Policy == store.PolicyApproval,
 			Unlisted: v.Visibility == store.VisInvite, Invite: v.Invite, SentTag: v.SentTag, Album: v.Album,
-			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB,
+			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB, LifetimeDays: v.LifetimeDays,
 			Quiet:   syncer.Quiet{From: v.QuietFrom, To: v.QuietTo, LargeMB: v.QuietLargeMB},
 			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},

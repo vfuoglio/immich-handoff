@@ -90,6 +90,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/visibility", w.setVisibility)
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("POST /services/rules", w.setRules)
+	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
+	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
@@ -292,6 +294,14 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 				v.Hold = t(ctx, "You paused sending to this service.")
 			}
 			w.limitsFor(ctx, &v, svc, a)
+			if w.Hub != nil && w.Hub.ReceiverDelete {
+				if svc.LifetimeDays > 0 {
+					v.Lifetime = n(ctx, "Photos you hand over to this service are moved to the receiver's trash after {n} day unless they file them in an album.", "Photos you hand over to this service are moved to the receiver's trash after {n} days unless they file them in an album.", svc.LifetimeDays)
+				}
+				if count, at := w.Hub.TakeBackOffer(ctx, m.user.ID, svc.Label()); count > 0 {
+					v.TakeBack = n(ctx, "{n} photo handed over {when}", "{n} photos handed over {when}", count, "when", loc(ctx).Stamp(at.Local()))
+				}
+			}
 			if qw, ok := w.S.QuietFor(a); ok {
 				v.QuietWait = n(ctx, "The quiet hours are not open, so {n} photo waits, still tagged. It is handed over from {when}.", "The quiet hours are not open, so {n} photos wait, still tagged. They are handed over from {when}.", qw.Waiting, "when", loc(ctx).Stamp(qw.Until.Local()))
 			}
@@ -337,7 +347,7 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 	for _, o := range owned {
 		ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
 			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB,
-			QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
+			LifetimeDays: o.Service.LifetimeDays, DeleteOK: w.Hub.ReceiverDelete, QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
 			AcceptOrient: o.Service.Accept.Orientation, AcceptMaxMB: o.Service.Accept.MaxMB}
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
@@ -375,6 +385,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 		return d
 	}
 	d.CanOffer = true
+	d.DeleteOK = w.Hub != nil && w.Hub.ReceiverDelete
 	if offers, err := w.Hub.Offers(ctx, me.user.ID); err == nil {
 		for _, o := range offers {
 			owner := ""
@@ -583,7 +594,7 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
-			w.Hub.EnsureStackPermissions(ctx, me.sess, me.user)
+			w.Hub.EnsureKeyPermissions(ctx, me.sess, me.user)
 		}()
 	}
 	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)
@@ -1007,6 +1018,55 @@ func (w *Server) setRules(rw http.ResponseWriter, r *http.Request) {
 			Orientation: strings.TrimSpace(r.PostFormValue("orientation")), MaxMB: num("maxmb")}
 		return w.Hub.SetRules(ctx, me.user, service, q, a)
 	})
+}
+
+// setLifetime reads how many days the copies that arrive live.
+func (w *Server) setLifetime(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "lifetime", func(ctx context.Context, me *member, service string) error {
+		v := strings.TrimSpace(r.PostFormValue("days"))
+		days := 0
+		if v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return hub.ErrBadLifetime
+			}
+			days = n
+		}
+		return w.Hub.SetLifetime(ctx, me.sess, me.user, service, days)
+	})
+}
+
+// takeBack undoes the signed-in sender's last hand-over to a service. When the receiver had already filed some of the
+// photos in an album, those stay, and the page says so instead of reloading.
+func (w *Server) takeBack(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.Error(rw, t(r.Context(), "Joining from this page is not switched on."), http.StatusNotFound)
+		return
+	}
+	service := r.PostFormValue("service")
+	res, err := w.Hub.TakeBack(r.Context(), me.user, service)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if hub.IsUserError(err) {
+			status = http.StatusConflict
+		}
+		w.Log.Warn("taking a hand-over back failed", "user", me.user.Email, "service", service, "err", err)
+		rw.Header().Set("HX-Reswap", "innerHTML")
+		rw.WriteHeader(status)
+		fmt.Fprint(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())))
+		return
+	}
+	if res.Kept > 0 {
+		rw.Header().Set("HX-Reswap", "innerHTML")
+		fmt.Fprint(rw, t(r.Context(), "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.", "n", res.Taken, "kept", res.Kept))
+		return
+	}
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 func (w *Server) pauseService(rw http.ResponseWriter, r *http.Request) {

@@ -174,6 +174,25 @@ To hand a photo over **on a day** (a surprise, an anniversary, Christmas morning
 - Photos tagged only for a date are **not counted** in the page's "Waiting to go" until their day.
 - Checked against a real Immich 3.2.0: a tag inside `share` (such as `share/2999-01-01`) is also found by a search for `share`, which is why the app skips photos whose day has not come.
 
+## Hand-overs that expire
+
+An owner can make the copies that arrive **expire**: "Move copies to my trash after N days" in the service's settings. A copy that is still **unfiled** (in no album) and still has the inbox tag when its time is up goes to the owner's **trash**, never deleted for good, so it can be put back for as long as Immich keeps the trash. To keep a copy, file it in an album or take the inbox tag off; both leave it alone. It is meant for photos that should not stay, such as a school picture sent to a teacher, or for a service that is only ever a place to look at things.
+
+- The time is counted from the day the copy arrived. A service with a lifetime does not take the inbox tag off at the usual inbox expiry first; the lifetime decides.
+- Senders are told on their card that photos expire ("moved to the receiver's trash after N days unless they file them in an album"), and the owner's activity says when copies expired.
+- It needs the administrator to allow it (`RECEIVER_DELETE`, on by default; see [Settings](settings.md)). A service made before that existed gets the permission when its owner opens the page, which is also when they set a lifetime.
+- Without the permission (a key made by hand, see [Fixed accounts](fixed-accounts.md)) the setting does nothing, and the log says so once.
+
+## Taking back the last hand-over
+
+A sender who joined from the page sees **Take back the last hand-over** on a service's card for 24 hours after handing photos over. It undoes what the last pass handed over to that service, as far as it can be undone:
+
+- The receiver's **copies** go to the receiver's trash (not deleted for good).
+- Your **originals** come back from your trash, if you moved them, and lose the service tag so they are not handed over again. With **keep my originals** nothing was in the trash; the "handed over" tag comes off.
+- A copy the receiver has **already filed in an album** is theirs now: it stays, and so does your original's state. The page says how many stayed.
+- A stack and a live photo (with its motion clip) are taken back whole.
+- It takes back the most recent hand-over not yet taken back, so pressing it again takes back the one before. Only people who joined from the page have it (accounts set up in `.env` or the routes file are not recorded). It needs `RECEIVER_DELETE` (on by default); if the owner's key cannot move photos to the trash yet, the page asks the sender to tell the owner to open the page once.
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.
