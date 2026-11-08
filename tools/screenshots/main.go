@@ -3,6 +3,7 @@
 //	go run . gen   <dir> [count]   write sample photos (generated landscapes, no real people)
 //	go run . shots <set> <outdir>  take screenshots of a running demo with headless Chrome
 //	go run . hero  <outdir>        compose the README hero image from earlier shots
+//	go run . record <who> <seconds> <framedir>  film the live scene as frames, for the README animation (see README.md)
 //
 // It lives in its own module so Chrome automation stays out of the app's dependencies.
 package main
@@ -64,6 +65,13 @@ func main() {
 		shots(os.Args[2], os.Args[3])
 	case "hero":
 		hero(os.Args[2])
+	case "record":
+		if len(os.Args) < 5 {
+			log.Fatal("record needs a person, a number of seconds and a directory for the frames")
+		}
+		var secs float64
+		fmt.Sscan(os.Args[3], &secs)
+		record(os.Args[2], secs, os.Args[4])
 	case "proxycheck":
 		proxycheck(os.Args[2])
 	default:
@@ -446,4 +454,77 @@ func proxycheck(page string) {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// ---------------------------------------------------------------- the animation
+
+// record films the live scene of one person's Overview: it grabs frames of that one element as fast as the browser
+// allows, for the given time, and writes them as JPEGs with a list (frames.txt) that ffmpeg turns into a GIF. It
+// starts when the page has settled, so tag the photos (seed.sh fire) a few seconds after starting it.
+func record(who string, seconds float64, dir string) {
+	os.MkdirAll(dir, 0o755)
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("no-sandbox", true), chromedp.Flag("hide-scrollbars", true), chromedp.Flag("disable-gpu", true))
+	actx, cancelA := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer cancelA()
+	ctx, cancel := chromedp.NewContext(actx)
+	defer cancel()
+	ctx, cancelT := context.WithTimeout(ctx, time.Duration(seconds+90)*time.Second)
+	defer cancelT()
+
+	tasks := chromedp.Tasks{emulation.SetDeviceMetricsOverride(1280, 900, 1, false), inEnglish()}
+	for _, c := range loginCookies(who + "@test.local") {
+		c := c
+		tasks = append(tasks, chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookie(c.Name, c.Value).WithDomain(c.Domain).WithPath(c.Path).WithHTTPOnly(c.HTTPOnly).Do(ctx)
+		}))
+	}
+	tasks = append(tasks, chromedp.Navigate(appURL), chromedp.WaitReady("body"),
+		chromedp.Poll(settled, nil, chromedp.WithPollingTimeout(30*time.Second)), chromedp.Sleep(2*time.Second))
+	if err := chromedp.Run(ctx, tasks); err != nil {
+		log.Fatal(err)
+	}
+	var r struct{ X, Y, W, H float64 }
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`(function(){const n=document.getElementById('scene'); if(!n) return {X:0,Y:0,W:0,H:0};
+		n.scrollIntoView({block:'center'}); const b=n.getBoundingClientRect(); return {X:b.left+scrollX,Y:b.top+scrollY,W:b.width,H:b.height}})()`, &r)); err != nil || r.W == 0 {
+		log.Fatalf("the live scene is not on %s's page: %v", who, err)
+	}
+	const pad = 12.0
+	clip := &page.Viewport{X: max(r.X-pad, 0), Y: max(r.Y-pad, 0), Width: r.W + 2*pad, Height: r.H + 2*pad, Scale: 1}
+	fmt.Printf("filming %.0fx%.0f for %.0fs\n", clip.Width, clip.Height, seconds)
+	type frame struct {
+		name string
+		at   time.Duration
+	}
+	var frames []frame
+	start := time.Now()
+	for time.Since(start) < time.Duration(seconds*float64(time.Second)) {
+		at := time.Since(start)
+		var buf []byte
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			buf, err = page.CaptureScreenshot().WithFormat(page.CaptureScreenshotFormatJpeg).WithQuality(92).WithClip(clip).Do(ctx)
+			return err
+		})); err != nil {
+			log.Fatal(err)
+		}
+		name := fmt.Sprintf("frame-%04d.jpg", len(frames))
+		if err := os.WriteFile(filepath.Join(dir, name), buf, 0o644); err != nil {
+			log.Fatal(err)
+		}
+		frames = append(frames, frame{name, at})
+	}
+	var list strings.Builder
+	for i, f := range frames {
+		d := 0.1
+		if i+1 < len(frames) {
+			d = (frames[i+1].at - f.at).Seconds()
+		}
+		fmt.Fprintf(&list, "file '%s'\nduration %.3f\n", f.name, d)
+	}
+	fmt.Fprintf(&list, "file '%s'\n", frames[len(frames)-1].name) // the concat list needs the last file twice
+	if err := os.WriteFile(filepath.Join(dir, "frames.txt"), []byte(list.String()), 0o644); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%d frames, about %.1f per second\n", len(frames), float64(len(frames))/seconds)
 }

@@ -9,6 +9,7 @@ Screenshots for the documentation are made by `tools/screenshots` (see its READM
 | `icon-512.png` | The full icon as a 512 px PNG with a transparent background, for places that need a raster image (registry listings, the Docker Hub icon). |
 | `icon-maskable.svg` | The icon drawn full-bleed (no rounded corners, the artwork kept inside the central 80%) so a phone can crop it to any shape. The home-screen icons are made from it. |
 | `banner.png` | 1800 x 320 banner at the top of the README (shown at 900 px wide, so 900 x 160). The icon, the name and the tagline on a wide twilight canvas. |
+| `live-scene.gif` | 760 px wide, about 14 s, under 1 MB: the live scene on the Overview while two senders' photos are handed over, recorded from the real page (see `tools/screenshots`, "The animation"). Shown near the top of the README. |
 | `social-preview.png` | 1280 x 640 image for the repository's social preview (Settings, General, Social preview) and for link cards. |
 
 The icon is two photo frames with an arrow passing from the back one to the front one, on a twilight gradient. Do not stretch or recolour it; if it is needed at a size between the two drawings, prefer `icon-small.svg` below 40 px.
