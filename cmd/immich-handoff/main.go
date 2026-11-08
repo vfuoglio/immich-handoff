@@ -83,7 +83,7 @@ func run(log *slog.Logger) error {
 		Services: services, Log: log, Bus: bus,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
-			NotifyURL: os.Getenv("NOTIFY_URL"),
+			NotifyURL: os.Getenv("NOTIFY_URL"), NoDetails: env("CARRY_DETAILS", "on") == "off",
 		},
 	}
 

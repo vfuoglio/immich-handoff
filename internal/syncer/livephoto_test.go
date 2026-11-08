@@ -42,6 +42,8 @@ type fakeStack struct {
 }
 
 type fakeAsset struct {
+	exif     map[string]any // what the sender's Immich knows about it (description, rating, location), if anything
+	archived bool
 	id, name string
 	data     []byte
 	motion   string
@@ -52,9 +54,10 @@ type fakeAsset struct {
 }
 
 type fakeUpload struct {
-	id, name, status string
-	hidden           bool
-	motion           string
+	visibility, sidecar string // what the form said about the visibility, and the sidecar file it carried
+	id, name, status    string
+	hidden              bool
+	motion              string
 }
 
 const (
@@ -86,6 +89,15 @@ func (f *twoAccounts) handler() http.Handler {
 		}
 		if a.hidden {
 			d["visibility"] = "hidden"
+		}
+		if a.archived {
+			d["visibility"] = "archive"
+		}
+		if a.exif != nil {
+			ex := d["exifInfo"].(map[string]any)
+			for k, v := range a.exif {
+				ex[k] = v
+			}
 		}
 		if st := f.stacks[a.stack]; a.stack != "" && st != nil {
 			d["stack"] = map[string]any{"id": st.id, "primaryAssetId": st.primary, "assetCount": len(st.members)}
@@ -253,7 +265,10 @@ func (f *twoAccounts) handler() http.Handler {
 			switch p.FormName() {
 			case "assetData":
 				a.name, a.data = p.FileName(), b
+			case "sidecarData":
+				up.sidecar = string(b)
 			case "visibility":
+				up.visibility = string(b)
 				a.hidden = string(b) == "hidden"
 			case "livePhotoVideoId":
 				if !f.dropLink {
@@ -297,6 +312,12 @@ func (f *twoAccounts) handler() http.Handler {
 
 func (f *twoAccounts) hand(t *testing.T, tune func(*syncer.Service)) syncer.Counts {
 	t.Helper()
+	return f.handWith(t, tune, nil)
+}
+
+// handWith is hand with the app-wide settings changed too.
+func (f *twoAccounts) handWith(t *testing.T, tune func(*syncer.Service), config func(*syncer.Config)) syncer.Counts {
+	t.Helper()
 	srv := httptest.NewServer(f.handler())
 	t.Cleanup(srv.Close)
 	svc := service(
@@ -306,6 +327,9 @@ func (f *twoAccounts) hand(t *testing.T, tune func(*syncer.Service)) syncer.Coun
 		tune(svc)
 	}
 	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet()}
+	if config != nil {
+		config(&s.Cfg)
+	}
 	s.Run(context.Background(), "test", false)
 	return s.Last().Counts
 }
@@ -605,5 +629,30 @@ func TestALivePhotoInAStackBringsItsClipToo(t *testing.T) {
 	}
 	if len(f.deleted) != 1 || len(f.deleted[0]) != 4 {
 		t.Errorf("three photos and a clip are removed together: %v", f.deleted)
+	}
+}
+
+func TestAnArchivedPhotoAndItsDescriptionRatingAndLocationGoWithIt(t *testing.T) {
+	f := newTwoAccounts()
+	f.addSender(&fakeAsset{id: stackCover, name: "pier.jpg", data: []byte("pier"), archived: true, tags: map[string]bool{"share": true},
+		exif: map[string]any{"description": "Sunset at the pier", "rating": 4, "latitude": 48.8584, "longitude": 2.2945}})
+	f.hand(t, nil)
+	if len(f.uploads) != 1 || f.uploads[0].visibility != "archive" {
+		t.Fatalf("the photo must stay archived: %+v", f.uploads)
+	}
+	for _, want := range []string{"Sunset at the pier", `xmp:Rating="4"`, "exif:GPSLatitude"} {
+		if !strings.Contains(f.uploads[0].sidecar, want) {
+			t.Errorf("the sidecar lacks %q: %s", want, f.uploads[0].sidecar)
+		}
+	}
+}
+
+func TestWithCarryDetailsOffNeitherTheArchivedStateNorTheDescriptionIsSent(t *testing.T) {
+	f := newTwoAccounts()
+	f.addSender(&fakeAsset{id: stackCover, name: "pier.jpg", data: []byte("pier"), archived: true, tags: map[string]bool{"share": true},
+		exif: map[string]any{"description": "private note", "rating": 4}})
+	f.handWith(t, nil, func(c *syncer.Config) { c.NoDetails = true })
+	if len(f.uploads) != 1 || f.uploads[0].visibility != "" || f.uploads[0].sidecar != "" {
+		t.Errorf("nothing extra may be sent: %+v", f.uploads)
 	}
 }

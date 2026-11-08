@@ -21,6 +21,7 @@ type Config struct {
 	DeleteForce bool // delete originals permanently instead of trashing them
 	DryRun      bool
 	NotifyURL   string
+	NoDetails   bool // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
 }
 
 type Counts struct {
@@ -627,7 +628,14 @@ func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, sn
 		id := cup.Id
 		motion = &id
 	}
-	up, sum, err := immich.TransferWith(ctx, snd.API, r.acct.API, a, immich.UploadOptions{MotionClip: motion})
+	if e := a.ExifInfo; !s.Cfg.NoDetails && (e == nil || (e.Description == nil && e.Rating == nil && e.Latitude == nil)) {
+		// a search and a stack list give only part of what Immich knows; the photo itself has the description,
+		// rating and location a person added
+		if full, err := snd.API.Asset(ctx, a.Id); err == nil && full != nil {
+			a = *full
+		}
+	}
+	up, sum, err := immich.TransferWith(ctx, snd.API, r.acct.API, a, immich.UploadOptions{MotionClip: motion, Details: !s.Cfg.NoDetails})
 	if err != nil {
 		return handedCopy{}, fmt.Errorf("to %s: %w", r.acct.Name, err)
 	}

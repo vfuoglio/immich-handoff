@@ -443,6 +443,9 @@ type UploadOptions struct {
 	Hidden bool
 	// MotionClip links the upload to this video of the same account as its motion (a live photo).
 	MotionClip *openapi_types.UUID
+	// Details carries what a person added in Immich and Immich keeps only in its database: the archived state, and the
+	// description, rating and location (as an XMP sidecar).
+	Details bool
 }
 
 // TransferWith is Transfer with options.
@@ -495,6 +498,8 @@ func writeUpload(mw *multipart.Writer, file io.Reader, a AssetResponseDto, opts 
 	}
 	if opts.Hidden {
 		fields["visibility"] = string(Hidden)
+	} else if opts.Details && a.Visibility == Archive {
+		fields["visibility"] = string(Archive)
 	}
 	if opts.MotionClip != nil {
 		fields["livePhotoVideoId"] = opts.MotionClip.String()
@@ -502,6 +507,20 @@ func writeUpload(mw *multipart.Writer, file io.Reader, a AssetResponseDto, opts 
 	for k, v := range fields {
 		if err := mw.WriteField(k, v); err != nil {
 			return err
+		}
+	}
+	if opts.Details {
+		if xmp := Sidecar(a); xmp != nil {
+			sh := make(textproto.MIMEHeader)
+			sh.Set("Content-Disposition", fmt.Sprintf(`form-data; name="sidecarData"; filename=%q`, a.OriginalFileName+".xmp"))
+			sh.Set("Content-Type", "application/octet-stream")
+			sp, err := mw.CreatePart(sh)
+			if err != nil {
+				return err
+			}
+			if _, err := sp.Write(xmp); err != nil {
+				return err
+			}
 		}
 	}
 	h := make(textproto.MIMEHeader)

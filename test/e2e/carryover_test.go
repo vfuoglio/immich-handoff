@@ -153,7 +153,17 @@ func TestWhatIsCarriedOver(t *testing.T) {
 	// The copies this test makes sit in the receiver's inbox. Other tests count that inbox, so take the tag
 	// off them when this test is done: the photos stay, the shared state is left as it was found.
 	var copies []string
+	already := map[string]bool{}
+	for _, id := range searchTag(t, family, "inbox", false) {
+		already[id] = true
+	}
 	t.Cleanup(func() {
+		// every photo that arrived, including the others of a stack, not only the one a subtest followed
+		for _, id := range searchTag(t, family, "inbox", false) {
+			if !already[id] {
+				copies = append(copies, id)
+			}
+		}
 		if len(copies) == 0 {
 			return
 		}
@@ -248,6 +258,9 @@ func TestWhatIsCarriedOver(t *testing.T) {
 		if !dst.IsFavorite || dst.OriginalFileName != "pier.jpg" || dst.FileCreatedAt != src.FileCreatedAt {
 			t.Errorf("the app promises the file, its name, its dates and the favourite mark: %+v", dst)
 		}
+		if sd != "Sunset at the pier" || dd != sd || dr != sr || dg != sg || sr == "" {
+			t.Errorf("the description, rating and location a person adds in Immich must arrive: sender %q %q %q, receiver %q %q %q", sd, sr, sg, dd, dr, dg)
+		}
 	})
 
 	t.Run("a photo whose details are written inside the file", func(t *testing.T) {
@@ -290,7 +303,11 @@ func TestWhatIsCarriedOver(t *testing.T) {
 			row("archived photo", "archive", "NOT HANDED OVER (the app did not find it)")
 			return
 		}
-		row("archived photo", "archive", "visibility "+getFull(t, family, cp).Visibility)
+		got := getFull(t, family, cp).Visibility
+		row("archived photo", "archive", "visibility "+got)
+		if got != "archive" {
+			t.Errorf("an archived photo must stay archived at the receiver: %q", got)
+		}
 	})
 
 	t.Run("a photo that was edited (rotated) in Immich", func(t *testing.T) {
@@ -377,8 +394,15 @@ func TestWhatIsCarriedOver(t *testing.T) {
 			recv = getFull(t, family, cp).Stack
 			return recv != nil && recv.AssetCount == 2
 		})
-		if recv.PrimaryAsset != cp {
-			t.Errorf("the cover of the tagged photo must stay the cover at the receiver: primary %s, copy %s", recv.PrimaryAsset, cp)
+		// both copies carry the inbox tag, so the one handOver saw first may be either: find the cover's copy by name
+		coverCopy := ""
+		for _, id := range searchTag(t, family, "inbox", false) {
+			if getFull(t, family, id).OriginalFileName == "stack-1.jpg" {
+				coverCopy = id
+			}
+		}
+		if coverCopy == "" || recv.PrimaryAsset != coverCopy {
+			t.Errorf("the cover of the sender's stack must stay the cover at the receiver: primary %s, copy of the cover %q", recv.PrimaryAsset, coverCopy)
 		}
 		for _, id := range []string{first, second} {
 			if !getFull(t, alice, id).IsTrashed {

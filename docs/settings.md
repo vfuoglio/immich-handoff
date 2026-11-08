@@ -40,4 +40,5 @@ These apply to services you define yourself ([Fixed accounts](fixed-accounts.md)
 | `REFUSED_TAG` | `share-duplicate` | Tag put on an original that could not be handed over. |
 | `SENT_TAG` | `handed-over` | Copy mode: tag put on an original after it was copied. |
 | `HANDOFF_MODE` | `copy` | `copy` keeps the senders' originals; `move` sends them to the sender's trash. |
+| `CARRY_DETAILS` | `on` | `off` stops the app from carrying what Immich keeps only in its database: the archived state and a photo's description, rating and location. With `off` an archived photo arrives in the receiver's timeline and the other details are not sent. See [what is carried over](what-is-carried-over.md). |
 | `DELETE_FORCE` | `false` | `true` deletes moved originals permanently instead of trashing them. |
