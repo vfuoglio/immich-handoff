@@ -1,6 +1,6 @@
 name: nightly
-# Every night at 09:00 UTC (4 AM in winter, in New York) the container image is built from `main` and published to
-# Docker Hub and GitHub's registry, but only if `main` has changed since the last nightly image was built.
+# Every night at about 09:17 UTC (4 AM in winter, in New York), with a second chance at 15:43, the container image is
+# built from `main` and published to Docker Hub and GitHub's registry, but only if `main` has changed since the last nightly image was built.
 #   - tags: the dated one, 20261107-nightly, and `nightly`, which always points at the newest
 #   - never touches `latest`, `X.Y` or any release tag
 #   - the same tests as a release run first; if anything fails nothing is published and `nightly` stays where it was
@@ -11,7 +11,11 @@ name: nightly
 # without repository activity (re-enable it on the Actions tab). See docs/releasing.md.
 on:
   schedule:
-    - cron: "0 9 * * *"
+    # Not on the hour, and twice: GitHub starts scheduled runs late when it is busy (the first nightly started almost
+    # seven hours after 09:00) and drops some, and the hour is its busiest moment. The second run is a safety net, not a
+    # second image: the `changed` job builds nothing when main is what the last nightly was built from.
+    - cron: "17 9 * * *"
+    - cron: "43 15 * * *"
   workflow_dispatch:
     inputs:
       force:
