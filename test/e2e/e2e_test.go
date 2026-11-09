@@ -146,7 +146,7 @@ func jpegBytes(seed int) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
 	for x := 0; x < 64; x++ {
 		for y := 0; y < 64; y++ {
-			img.Set(x, y, color.RGBA{uint8(seed * 37), uint8(x * 4), uint8(y * 4), 255})
+			img.Set(x, y, color.RGBA{uint8(seed * 37), uint8(x*4) + uint8(seed>>8)*61, uint8(y * 4), 255}) // seed>>8: seeds 256 apart must not make the same file
 		}
 	}
 	var b bytes.Buffer

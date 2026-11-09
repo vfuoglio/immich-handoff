@@ -120,7 +120,7 @@ func (h *Hub) runHighlights(ctx context.Context, sess *immich.API, b store.DropB
 					progress(d)
 				}
 			}()
-			data, _, err := sess.Thumbnail(ctx, assets[i].Id, true)
+			data, err := previewWhenReady(ctx, sess, assets[i].Id)
 			if err != nil {
 				return
 			}
@@ -261,4 +261,29 @@ func (h *Hub) fillAlbum(ctx context.Context, sess *immich.API, name string, boxA
 		add = add[n:]
 	}
 	return nil
+}
+
+// previewTries and previewWait bound how long the best-of waits for Immich to make the small picture of a photo that
+// has just arrived (it makes them in the background, so a set judged straight after an event may not have them yet).
+var (
+	previewTries = 12
+	previewWait  = 5 * time.Second
+)
+
+// previewWhenReady fetches the small picture of a photo, trying again while Immich has not made it. A photo whose
+// picture never comes is kept, as one that cannot be looked at.
+func previewWhenReady(ctx context.Context, sess *immich.API, id uuid.UUID) ([]byte, error) {
+	var err error
+	for try := 0; try < previewTries; try++ {
+		var data []byte
+		if data, _, err = sess.Thumbnail(ctx, id, true); err == nil && len(data) > 0 {
+			return data, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(previewWait):
+		}
+	}
+	return nil, err
 }

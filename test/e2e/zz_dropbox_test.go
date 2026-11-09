@@ -1,5 +1,7 @@
 //go:build e2e
 
+// This file is named to sort last: go test runs the files in name order, and these tests leave services, workflows and
+// photos behind in the shared Immich that the older tests (which count what is there) must not see.
 package e2e
 
 import (
@@ -568,6 +570,9 @@ func TestDropBoxExtras(t *testing.T) {
 	send("p2", "guest.jpg", jpegBytes(7404))
 	eventually(t, "three photos arrive", 60*time.Second, func() bool { return len(inbox()) == 3 })
 	// each prompt is a tag of its own, under the box's tag, and Immich lists the photos by it
+	eventually(t, "the prompt tags are on", 60*time.Second, func() bool {
+		return len(searchTag(t, alice, "inbox/Hunt/The cake", false)) == 2 && len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)) == 1
+	})
 	cake := searchTag(t, alice, "inbox/Hunt/The cake", false)
 	if len(cake) != 2 || len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)) != 1 {
 		t.Errorf("photos by prompt: %d and %d", len(cake), len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)))
@@ -757,15 +762,17 @@ func TestDropBoxWallBestOfAndHandingOn(t *testing.T) {
 		t.Errorf("what is newer than the fourth: %v", newer)
 	}
 	// a picture, once Immich has made its thumbnail, with no sign-in; a photo that is not on the wall gives nothing
-	eventually(t, "Immich has made the picture", 90*time.Second, func() bool {
-		res, err := http.Get(fmt.Sprintf("http://localhost:%s/wall/%s/photo/%d", port, wall, ids[0]))
-		if err != nil {
-			return false
-		}
-		defer res.Body.Close()
-		b, _ := io.ReadAll(res.Body)
-		return res.StatusCode == 200 && strings.HasPrefix(res.Header.Get("Content-Type"), "image/") && len(b) > 500
-	})
+	for _, id := range ids {
+		eventually(t, "Immich has made the picture", 90*time.Second, func() bool {
+			res, err := http.Get(fmt.Sprintf("http://localhost:%s/wall/%s/photo/%d", port, wall, id))
+			if err != nil {
+				return false
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			return res.StatusCode == 200 && strings.HasPrefix(res.Header.Get("Content-Type"), "image/") && len(b) > 500
+		})
+	}
 	if c, _ := guestGet(t, port, "/wall/"+wall+"/photo/999999"); c != 404 {
 		t.Errorf("a photo that is not on the wall: %d", c)
 	}
