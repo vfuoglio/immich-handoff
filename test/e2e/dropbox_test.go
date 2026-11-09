@@ -130,3 +130,124 @@ func TestDropBox(t *testing.T) {
 		t.Errorf("revoking must leave the received photos in the library: %d", n)
 	}
 }
+
+// TestDropBoxTools: a box that files into an album and a tag of its own and holds files for approval; a co-host who may
+// only look, then one who manages; extending; all with a real Immich.
+func TestDropBoxTools(t *testing.T) {
+	alice, _, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 51)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, helper := loginCookie(t, "alice@e2e.test"), loginCookie(t, "bob@e2e.test")
+
+	closes := time.Now().Add(72 * time.Hour).Format("2006-01-02T15:04")
+	code, body := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Gala"}, "album": {"Gala photos"}, "tag": {"gala"}, "approve": {"1"}, "closes": {closes}})
+	if code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, body)
+	}
+	perms := keyPermissions(t, alice, "handoff: Gala (drop box)")
+	if !has(perms, "album.create") || !has(perms, "albumAsset.create") || has(perms, "asset.read") || has(perms, "asset.delete") {
+		t.Errorf("a box with an album: %v", perms)
+	}
+	op := page(t, port, owner)
+	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	inbox := func() []string { return searchTag(t, alice, "inbox/Gala", false) }
+
+	// two files wait; nothing is in the library
+	code, p := guestUpload(t, port, token, map[string][]byte{"keep.jpg": jpegBytes(7101), "drop.jpg": jpegBytes(7102)})
+	if code != 200 || strings.Count(p, "waiting for approval") != 2 {
+		t.Fatalf("guest upload: %d %s", code, p)
+	}
+	time.Sleep(2 * time.Second)
+	if n := len(inbox()); n != 0 {
+		t.Fatalf("nothing may be stored before approval: %d", n)
+	}
+	op = page(t, port, owner)
+	ids := regexp.MustCompile(`src="dropbox/pending/([0-9a-f-]{36})" alt="([a-z]+\.jpg)"`).FindAllStringSubmatch(op, -1)
+	if len(ids) != 2 || !strings.Contains(op, "Waiting for approval") {
+		t.Fatalf("the owner must see both files waiting: %.300s", op)
+	}
+	idOf := map[string]string{}
+	for _, m := range ids {
+		idOf[m[2]] = m[1]
+	}
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+"/dropbox/pending/"+idOf["keep.jpg"], nil)
+	req.Header.Set("Cookie", owner)
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "image/jpeg") {
+		t.Errorf("the owner opens a waiting file: %v %v", err, res)
+	}
+
+	// bob is made a co-host who only looks: he sees the box and that files wait, but cannot decide
+	if code, b := postBody(t, port, "/dropbox/host", owner, url.Values{"service": {boxID}, "email": {"bob@e2e.test"}, "role": {"view"}}); code != 204 {
+		t.Fatalf("add a co-host: %d %s", code, b)
+	}
+	if code, _ := postBody(t, port, "/dropbox/host", owner, url.Values{"service": {boxID}, "email": {"nobody@e2e.test"}, "role": {"view"}}); code != 409 {
+		t.Errorf("an email nobody has: %d, want 409", code)
+	}
+	bp := page(t, port, helper)
+	if !strings.Contains(bp, "Gala") || !strings.Contains(bp, "You can see this drop box") || strings.Contains(bp, "dropbox/pending/") || strings.Contains(bp, `data-link="drop/`) {
+		t.Errorf("what a viewer sees: %.400s", bp)
+	}
+	if code, _ := postBody(t, port, "/dropbox/approve", helper, url.Values{"service": {boxID}, "all": {"1"}}); code != 409 {
+		t.Errorf("a viewer approving: %d, want 409", code)
+	}
+	// ...then to a co-host who manages: he approves one and rejects the other
+	postBody(t, port, "/dropbox/host", owner, url.Values{"service": {boxID}, "email": {"bob@e2e.test"}, "role": {"manage"}})
+	if code, b := postBody(t, port, "/dropbox/approve", helper, url.Values{"service": {boxID}, "item": {idOf["keep.jpg"]}}); code != 204 {
+		t.Fatalf("approve: %d %s", code, b)
+	}
+	if code, b := postBody(t, port, "/dropbox/reject", helper, url.Values{"service": {boxID}, "item": {idOf["drop.jpg"]}}); code != 204 {
+		t.Fatalf("reject: %d %s", code, b)
+	}
+	eventually(t, "the approved photo is in the library, and only it", 60*time.Second, func() bool { return len(inbox()) == 1 })
+	id := inbox()[0]
+	a := getFull(t, alice, id)
+	if tags := tagNames(a); !strings.Contains(tags, "Gala") || !strings.Contains(tags, "gala") {
+		t.Errorf("the photo's tags: %q", tags)
+	}
+	var albums []struct {
+		AlbumName  string `json:"albumName"`
+		AssetCount int    `json:"assetCount"`
+	}
+	call(t, "GET", "/albums", keyAuth(alice), nil, &albums)
+	found := false
+	for _, al := range albums {
+		if al.AlbumName == "Gala photos" {
+			found = true
+			if al.AssetCount != 1 {
+				t.Errorf("the album holds %d photos, want 1", al.AssetCount)
+			}
+		}
+	}
+	if !found {
+		t.Error("the album must be made on the first arrival")
+	}
+	if strings.Contains(page(t, port, owner), "dropbox/pending/") {
+		t.Error("the queue must be empty")
+	}
+
+	// the manager may pause and extend, not end it; a co-host may stop helping
+	if code, _ := postBody(t, port, "/dropbox/pause", helper, url.Values{"service": {boxID}, "paused": {"1"}}); code != 204 {
+		t.Errorf("a manager pausing: %d", code)
+	}
+	if code, _ := guestGet(t, port, "/drop/"+token); code != 404 {
+		t.Errorf("a paused box: %d", code)
+	}
+	postBody(t, port, "/dropbox/pause", helper, url.Values{"service": {boxID}, "paused": {"0"}})
+	if code, _ := postBody(t, port, "/dropbox/extend", helper, url.Values{"service": {boxID}, "days": {"7"}}); code != 204 {
+		t.Errorf("a manager extending: %d", code)
+	}
+	if code, _ := postBody(t, port, "/dropbox/revoke", helper, url.Values{"service": {boxID}}); code != 409 {
+		t.Errorf("a manager revoking: %d, want 409", code)
+	}
+	if code, _ := postBody(t, port, "/dropbox/host/remove", helper, url.Values{"service": {boxID}}); code != 204 {
+		t.Errorf("a co-host stopping: %d", code)
+	}
+	if strings.Contains(page(t, port, helper), "Gala") {
+		t.Error("after stopping, the box is gone from the co-host's page")
+	}
+	if !strings.Contains(page(t, port, owner), "The link stops working") {
+		t.Error("the owner's page must say when the link stops working")
+	}
+}

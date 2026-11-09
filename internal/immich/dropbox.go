@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/textproto"
+	"strings"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -62,4 +63,27 @@ func (a *API) UploadFile(ctx context.Context, name string, r io.Reader, at time.
 		return resp.JSON200.Id, true, nil
 	}
 	return id, false, statusErr("uploadAsset", resp.StatusCode(), resp.Body)
+}
+
+// DropBoxPermissionsAlbum is DropBoxPermissions for a box that files what arrives in an album: it can also find, make
+// and add to albums, and still cannot change, share or delete one, or read a photo back.
+var DropBoxPermissionsAlbum = perms("user.read", "tag.read", "tag.create", "tag.asset", "asset.upload",
+	"album.read", "album.create", "albumAsset.create")
+
+// FindUserByEmail looks for a person on this Immich server by their exact email, for choosing a co-host. It returns
+// false when nobody has that address.
+func (a *API) FindUserByEmail(ctx context.Context, email string) (User, bool, error) {
+	r, err := a.c.SearchUsersWithResponse(ctx)
+	if err != nil {
+		return User{}, false, err
+	}
+	if r.JSON200 == nil {
+		return User{}, false, statusErr("searchUsers", r.StatusCode(), r.Body)
+	}
+	for _, u := range *r.JSON200 {
+		if strings.EqualFold(string(u.Email), strings.TrimSpace(email)) {
+			return User{ID: u.Id, Name: u.Name, Email: string(u.Email)}, true, nil
+		}
+	}
+	return User{}, false, nil
 }

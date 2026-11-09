@@ -7,9 +7,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -64,7 +67,7 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropPage(DropPageView{Token: b.Token, Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly, Limits: dropLimitText(r.Context(), b)}).Render(r.Context(), rw)
+	DropPage(DropPageView{Token: b.Token, Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly, Approve: b.Approve, Limits: dropLimitText(r.Context(), b)}).Render(r.Context(), rw)
 }
 
 // dropUpload takes what a guest sent. The files are read from the request one by one and streamed on to Immich, so
@@ -115,8 +118,14 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 				Notice(t(ctx, "Wrong password"), t(ctx, "The password is not right. Go back and try again."), true).Render(ctx, rw)
 				return
 			}
-			_, err := w.Hub.ReceiveDropFile(ctx, b.ID, part.FileName(), part, who)
-			lines = append(lines, DropResultLine{Name: part.FileName(), Text: dropReason(ctx, err), OK: err == nil})
+			outcome, err := w.Hub.ReceiveDropFile(ctx, b.ID, part.FileName(), part, who)
+			text := dropReason(ctx, err)
+			if err == nil && outcome == hub.DropHeld {
+				text = t(ctx, "Received, waiting for approval")
+			} else if err == nil && outcome == hub.DropDuplicate {
+				text = t(ctx, "Already there, thank you")
+			}
+			lines = append(lines, DropResultLine{Name: part.FileName(), Text: text, OK: err == nil})
 			if errors.Is(err, hub.ErrDropFull) {
 				for len(lines) < maxDropFilesPerRequest { // the rest cannot be taken either; do not read them
 					if part, err = mr.NextPart(); err != nil {
@@ -211,6 +220,9 @@ func dropLimitText(ctx context.Context, b store.DropBox) string {
 	if b.Password != "" {
 		parts = append(parts, t(ctx, "needs a password"))
 	}
+	if b.Approve {
+		parts = append(parts, t(ctx, "files are looked at before they are kept"))
+	}
 	if len(parts) == 0 {
 		return t(ctx, "There are no limits.")
 	}
@@ -273,7 +285,7 @@ func dropTone(kind string) string {
 	return ""
 }
 
-// dropBoxViews is the person's drop boxes as the page shows them.
+// dropBoxViews is the person's drop boxes as the page shows them: their own, and the ones they help with.
 func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 	boxes, err := w.Hub.DropBoxes(ctx, me.user.ID)
 	if err != nil {
@@ -281,11 +293,38 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 		return nil
 	}
 	var out []DropBoxView
-	for _, b := range boxes {
-		v := DropBoxView{ID: b.ID, Name: b.Name, Message: b.Message, Token: b.Token, State: dropState(b), Note: b.Note,
-			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != ""}
-		if v.State == "revoked" {
-			v.Token = ""
+	for _, a := range boxes {
+		b := a.Box
+		v := DropBoxView{ID: b.ID, Name: b.Name, Message: b.Message, State: dropState(b), Note: b.Note, Role: a.Role,
+			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != "",
+			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view"}
+		if v.State != "revoked" && v.Manage {
+			v.Token = b.Token // a co-host who only views does not get the link
+		}
+		v.CanExtend = v.Manage && v.State != "revoked" && !b.ExpiresAt.IsZero()
+		if !b.StartsAt.IsZero() && b.NotStarted(time.Now()) {
+			v.Opens = loc(ctx).Stamp(b.StartsAt.Local())
+		}
+		if !b.ExpiresAt.IsZero() {
+			v.Ends = loc(ctx).Stamp(b.ExpiresAt.Local())
+		}
+		if v.State != "revoked" {
+			if sum, err := w.Hub.Store.DropSummaryOf(ctx, b.ID); err == nil {
+				v.Summary = dropSummaryText(ctx, b, sum)
+			}
+		}
+		if v.Manage && v.State != "revoked" {
+			if list, n, err := w.Hub.DropPending(ctx, me.user.ID, b.ID, 24); err == nil {
+				v.PendingN = n
+				for _, p := range list {
+					v.Pending = append(v.Pending, PendingView{ID: p.ID, Name: p.Name, Size: megabytes(p.Size), Image: p.Kind == "image"})
+				}
+			}
+		} else if v.State != "revoked" {
+			v.PendingN = w.Hub.DropPendingCount(ctx, b.ID)
+		}
+		for _, h := range a.Hosts {
+			v.Hosts = append(v.Hosts, HostView{ID: h.UserID.String(), Name: h.Name, Email: h.Email, Manage: h.Role == store.HostManage})
 		}
 		if evs, err := w.Hub.DropEvents(ctx, me.user.ID, b.ID, 15); err == nil {
 			for _, e := range evs {
@@ -297,6 +336,18 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 	return out
 }
 
+// dropSummaryText is what a box took, in a sentence: files, guests and the busiest hour.
+func dropSummaryText(ctx context.Context, b store.DropBox, sum store.DropSummary) string {
+	text := t(ctx, "{files} from {guests}, {size} in all.", "files", n(ctx, "{n} file", "{n} files", b.Files),
+		"guests", n(ctx, "{n} guest", "{n} guests", sum.Guests), "size", megabytes(b.Bytes))
+	if sum.BusiestFiles > 0 {
+		if h, err := time.Parse("2006-01-02T15", sum.BusiestHour); err == nil {
+			text += " " + t(ctx, "Busiest hour: {hour} ({files}).", "hour", loc(ctx).Stamp(h.Local()), "files", n(ctx, "{n} file", "{n} files", sum.BusiestFiles))
+		}
+	}
+	return text
+}
+
 func dropEventText(ctx context.Context, e store.DropEvent) string {
 	text := unpack(ctx, e.Text)
 	if e.Who != "" {
@@ -306,6 +357,19 @@ func dropEventText(ctx context.Context, e store.DropEvent) string {
 }
 
 // --- the owner's side ---
+
+// clockField reads a date and time from a form ("2006-01-02T15:04", as a browser sends it), in the app's time zone.
+func clockField(r *http.Request, name string) (time.Time, error) {
+	v := strings.TrimSpace(r.PostFormValue(name))
+	if v == "" {
+		return time.Time{}, nil
+	}
+	tm, err := time.ParseInLocation("2006-01-02T15:04", v, time.Local)
+	if err != nil {
+		return tm, hub.ErrBadDropWhen
+	}
+	return tm, nil
+}
 
 func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "drop box created", func(ctx context.Context, me *member, _ string) error {
@@ -330,8 +394,16 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		if p.Opens, err = clockField(r, "opens"); err != nil {
+			return err
+		}
+		if p.Closes, err = clockField(r, "closes"); err != nil {
+			return err
+		}
 		p.Name, p.Message, p.Password = r.PostFormValue("name"), r.PostFormValue("message"), r.PostFormValue("password")
 		p.PhotosOnly = r.PostFormValue("photos") == "1"
+		p.Approve = r.PostFormValue("approve") == "1"
+		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
 	})
@@ -347,4 +419,79 @@ func (w *Server) revokeDropBox(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "drop box revoked", func(ctx context.Context, me *member, id string) error {
 		return w.Hub.RevokeDropBox(ctx, me.sess, me.user, id)
 	})
+}
+
+func (w *Server) extendDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box extended", func(ctx context.Context, me *member, id string) error {
+		days, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
+		if err != nil {
+			return hub.ErrBadDropLimit
+		}
+		return w.Hub.ExtendDropBox(ctx, me.user, id, days)
+	})
+}
+
+// decideDropBox approves or rejects the files a person chose (or, with "all", every waiting file of the box).
+func (w *Server) decideDropBox(approve bool) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		w.membership(rw, r, "drop box decided", func(ctx context.Context, me *member, id string) error {
+			r.ParseForm()
+			only := r.PostForm["item"]
+			if len(only) == 0 && r.PostFormValue("all") != "1" {
+				return hub.ErrNothingChosen
+			}
+			_, failed, err := w.Hub.DecideDrop(ctx, me.user, id, only, approve)
+			if err == nil && failed > 0 {
+				err = hub.ErrSomeNotStored
+			}
+			return err
+		})
+	}
+}
+
+func (w *Server) addDropHost(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box co-host added", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.AddDropHost(ctx, me.sess, me.user, id, r.PostFormValue("email"), r.PostFormValue("role"))
+	})
+}
+
+func (w *Server) removeDropHost(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box co-host removed", func(ctx context.Context, me *member, id string) error {
+		target := me.user.ID // no one named: the person asking stops helping
+		if v := r.PostFormValue("user"); v != "" {
+			var err error
+			if target, err = uuid.Parse(v); err != nil {
+				return hub.ErrNoDropBox
+			}
+		}
+		return w.Hub.RemoveDropHost(ctx, me.user, id, target)
+	})
+}
+
+// pendingFile shows a host a file that waits for approval. It is an image the app has checked, sent as an image and
+// nothing else, with no way to run anything.
+func (w *Server) pendingFile(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	p, err := w.Hub.DropPendingFile(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil || p.Kind != "image" {
+		http.NotFound(rw, r)
+		return
+	}
+	f, err := os.Open(p.Path)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	defer f.Close()
+	head := make([]byte, 512)
+	n, _ := f.Read(head)
+	f.Seek(0, io.SeekStart)
+	rw.Header().Set("Content-Type", http.DetectContentType(head[:n]))
+	rw.Header().Set("Cache-Control", "private, no-store")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	io.Copy(rw, f)
 }

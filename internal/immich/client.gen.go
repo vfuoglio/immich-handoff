@@ -2764,6 +2764,13 @@ type ClientInterface interface {
 	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 	RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SearchUsers Get all users
+	//
+	// Retrieve a list of all users on the server.
+	//
+	// Corresponds with GET /users (the `SearchUsers` operationId).
+	SearchUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMyUser Get current user
 	//
 	// Retrieve information about the user making the API request.
@@ -3468,6 +3475,23 @@ func (c *Client) RestoreAssetsWithBody(ctx context.Context, contentType string, 
 // Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 func (c *Client) RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRestoreAssetsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchUsers Get all users
+//
+// Retrieve a list of all users on the server.
+//
+// Corresponds with GET /users (the `SearchUsers` operationId).
+func (c *Client) SearchUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchUsersRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -4758,6 +4782,33 @@ func NewRestoreAssetsRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
+// NewSearchUsersRequest constructs an http.Request for the SearchUsers method
+func NewSearchUsersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMyUserRequest constructs an http.Request for the GetMyUser method
 func NewGetMyUserRequest(server string) (*http.Request, error) {
 	var err error
@@ -5543,6 +5594,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 	RestoreAssetsWithResponse(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error)
+
+	// SearchUsersWithResponse Get all users
+	//
+	// Retrieve a list of all users on the server.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /users (the `SearchUsers` operationId).
+	SearchUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SearchUsersResponse, error)
 
 	// GetMyUserWithResponse Get current user
 	//
@@ -6549,6 +6609,47 @@ func (r RestoreAssetsResponse) ContentType() string {
 	return ""
 }
 
+type SearchUsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]UserResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchUsersResponse) GetJSON200() *[]UserResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchUsersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchUsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchUsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchUsersResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetMyUserResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7409,6 +7510,21 @@ func (c *ClientWithResponses) RestoreAssetsWithResponse(ctx context.Context, bod
 	return ParseRestoreAssetsResponse(rsp)
 }
 
+// SearchUsersWithResponse Get all users
+//
+// Retrieve a list of all users on the server.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /users (the `SearchUsers` operationId).
+func (c *ClientWithResponses) SearchUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SearchUsersResponse, error) {
+	rsp, err := c.SearchUsers(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchUsersResponse(rsp)
+}
+
 // GetMyUserWithResponse Get current user
 //
 // Retrieve information about the user making the API request.
@@ -8134,6 +8250,32 @@ func ParseRestoreAssetsResponse(rsp *http.Response) (*RestoreAssetsResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest TrashResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchUsersResponse parses an HTTP response from a SearchUsersWithResponse call
+func ParseSearchUsersResponse(rsp *http.Response) (*SearchUsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchUsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []UserResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

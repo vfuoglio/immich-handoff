@@ -146,6 +146,19 @@ func run(log *slog.Logger) error {
 		}
 		defer st.Close()
 		h.Store = st
+		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
+		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
+			t := time.NewTicker(10 * time.Minute)
+			defer t.Stop()
+			for {
+				h.DropMaintenance(ctx)
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
 		every, keep, err := backupSchedule()
 		if err != nil {
 			return err

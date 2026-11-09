@@ -53,6 +53,8 @@ type fakeImmich struct {
 	albums        []map[string]any    // bob's own albums
 	uploads       []fakeUpload        // files stored through an upload
 	tagged        []string            // asset ids that were tagged
+	tagNames      []string            // tags that were made
+	albumAdds     []string            // "album name: asset id" for each photo put in an album
 }
 
 type fakeUpload struct {
@@ -203,9 +205,48 @@ func (f *fakeImmich) handler() http.Handler {
 		}
 		http.Error(w, "no file", 400)
 	})
+	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
+		out := []any{}
+		for _, p := range people {
+			out = append(out, map[string]any{"id": p.id, "name": p.name, "email": p.email, "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("POST /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AlbumName string `json:"albumName"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		id := uuid.NewString()
+		f.albums = append(f.albums, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0})
+		f.mu.Unlock()
+		j(w, 201, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0})
+	})
+	mux.HandleFunc("PUT /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		name := r.PathValue("id")
+		for _, a := range f.albums {
+			if a["id"] == r.PathValue("id") {
+				name, _ = a["albumName"].(string)
+			}
+		}
+		for _, id := range body.Ids {
+			f.albumAdds = append(f.albumAdds, name+": "+id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Tags []string }
 		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.tagNames = append(f.tagNames, body.Tags...)
+		f.mu.Unlock()
 		out := []any{}
 		for _, n := range body.Tags {
 			out = append(out, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})

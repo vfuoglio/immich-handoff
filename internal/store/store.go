@@ -203,6 +203,44 @@ var migrations = []string{
 	   who    TEXT NOT NULL DEFAULT ''
 	 );
 	 CREATE INDEX dropbox_events_box ON dropbox_events (box_id, id);`,
+	// Drop boxes grow: filing on arrival (an album, a tag of their own), approval before anything is stored, a start,
+	// co-hosts, and what a summary needs (files per hour, which guests came).
+	`ALTER TABLE dropboxes ADD COLUMN album TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN extra_tag TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN approve INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN starts_at TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN notified INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE dropbox_hosts (
+	   box_id   TEXT NOT NULL,
+	   user_id  TEXT NOT NULL,
+	   name     TEXT NOT NULL,
+	   email    TEXT NOT NULL,
+	   role     TEXT NOT NULL,
+	   added_at TEXT NOT NULL,
+	   PRIMARY KEY (box_id, user_id)
+	 );
+	 CREATE TABLE dropbox_pending (
+	   id     TEXT PRIMARY KEY,
+	   box_id TEXT NOT NULL,
+	   name   TEXT NOT NULL,
+	   size   INTEGER NOT NULL,
+	   kind   TEXT NOT NULL,
+	   who    TEXT NOT NULL,
+	   at     TEXT NOT NULL,
+	   path   TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_pending_box ON dropbox_pending (box_id, at);
+	 CREATE TABLE dropbox_hours (
+	   box_id TEXT NOT NULL,
+	   hour   TEXT NOT NULL,
+	   files  INTEGER NOT NULL,
+	   PRIMARY KEY (box_id, hour)
+	 );
+	 CREATE TABLE dropbox_guests (
+	   box_id TEXT NOT NULL,
+	   who    TEXT NOT NULL,
+	   PRIMARY KEY (box_id, who)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

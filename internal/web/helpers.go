@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -679,4 +680,31 @@ func createConfirm(ctx context.Context, deleteOK bool) string {
 		msg += " " + t(ctx, "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.")
 	}
 	return msg
+}
+
+func extendVals(id string, days int) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "days": strconv.Itoa(days)})
+	return string(b)
+}
+
+func allVals(id string) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "all": "1"})
+	return string(b)
+}
+
+// hostVals is the form of removing a co-host (an empty user: the person asking stops helping).
+func hostVals(id, user string) string {
+	m := map[string]string{"service": id}
+	if user != "" {
+		m["user"] = user
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func hostRoleLabel(ctx context.Context, manage bool) string {
+	if manage {
+		return t(ctx, "approves, pauses and extends")
+	}
+	return t(ctx, "only looks")
 }

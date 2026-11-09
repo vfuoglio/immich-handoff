@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -253,4 +257,250 @@ func countKind(ev []store.DropEvent, kind string) (n int) {
 		}
 	}
 	return
+}
+
+// --- filing, approval, co-hosts and time ---
+
+func TestADropBoxFilesWhatArrivesInItsAlbumAndTag(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Gala", Album: "Gala photos", ExtraTag: "gala"})
+	if !has(e.f.lastPerms, "album.create") || !has(e.f.lastPerms, "albumAsset.create") || has(e.f.lastPerms, "album.delete") || has(e.f.lastPerms, "asset.read") {
+		t.Errorf("a box with an album may find, make and add to albums and nothing more: %v", e.f.lastPerms)
+	}
+	if _, err := e.h.ReceiveDropFile(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "g"); err != nil {
+		t.Fatal(err)
+	}
+	if !has(e.f.tagNames, "inbox/Gala") || !has(e.f.tagNames, "gala") || len(e.f.tagged) != 2 {
+		t.Errorf("tags made %v, photos tagged %d times", e.f.tagNames, len(e.f.tagged))
+	}
+	if len(e.f.albumAdds) != 1 || !strings.HasPrefix(e.f.albumAdds[0], "Gala photos: ") {
+		t.Errorf("album: %v", e.f.albumAdds)
+	}
+	// the second photo goes in the same album, which is not made again
+	e.h.ReceiveDropFile(ctx, b.ID, "b.jpg", bytes.NewReader(jpeg), "g")
+	if len(e.f.albumAdds) != 2 || len(e.f.albums) != 1 {
+		t.Errorf("albums %d, adds %v", len(e.f.albums), e.f.albumAdds)
+	}
+	// a plain box asks for no album permission
+	newBox(t, e, hub.DropParams{Name: "Plain"})
+	if has(e.f.lastPerms, "album.create") {
+		t.Error("a box with no album must not be given album permissions")
+	}
+	// a duplicate is told apart, and not filed again
+	before := len(e.f.tagged)
+	if out, err := e.h.ReceiveDropFile(ctx, b.ID, "dupe.jpg", bytes.NewReader(jpeg), "g"); err != nil || out != hub.DropDuplicate || len(e.f.tagged) != before {
+		t.Errorf("duplicate: %v %v tagged %d->%d", out, err, before, len(e.f.tagged))
+	}
+	if _, err := e.h.CreateDropBox(ctx, e.sess, bob, hub.DropParams{Name: "Bad", Album: "a/b"}); !errors.Is(err, hub.ErrBadDropAlbum) {
+		t.Errorf("a slash in an album name: %v", err)
+	}
+}
+
+func TestFilesWaitForApprovalAndOnlyHostsDecide(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	if _, err := e.h.CreateDropBox(ctx, e.sess, bob, hub.DropParams{Name: "Careful", Approve: true}); !errors.Is(err, hub.ErrNoStaging) {
+		t.Fatalf("with no place to keep files: %v", err)
+	}
+	e.h.StageDir = t.TempDir()
+	b := newBox(t, e, hub.DropParams{Name: "Careful", Approve: true})
+	out, err := e.h.ReceiveDropFile(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "g1")
+	if err != nil || out != hub.DropHeld {
+		t.Fatalf("receive: %v %v", out, err)
+	}
+	e.h.ReceiveDropFile(ctx, b.ID, "b.jpg", bytes.NewReader(jpeg), "g2")
+	e.h.ReceiveDropFile(ctx, b.ID, "c.jpg", bytes.NewReader(jpeg), "g2")
+	if _, err := e.h.ReceiveDropFile(ctx, b.ID, "page.jpg", bytes.NewReader(page), "g2"); err == nil {
+		t.Error("a page must be refused before it waits")
+	}
+	if len(e.f.uploads) != 0 {
+		t.Fatalf("nothing may reach the library before approval: %v", e.f.uploads)
+	}
+	pend, n, err := e.h.DropPending(ctx, bobID, b.ID, 10)
+	if err != nil || n != 3 || len(pend) != 3 {
+		t.Fatalf("pending: %d %d %v", n, len(pend), err)
+	}
+	if got, _ := e.st.DropBox(ctx, b.ID); got.Files != 3 || got.Bytes != int64(3*len(jpeg)) {
+		t.Errorf("waiting files count against the box: %+v", got)
+	}
+
+	// a stranger cannot see or decide; a co-host who only views cannot decide either
+	if _, _, err := e.h.DropPending(ctx, annID, b.ID, 10); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("a stranger sees the queue: %v", err)
+	}
+	if err := e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostView); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.h.DecideDrop(ctx, ann, b.ID, nil, true); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer decides: %v", err)
+	}
+	if _, err := e.h.DropPendingFile(ctx, annID, pend[0].ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer opens a waiting file: %v", err)
+	}
+
+	// approve one by name; the file goes to the library, is filed, and its place on the disk is freed
+	done, failed, err := e.h.DecideDrop(ctx, bob, b.ID, []string{pend[0].ID}, true)
+	if err != nil || done != 1 || failed != 0 {
+		t.Fatalf("approve: %d %d %v", done, failed, err)
+	}
+	if len(e.f.uploads) != 1 || len(e.f.tagged) != 1 {
+		t.Errorf("uploads %v tagged %v", e.f.uploads, e.f.tagged)
+	}
+	if _, err := os.Stat(pend[0].Path); !os.IsNotExist(err) {
+		t.Errorf("an approved file must leave the disk: %v", err)
+	}
+	// the same file cannot be approved twice
+	if done, _, _ := e.h.DecideDrop(ctx, bob, b.ID, []string{pend[0].ID}, true); done != 0 || len(e.f.uploads) != 1 {
+		t.Errorf("approved twice: %d, uploads %d", done, len(e.f.uploads))
+	}
+	// reject all: deleted from the disk, the room given back
+	done, _, err = e.h.DecideDrop(ctx, bob, b.ID, nil, false)
+	if err != nil || done != 2 {
+		t.Fatalf("reject: %d %v", done, err)
+	}
+	if got, _ := e.st.DropBox(ctx, b.ID); got.Files != 1 || got.Bytes != int64(len(jpeg)) {
+		t.Errorf("rejected files give their room back: %+v", got)
+	}
+	for _, p := range pend[1:] {
+		if _, err := os.Stat(p.Path); !os.IsNotExist(err) {
+			t.Errorf("a rejected file must leave the disk: %v", err)
+		}
+	}
+	if len(e.f.uploads) != 1 {
+		t.Errorf("rejected files must never be stored: %v", e.f.uploads)
+	}
+	// revoking deletes what still waits
+	e.h.ReceiveDropFile(ctx, b.ID, "d.jpg", bytes.NewReader(jpeg), "g")
+	left, _, _ := e.h.DropPending(ctx, bobID, b.ID, 10)
+	e.h.RevokeDropBox(ctx, e.sess, bob, b.ID)
+	if _, err := os.Stat(left[0].Path); !os.IsNotExist(err) {
+		t.Errorf("revoking must delete waiting files: %v", err)
+	}
+}
+
+func TestCoHostsSeeTheBoxAndNothingElse(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Shared", Days: 3})
+	for email, want := range map[string]error{"nobody@x.test": hub.ErrNoSuchPerson, "bob@x.test": hub.ErrHostSelf} {
+		if err := e.h.AddDropHost(ctx, e.sess, bob, b.ID, email, store.HostManage); !errors.Is(err, want) {
+			t.Errorf("%s: %v", email, err)
+		}
+	}
+	if err := e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", "boss"); !errors.Is(err, hub.ErrBadHostRole) {
+		t.Errorf("an unknown role: %v", err)
+	}
+	if err := e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ANN@x.test", store.HostManage); err != nil {
+		t.Fatal(err)
+	}
+	// Ann finds the box on her page, without its key, and without knowing who else helps
+	boxes, _ := e.h.DropBoxes(ctx, annID)
+	if len(boxes) != 1 || boxes[0].Role != "manage" || boxes[0].Box.Key != "" || boxes[0].Hosts != nil {
+		t.Fatalf("what a co-host sees: %+v", boxes)
+	}
+	if mine, _ := e.h.DropBoxes(ctx, bobID); len(mine) != 1 || mine[0].Role != "owner" || len(mine[0].Hosts) != 1 {
+		t.Errorf("the owner sees the co-hosts: %+v", mine)
+	}
+	// she may pause, resume and extend; she may not end it, choose co-hosts, or see the log of a box she does not help with
+	if err := e.h.SetDropBoxPaused(ctx, ann, b.ID, true); err != nil {
+		t.Errorf("a co-host pauses: %v", err)
+	}
+	if err := e.h.SetDropBoxPaused(ctx, ann, b.ID, false); err != nil {
+		t.Error(err)
+	}
+	if err := e.h.ExtendDropBox(ctx, ann, b.ID, 2); err != nil {
+		t.Errorf("a co-host extends: %v", err)
+	}
+	if err := e.h.RevokeDropBox(ctx, e.ann, ann, b.ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host revokes: %v", err)
+	}
+	if err := e.h.AddDropHost(ctx, e.ann, ann, b.ID, "bob@x.test", store.HostView); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host chooses co-hosts: %v", err)
+	}
+	if err := e.h.RemoveDropHost(ctx, ann, b.ID, bobID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host removes the owner: %v", err)
+	}
+	if _, err := e.h.DropEvents(ctx, uuid.New(), b.ID, 5); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("a stranger reads the log: %v", err)
+	}
+	// she can stop helping; then the box is gone from her page
+	if err := e.h.RemoveDropHost(ctx, ann, b.ID, annID); err != nil {
+		t.Fatal(err)
+	}
+	if boxes, _ := e.h.DropBoxes(ctx, annID); len(boxes) != 0 {
+		t.Errorf("after leaving: %+v", boxes)
+	}
+	if err := e.h.SetDropBoxPaused(ctx, ann, b.ID, true); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("a former co-host pauses: %v", err)
+	}
+}
+
+func TestADropBoxOpensAndClosesOnSchedule(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	soon := newBox(t, e, hub.DropParams{Name: "Later", Opens: time.Now().Add(2 * time.Hour), Days: 1})
+	if _, err := e.h.OpenDropBox(ctx, soon.Token); err == nil {
+		t.Error("a box that has not opened takes nothing")
+	}
+	if soon.ExpiresAt.Before(time.Now().Add(25 * time.Hour)) {
+		t.Errorf("the days count from the opening: %v", soon.ExpiresAt)
+	}
+	for _, p := range []hub.DropParams{
+		{Name: "Back", Closes: time.Now().Add(-time.Hour)},
+		{Name: "Inverted", Opens: time.Now().Add(5 * time.Hour), Closes: time.Now().Add(time.Hour)},
+		{Name: "Far", Closes: time.Now().AddDate(2, 0, 0)},
+	} {
+		if _, err := e.h.CreateDropBox(ctx, e.sess, bob, p); !errors.Is(err, hub.ErrBadDropWhen) {
+			t.Errorf("%s: %v", p.Name, err)
+		}
+	}
+
+	// the reminder and the closing message are each sent once; extending lets them go again
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	b := newBox(t, e, hub.DropParams{Name: "Party", Closes: time.Now().Add(2 * time.Hour)})
+	e.h.DropMaintenance(ctx)
+	e.h.DropMaintenance(ctx)
+	if len(told) != 1 || !strings.Contains(told[0], "closes at") {
+		t.Fatalf("reminder: %v", told)
+	}
+	e.st.SetDropSchedule(ctx, b.ID, time.Time{}, time.Now().Add(-time.Minute)) // it is over
+	e.h.ReceiveDropFile(ctx, b.ID, "late.jpg", bytes.NewReader(jpeg), "g")
+	e.h.DropMaintenance(ctx)
+	e.h.DropMaintenance(ctx)
+	if len(told) != 2 || !strings.Contains(told[1], "closed") || !strings.Contains(told[1], "0 files") {
+		t.Fatalf("closing message: %v", told)
+	}
+	if _, err := e.h.OpenDropBox(ctx, b.Token); err == nil {
+		t.Error("a box that has closed takes nothing")
+	}
+	// extend by a day: open again, and it will remind again
+	if err := e.h.ExtendDropBox(ctx, bob, b.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.OpenDropBox(ctx, b.Token); err != nil {
+		t.Errorf("after extending: %v", err)
+	}
+	got, _ := e.st.DropBox(ctx, b.ID)
+	if got.Notified != 0 || got.ExpiresAt.Before(time.Now().Add(23*time.Hour)) {
+		t.Errorf("extend: %+v", got)
+	}
+	if err := e.h.ExtendDropBox(ctx, bob, b.ID, 0); !errors.Is(err, hub.ErrBadDropLimit) {
+		t.Errorf("extend by nothing: %v", err)
+	}
+	noEnd := newBox(t, e, hub.DropParams{Name: "Endless"})
+	if err := e.h.ExtendDropBox(ctx, bob, noEnd.ID, 1); !errors.Is(err, hub.ErrNoEnd) {
+		t.Errorf("a box with no end: %v", err)
+	}
+}
+
+func TestTheSummaryCountsGuestsAndTheBusiestHour(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Count"})
+	for i, who := range []string{"a", "a", "b"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, fmt.Sprint(i, ".jpg"), bytes.NewReader(jpeg), who); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sum, _ := e.st.DropSummaryOf(ctx, b.ID)
+	if sum.Guests != 2 || sum.BusiestFiles != 3 || sum.BusiestHour == "" {
+		t.Errorf("summary: %+v", sum)
+	}
 }

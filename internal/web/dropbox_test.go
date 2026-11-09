@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -91,6 +92,7 @@ func withDrop(t *testing.T, st **store.Store, im *storing, box store.DropBox) fu
 		h := &hub.Hub{Static: srv.S.Services, Store: s, Log: srv.Log, Options: hub.Options{InboxTag: "inbox"},
 			Connect: func(key string) (*immich.API, error) { return immich.New(srv.BaseURL, immich.Auth{APIKey: key}, nil) }}
 		h.Connect = func(key string) (*immich.API, error) { return immich.New(store.URL, immich.Auth{APIKey: key}, nil) }
+		h.StageDir = t.TempDir()
 		if err := h.Reload(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -241,3 +243,62 @@ func TestGuestRoutesAreOpenButTheOwnersAreNot(t *testing.T) {
 
 // hubPassword is the stored form of the password "swordfish", made the way a drop box makes it.
 func hubPassword() (string, error) { return hub.HashDropPassword("swordfish") }
+
+func TestAnApprovalBoxHoldsFilesAndOnlyItsHostsSeeThem(t *testing.T) {
+	var st *store.Store
+	im := &storing{}
+	token := strings.Repeat("56", 16)
+	app, _ := setup(t, withDrop(t, &st, im, store.DropBox{Token: token, Name: "Careful", InboxTag: "inbox/Careful", Approve: true}))
+	id := firstBox(t, st)
+
+	if _, page := do(t, "GET", app.URL+"/drop/"+token, "", nil); !strings.Contains(page, "looked at before it is kept") {
+		t.Error("guests are told their files are looked at first")
+	}
+	code, body := sendFiles(t, app.URL+"/drop/"+token+"/upload", nil, map[string][]byte{"a.jpg": jpegBytes})
+	if code != 200 || !strings.Contains(body, "waiting for approval") || len(im.names) != 0 {
+		t.Fatalf("upload: %d %.200s stored %v", code, body, im.names)
+	}
+
+	owner := get(t, app.URL, "sess=family")
+	m := regexp.MustCompile(`src="dropbox/pending/([0-9a-f-]{36})"`).FindStringSubmatch(owner)
+	if m == nil || !strings.Contains(owner, "Waiting for approval") || !strings.Contains(owner, "Approve all") {
+		t.Fatalf("the owner must see the file waiting: %.300s", owner)
+	}
+	// the file is shown to the people who decide and to nobody else
+	for who, want := range map[string]int{"sess=family": 200, "sess=other": 404, "": 401} {
+		if code, _ := do(t, "GET", app.URL+"/dropbox/pending/"+m[1], who, nil); code != want {
+			t.Errorf("waiting file as %q: %d, want %d", who, code, want)
+		}
+	}
+	// a co-host who only views sees that something waits, not what
+	st.SetDropHost(context.Background(), id, store.DropHost{UserID: uuid.MustParse(otherID), Name: "Other", Email: "other@x.test", Role: store.HostView})
+	view := get(t, app.URL, "sess=other")
+	if !strings.Contains(view, "Careful") || !strings.Contains(view, "You can see this drop box") || strings.Contains(view, "dropbox/pending/") || strings.Contains(view, `data-link="drop/`) || strings.Contains(view, "Revoke drop box") {
+		t.Errorf("what a viewer sees: %.600s", view)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/approve", "sess=other", "service="+id+"&all=1"); code != 409 {
+		t.Errorf("a viewer approving: %d, want 409", code)
+	}
+	// nothing chosen is an error, not "approve everything"
+	if code, _ := postForm(t, app.URL+"/dropbox/approve", "sess=family", "service="+id); code != 409 {
+		t.Errorf("approving nothing: %d, want 409", code)
+	}
+	// a manager approves; the file is stored and the queue empties
+	st.SetDropHost(context.Background(), id, store.DropHost{UserID: uuid.MustParse(otherID), Name: "Other", Email: "other@x.test", Role: store.HostManage})
+	if code, b := postForm(t, app.URL+"/dropbox/approve", "sess=other", "service="+id+"&item="+m[1]); code != 204 {
+		t.Fatalf("approve: %d %s", code, b)
+	}
+	if len(im.names) != 1 {
+		t.Errorf("stored: %v", im.names)
+	}
+	if after := get(t, app.URL, "sess=family"); strings.Contains(after, "dropbox/pending/") {
+		t.Error("the queue must be empty")
+	}
+	// a manager may pause but not revoke
+	if code, _ := postForm(t, app.URL+"/dropbox/pause", "sess=other", "service="+id+"&paused=1"); code != 204 {
+		t.Errorf("a manager pausing: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/revoke", "sess=other", "service="+id); code != 409 {
+		t.Errorf("a manager revoking: %d, want 409", code)
+	}
+}

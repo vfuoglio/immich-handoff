@@ -48,6 +48,9 @@ type Hub struct {
 	// when their owner opens the page (RECEIVER_DELETE, on by default).
 	ReceiverDelete bool
 
+	// StageDir is where files wait for a host's approval in a drop box that asks for it (empty: no such drop boxes).
+	StageDir string
+
 	mu       sync.RWMutex
 	snapshot []*syncer.Service
 	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads

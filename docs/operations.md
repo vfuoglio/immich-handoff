@@ -48,6 +48,8 @@ With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for 
 
 ## Backups
 
+A backup is the data file. Files that wait for approval in a [drop box](using.md#approving-files-before-they-are-kept) are kept beside it in `dropbox-pending` and are not in the backup (they are deleted after two weeks anyway).
+
 Only installs that let people join keep data: one file, `handoff.db`, in the `handoff-data` volume (its name starts with the folder name; see `docker volume ls`). It holds the services, the memberships and the saved API keys. Fixed-account installs store nothing.
 
 Ask the running app for a backup:

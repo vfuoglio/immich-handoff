@@ -189,6 +189,29 @@ type DropBoxView struct {
 	Ends              string // when the link stops working, when it will
 	Locked            bool   // guests need a password
 	Log               []ActivityView
+
+	Role                string // owner, manage or view
+	Owner, Manage       bool   // the owner may do everything; a co-host who manages may do all but end the box and choose co-hosts
+	Album, ExtraTag     string // where files are filed besides the inbox tag
+	Approve             bool   // files wait for approval
+	Opens               string // when it opens, if it has not yet
+	Summary             string // what it took, in a sentence
+	CanExtend           bool
+	PendingN            int // files waiting for a decision
+	Pending             []PendingView
+	Hosts               []HostView
+}
+
+// PendingView is a file a guest sent that waits for a host's decision.
+type PendingView struct {
+	ID, Name, Size string
+	Image          bool // it can be shown as a picture
+}
+
+// HostView is a co-host of a drop box.
+type HostView struct {
+	ID, Name, Email string
+	Manage          bool
 }
 
 // DropPageView is what a guest sees at a drop box's link.
@@ -196,6 +219,7 @@ type DropPageView struct {
 	Token, Name, Message string
 	Password             bool
 	PhotosOnly           bool
+	Approve              bool // a host looks at files before they are kept
 	Limits               string
 }
 
@@ -1264,26 +1288,117 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					<p class="meta">{ b.Message }</p>
 				}
 				<p class="meta">{ b.Limits }</p>
+				if b.Summary != "" {
+					<p class="meta"><b>{ t(ctx, "So far") }</b> { b.Summary }</p>
+				}
+				if b.Opens != "" {
+					<p class="meta"><span class="chip">{ t(ctx, "Not open yet") }</span> { t(ctx, "It opens {when}.", "when", b.Opens) }</p>
+				}
+				if b.Ends != "" {
+					<p class="meta">{ t(ctx, "The link stops working {when}.", "when", b.Ends) }</p>
+				}
+				if b.Album != "" || b.ExtraTag != "" {
+					<p class="meta">
+						{ t(ctx, "Filed on arrival:") }
+						if b.Album != "" {
+							{ t(ctx, "in the album {album}", "album", b.Album) }
+						}
+						if b.ExtraTag != "" {
+							{ t(ctx, "with the tag {tag}", "tag", b.ExtraTag) }
+						}
+					</p>
+				}
 				if b.Note != "" {
 					<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { unpack(ctx, b.Note) } { t(ctx, "Look at the log below, then resume it when you are happy.") }</p>
 				}
-				<div class="field">
-					<label for={ "drop-" + id }>{ t(ctx, "Link for guests (anyone who has it can send photos)") }</label>
-					<div class="row">
-						<input id={ "drop-" + id } class="invite" readonly data-link={ "drop/" + b.Token }/>
-						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
-						<button type="button" class="copy-message" data-for={ "drop-" + id } data-message={ t(ctx, "Hello! Please send me your photos of {name} here, no account needed: {link}", "name", b.Name, "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
-						<button type="button" class="show-qr" data-for={ "drop-" + id } data-alt={ t(ctx, "QR code of the drop box link") }>{ t(ctx, "QR code") }</button>
+				if b.Role != "owner" {
+					<p class="meta">
+						if b.Manage {
+							{ t(ctx, "You help with this drop box: you can approve photos, pause it and extend it.") }
+						} else {
+							{ t(ctx, "You can see this drop box and its log.") }
+						}
+						<button hx-post="dropbox/host/remove" hx-vals={ hostVals(b.ID, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop helping with {name}?", "name", b.Name) } data-confirm-title={ t(ctx, "Stop helping?") } data-confirm-label={ t(ctx, "Stop helping") }>{ t(ctx, "Stop helping") }</button>
+					</p>
+				}
+				if b.Token != "" {
+					<div class="field">
+						<label for={ "drop-" + id }>{ t(ctx, "Link for guests (anyone who has it can send photos)") }</label>
+						<div class="row">
+							<input id={ "drop-" + id } class="invite" readonly data-link={ "drop/" + b.Token }/>
+							<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+							<button type="button" class="copy-message" data-for={ "drop-" + id } data-message={ t(ctx, "Hello! Please send me your photos of {name} here, no account needed: {link}", "name", b.Name, "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
+							<button type="button" class="show-qr" data-for={ "drop-" + id } data-alt={ t(ctx, "QR code of the drop box link") }>{ t(ctx, "QR code") }</button>
+						</div>
+						<div class="qr" id={ "qr-drop-" + id } hidden></div>
 					</div>
-					<div class="qr" id={ "qr-drop-" + id } hidden></div>
-				</div>
-				<p class="row">
-					if b.State == "paused" {
-						<button class="primary" data-act="resume" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Resume") }</button>
-					} else if b.State == "open" {
-						<button data-act="pause" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pause") }</button>
+				}
+				if b.Manage {
+					<p class="row">
+						if b.State == "paused" {
+							<button class="primary" data-act="resume" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Resume") }</button>
+						} else if b.State == "open" {
+							<button data-act="pause" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pause") }</button>
+						}
+						if b.CanExtend {
+							<button data-act="extend" hx-post="dropbox/extend" hx-vals={ extendVals(b.ID, 1) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Extend by a day") }</button>
+							<button data-act="extend" hx-post="dropbox/extend" hx-vals={ extendVals(b.ID, 7) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Extend by a week") }</button>
+						}
+					</p>
+				}
+				if b.PendingN > 0 {
+					<h3>{ t(ctx, "Waiting for approval") } <span class="count-badge">{ fmt.Sprint(b.PendingN) }</span></h3>
+					if b.Manage {
+						<form class="pending" hx-post="dropbox/approve" hx-target="#flash" hx-swap="innerHTML">
+							<input type="hidden" name="service" value={ b.ID }/>
+							<ul class="plain thumbs">
+								for _, p := range b.Pending {
+									<li>
+										if p.Image {
+											<img src={ "dropbox/pending/" + p.ID } alt={ p.Name } loading="lazy" width="96" height="96"/>
+										} else {
+											<span class="thumb-video">{ t(ctx, "video") }</span>
+										}
+										<label><input type="checkbox" name="item" value={ p.ID }/> <span class="meta">{ p.Name } \u00b7 { p.Size }</span></label>
+									</li>
+								}
+							</ul>
+							if b.PendingN > len(b.Pending) {
+								<p class="meta">{ t(ctx, "Showing the first {n}; decide on these and the rest appear.", "n", len(b.Pending)) }</p>
+							}
+							<p class="row">
+								<button class="primary" type="submit" data-act="approve">{ t(ctx, "Approve chosen") }</button>
+								<button type="button" hx-post="dropbox/reject" hx-include="closest form" hx-target="#flash" hx-swap="innerHTML" data-act="reject">{ t(ctx, "Reject chosen") }</button>
+								<button type="button" hx-post="dropbox/approve" hx-vals={ allVals(b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" data-act="approve-all">{ t(ctx, "Approve all") }</button>
+								<button type="button" hx-post="dropbox/reject" hx-vals={ allVals(b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Reject every waiting file? They are deleted.") } data-confirm-title={ t(ctx, "Reject all?") } data-confirm-label={ t(ctx, "Reject all") } data-danger="true" data-act="reject-all">{ t(ctx, "Reject all") }</button>
+							</p>
+						</form>
+					} else {
+						<p class="meta">{ t(ctx, "Photos that wait for a host's approval are only shown to the people who decide.") }</p>
 					}
-				</p>
+				}
+				if b.Owner {
+					<h3>{ t(ctx, "Co-hosts") }</h3>
+					<p class="meta">{ t(ctx, "People on this Immich server who help you look after the box. They see it on their own page. They never see your library, and only you can end the box.") }</p>
+					for _, h := range b.Hosts {
+						<p class="row">
+							<span class="chip">{ h.Name }</span>
+							<span class="meta">{ h.Email } \u00b7 { hostRoleLabel(ctx, h.Manage) }</span>
+							<button hx-post="dropbox/host/remove" hx-vals={ hostVals(b.ID, h.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Remove") }</button>
+						</p>
+					}
+					<form class="limits" hx-post="dropbox/host" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="service" value={ b.ID }/>
+						<label>{ t(ctx, "Email of the person") } <input name="email" type="email" required maxlength="200"/></label>
+						<label>{ t(ctx, "They may") }
+							<select name="role">
+								<option value="manage">{ t(ctx, "Approve, pause and extend") }</option>
+								<option value="view">{ t(ctx, "Only look") }</option>
+							</select>
+						</label>
+						<button type="submit">{ t(ctx, "Add co-host") }</button>
+					</form>
+				}
 			}
 			if len(b.Log) > 0 {
 				<h3>{ t(ctx, "Log") }</h3>
@@ -1293,7 +1408,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					}
 				</ol>
 			}
-			if b.State != "revoked" {
+			if b.Owner && b.State != "revoked" {
 				<div class="danger-zone">
 					<span class="meta">{ t(ctx, "Revoking ends the drop box for good: the link stops working at once and its key is deleted from your Immich account. Photos already received stay in your library.") }</span>
 					<button class="danger" hx-post="dropbox/revoke" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Revoke {name}? Its link stops working and nobody can send photos through it again.", "name", b.Name) } data-confirm-title={ t(ctx, "Revoke {name}?", "name", b.Name) } data-confirm-label={ t(ctx, "Revoke drop box") } data-danger="true">{ t(ctx, "Revoke drop box") }</button>
@@ -1315,6 +1430,14 @@ templ DropBoxForm() {
 				<label for="drop-days">{ t(ctx, "Open for (days)") }</label>
 				<input id="drop-days" name="opendays" type="number" min="1" max="365" value="14"/>
 			</div>
+			<div class="field">
+				<label for="drop-opens">{ t(ctx, "Opens at (optional, otherwise now)") }</label>
+				<input id="drop-opens" name="opens" type="datetime-local"/>
+			</div>
+			<div class="field">
+				<label for="drop-closes">{ t(ctx, "Closes at (optional, replaces the days)") }</label>
+				<input id="drop-closes" name="closes" type="datetime-local"/>
+			</div>
 			<div class="field wide">
 				<label for="drop-message">{ t(ctx, "Message for guests (optional)") }</label>
 				<input id="drop-message" name="message" maxlength="300" placeholder={ t(ctx, "Thank you for being there! Send us your photos.") }/>
@@ -1335,7 +1458,17 @@ templ DropBoxForm() {
 				<label for="drop-pass">{ t(ctx, "Password (optional)") }</label>
 				<input id="drop-pass" name="password" type="text" maxlength="64" autocomplete="off"/>
 			</div>
+			<div class="field">
+				<label for="drop-album">{ t(ctx, "Put what arrives in this album (optional)") }</label>
+				<input id="drop-album" name="album" maxlength="100"/>
+			</div>
+			<div class="field">
+				<label for="drop-tag">{ t(ctx, "Another tag for what arrives (optional)") }</label>
+				<input id="drop-tag" name="tag" maxlength="100"/>
+			</div>
 			<label class="wide"><input name="photos" type="checkbox" value="1"/> { t(ctx, "Photos only (no videos)") }</label>
+			<label class="wide"><input name="approve" type="checkbox" value="1"/> { t(ctx, "I look at every file before it is kept") }</label>
+			<small class="meta wide">{ t(ctx, "An album gives the key permission to find, make and add to albums, nothing more. Files that wait for you are kept on this server's disk until you decide, and deleted after two weeks.") }</small>
 			<small class="meta wide">{ t(ctx, "0 means no limit. The link stops working by itself after the days you choose. A box pauses by itself if it is flooded with files or with refusals.") }</small>
 		</div>
 		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make drop box") }</button></p>
@@ -1366,6 +1499,9 @@ templ DropPage(d DropPageView) {
 			</div>
 			<p class="meta">{ d.Limits }</p>
 			<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			if d.Approve {
+				<p class="meta">{ t(ctx, "What you send is looked at before it is kept.") }</p>
+			}
 			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send") }</button></p>
 		</form>
 	}

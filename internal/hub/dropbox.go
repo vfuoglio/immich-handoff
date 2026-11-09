@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +34,17 @@ var (
 	ErrBadDropSecret = errors.New("a password is at most 64 characters")
 	ErrNoDropBox     = errors.New("there is no such drop box")
 	ErrDropFinished  = errors.New("this drop box has been revoked")
+	ErrDropRole      = errors.New("your part in this drop box does not allow that")
+	ErrBadDropAlbum  = errors.New("the album and the tag are at most 100 characters, with no line breaks, slashes or commas")
+	ErrBadDropWhen   = errors.New("a drop box closes after it opens, and within a year from now")
+	ErrNoStaging     = errors.New("approving before files arrive needs a place to keep them while they wait, and this install has none (it has no data folder)")
+	ErrNoSuchPerson  = errors.New("nobody on this Immich server has that email address")
+	ErrHostSelf      = errors.New("you already own this drop box")
+	ErrBadHostRole   = errors.New("a co-host manages the box or only views it")
+	ErrTooManyHosts  = errors.New("a drop box has at most ten co-hosts")
+	ErrNoEnd         = errors.New("this drop box has no end to extend")
+	ErrNothingChosen = errors.New("choose the files first")
+	ErrSomeNotStored = errors.New("some files could not be stored right now and stay waiting; try again")
 
 	ErrDropType     = errors.New("this kind of file is not accepted")
 	ErrDropTooBig   = errors.New("the file is larger than this drop box takes")
@@ -54,15 +67,23 @@ const (
 	dropBurstTurnedAway  = 200                 // refused files and blocked guests in ten minutes that pause it
 	dropBurstWindow      = 10 * time.Minute    //
 	dropKeepRevoked      = 30 * 24 * time.Hour // how long the log of a revoked box stays readable
+	dropPendingFiles     = 1000                // files that may wait for approval in one box
+	dropPendingBytes     = 10 << 30            // and the bytes they may hold
+	dropPendingAge       = 14 * 24 * time.Hour // a file nobody decided on is deleted after this long
+	dropReminder         = 24 * time.Hour      // how long before its end a box reminds
+	dropMaxHosts         = 10
 )
 
 // DropParams describe a new drop box. Zero values mean no limit, no expiry and no password.
 type DropParams struct {
 	Name, Message, Password string
-	Days                    int // the link works for this many days
-	MaxFiles, MaxMB         int // the most the box takes in all
-	MaxFileMB               int // the largest single file
+	Days                    int       // the link works for this many days from now (or from Opens)
+	Opens, Closes           time.Time // a start, and an end that replaces Days; zero: now, and Days
+	MaxFiles, MaxMB         int       // the most the box takes in all
+	MaxFileMB               int       // the largest single file
 	PhotosOnly              bool
+	Album, ExtraTag         string // where files are filed besides the inbox tag
+	Approve                 bool   // files wait for a host's approval
 }
 
 func checkDropParams(p DropParams) error {
@@ -84,6 +105,24 @@ func checkDropParams(p DropParams) error {
 	if p.Days < 0 || p.Days > 365 {
 		return ErrBadDropLimit
 	}
+	for _, v := range []string{p.Album, p.ExtraTag} {
+		if utf8.RuneCountInString(v) > 100 || strings.ContainsAny(v, "/,\r\n\x00") {
+			return ErrBadDropAlbum
+		}
+	}
+	now := time.Now()
+	if !p.Closes.IsZero() {
+		start := now
+		if !p.Opens.IsZero() {
+			start = p.Opens
+		}
+		if !p.Closes.After(start) || p.Closes.After(now.AddDate(1, 0, 0)) || p.Closes.Before(now) {
+			return ErrBadDropWhen
+		}
+	}
+	if !p.Opens.IsZero() && p.Opens.After(now.AddDate(1, 0, 0)) {
+		return ErrBadDropWhen
+	}
 	return nil
 }
 
@@ -95,10 +134,18 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		return store.DropBox{}, ErrNotJoinable
 	}
 	p.Name, p.Message = strings.TrimSpace(p.Name), strings.TrimSpace(p.Message)
+	p.Album, p.ExtraTag = strings.TrimSpace(p.Album), strings.TrimSpace(p.ExtraTag)
 	if err := checkDropParams(p); err != nil {
 		return store.DropBox{}, err
 	}
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(p.Name)+" (drop box)", immich.DropBoxPermissions)
+	if p.Approve && h.StageDir == "" {
+		return store.DropBox{}, ErrNoStaging
+	}
+	perms := immich.DropBoxPermissions
+	if p.Album != "" {
+		perms = immich.DropBoxPermissionsAlbum
+	}
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(p.Name)+" (drop box)", perms)
 	if err != nil {
 		return store.DropBox{}, fmt.Errorf("could not create an API key in your Immich account: %w", err)
 	}
@@ -118,9 +165,17 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		Token: newToken() + newToken(), Name: p.Name, Message: p.Message, OwnerID: owner.ID, OwnerName: owner.Name,
 		KeyID: keyID, Key: secret, InboxTag: h.Options.InboxTag + "/" + p.Name,
 		MaxFiles: p.MaxFiles, MaxMB: p.MaxMB, MaxFileMB: p.MaxFileMB, PhotosOnly: p.PhotosOnly,
+		Album: p.Album, ExtraTag: p.ExtraTag, Approve: p.Approve, StartsAt: p.Opens,
 	}
-	if p.Days > 0 {
-		b.ExpiresAt = time.Now().Add(time.Duration(p.Days) * 24 * time.Hour)
+	switch {
+	case !p.Closes.IsZero():
+		b.ExpiresAt = p.Closes
+	case p.Days > 0:
+		from := time.Now()
+		if p.Opens.After(from) {
+			from = p.Opens
+		}
+		b.ExpiresAt = from.Add(time.Duration(p.Days) * 24 * time.Hour)
 	}
 	if p.Password != "" {
 		if b.Password, err = HashDropPassword(p.Password); err != nil {
@@ -137,8 +192,19 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 	return b, nil
 }
 
-// DropBoxes returns the drop boxes of a person, newest first, and forgets old revoked ones.
-func (h *Hub) DropBoxes(ctx context.Context, owner uuid.UUID) ([]store.DropBox, error) {
+// DropAccess is a drop box and what the person asking may do with it: "owner", "manage" or "view".
+type DropAccess struct {
+	Box   store.DropBox
+	Role  string
+	Hosts []store.DropHost // only the owner is told who the co-hosts are
+}
+
+// the roles, from the least to the most
+var dropRank = map[string]int{"view": 1, "manage": 2, "owner": 3}
+
+// DropBoxes returns the drop boxes of a person, newest first: their own and the ones they help with. It also
+// forgets old revoked ones.
+func (h *Hub) DropBoxes(ctx context.Context, user uuid.UUID) ([]DropAccess, error) {
 	if h.Store == nil {
 		return nil, nil
 	}
@@ -147,39 +213,67 @@ func (h *Hub) DropBoxes(ctx context.Context, owner uuid.UUID) ([]store.DropBox, 
 	if err != nil {
 		return nil, err
 	}
-	var mine []store.DropBox
+	hosted, err := h.Store.HostedBoxes(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	var mine []DropAccess
 	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].OwnerID == owner {
-			all[i].Key = "" // the page never needs it
-			mine = append(mine, all[i])
+		b := all[i]
+		role := hosted[b.ID]
+		if b.OwnerID == user {
+			role = "owner"
 		}
+		if role == "" {
+			continue
+		}
+		b.Key = "" // the page never needs it
+		a := DropAccess{Box: b, Role: role}
+		if role == "owner" {
+			a.Hosts, _ = h.Store.DropHosts(ctx, b.ID)
+		}
+		mine = append(mine, a)
 	}
 	return mine, nil
 }
 
-func (h *Hub) ownedDropBox(ctx context.Context, owner uuid.UUID, id string) (store.DropBox, error) {
+// dropBoxFor finds a box the person may use as at least this role. A box they have nothing to do with is "no such
+// drop box", the same as one that does not exist.
+func (h *Hub) dropBoxFor(ctx context.Context, user uuid.UUID, id, least string) (store.DropBox, string, error) {
 	b, err := h.Store.DropBox(ctx, id)
-	if err != nil || b.OwnerID != owner {
-		return b, ErrNoDropBox
+	if err != nil {
+		return b, "", ErrNoDropBox
+	}
+	role := ""
+	if b.OwnerID == user {
+		role = "owner"
+	} else if hosted, err := h.Store.HostedBoxes(ctx, user); err == nil {
+		role = hosted[id]
+	}
+	if role == "" {
+		return b, "", ErrNoDropBox
 	}
 	if b.State == store.DropRevoked {
-		return b, ErrDropFinished
+		return b, role, ErrDropFinished
 	}
-	return b, nil
+	if dropRank[role] < dropRank[least] {
+		return b, role, ErrDropRole
+	}
+	return b, role, nil
 }
 
-// DropEvents is the log of one of the person's drop boxes, newest first.
-func (h *Hub) DropEvents(ctx context.Context, owner uuid.UUID, id string, limit int) ([]store.DropEvent, error) {
-	b, err := h.Store.DropBox(ctx, id)
-	if err != nil || b.OwnerID != owner {
-		return nil, ErrNoDropBox
+// DropEvents is the log of a drop box the person owns or helps with, newest first.
+func (h *Hub) DropEvents(ctx context.Context, user uuid.UUID, id string, limit int) ([]store.DropEvent, error) {
+	if _, _, err := h.dropBoxFor(ctx, user, id, "view"); err != nil && !errors.Is(err, ErrDropFinished) {
+		return nil, err
 	}
 	return h.Store.DropEvents(ctx, id, limit)
 }
 
-// SetDropBoxPaused stops a drop box taking photos, or lets it take them again.
-func (h *Hub) SetDropBoxPaused(ctx context.Context, owner immich.User, id string, paused bool) error {
-	b, err := h.ownedDropBox(ctx, owner.ID, id)
+// SetDropBoxPaused stops a drop box taking photos, or lets it take them again. The owner and co-hosts who manage
+// may do it.
+func (h *Hub) SetDropBoxPaused(ctx context.Context, user immich.User, id string, paused bool) error {
+	b, _, err := h.dropBoxFor(ctx, user.ID, id, "manage")
 	if err != nil {
 		return err
 	}
@@ -190,15 +284,15 @@ func (h *Hub) SetDropBoxPaused(ctx context.Context, owner immich.User, id string
 	if changed, err := h.Store.SetDropBoxState(ctx, b.ID, state, ""); err != nil {
 		return err
 	} else if changed {
-		h.dropEvent(ctx, b.ID, kind, i18n.Pack(msg, "name", owner.Name), "")
+		h.dropEvent(ctx, b.ID, kind, i18n.Pack(msg, "name", user.Name), "")
 	}
 	return nil
 }
 
 // RevokeDropBox ends a drop box for good: its key is deleted from the owner's account and its link stops working.
-// The photos already received stay in the library.
+// The photos already received stay in the library; files still waiting for approval are deleted. Only the owner may.
 func (h *Hub) RevokeDropBox(ctx context.Context, sess *immich.API, owner immich.User, id string) error {
-	b, err := h.ownedDropBox(ctx, owner.ID, id)
+	b, _, err := h.dropBoxFor(ctx, owner.ID, id, "owner")
 	if err != nil {
 		return err
 	}
@@ -208,8 +302,91 @@ func (h *Hub) RevokeDropBox(ctx context.Context, sess *immich.API, owner immich.
 	if _, err := h.Store.SetDropBoxState(ctx, b.ID, store.DropRevoked, ""); err != nil {
 		return err
 	}
+	h.purgePending(ctx, b.ID, "")
 	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} revoked the drop box", "name", owner.Name), "")
 	h.Log.Info("drop box revoked", "name", b.Name, "owner", owner.Email)
+	return nil
+}
+
+// ExtendDropBox moves the end of a box later by some days, counted from its end or from now if it already ended, and
+// opens it for guests again if it had ended. The reminder and the summary can be sent again for the new end.
+func (h *Hub) ExtendDropBox(ctx context.Context, user immich.User, id string, days int) error {
+	b, _, err := h.dropBoxFor(ctx, user.ID, id, "manage")
+	if err != nil {
+		return err
+	}
+	if days < 1 || days > 90 {
+		return ErrBadDropLimit
+	}
+	if b.ExpiresAt.IsZero() {
+		return ErrNoEnd
+	}
+	from := b.ExpiresAt
+	if now := time.Now(); from.Before(now) {
+		from = now
+	}
+	end := from.Add(time.Duration(days) * 24 * time.Hour)
+	if limit := time.Now().AddDate(1, 0, 0); end.After(limit) {
+		end = limit
+	}
+	if err := h.Store.SetDropSchedule(ctx, b.ID, b.StartsAt, end); err != nil {
+		return err
+	}
+	h.dropEvent(ctx, b.ID, store.DropResumed, i18n.Pack("{name} extended the drop box by {days} days", "name", user.Name, "days", days), "")
+	return nil
+}
+
+// --- co-hosts ---
+
+// AddDropHost lets another person on this Immich server help with a box: they find it on their own page. They are
+// found by their exact email, through the owner's own session. Only the owner chooses co-hosts. Adding someone again
+// changes their role.
+func (h *Hub) AddDropHost(ctx context.Context, sess *immich.API, owner immich.User, id, email, role string) error {
+	b, _, err := h.dropBoxFor(ctx, owner.ID, id, "owner")
+	if err != nil {
+		return err
+	}
+	if role != store.HostManage && role != store.HostView {
+		return ErrBadHostRole
+	}
+	u, found, err := sess.FindUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNoSuchPerson
+	}
+	if u.ID == owner.ID {
+		return ErrHostSelf
+	}
+	hosts, _ := h.Store.DropHosts(ctx, b.ID)
+	known := false
+	for _, x := range hosts {
+		known = known || x.UserID == u.ID
+	}
+	if !known && len(hosts) >= dropMaxHosts {
+		return ErrTooManyHosts
+	}
+	if err := h.Store.SetDropHost(ctx, b.ID, store.DropHost{UserID: u.ID, Name: u.Name, Email: u.Email, Role: role}); err != nil {
+		return err
+	}
+	h.dropEvent(ctx, b.ID, store.DropCreated, i18n.Pack("{name} made {host} a co-host ({role})", "name", owner.Name, "host", u.Name, "role", role), "")
+	return nil
+}
+
+// RemoveDropHost takes a co-host off a box. The owner may remove anybody; a co-host may remove themselves.
+func (h *Hub) RemoveDropHost(ctx context.Context, user immich.User, id string, target uuid.UUID) error {
+	b, role, err := h.dropBoxFor(ctx, user.ID, id, "view")
+	if err != nil {
+		return err
+	}
+	if role != "owner" && target != user.ID {
+		return ErrDropRole
+	}
+	if err := h.Store.RemoveDropHost(ctx, b.ID, target); err != nil {
+		return err
+	}
+	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} ended a co-host's part in the drop box", "name", user.Name), "")
 	return nil
 }
 
@@ -424,11 +601,62 @@ type DropOutcome int
 const (
 	DropStored    DropOutcome = iota // it is in the owner's library, tagged
 	DropDuplicate                    // Immich already had this very file
+	DropHeld                         // it waits for a host's approval
 )
 
-// ReceiveDropFile stores one guest's file in the owner's library and tags it with the box's inbox tag, streaming it
-// straight through without keeping a copy. What is refused, and why, is written in the box's log; the caller shows
-// the guest the error. The first bytes decide what the file is, not its name.
+// fileDrop files a stored photo as the box says: its inbox tag, the box's own tag, and its album. Failing to file
+// does not lose the photo, which is already in the library: it is logged and the photo stays where it is.
+func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id uuid.UUID) {
+	tags := []string{b.InboxTag}
+	if b.ExtraTag != "" {
+		tags = append(tags, b.ExtraTag)
+	}
+	for _, name := range tags {
+		if tag, err := api.FindTag(ctx, name, true); err != nil {
+			h.Log.Warn("drop box: could not find or make a tag", "box", b.Name, "tag", name, "err", err)
+		} else if err := api.TagAssets(ctx, *tag, id); err != nil {
+			h.Log.Warn("drop box: could not tag a photo", "box", b.Name, "tag", name, "err", err)
+		}
+	}
+	if b.Album == "" {
+		return
+	}
+	album, _, err := api.FindAlbum(ctx, b.Album)
+	if err == nil && album == nil {
+		var made uuid.UUID
+		if made, err = api.CreateAlbum(ctx, b.Album); err == nil {
+			album = &made
+		}
+	}
+	if err == nil {
+		err = api.AddToAlbum(ctx, *album, id)
+	}
+	if err != nil {
+		h.Log.Warn("drop box: could not put a photo in the album", "box", b.Name, "album", b.Album, "err", err)
+	}
+}
+
+// kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
+// allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
+func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool) {
+	c := context.WithoutCancel(ctx)
+	if countBytes {
+		_ = h.Store.AddDropBytes(c, b.ID, n)
+	}
+	_ = h.Store.RecordDropArrival(c, b.ID, who, time.Now())
+	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} arrived ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
+	h.checkBurst(ctx, b)
+	g := &h.drop
+	g.mu.Lock()
+	if s := g.seen[b.ID+"|"+who]; s != nil {
+		s.files = append(s.files, time.Now())
+	}
+	g.mu.Unlock()
+}
+
+// ReceiveDropFile takes one guest's file. It is streamed straight through to the owner's library and filed, keeping no
+// copy, or, in a box that needs approval, kept on disk until a host decides. What is refused, and why, is written in the
+// box's log; the caller shows the guest the error. The first bytes decide what the file is, not its name.
 func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file io.Reader, who string) (DropOutcome, error) {
 	b, err := h.Store.TakeDropSlot(ctx, boxID)
 	if err != nil {
@@ -462,11 +690,27 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 		}
 	}
 	cr := &capReader{r: br, max: limit}
+	name := dropFileName(filename, ext)
+
+	if b.Approve {
+		if err := h.stage(ctx, b, name, kind, who, cr); err != nil {
+			if cr.hit || errors.Is(err, ErrDropTooBig) {
+				h.RejectDrop(ctx, b, who, filename, ErrDropTooBig)
+				return 0, ErrDropTooBig
+			}
+			if errors.Is(err, ErrDropFull) {
+				h.RejectDrop(ctx, b, who, filename, ErrDropFull)
+			}
+			return 0, err
+		}
+		kept = true
+		return DropHeld, nil
+	}
+
 	api, err := h.Connect(b.Key)
 	if err != nil {
 		return 0, err
 	}
-	name := dropFileName(filename, ext)
 	id, dup, err := api.UploadFile(ctx, name, cr, time.Now())
 	if err != nil {
 		if cr.hit || errors.Is(err, ErrDropTooBig) {
@@ -481,22 +725,224 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 		return DropDuplicate, nil
 	}
 	kept = true
-	_ = h.Store.AddDropBytes(context.WithoutCancel(ctx), b.ID, cr.n)
-	if tag, err := api.FindTag(ctx, b.InboxTag, true); err != nil {
-		h.Log.Warn("drop box: could not find or make the inbox tag", "box", b.Name, "err", err)
-	} else if err := api.TagAssets(ctx, *tag, id); err != nil {
-		h.Log.Warn("drop box: could not tag a photo", "box", b.Name, "err", err)
-	}
-	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} arrived ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(cr.n)/(1<<20))), who)
-	h.checkBurst(ctx, b)
-	// a guest's files count against their hourly allowance
-	g := &h.drop
-	g.mu.Lock()
-	if s := g.seen[b.ID+"|"+who]; s != nil {
-		s.files = append(s.files, time.Now())
-	}
-	g.mu.Unlock()
+	h.fileDrop(ctx, api, b, id)
+	h.kept(ctx, b, who, name, cr.n, true)
 	return DropStored, nil
+}
+
+// stage keeps a file that waits for approval on disk, in a folder of its own for the box, and records it.
+func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string, r io.Reader) error {
+	if h.StageDir == "" {
+		return ErrNoStaging
+	}
+	if n, size, err := h.Store.DropPendingTotals(ctx, b.ID); err != nil {
+		return err
+	} else if n >= dropPendingFiles || size >= dropPendingBytes {
+		return ErrDropFull
+	}
+	dir := filepath.Join(h.StageDir, b.ID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, "p-*")
+	if err != nil {
+		return err
+	}
+	n, err := io.Copy(f, r)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	c := context.WithoutCancel(ctx)
+	if _, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name()}); err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	_ = h.Store.AddDropBytes(c, b.ID, n)
+	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} waits for approval ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
+	return nil
+}
+
+// DropPending lists the files of a box that wait for a decision, for the owner and the co-hosts who manage it.
+func (h *Hub) DropPending(ctx context.Context, user uuid.UUID, id string, limit int) ([]store.DropPending, int, error) {
+	if _, _, err := h.dropBoxFor(ctx, user, id, "manage"); err != nil {
+		return nil, 0, err
+	}
+	n, _, err := h.Store.DropPendingTotals(ctx, id)
+	if err != nil {
+		return nil, 0, err
+	}
+	list, err := h.Store.DropPendingOf(ctx, id, limit)
+	return list, n, err
+}
+
+// DropPendingCount is how many files wait in a box, for anyone who may see the box.
+func (h *Hub) DropPendingCount(ctx context.Context, id string) int {
+	n, _, _ := h.Store.DropPendingTotals(ctx, id)
+	return n
+}
+
+// DropPendingFile gives the path of one waiting file, so a host can see it before deciding.
+func (h *Hub) DropPendingFile(ctx context.Context, user uuid.UUID, pendingID string) (store.DropPending, error) {
+	p, err := h.Store.DropPendingByID(ctx, pendingID)
+	if err != nil {
+		return p, ErrNoDropBox
+	}
+	if _, _, err := h.dropBoxFor(ctx, user, p.BoxID, "manage"); err != nil {
+		return store.DropPending{}, err
+	}
+	return p, nil
+}
+
+// purgePending deletes the waiting files of a box from the disk and the record; with an id, only that one.
+func (h *Hub) purgePending(ctx context.Context, boxID, only string) {
+	list, err := h.Store.DropPendingOf(ctx, boxID, 100000)
+	if err != nil {
+		return
+	}
+	for _, p := range list {
+		if only != "" && p.ID != only {
+			continue
+		}
+		if ok, _ := h.Store.RemoveDropPending(context.WithoutCancel(ctx), p.ID); ok {
+			os.Remove(p.Path)
+		}
+	}
+	if only == "" && h.StageDir != "" {
+		os.Remove(filepath.Join(h.StageDir, boxID))
+	}
+}
+
+// DecideDrop approves or rejects waiting files of a box, the ones named or, with none named, all of them. An approved
+// file is stored in the owner's library and filed; a rejected one is deleted and its room given back. Two people
+// deciding on the same file cannot both succeed. It returns how many files were done and how many could not be stored
+// (those stay waiting).
+func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only []string, approve bool) (done, failed int, err error) {
+	b, _, err := h.dropBoxFor(ctx, user.ID, id, "manage")
+	if err != nil {
+		return 0, 0, err
+	}
+	list, err := h.Store.DropPendingOf(ctx, b.ID, 5000)
+	if err != nil {
+		return 0, 0, err
+	}
+	want := map[string]bool{}
+	for _, x := range only {
+		want[x] = true
+	}
+	var api *immich.API
+	if approve {
+		if api, err = h.Connect(b.Key); err != nil {
+			return 0, 0, err
+		}
+	}
+	c := context.WithoutCancel(ctx)
+	for _, p := range list {
+		if len(want) > 0 && !want[p.ID] {
+			continue
+		}
+		if ok, err := h.Store.RemoveDropPending(c, p.ID); err != nil || !ok {
+			continue // another host decided first
+		}
+		if !approve {
+			os.Remove(p.Path)
+			_ = h.Store.ReleaseDropSlot(c, b.ID)
+			_ = h.Store.AddDropBytes(c, b.ID, -p.Size)
+			done++
+			continue
+		}
+		f, err := os.Open(p.Path)
+		var imageID uuid.UUID
+		dup := false
+		if err == nil {
+			imageID, dup, err = api.UploadFile(ctx, p.Name, f, p.At)
+			f.Close()
+		}
+		if err != nil {
+			h.Log.Warn("drop box: could not store an approved file; it stays waiting", "box", b.Name, "err", err)
+			_, _ = h.Store.AddDropPending(c, p) // put it back, with the same id and path
+			failed++
+			continue
+		}
+		os.Remove(p.Path)
+		if dup {
+			_ = h.Store.ReleaseDropSlot(c, b.ID)
+			_ = h.Store.AddDropBytes(c, b.ID, -p.Size)
+			h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} was already in the library", "file", p.Name), p.Who)
+		} else {
+			h.fileDrop(ctx, api, b, imageID)
+			h.kept(ctx, b, p.Who, p.Name, p.Size, false)
+		}
+		done++
+	}
+	if done > 0 {
+		one, msg := "{name} approved {n} file", "{name} approved {n} files"
+		if !approve {
+			one, msg = "{name} rejected {n} file", "{name} rejected {n} files"
+		}
+		h.dropEvent(ctx, b.ID, store.DropResumed, i18n.PackN(one, msg, done, "name", user.Name), "")
+	}
+	return done, failed, nil
+}
+
+// --- time ---
+
+// DropMaintenance does what a drop box needs done on a clock: it reminds shortly before a box closes, tells what a
+// box took when it has closed, deletes files nobody decided on for two weeks, and forgets old logs. It is safe to run
+// as often as wanted.
+func (h *Hub) DropMaintenance(ctx context.Context) {
+	if h.Store == nil {
+		return
+	}
+	now := time.Now()
+	boxes, err := h.Store.DropBoxes(ctx)
+	if err != nil {
+		return
+	}
+	for _, b := range boxes {
+		if b.State == store.DropRevoked || b.ExpiresAt.IsZero() {
+			continue
+		}
+		switch {
+		case b.Expired(now) && b.Notified&2 == 0:
+			_ = h.Store.MarkDropNotified(ctx, b.ID, 2)
+			text := h.dropClosingText(ctx, b)
+			h.dropEvent(ctx, b.ID, store.DropExpired, i18n.Pack("The drop box closed. {summary}", "summary", text), "")
+			if h.Notify != nil {
+				h.Notify(fmt.Sprintf("The drop box %q of %s closed. %s", b.Name, b.OwnerName, text))
+			}
+		case !b.Expired(now) && b.ExpiresAt.Sub(now) < dropReminder && b.Notified&1 == 0:
+			_ = h.Store.MarkDropNotified(ctx, b.ID, 1)
+			if h.Notify != nil {
+				h.Notify(fmt.Sprintf("The drop box %q of %s closes at %s. Its owner or a co-host can extend it from the page.", b.Name, b.OwnerName, b.ExpiresAt.Local().Format("2006-01-02 15:04")))
+			}
+		}
+	}
+	if old, err := h.Store.DropPendingBefore(ctx, now.Add(-dropPendingAge)); err == nil {
+		for _, p := range old {
+			if ok, _ := h.Store.RemoveDropPending(ctx, p.ID); ok {
+				os.Remove(p.Path)
+				_ = h.Store.ReleaseDropSlot(ctx, p.BoxID)
+				_ = h.Store.AddDropBytes(ctx, p.BoxID, -p.Size)
+				h.dropEvent(ctx, p.BoxID, store.DropRejected, i18n.Pack("{file} was deleted: nobody decided on it in two weeks", "file", p.Name), p.Who)
+			}
+		}
+	}
+	_ = h.Store.PruneDropBoxes(ctx, now.Add(-dropKeepRevoked))
+}
+
+// dropClosingText is what a box took, in a sentence for the log and for the administrator.
+func (h *Hub) dropClosingText(ctx context.Context, b store.DropBox) string {
+	sum, _ := h.Store.DropSummaryOf(ctx, b.ID)
+	waiting := h.DropPendingCount(ctx, b.ID)
+	text := fmt.Sprintf("%d files (%.1f MB) from %d guests", b.Files, float64(b.Bytes)/(1<<20), sum.Guests)
+	if waiting > 0 {
+		text += fmt.Sprintf(", %d still waiting for approval", waiting)
+	}
+	return text + "."
 }
 
 // --- passwords ---
