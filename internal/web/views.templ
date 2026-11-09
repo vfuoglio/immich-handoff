@@ -362,7 +362,12 @@ templ Layout(title, user string) {
 					{ children... }
 				</main>
 				if !isGuest(ctx) {
-					<footer>{ t(ctx, "Photos you tag in Immich are handed over automatically.") }</footer>
+					<footer>
+						{ t(ctx, "Photos you tag in Immich are handed over automatically.") }
+						if v := versionOf(ctx); v != "" && user != "" {
+							<span class="version" title={ t(ctx, "The version of Immich Handoff that is running") }>\u00b7 Immich Handoff { v }</span>
+						}
+					</footer>
 				}
 				if hasTabs(ctx) {
 					<dialog id="cmd" class="cmd" aria-label={ t(ctx, "Command palette") }>

@@ -538,3 +538,5 @@ ul.guestbook li { display: grid; gap: .3rem; padding: .6rem 0; border-top: 1px s
 ul.guestbook audio { width: 100%; max-width: 22rem; }
 textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7rem; border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent); background: transparent; color: inherit; }
 .guestbook-form h2 { margin: 0 0 .3rem; }
+
+footer .version { opacity: .75; white-space: nowrap; }

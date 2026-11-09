@@ -182,7 +182,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("Content-Language", string(lang))
 		h.Add("Vary", "Accept-Language")
 		h.Add("Vary", "Cookie")
-		r = r.WithContext(i18n.With(r.Context(), i18n.For(lang)))
+		r = r.WithContext(context.WithValue(i18n.With(r.Context(), i18n.For(lang)), versionKey{}, w.Version))
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") {

@@ -225,6 +225,12 @@ func reasonLabel(ctx context.Context, reason string) string {
 
 type baseKey struct{}
 
+type versionKey struct{}
+
+// versionOf is the version of the app that is running: set when it was built (a release says 1.2.0, a build from a
+// checkout says dev), and read from the running program, not written into the pages.
+func versionOf(ctx context.Context) string { v, _ := ctx.Value(versionKey{}).(string); return v }
+
 type adminKey struct{}
 
 type tabsKey struct{}

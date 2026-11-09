@@ -10,6 +10,9 @@
 
 - **Drop boxes: a shot list, a guest book, and sharing the photos back.** A box can have a **shot list** (up to twenty prompts) that guests choose from for each photo, with a checklist that ticks what already has a photo; a photo for a prompt is also tagged `inbox/<box>/<prompt>`, so Immich lists them grouped, and every photo can be made to name its prompt. A box can have a **guest book**: guests leave a message (up to 1000 characters) and a recorded **voice note** (up to 90 seconds), kept in the app's own data file (so in backups), readable and playable only by the owner and the co-hosts who manage the box, removable and downloadable as a zip. The owner can **share the photos back**: an album with what the box received and a view-only Immich shared link (days, optional password, thank-you message) that guests open with no account to see and download; a closed box's link then leads to it. Immich allows downloads only on a link that shows photo details, so guests with the link see every photo's metadata. Adds columns and four tables to the data file. See [Drop boxes](docs/using.md#drop-boxes-photos-from-people-who-do-not-have-immich). (#67, #70, #73)
 
+### Changes
+- **The footer of the pages says which version is running** (for example "Immich Handoff 1.2.0"), taken from the running program, to people who are signed in.
+
 ### Fixes
 - **Linking an album now hands over what is already in it at once.** Until now a newly linked album waited for the next timer round (15 minutes by default) or for a photo to be tagged, which is what started a pass. Photos added to a linked album later still wait for the timer, as Immich sends no event for an album.
 - The administrator is now told (through `NOTIFY_URL`) when a stored key stops working, as the log already said it would; the notification was never connected.
