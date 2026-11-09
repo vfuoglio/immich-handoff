@@ -38,7 +38,7 @@ Everyone's phone keeps backing up to their own account, and anyone can hand phot
 - **Careful by design.** A photo is only removed after the other side holds a verified copy. Duplicates are recognised. If anything fails, your original stays put.
 - **Small.** One container, no database server, nothing stored unless you let people join from the page.
 
-## See it move
+## In action
 
 Everything below is recorded from the real page, in the dark theme or the light one.
 
