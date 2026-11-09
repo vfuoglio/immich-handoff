@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Handing over
+- **Drop boxes: photos from people who do not have Immich.** An owner makes a drop box on the Services tab and shares its link or QR code; guests open it with no account, choose photos and send them, and they arrive in the owner's library tagged `inbox/<name>`. It is write-only: guests see nothing of the library, not even what they sent. An owner sets an end date, the most per file and in all, photos only and a password, can pause, resume or revoke the box, and reads its log. The box has a key of its own with five permissions (`user.read`, `tag.read`, `tag.create`, `tag.asset`, `asset.upload`); files are checked by their content, not their name, and streamed to Immich without being kept. Abuse limits: per guest, 30 requests in ten minutes and 300 files an hour; per box, four uploads at once and an automatic pause (with a notification) after a flood of files or refusals. New setting `DROPBOX_CLIENT_IP_HEADER`. **Guests have no Immich login, so `/drop/` on the page must be reachable without a sign-in in front of it**; nothing is open until someone makes a drop box. See [Drop boxes](docs/using.md#drop-boxes-photos-from-people-who-do-not-have-immich), [Letting guests reach a drop box](docs/operations.md#letting-guests-reach-a-drop-box) and [Security](docs/security.md#drop-boxes). Adds two tables to the data file. The guest page is in all seven languages; the owner's side of it (the form, the row and the log) is in English in the others until it is translated. (#56, #74)
+
+### Fixes
+- The administrator is now told (through `NOTIFY_URL`) when a stored key stops working, as the log already said it would; the notification was never connected.
+
 ## 1.2.0
 
 ### Handing over

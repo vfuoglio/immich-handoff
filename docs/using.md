@@ -193,6 +193,32 @@ A sender who joined from the page sees **Take back the last hand-over** on a ser
 - A stack and a live photo (with its motion clip) are taken back whole.
 - It takes back the most recent hand-over not yet taken back, so pressing it again takes back the one before. Only people who joined from the page have it (accounts set up in `.env` or the routes file are not recorded). It needs `RECEIVER_DELETE` (on by default); if the owner's key cannot move photos to the trash yet, the page asks the sender to tell the owner to open the page once.
 
+## Drop boxes: photos from people who do not have Immich
+
+A drop box is a link for people without an Immich account: relatives at a wedding, guests at an event. You make one on the **Services** tab, under **Make a drop box**, and share its link, a message with it, or its QR code. Guests open it in any browser, choose photos and send them. What arrives goes into **your** library, tagged `inbox/<name of the box>`, to look through before you file it. Nothing else changes: it is not a service, nobody has to be approved, and there is no sender.
+
+What a guest sees: the name of the box, your message, a form to choose photos (and videos, unless the box is for photos only), and afterwards what became of each file. **They cannot see your library, what other guests sent, or even what they sent themselves once they leave the page.** Immich's own shared link with uploads switched on shows guests the whole album; a drop box does not.
+
+What you set, all optional:
+
+| Setting | What it does |
+|---|---|
+| **Open for (days)** | The link stops working by itself after this many days (at most 365). |
+| **Message for guests** | Shown above the form. |
+| **Largest file / most megabytes / most files** | The most one file may weigh, and the most the box takes in all. A file that would go past the total is refused before it is stored. `0` is no limit. |
+| **Photos only** | Videos are turned away. |
+| **Password** | Guests must give it. Five wrong tries from one guest in ten minutes silence that guest for ten minutes. |
+
+What a drop box checks: it looks at the first bytes of every file, not at its name, and takes only what Immich can show as a photo or a video (JPEG, PNG, GIF, WebP, BMP, HEIC, AVIF, TIFF and DNG, MP4, MOV, WebM, 3GP). Pages, programs and archives are turned away and the log says so. A file is stored under a clean name with the extension its content calls for.
+
+From the box's row you can **Pause** it (the link then looks like one that does not exist), **Resume** it, copy its link or message, show its **QR code**, read its **log**, and **Revoke** it. Revoking ends it for good: the link stops working at once and the key is deleted from your Immich account. The photos already received stay in your library, and the log stays readable for a month.
+
+**The log** shows each file that arrived or was turned away, and each time a guest was refused for asking too much, with a short mark such as `guest 3fa9c1` instead of an address, so you can tell guests apart without the app keeping where they are. Nothing in it is a name or an address.
+
+**Protection against abuse.** One guest can make 30 upload requests in ten minutes and 300 files in an hour; a box takes four uploads at once and the whole app sixteen. If a box takes 1000 files in ten minutes, or turns away 200 files or guests in ten minutes, it **pauses by itself**, the log says why, and `NOTIFY_URL` is told. Look at the log, then resume it. The limits are the same for every box. More on what a link allows is in [Security](security.md#drop-boxes).
+
+**Making the link reachable.** Guests do not have your Immich login, so `/drop/` on the page must be open to the internet *without* any sign-in in front of it. See [Letting guests reach a drop box](operations.md#letting-guests-reach-a-drop-box).
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.

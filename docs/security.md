@@ -12,6 +12,18 @@ The receiver's key can upload photos, read the receiver's library and add tags. 
 
 Each key is named `handoff: <service>` in the owner's own Immich settings, so people can see exactly what exists and delete it whenever they like. Deleting it ends the connection at once: Immich refuses the key, the app notices and pauses, and no photo is touched.
 
+## Drop boxes
+
+A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.
+
+- **What a link allows.** Whoever has it can send photos and videos to its owner's library, up to the limits the owner set, until it expires, is paused or is revoked. That is all. It cannot list, read, download, change or delete anything, and a guest never sees what was stored, not even their own files.
+- **The key.** A drop box has a key of its own in the owner's account, named `handoff: <name> (drop box)`, made with the owner's own login and holding five permissions: `user.read`, `tag.read`, `tag.create`, `tag.asset` and `asset.upload`. It cannot read a photo back, delete one, or touch an album. Revoking the box deletes it.
+- **The link.** It holds 256 bits of randomness, so it cannot be guessed. A link that is unknown, paused, past its end or revoked gives the same answer, so nobody can tell which it was. The page sends `no-referrer`, so the link does not leak to other sites, and is never cached.
+- **What is checked.** The first bytes of each file decide what it is, never its name or what the browser says. Only photos and videos Immich can show are stored; the stored name is cleaned. Files are streamed to Immich and never kept on the app's disk or in its memory. Size limits are enforced while the file streams, so an oversized file is cut off, not read to the end.
+- **Limits against abuse.** Per guest: 30 requests in ten minutes and 300 files an hour. Per box: four uploads at once, and an automatic pause after 1000 files or 200 refusals in ten minutes. A password, if set, is stored as a salted PBKDF2 hash and slows guessing down to five tries per ten minutes.
+- **What is remembered about guests.** A short one-way mark made from the link and the guest's address together, shown in the log. The address is not stored, the mark is useless outside its box, and the log keeps at most 200 entries per box. The limits above keep their counts in memory only. Behind a reverse proxy the app sees the proxy's address unless `DROPBOX_CLIENT_IP_HEADER` names the header that carries the real one; without it all guests count as one for the per-guest limits (the per-box limits still hold).
+- **What the owner should still think about.** A link that is shared widely can be used by anyone who gets it; give it an end date, a size limit and, for a private event, a password, and revoke it when the event is over. Photos arrive in your library like any upload, so Immich's own checks (and your storage) apply.
+
 ## Who decides what
 
 - **The sender** decides what happens to their own originals, when they join. The owner has no say over that.
@@ -24,6 +36,7 @@ Each key is named `handoff: <service>` in the owner's own Immich settings, so pe
 - With self-service, one SQLite file in the `handoff-data` volume lists who joined what. Every API key in it is encrypted with AES-256-GCM using `HANDOFF_STORE_KEY`. The app refuses to start if that key does not match the database.
 - **Whoever runs the container and holds the store key can read those keys**, in the same way the person running Immich can already read the photos. This is the trust you place in the person who hosts it.
 - The activity log keeps the last 500 events (who joined, left, asked, was approved, lost a connection), in the same file.
+- Drop boxes are stored there too: the name, message and limits, the link, the key (encrypted, like every key) and a log of up to 200 entries per box. A revoked box and its log are forgotten after a month.
 
 ## What other people can see
 

@@ -122,7 +122,8 @@ func run(log *slog.Logger) error {
 	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus, ReceiverDelete: receiverDelete,
 		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
-		Retry:   func() { s.ProvisionRetry(ctx, hook) }}
+		Retry:   func() { s.ProvisionRetry(ctx, hook) },
+		Notify:  s.Tell}
 	if storeKey, err := readStoreKey(); err != nil {
 		return err
 	} else if storeKey == "" {
@@ -170,7 +171,7 @@ func run(log *slog.Logger) error {
 
 	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
-		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version}
+		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 

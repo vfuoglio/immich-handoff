@@ -53,6 +53,7 @@ type Server struct {
 	BackupDownload  bool            // HANDOFF_ADMIN_BACKUP_DOWNLOAD: the administrator's page may hand out a backup (off by default)
 	DownloadGap     time.Duration   // the least time between two downloads (default 10 minutes)
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
+	ClientIPHeader  string          // DROPBOX_CLIENT_IP_HEADER: the header in which a reverse proxy puts a guest's real address (empty: the connection's)
 
 	limiter limiter
 	gate    downloadGate
@@ -93,6 +94,11 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
+	mux.HandleFunc("GET /drop/{token}", w.dropPage)
+	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
+	mux.HandleFunc("POST /dropbox", w.createDropBox)
+	mux.HandleFunc("POST /dropbox/pause", w.pauseDropBox)
+	mux.HandleFunc("POST /dropbox/revoke", w.revokeDropBox)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
@@ -132,7 +138,8 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
-		if r.Method == http.MethodPost {
+		upload := dropRoute(r.URL.Path) && strings.HasSuffix(r.URL.Path, "/upload")
+		if r.Method == http.MethodPost && !upload { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
 		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English
@@ -149,6 +156,13 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
+		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation, /drop/<token>/upload one deeper
+			base := "../"
+			if upload {
+				base = "../../"
+			}
+			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, true))
 		}
 		next.ServeHTTP(rw, r)
 	})
@@ -396,6 +410,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 		}
 	}
 	d.Owned = w.ownedViews(ctx, me)
+	d.DropBoxes = w.dropBoxViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
 		for _, b := range broken {

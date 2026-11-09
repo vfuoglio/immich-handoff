@@ -174,6 +174,35 @@ type DashboardData struct {
 	Scene      []SceneStage // one stage per service that has senders
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
+	DropBoxes  []DropBoxView
+}
+
+// DropBoxView is one of the person's drop boxes: a link through which people without an Immich account send photos.
+type DropBoxView struct {
+	ID, Name, Message string
+	Token             string // the link is made from it in the browser
+	State             string // open, paused, expired or revoked
+	Note              string // why it is paused, when it paused itself
+	Files             int
+	Size              string // what it holds, e.g. "12.4 MB"
+	Limits            string // the limits in words
+	Ends              string // when the link stops working, when it will
+	Locked            bool   // guests need a password
+	Log               []ActivityView
+}
+
+// DropPageView is what a guest sees at a drop box's link.
+type DropPageView struct {
+	Token, Name, Message string
+	Password             bool
+	PhotosOnly           bool
+	Limits               string
+}
+
+// DropResultLine is what became of one file a guest sent.
+type DropResultLine struct {
+	Name, Text string
+	OK         bool
 }
 
 templ Layout(title, user string) {
@@ -250,7 +279,9 @@ templ Layout(title, user string) {
 				<main>
 					{ children... }
 				</main>
-				<footer>{ t(ctx, "Photos you tag in Immich are handed over automatically.") }</footer>
+				if !isGuest(ctx) {
+					<footer>{ t(ctx, "Photos you tag in Immich are handed over automatically.") }</footer>
+				}
 				if hasTabs(ctx) {
 					<dialog id="cmd" class="cmd" aria-label={ t(ctx, "Command palette") }>
 						<input id="cmd-q" type="text" placeholder={ t(ctx, "Type a command or the name of a service") } aria-label={ t(ctx, "Command") } autocomplete="off" role="combobox" aria-controls="cmd-list" aria-expanded="true"/>
@@ -350,6 +381,7 @@ templ Dashboard(d DashboardData) {
 					<summary>{ t(ctx, "Offer a service of your own") }</summary>
 					@OfferForm(d.DeleteOK)
 				</details>
+				@DropBoxSection(d.DropBoxes)
 			}
 		</section>
 		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
@@ -1195,5 +1227,164 @@ templ InvitePage(d DashboardData) {
 			</div>
 			<p class="meta"><a href="../">{ t(ctx, "Not now: open your own page") }</a></p>
 		</div>
+	}
+}
+
+// DropBoxSection is where a person makes and looks after their drop boxes.
+templ DropBoxSection(boxes []DropBoxView) {
+	<h2>{ t(ctx, "Drop boxes") }</h2>
+	<p class="meta">{ t(ctx, "A drop box is a link for people who do not have Immich: relatives at a wedding, guests at an event. They open it, choose photos and send them. They see nothing of your library, not even what others sent. What arrives goes into your library under a tag of its own, to look through before you file it.") }</p>
+	for i, b := range boxes {
+		@DropBoxRow(b, fmt.Sprintf("drop-%d", i), len(boxes) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Make a drop box") }</summary>
+		@DropBoxForm()
+	</details>
+}
+
+templ DropBoxRow(b DropBoxView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		<summary>
+			<span class={ "badge", hueClass(b.Name) } aria-hidden="true">{ initial(b.Name) }</span>
+			<span class="title"><b>{ b.Name }</b><span>{ dropStateLabel(ctx, b.State) }</span></span>
+			<span class="chips">
+				for _, c := range dropChips(ctx, b) {
+					<span class={ "chip", c.Tone }>{ c.Text }</span>
+				}
+			</span>
+			<span class="sum">{ dropCount(ctx, b) }</span>
+			<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+		</summary>
+		<div class="body">
+			if b.State == "revoked" {
+				<p class="meta">{ t(ctx, "This drop box was revoked: its link no longer works and its key is gone from your Immich account. The photos it received are in your library. This log disappears after a month.") }</p>
+			} else {
+				if b.Message != "" {
+					<p class="meta">{ b.Message }</p>
+				}
+				<p class="meta">{ b.Limits }</p>
+				if b.Note != "" {
+					<p class="meta"><span class="chip warn">{ t(ctx, "Paused") }</span> { unpack(ctx, b.Note) } { t(ctx, "Look at the log below, then resume it when you are happy.") }</p>
+				}
+				<div class="field">
+					<label for={ "drop-" + id }>{ t(ctx, "Link for guests (anyone who has it can send photos)") }</label>
+					<div class="row">
+						<input id={ "drop-" + id } class="invite" readonly data-link={ "drop/" + b.Token }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="copy-message" data-for={ "drop-" + id } data-message={ t(ctx, "Hello! Please send me your photos of {name} here, no account needed: {link}", "name", b.Name, "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
+						<button type="button" class="show-qr" data-for={ "drop-" + id } data-alt={ t(ctx, "QR code of the drop box link") }>{ t(ctx, "QR code") }</button>
+					</div>
+					<div class="qr" id={ "qr-drop-" + id } hidden></div>
+				</div>
+				<p class="row">
+					if b.State == "paused" {
+						<button class="primary" data-act="resume" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Resume") }</button>
+					} else if b.State == "open" {
+						<button data-act="pause" hx-post="dropbox/pause" hx-vals={ pauseVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pause") }</button>
+					}
+				</p>
+			}
+			if len(b.Log) > 0 {
+				<h3>{ t(ctx, "Log") }</h3>
+				<ol class="timeline">
+					for _, a := range b.Log {
+						<li><time>{ a.When }</time><span class={ "dot", a.Tone } aria-hidden="true"></span><span>{ a.Text }</span></li>
+					}
+				</ol>
+			}
+			if b.State != "revoked" {
+				<div class="danger-zone">
+					<span class="meta">{ t(ctx, "Revoking ends the drop box for good: the link stops working at once and its key is deleted from your Immich account. Photos already received stay in your library.") }</span>
+					<button class="danger" hx-post="dropbox/revoke" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Revoke {name}? Its link stops working and nobody can send photos through it again.", "name", b.Name) } data-confirm-title={ t(ctx, "Revoke {name}?", "name", b.Name) } data-confirm-label={ t(ctx, "Revoke drop box") } data-danger="true">{ t(ctx, "Revoke drop box") }</button>
+				</div>
+			}
+		</div>
+	</details>
+}
+
+templ DropBoxForm() {
+	<form class="card offer-form" hx-post="dropbox" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<p class="meta">{ t(ctx, "The app makes a key in your Immich account that can only add photos and tag them, nothing else. You can pause or revoke the box at any time.") }</p>
+		<div class="form-grid">
+			<div class="field">
+				<label for="drop-name">{ t(ctx, "Name") }</label>
+				<input id="drop-name" name="name" required minlength="2" maxlength="60" placeholder={ t(ctx, "Anna and Marco's wedding") }/>
+			</div>
+			<div class="field">
+				<label for="drop-days">{ t(ctx, "Open for (days)") }</label>
+				<input id="drop-days" name="opendays" type="number" min="1" max="365" value="14"/>
+			</div>
+			<div class="field wide">
+				<label for="drop-message">{ t(ctx, "Message for guests (optional)") }</label>
+				<input id="drop-message" name="message" maxlength="300" placeholder={ t(ctx, "Thank you for being there! Send us your photos.") }/>
+			</div>
+			<div class="field">
+				<label for="drop-filemb">{ t(ctx, "Largest file (MB)") }</label>
+				<input id="drop-filemb" name="filemb" type="number" min="0" max="1000000" value="500"/>
+			</div>
+			<div class="field">
+				<label for="drop-mb">{ t(ctx, "Most megabytes in all") }</label>
+				<input id="drop-mb" name="mb" type="number" min="0" max="1000000" value="20000"/>
+			</div>
+			<div class="field">
+				<label for="drop-files">{ t(ctx, "Most files in all") }</label>
+				<input id="drop-files" name="files" type="number" min="0" max="1000000" value="2000"/>
+			</div>
+			<div class="field">
+				<label for="drop-pass">{ t(ctx, "Password (optional)") }</label>
+				<input id="drop-pass" name="password" type="text" maxlength="64" autocomplete="off"/>
+			</div>
+			<label class="wide"><input name="photos" type="checkbox" value="1"/> { t(ctx, "Photos only (no videos)") }</label>
+			<small class="meta wide">{ t(ctx, "0 means no limit. The link stops working by itself after the days you choose. A box pauses by itself if it is flooded with files or with refusals.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make drop box") }</button></p>
+	</form>
+}
+
+// DropPage is what a guest opens: a name, a message and a way to send photos. Nothing in it comes from the library.
+templ DropPage(d DropPageView) {
+	@Layout(d.Name, "") {
+		<section class="invite-hero">
+			<h1>{ d.Name }</h1>
+			if d.Message != "" {
+				<p class="lead">{ d.Message }</p>
+			} else {
+				<p class="lead">{ t(ctx, "Send your photos here. No account is needed.") }</p>
+			}
+		</section>
+		<form class="card offer-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/upload" }>
+			if d.Password {
+				<div class="field">
+					<label for="drop-pw">{ t(ctx, "Password") }</label>
+					<input id="drop-pw" name="password" type="password" required autocomplete="off"/>
+				</div>
+			}
+			<div class="field">
+				<label for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
+				<input id="drop-files" name="files" type="file" multiple required accept={ dropAccept(d.PhotosOnly) }/>
+			</div>
+			<p class="meta">{ d.Limits }</p>
+			<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send") }</button></p>
+		</form>
+	}
+}
+
+// DropDone tells a guest what became of what they sent.
+templ DropDone(name, back string, lines []DropResultLine) {
+	@Layout(name, "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "Thank you!") }</h1>
+			<p class="lead">{ dropSummary(ctx, lines) }</p>
+		</section>
+		<div class="card">
+			<ul class="plain">
+				for _, l := range lines {
+					<li><span class={ "chip", templ.KV("ok", l.OK), templ.KV("bad", !l.OK) }>{ l.Text }</span> { l.Name }</li>
+				}
+			</ul>
+		</div>
+		<p class="meta"><a href={ templ.SafeURL(back) }>{ t(ctx, "Send more photos") }</a></p>
 	}
 }

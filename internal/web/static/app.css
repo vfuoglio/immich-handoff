@@ -503,3 +503,6 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 
 .qr { margin-top: .8rem; }
 .qr img { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+
+/* the list of what became of a guest's files */
+ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }

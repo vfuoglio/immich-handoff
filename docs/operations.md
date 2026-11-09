@@ -184,6 +184,16 @@ What it needs from you:
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
 
+## Letting guests reach a drop box
+
+A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages, `/drop/<link>` and `/drop/<link>/upload`, must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
+
+- **Same hostname rule.** Guests only need the link, so the hostname does not matter to them, but the link is built from the address the owner has the page open on. Owners should open the page on the address guests can reach.
+- **Behind single sign-on at the proxy** (Authelia, Authentik, oauth2-proxy and the like): add a rule that lets `/handoff/drop/` (or `/drop/` on the page's own address) through without the login. Leave everything else behind it.
+- **Large files.** The nginx example above already has `client_max_body_size 0`. Add `proxy_request_buffering off;` to the `/handoff/` location so a big video streams to Immich instead of being stored by the proxy first, and keep `proxy_read_timeout` generous.
+- **Guests' addresses.** Set `DROPBOX_CLIENT_IP_HEADER` (for nginx, `proxy_set_header X-Forwarded-For $remote_addr;` and `DROPBOX_CLIENT_IP_HEADER=X-Forwarded-For`) so the log and the per-guest limits can tell guests apart.
+- **Limit what you expose.** If you do not want any open endpoint, do not make drop boxes: nothing is open until an owner makes one, and revoking every box leaves `/drop/` answering as if it never existed.
+
 ## Monitoring
 
 - **Log:** `docker compose logs`. Each pass logs what it found and did; errors are marked `ERROR`.

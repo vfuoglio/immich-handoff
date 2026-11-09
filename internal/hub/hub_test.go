@@ -51,6 +51,13 @@ type fakeImmich struct {
 	keyPerms      map[string][]string // key id -> permissions
 	keyUpdates    int                 // how many times a key's permissions were changed
 	albums        []map[string]any    // bob's own albums
+	uploads       []fakeUpload        // files stored through an upload
+	tagged        []string            // asset ids that were tagged
+}
+
+type fakeUpload struct {
+	person, name string
+	size         int
 }
 
 // person is who a request is from: a session cookie ("sess=bob") or one of the keys created for them.
@@ -162,6 +169,60 @@ func (f *fakeImmich) handler() http.Handler {
 			}
 		}
 		w.WriteHeader(204)
+	})
+	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		who := f.person(r)
+		f.mu.Unlock()
+		mr, err := r.MultipartReader()
+		if err != nil {
+			http.Error(w, "no", 400)
+			return
+		}
+		for {
+			part, err := mr.NextPart()
+			if err != nil {
+				break
+			}
+			if part.FormName() == "assetData" {
+				n, err := io.Copy(io.Discard, part)
+				if err != nil {
+					http.Error(w, "broken", 400)
+					return
+				}
+				f.mu.Lock()
+				f.uploads = append(f.uploads, fakeUpload{who, part.FileName(), int(n)})
+				f.mu.Unlock()
+				status, code := "created", 201
+				if strings.HasPrefix(part.FileName(), "dupe") {
+					status, code = "duplicate", 200
+				}
+				j(w, code, map[string]any{"id": uuid.NewString(), "status": status})
+				return
+			}
+		}
+		http.Error(w, "no file", 400)
+	})
+	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Tags []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		for _, n := range body.Tags {
+			out = append(out, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("PUT /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			f.tagged = append(f.tagged, id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
 	})
 	tag := map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { j(w, 200, []any{tag}) })

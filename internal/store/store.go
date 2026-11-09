@@ -169,6 +169,40 @@ var migrations = []string{
 	   taken_back     INTEGER NOT NULL DEFAULT 0
 	 );
 	 CREATE INDEX handover_items_link ON handover_items (link_id, at);`,
+	// A drop box is a link through which people without an Immich account send photos to its owner. Its key is
+	// the owner's, made with the owner's own session, and sealed like every other key. The log keeps what happened.
+	`CREATE TABLE dropboxes (
+	   id          TEXT PRIMARY KEY,
+	   token       TEXT NOT NULL UNIQUE,
+	   name        TEXT NOT NULL,
+	   message     TEXT NOT NULL DEFAULT '',
+	   owner_id    TEXT NOT NULL,
+	   owner_name  TEXT NOT NULL,
+	   key_id      TEXT NOT NULL,
+	   key_enc     BLOB NOT NULL,
+	   inbox_tag   TEXT NOT NULL,
+	   expires_at  TEXT NOT NULL DEFAULT '',
+	   max_files   INTEGER NOT NULL DEFAULT 0,
+	   max_mb      INTEGER NOT NULL DEFAULT 0,
+	   max_file_mb INTEGER NOT NULL DEFAULT 0,
+	   photos_only INTEGER NOT NULL DEFAULT 0,
+	   password    TEXT NOT NULL DEFAULT '',
+	   state       TEXT NOT NULL DEFAULT 'active',
+	   note        TEXT NOT NULL DEFAULT '',
+	   files       INTEGER NOT NULL DEFAULT 0,
+	   bytes       INTEGER NOT NULL DEFAULT 0,
+	   created_at  TEXT NOT NULL,
+	   ended_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE TABLE dropbox_events (
+	   id     INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id TEXT NOT NULL,
+	   at     TEXT NOT NULL,
+	   kind   TEXT NOT NULL,
+	   text   TEXT NOT NULL,
+	   who    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX dropbox_events_box ON dropbox_events (box_id, id);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
