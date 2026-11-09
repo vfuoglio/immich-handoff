@@ -676,8 +676,9 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 
 // kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
 // allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
-func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt string) {
+func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt string, asset uuid.UUID) {
 	c := context.WithoutCancel(ctx)
+	_ = h.Store.AddDropAsset(c, b.ID, asset.String(), prompt)
 	if prompt != "" {
 		_ = h.Store.AddPromptCount(c, b.ID, prompt, 1)
 	}
@@ -803,7 +804,7 @@ func (h *Hub) ReceiveDropFileWith(ctx context.Context, boxID, filename string, f
 	}
 	kept = true
 	h.fileDrop(ctx, api, b, id, prompt)
-	h.kept(ctx, b, who, name, cr.n, true, prompt)
+	h.kept(ctx, b, who, name, cr.n, true, prompt, id)
 	if guest != "" {
 		_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, AssetID: id.String(), Name: name, Size: cr.n, Prompt: prompt})
 	}
@@ -960,7 +961,7 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 		} else {
 			_ = h.Store.DropUploadApproved(c, p.ID, imageID.String())
 			h.fileDrop(ctx, api, b, imageID, p.Prompt)
-			h.kept(ctx, b, p.Who, p.Name, p.Size, false, p.Prompt)
+			h.kept(ctx, b, p.Who, p.Name, p.Size, false, p.Prompt, imageID)
 		}
 		done++
 	}
@@ -995,7 +996,17 @@ func (h *Hub) DropMaintenance(ctx context.Context) {
 		switch {
 		case b.Expired(now) && b.Notified&2 == 0:
 			_ = h.Store.MarkDropNotified(ctx, b.ID, 2)
-			text := h.dropClosingText(ctx, b)
+			// a box that was told to hand its photos on does it now, once, as its owner, and the summary says how it went
+			onward := ""
+			if b.OnwardAuto && b.OnwardService != "" && b.Notified&4 == 0 {
+				_ = h.Store.MarkDropNotified(ctx, b.ID, 4)
+				if n, err := h.handOnward(ctx, b.OwnerID, b.OwnerName, b, b.OnwardService, "all"); err != nil {
+					onward = fmt.Sprintf(" Could not hand the photos on to %s: %v.", b.OnwardService, err)
+				} else {
+					onward = fmt.Sprintf(" Handed %d photos on to %s.", n, b.OnwardService)
+				}
+			}
+			text := h.dropClosingText(ctx, b) + onward
 			h.dropEvent(ctx, b.ID, store.DropExpired, i18n.Pack("The drop box closed. {summary}", "summary", text), "")
 			if h.Notify != nil {
 				h.Notify(fmt.Sprintf("The drop box %q of %s closed. %s", b.Name, b.OwnerName, text))

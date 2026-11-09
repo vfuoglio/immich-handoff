@@ -47,18 +47,22 @@ type fakeImmich struct {
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
-	lastPerms     []string                  // permissions of the most recent key created
-	keyPerms      map[string][]string       // key id -> permissions
-	keyUpdates    int                       // how many times a key's permissions were changed
-	albums        []map[string]any          // bob's own albums
-	uploads       []fakeUpload              // files stored through an upload
-	tagged        []string                  // asset ids that were tagged
-	tagNames      []string                  // tags that were made
-	albumAdds     []string                  // "album name: asset id" for each photo put in an album
-	tagIDs        map[string]string         // tag id -> name
-	assetTags     map[string][]string       // asset id -> names of its tags
-	trashed       map[string]bool           // asset ids moved to the trash
-	links         map[string]map[string]any // shared links made, by id
+	lastPerms     []string                   // permissions of the most recent key created
+	keyPerms      map[string][]string        // key id -> permissions
+	keyUpdates    int                        // how many times a key's permissions were changed
+	albums        []map[string]any           // bob's own albums
+	uploads       []fakeUpload               // files stored through an upload
+	tagged        []string                   // asset ids that were tagged
+	tagNames      []string                   // tags that were made
+	albumAdds     []string                   // "album name: asset id" for each photo put in an album
+	tagIDs        map[string]string          // tag id -> name
+	assetTags     map[string][]string        // asset id -> names of its tags
+	trashed       map[string]bool            // asset ids moved to the trash
+	links         map[string]map[string]any  // shared links made, by id
+	assetName     map[string]string          // asset id -> the name it was stored under
+	created       map[string]string          // asset id -> its capture time (RFC 3339), when a test sets one
+	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
+	members       map[string]map[string]bool // album id -> asset ids in it
 	removedLinks  []string
 }
 
@@ -210,6 +214,10 @@ func (f *fakeImmich) handler() http.Handler {
 					f.assetTags = map[string][]string{}
 				}
 				f.assetTags[id] = nil
+				if f.assetName == nil {
+					f.assetName = map[string]string{}
+				}
+				f.assetName[id] = part.FileName()
 				f.mu.Unlock()
 				j(w, code, map[string]any{"id": id, "status": status})
 				return
@@ -235,6 +243,35 @@ func (f *fakeImmich) handler() http.Handler {
 		f.mu.Unlock()
 		j(w, 201, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0})
 	})
+	mux.HandleFunc("DELETE /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			delete(f.members[r.PathValue("id")], id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/assets/{id}/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		name, ok := f.assetName[r.PathValue("id")]
+		var data []byte
+		for prefix, d := range f.thumbs {
+			if strings.HasPrefix(name, prefix) {
+				data = d
+			}
+		}
+		f.mu.Unlock()
+		if !ok || data == nil {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(data)
+	})
 	mux.HandleFunc("PUT /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Ids []string }
 		json.NewDecoder(r.Body).Decode(&body)
@@ -248,6 +285,13 @@ func (f *fakeImmich) handler() http.Handler {
 		}
 		for _, id := range body.Ids {
 			f.albumAdds = append(f.albumAdds, name+": "+id)
+			if f.members == nil {
+				f.members = map[string]map[string]bool{}
+			}
+			if f.members[r.PathValue("id")] == nil {
+				f.members[r.PathValue("id")] = map[string]bool{}
+			}
+			f.members[r.PathValue("id")][id] = true
 			out = append(out, map[string]any{"id": id, "success": true})
 		}
 		f.mu.Unlock()
@@ -328,25 +372,45 @@ func (f *fakeImmich) handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			TagIds []string `json:"tagIds"`
+			TagIds   []string `json:"tagIds"`
+			AlbumIds []string `json:"albumIds"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		items := []any{}
-		for id, names := range f.assetTags {
-			if f.trashed[id] {
-				continue
+		add := func(id string) {
+			created := ts
+			if c := f.created[id]; c != "" {
+				created = c
 			}
-			for _, tid := range body.TagIds {
-				for _, n := range names {
-					if f.tagIDs[tid] == n {
-						items = append(items, map[string]any{"id": id, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
-						goto next
-					}
+			name := f.assetName[id]
+			if name == "" {
+				name = "x.jpg"
+			}
+			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+		}
+		if len(body.AlbumIds) > 0 {
+			for _, aid := range body.AlbumIds {
+				for id := range f.members[aid] {
+					add(id)
 				}
 			}
-		next:
+		} else {
+			for id, names := range f.assetTags {
+				if f.trashed[id] {
+					continue
+				}
+				for _, tid := range body.TagIds {
+					for _, n := range names {
+						if f.tagIDs[tid] == n {
+							add(id)
+							goto next
+						}
+					}
+				}
+			next:
+			}
 		}
 		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
 	})

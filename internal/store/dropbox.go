@@ -61,6 +61,9 @@ type DropBox struct {
 	Prompts                  []Prompt  // the shot list: what guests are asked to photograph
 	PromptRequired           bool      // every photo must say which prompt it is for
 	GuestBook                bool      // guests may leave a message and a voice note
+	Wall                     string    // the token of the slideshow link (empty: no wall)
+	OnwardService            string    // the service the photos are handed on to when the box closes (empty: none)
+	OnwardAuto               bool      // hand them on by itself when the box closes
 	CreatedAt, EndedAt       time.Time
 }
 
@@ -90,7 +93,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, created_at, ended_at`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at`
 
 // AddDropBox stores a new box. Its id is made here.
 func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
@@ -108,7 +111,7 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.CreatedAt.Format(time.RFC3339Nano), "")
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "")
 	return b, err
 }
 
@@ -117,7 +120,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &created, &ended); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -280,6 +283,10 @@ func (s *Store) PruneDropBoxes(ctx context.Context, cutoff time.Time) error {
 		`DELETE FROM dropbox_messages WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_prompt_counts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_shares WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_assets WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_highlights WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_verdicts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_onward WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_covers WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?`,
 		`DELETE FROM dropbox_events WHERE at < ?`,
@@ -738,6 +745,7 @@ type DropMessage struct {
 	ID, BoxID, Who, Name, Text string
 	AudioKind                  string // "" when there is no voice note
 	HasAudio                   bool
+	OnWall                     bool // the owner chose to show it on the wall
 	At                         time.Time
 }
 
@@ -750,7 +758,7 @@ func (s *Store) AddDropMessage(ctx context.Context, m DropMessage, audio []byte)
 
 // DropMessages lists a box's messages, newest first, without their audio.
 func (s *Store) DropMessages(ctx context.Context, boxID string, limit int) ([]DropMessage, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, who, name, text, audio_kind, at, COALESCE(length(audio), 0) > 0 FROM dropbox_messages WHERE box_id = ? ORDER BY at DESC LIMIT ?`, boxID, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, who, name, text, audio_kind, at, COALESCE(length(audio), 0) > 0, on_wall FROM dropbox_messages WHERE box_id = ? ORDER BY at DESC LIMIT ?`, boxID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -759,7 +767,7 @@ func (s *Store) DropMessages(ctx context.Context, boxID string, limit int) ([]Dr
 	for rows.Next() {
 		var m DropMessage
 		var at string
-		if err := rows.Scan(&m.ID, &m.BoxID, &m.Who, &m.Name, &m.Text, &m.AudioKind, &at, &m.HasAudio); err != nil {
+		if err := rows.Scan(&m.ID, &m.BoxID, &m.Who, &m.Name, &m.Text, &m.AudioKind, &at, &m.HasAudio, &m.OnWall); err != nil {
 			return nil, err
 		}
 		m.At, _ = time.Parse(time.RFC3339Nano, at)
@@ -853,4 +861,270 @@ func (s *Store) DropShareOf(ctx context.Context, boxID string) (DropShare, error
 func (s *Store) RemoveDropShare(ctx context.Context, boxID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_shares WHERE box_id = ?`, boxID)
 	return err
+}
+
+// --- the photos a box kept ---
+
+// DropAsset is a photo a box put in its owner's library. ID grows with each one, so a wall can ask for what is newer.
+type DropAsset struct {
+	ID             int64
+	BoxID, AssetID string
+	Prompt         string
+	At             time.Time
+}
+
+// AddDropAsset records a photo a box kept (once).
+func (s *Store) AddDropAsset(ctx context.Context, boxID, assetID, prompt string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO dropbox_assets (box_id, asset_id, prompt, at) VALUES (?,?,?,?)`,
+		boxID, assetID, prompt, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// RemoveDropAsset forgets a photo (a guest took it back).
+func (s *Store) RemoveDropAsset(ctx context.Context, boxID, assetID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_assets WHERE box_id = ? AND asset_id = ?`, boxID, assetID)
+	return err
+}
+
+// DropAssetsAfter lists a box's photos newer than a position, oldest first.
+func (s *Store) DropAssetsAfter(ctx context.Context, boxID string, after int64, limit int) ([]DropAsset, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? AND id > ? ORDER BY id LIMIT ?`, boxID, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropAsset
+	for rows.Next() {
+		var a DropAsset
+		var at string
+		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at); err != nil {
+			return nil, err
+		}
+		a.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DropAssetsLatest lists the newest photos of a box, newest first.
+func (s *Store) DropAssetsLatest(ctx context.Context, boxID string, limit int) ([]DropAsset, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? ORDER BY id DESC LIMIT ?`, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropAsset
+	for rows.Next() {
+		var a DropAsset
+		var at string
+		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at); err != nil {
+			return nil, err
+		}
+		a.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DropAssetByID finds one photo of a box.
+func (s *Store) DropAssetByID(ctx context.Context, boxID string, id int64) (DropAsset, error) {
+	var a DropAsset
+	var at string
+	err := s.db.QueryRowContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? AND id = ?`, boxID, id).
+		Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return a, ErrNotFound
+	}
+	a.At, _ = time.Parse(time.RFC3339Nano, at)
+	return a, err
+}
+
+// DropAssetIDs lists every photo a box kept (their ids in the library), oldest first.
+func (s *Store) DropAssetIDs(ctx context.Context, boxID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id FROM dropbox_assets WHERE box_id = ? ORDER BY id`, boxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// --- the wall ---
+
+// SetDropWall gives a box a wall link, or takes it away (empty).
+func (s *Store) SetDropWall(ctx context.Context, id, token string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET wall = ? WHERE id = ? AND state <> ?`, token, id, DropRevoked)
+	return err
+}
+
+// DropBoxByWall finds the box a wall link shows. A revoked box has no wall.
+func (s *Store) DropBoxByWall(ctx context.Context, token string) (DropBox, error) {
+	if token == "" {
+		return DropBox{}, ErrDropBoxGone
+	}
+	b, err := s.scanDropBox(s.db.QueryRowContext(ctx, `SELECT `+dropCols+` FROM dropboxes WHERE wall = ? AND state <> ?`, token, DropRevoked))
+	if errors.Is(err, sql.ErrNoRows) {
+		return b, ErrDropBoxGone
+	}
+	return b, err
+}
+
+// SetMessageOnWall chooses whether a guest-book message is shown on the wall.
+func (s *Store) SetMessageOnWall(ctx context.Context, id string, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropbox_messages SET on_wall = ? WHERE id = ?`, b2i(on), id)
+	return err
+}
+
+// WallMessages lists the messages the owner chose to show on the wall, newest first.
+func (s *Store) WallMessages(ctx context.Context, boxID string, limit int) ([]DropMessage, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, text FROM dropbox_messages WHERE box_id = ? AND on_wall = 1 AND text <> '' ORDER BY at DESC LIMIT ?`, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropMessage
+	for rows.Next() {
+		m := DropMessage{BoxID: boxID, OnWall: true}
+		if err := rows.Scan(&m.ID, &m.Name, &m.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// --- the best-of ---
+
+const (
+	HighlightRunning = "running"
+	HighlightDone    = "done"
+	HighlightFailed  = "failed"
+)
+
+// DropHighlight is the state of a box's best-of: how far it is, and what it found.
+type DropHighlight struct {
+	BoxID, Strictness, Status, Album, Note string
+	Total, Done, Kept                      int
+	Started, Finished                      time.Time
+}
+
+// SetDropHighlight keeps (or updates) the state of a box's best-of.
+func (s *Store) SetDropHighlight(ctx context.Context, h DropHighlight) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_highlights (box_id, strictness, status, total, done, kept, album, note, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(box_id) DO UPDATE SET strictness = excluded.strictness, status = excluded.status, total = excluded.total, done = excluded.done, kept = excluded.kept,
+		album = excluded.album, note = excluded.note, started_at = excluded.started_at, finished_at = excluded.finished_at`,
+		h.BoxID, h.Strictness, h.Status, h.Total, h.Done, h.Kept, h.Album, h.Note, timeText(h.Started), timeText(h.Finished))
+	return err
+}
+
+// DropHighlightOf reads a box's best-of; ErrNotFound when none was made.
+func (s *Store) DropHighlightOf(ctx context.Context, boxID string) (DropHighlight, error) {
+	var h DropHighlight
+	var st, fin string
+	err := s.db.QueryRowContext(ctx, `SELECT box_id, strictness, status, total, done, kept, album, note, started_at, finished_at FROM dropbox_highlights WHERE box_id = ?`, boxID).
+		Scan(&h.BoxID, &h.Strictness, &h.Status, &h.Total, &h.Done, &h.Kept, &h.Album, &h.Note, &st, &fin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return h, ErrNotFound
+	}
+	h.Started, _ = time.Parse(time.RFC3339Nano, st)
+	h.Finished, _ = time.Parse(time.RFC3339Nano, fin)
+	return h, err
+}
+
+// Verdict is what the best-of decided about one photo, and why.
+type Verdict struct {
+	AssetID, Verdict, Detail, Name string
+}
+
+// ReplaceDropVerdicts replaces every verdict of a box at once.
+func (s *Store) ReplaceDropVerdicts(ctx context.Context, boxID string, vs []Verdict) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM dropbox_verdicts WHERE box_id = ?`, boxID); err != nil {
+		return err
+	}
+	for _, v := range vs {
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO dropbox_verdicts (box_id, asset_id, verdict, detail, name) VALUES (?,?,?,?,?)`, boxID, v.AssetID, v.Verdict, v.Detail, v.Name); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// DropVerdicts lists a box's verdicts: with excluded, only the photos that were left out.
+func (s *Store) DropVerdicts(ctx context.Context, boxID string, excluded bool, limit int) ([]Verdict, error) {
+	q := `SELECT asset_id, verdict, detail, name FROM dropbox_verdicts WHERE box_id = ?`
+	if excluded {
+		q += ` AND verdict <> 'kept'`
+	} else {
+		q += ` AND verdict = 'kept'`
+	}
+	rows, err := s.db.QueryContext(ctx, q+` ORDER BY verdict, name LIMIT ?`, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Verdict
+	for rows.Next() {
+		var v Verdict
+		if err := rows.Scan(&v.AssetID, &v.Verdict, &v.Detail, &v.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// --- handing the set on ---
+
+// SetDropOnward chooses the service a box's photos are handed on to when it closes, and whether that happens by itself.
+func (s *Store) SetDropOnward(ctx context.Context, id, service string, auto bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET onward_service = ?, onward_auto = ? WHERE id = ? AND state <> ?`, service, b2i(auto && service != ""), id, DropRevoked)
+	return err
+}
+
+// DropOnward is one time a box's photos were handed on.
+type DropOnward struct {
+	At             time.Time
+	Service, Scope string // scope: "all" or "best"
+	Count          int
+	By             string
+}
+
+// AddDropOnward records a hand-on.
+func (s *Store) AddDropOnward(ctx context.Context, boxID string, o DropOnward) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_onward (box_id, at, service, scope, count, by_name) VALUES (?,?,?,?,?,?)`,
+		boxID, time.Now().UTC().Format(time.RFC3339Nano), o.Service, o.Scope, o.Count, o.By)
+	return err
+}
+
+// DropOnwardLog lists what was handed on, newest first.
+func (s *Store) DropOnwardLog(ctx context.Context, boxID string, limit int) ([]DropOnward, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT at, service, scope, count, by_name FROM dropbox_onward WHERE box_id = ? ORDER BY id DESC LIMIT ?`, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropOnward
+	for rows.Next() {
+		var o DropOnward
+		var at string
+		if err := rows.Scan(&at, &o.Service, &o.Scope, &o.Count, &o.By); err != nil {
+			return nil, err
+		}
+		o.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }

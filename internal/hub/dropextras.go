@@ -387,6 +387,7 @@ func (h *Hub) DeleteGuestUpload(ctx context.Context, boxID, secret, uploadID str
 		}
 	}
 	_, _ = h.Store.RemoveDropUpload(c, u.ID)
+	_ = h.Store.RemoveDropAsset(c, b.ID, u.AssetID)
 	_ = h.Store.ReleaseDropSlot(c, b.ID)
 	_ = h.Store.AddDropBytes(c, b.ID, -u.Size)
 	h.removedByGuest(ctx, b, u, true)

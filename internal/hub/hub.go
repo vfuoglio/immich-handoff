@@ -56,6 +56,8 @@ type Hub struct {
 	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
 	granted  map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
 	drop     dropGuard                  // what the drop boxes' limits know about their guests
+	wall     wallCache                  // the pictures a wall fetched last
+	hlRun    map[string]bool            // boxes whose best-of is being made now
 }
 
 // SelfService reports whether people can join and leave from the web page.

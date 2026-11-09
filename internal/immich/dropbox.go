@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/textproto"
 	"strings"
 	"time"
@@ -137,6 +138,39 @@ func (a *API) RemoveLink(ctx context.Context, id openapi_types.UUID) error {
 	}
 	if c := r.StatusCode(); (c < 200 || c > 299) && c != 404 {
 		return statusErr("removeSharedLink", c, r.Body)
+	}
+	return nil
+}
+
+// Thumbnail fetches a picture of a photo: its small thumbnail or its larger preview, as Immich made it (a JPEG or a
+// WebP). It needs asset.view. At most 8 MB are read.
+func (a *API) Thumbnail(ctx context.Context, id openapi_types.UUID, preview bool) (data []byte, contentType string, err error) {
+	size := Thumbnail
+	if preview {
+		size = Preview
+	}
+	resp, err := a.bulk.ViewAsset(ctx, id, &ViewAssetParams{Size: &size})
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
+		return nil, "", statusErr("viewAsset", resp.StatusCode, b)
+	}
+	data, err = io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	return data, resp.Header.Get("Content-Type"), err
+}
+
+// RemoveFromAlbum takes photos out of an album of this account (they stay in the library). One that is not in it is not
+// an error.
+func (a *API) RemoveFromAlbum(ctx context.Context, album openapi_types.UUID, ids ...openapi_types.UUID) error {
+	r, err := a.c.RemoveAssetFromAlbumWithResponse(ctx, album, RemoveAssetFromAlbumJSONRequestBody{Ids: ids})
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("removeAssetFromAlbum", r.StatusCode(), r.Body)
 	}
 	return nil
 }

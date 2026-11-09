@@ -188,10 +188,10 @@ I have checked the manifest, the icons and the headers with tests, but not insta
 
 ## Letting guests reach a drop box
 
-A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages (`/drop/<link>`, the short `/d/<code>`, and what hangs off them, such as `/upload` and `/mine`) must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
+A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages (`/drop/<link>`, the short `/d/<code>`, and what hangs off them, such as `/upload` and `/mine`; and, for a [wall](using.md#the-wall), `/wall/<link>`) must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
 
 - **Same hostname rule.** Guests only need the link, so the hostname does not matter to them, but the link is built from the address the owner has the page open on. Owners should open the page on the address guests can reach.
-- **Behind single sign-on at the proxy** (Authelia, Authentik, oauth2-proxy and the like): add a rule that lets `/handoff/drop/` and `/handoff/d/` (or `/drop/` and `/d/` on the page's own address) through without the login. Leave everything else behind it.
+- **Behind single sign-on at the proxy** (Authelia, Authentik, oauth2-proxy and the like): add a rule that lets `/handoff/drop/`, `/handoff/d/` and `/handoff/wall/` (or `/drop/`, `/d/` and `/wall/` on the page's own address) through without the login. Leave everything else behind it.
 - **Large files.** The nginx example above already has `client_max_body_size 0`. Add `proxy_request_buffering off;` to the `/handoff/` location so a big video streams to Immich instead of being stored by the proxy first, and keep `proxy_read_timeout` generous.
 - **Guests' addresses.** Set `DROPBOX_CLIENT_IP_HEADER` (for nginx, `proxy_set_header X-Forwarded-For $remote_addr;` and `DROPBOX_CLIENT_IP_HEADER=X-Forwarded-For`) so the log and the per-guest limits can tell guests apart.
 - **Limit what you expose.** If you do not want any open endpoint, do not make drop boxes: nothing is open until an owner makes one, and revoking every box leaves `/drop/` answering as if it never existed.

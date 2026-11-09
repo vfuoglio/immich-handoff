@@ -649,3 +649,196 @@ func TestDropBoxExtras(t *testing.T) {
 		t.Errorf("after stopping, the closed box answers like any closed one: %d", c)
 	}
 }
+
+// noiseJPEG is a picture full of detail between two grey levels: a sharp photo, dark or bright, of a scene chosen by its seed.
+func noiseJPEG(seed uint32, lo, hi uint8) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 400, 300))
+	state := seed*2654435761 + 1
+	for y := 0; y < 300; y += 3 {
+		for x := 0; x < 400; x += 3 {
+			state = state*1664525 + 1013904223
+			v := lo + uint8((state>>16)%uint32(hi-lo+1))
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					img.Set(x+dx, y+dy, color.RGBA{v, v, v, 255})
+				}
+			}
+		}
+	}
+	var b bytes.Buffer
+	jpeg.Encode(&b, img, &jpeg.Options{Quality: 92})
+	return b.Bytes()
+}
+
+// blurredJPEG is a picture with no detail: a soft gradient, as a blurred shot is.
+func blurredJPEG() []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 400, 300))
+	for y := 0; y < 300; y++ {
+		for x := 0; x < 400; x++ {
+			v := uint8(80 + x*80/400)
+			img.Set(x, y, color.RGBA{v, v, v, 255})
+		}
+	}
+	var b bytes.Buffer
+	jpeg.Encode(&b, img, &jpeg.Options{Quality: 92})
+	return b.Bytes()
+}
+
+// TestDropBoxWallBestOfAndHandingOn: a wall that a screen with no sign-in watches, a best-of that leaves out what is too
+// dark, blurred or repeated and says why, and the best-of handed on through a real service to another account's library,
+// all with a real Immich.
+func TestDropBoxWallBestOfAndHandingOn(t *testing.T) {
+	alice, _, family, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 55)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner, receiver := loginCookie(t, "alice@e2e.test"), loginCookie(t, "family@e2e.test")
+
+	// a service the owner sends to, which is where the best-of will be handed on
+	if code, b := postBody(t, port, "/services", receiver, url.Values{"name": {"frame"}, "tag": {"frame-tag"}, "policy": {"open"}}); code != 204 {
+		t.Fatalf("make a service: %d %s", code, b)
+	}
+	if code, b := postBody(t, port, "/join", owner, url.Values{"service": {"frame"}, "mode": {"copy"}}); code != 204 {
+		t.Fatalf("join: %d %s", code, b)
+	}
+	code, body := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Wow"}, "opendays": {"5"}})
+	if code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, body)
+	}
+	op := page(t, port, owner)
+	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	inbox := func() []string { return searchTag(t, alice, "inbox/Wow", false) }
+
+	// the wall: nothing at first; started by the owner, which gives the key one more permission
+	if perms := keyPermissions(t, alice, "handoff: Wow (drop box)"); has(perms, "asset.view") {
+		t.Fatal("a box with no wall must not be able to view photos")
+	}
+	if code, b := postBody(t, port, "/dropbox/wall", owner, url.Values{"service": {boxID}}); code != 204 {
+		t.Fatalf("start the wall: %d %s", code, b)
+	}
+	if !has(keyPermissions(t, alice, "handoff: Wow (drop box)"), "asset.view") {
+		t.Error("the wall needs the key to view pictures")
+	}
+	wall := regexp.MustCompile(`data-link="wall/([0-9a-f]+)"`).FindStringSubmatch(page(t, port, owner))[1]
+	if c, p := guestGet(t, port, "/wall/"+wall); c != 200 || !strings.Contains(p, `id="wall"`) {
+		t.Fatalf("the wall page: %d", c)
+	}
+	feed := func(after int64) (ids []int64) {
+		c, b := guestGet(t, port, fmt.Sprintf("/wall/%s/feed?after=%d", wall, after))
+		if c != 200 {
+			t.Fatalf("feed: %d", c)
+		}
+		for _, m := range regexp.MustCompile(`"id":(\d+)`).FindAllStringSubmatch(b, -1) {
+			var id int64
+			fmt.Sscan(m[1], &id)
+			ids = append(ids, id)
+		}
+		return
+	}
+	if n := len(feed(0)); n != 0 {
+		t.Fatalf("an empty box has nothing on its wall: %d", n)
+	}
+	photos := map[string][]byte{
+		"sharp.jpg": noiseJPEG(1, 40, 220), "sharp-again.jpg": noiseJPEG(1, 46, 226), "scene.jpg": noiseJPEG(9, 40, 220),
+		"blur.jpg": blurredJPEG(), "dark.jpg": noiseJPEG(2, 0, 30), "bright.jpg": noiseJPEG(3, 235, 255),
+	}
+	for name, data := range photos {
+		if c, p := guestUpload(t, port, token, map[string][]byte{name: data}); c != 200 || !strings.Contains(p, "Received") {
+			t.Fatalf("upload %s: %d %s", name, c, p)
+		}
+	}
+	eventually(t, "all six are in the library", 90*time.Second, func() bool { return len(inbox()) == 6 })
+	ids := feed(0)
+	if len(ids) != 6 {
+		t.Fatalf("the wall's feed: %v", ids)
+	}
+	if newer := feed(ids[3]); len(newer) != 2 {
+		t.Errorf("what is newer than the fourth: %v", newer)
+	}
+	// a picture, once Immich has made its thumbnail, with no sign-in; a photo that is not on the wall gives nothing
+	eventually(t, "Immich has made the picture", 90*time.Second, func() bool {
+		res, err := http.Get(fmt.Sprintf("http://localhost:%s/wall/%s/photo/%d", port, wall, ids[0]))
+		if err != nil {
+			return false
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode == 200 && strings.HasPrefix(res.Header.Get("Content-Type"), "image/") && len(b) > 500
+	})
+	if c, _ := guestGet(t, port, "/wall/"+wall+"/photo/999999"); c != 404 {
+		t.Errorf("a photo that is not on the wall: %d", c)
+	}
+
+	// the best-of: it runs in the background and the owner's page says how it went
+	if code, b := postBody(t, port, "/dropbox/highlights", owner, url.Values{"service": {boxID}, "strictness": {"normal"}}); code != 204 {
+		t.Fatalf("make a best-of: %d %s", code, b)
+	}
+	eventually(t, "the best-of is done", 180*time.Second, func() bool {
+		return strings.Contains(page(t, port, owner), "photos kept in the album Wow best of")
+	})
+	op = page(t, port, owner)
+	for _, want := range []string{"2 of 6 photos kept", "Why 4 photos were left out", "blur.jpg", "blurry", "dark.jpg", "too dark", "bright.jpg", "too bright", "the same moment as a better photo"} {
+		if !strings.Contains(op, want) {
+			t.Errorf("the best-of's report lacks %q", want)
+		}
+	}
+	var albums []struct {
+		AlbumName  string `json:"albumName"`
+		AssetCount int    `json:"assetCount"`
+	}
+	call(t, "GET", "/albums", keyAuth(alice), nil, &albums)
+	best := -1
+	for _, al := range albums {
+		if al.AlbumName == "Wow best of" {
+			best = al.AssetCount
+		}
+	}
+	if best != 2 {
+		t.Errorf("the best-of album holds %d photos, want 2", best)
+	}
+	if n := len(inbox()); n != 6 {
+		t.Errorf("a best-of must delete nothing: %d photos in the inbox", n)
+	}
+
+	// handing the best-of on: the photos get the service's tag and the hand-over that exists carries them to the other account
+	if code, b := postBody(t, port, "/dropbox/onward", owner, url.Values{"service": {boxID}, "target": {"frame"}}); code != 204 {
+		t.Fatalf("choose a service: %d %s", code, b)
+	}
+	if !strings.Contains(page(t, port, owner), `option value="frame" selected`) {
+		t.Error("the choice must be shown")
+	}
+	eventually(t, "the owner's workflow for the service exists", 90*time.Second, func() bool {
+		var wfs []struct{ Name string }
+		call(t, "GET", "/workflows", keyAuth(alice), nil, &wfs)
+		for _, w := range wfs {
+			if w.Name == "immich-handoff: frame" {
+				return true
+			}
+		}
+		return false
+	})
+	if code, b := postBody(t, port, "/dropbox/handon", owner, url.Values{"service": {boxID}, "scope": {"best"}}); code != 204 {
+		t.Fatalf("hand on: %d %s", code, b)
+	}
+	eventually(t, "the best-of arrives in the other account", 120*time.Second, func() bool {
+		return len(searchTag(t, family, "inbox/frame", false)) == 2
+	})
+	if p := page(t, port, owner); !strings.Contains(p, "2 photos (the best-of) to frame") {
+		t.Errorf("the box must say where its photos went: %.200s", p)
+	}
+	if n := len(inbox()); n != 6 {
+		t.Errorf("with copy mode the owner keeps every original: %d", n)
+	}
+
+	// stopping the wall: it shows nothing, and the key loses the permission
+	if code, b := postBody(t, port, "/dropbox/wall/stop", owner, url.Values{"service": {boxID}}); code != 204 {
+		t.Fatalf("stop the wall: %d %s", code, b)
+	}
+	if c, _ := guestGet(t, port, "/wall/"+wall+"/feed?after=0"); c != 404 {
+		t.Errorf("a stopped wall: %d", c)
+	}
+	if has(keyPermissions(t, alice, "handoff: Wow (drop box)"), "asset.view") {
+		t.Error("stopping the wall must take the permission off the key")
+	}
+}

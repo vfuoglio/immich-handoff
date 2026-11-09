@@ -321,3 +321,112 @@ func TestDropBoxPromptsMessagesAndShare(t *testing.T) {
 		t.Error("a pruned box keeps no messages")
 	}
 }
+
+func TestDropBoxAssetsWallHighlightsAndOnward(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "wall-token-12345678", Name: "Wall", Key: "k", Wall: "the-wall-token-0123456789012345678901"})
+	other, _ := s.AddDropBox(ctx, DropBox{Token: "other-token-1234567", Name: "Other", Key: "k"})
+
+	// the photos a box kept: once each, in order, found by their place, and forgotten when taken back
+	for _, a := range []string{"a1", "a2", "a3", "a2"} {
+		s.AddDropAsset(ctx, b.ID, a, "p1")
+	}
+	s.AddDropAsset(ctx, other.ID, "o1", "")
+	list, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
+	if len(list) != 3 || list[0].AssetID != "a1" || list[2].AssetID != "a3" || list[0].ID >= list[1].ID {
+		t.Fatalf("assets: %+v", list)
+	}
+	if after, _ := s.DropAssetsAfter(ctx, b.ID, list[1].ID, 10); len(after) != 1 || after[0].AssetID != "a3" {
+		t.Errorf("after: %+v", after)
+	}
+	if latest, _ := s.DropAssetsLatest(ctx, b.ID, 2); len(latest) != 2 || latest[0].AssetID != "a3" {
+		t.Errorf("latest: %+v", latest)
+	}
+	if a, err := s.DropAssetByID(ctx, b.ID, list[1].ID); err != nil || a.AssetID != "a2" || a.Prompt != "p1" {
+		t.Errorf("by id: %+v %v", a, err)
+	}
+	if _, err := s.DropAssetByID(ctx, other.ID, list[1].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another box's photo: %v", err)
+	}
+	s.RemoveDropAsset(ctx, b.ID, "a2")
+	if ids, _ := s.DropAssetIDs(ctx, b.ID); len(ids) != 2 || ids[0] != "a1" || ids[1] != "a3" {
+		t.Errorf("ids: %v", ids)
+	}
+
+	// the wall: found by its token, not by the box's, and gone with a revoked box
+	if got, err := s.DropBoxByWall(ctx, "the-wall-token-0123456789012345678901"); err != nil || got.ID != b.ID || got.Key != "k" {
+		t.Errorf("by wall: %+v %v", got, err)
+	}
+	if _, err := s.DropBoxByWall(ctx, ""); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("no token: %v", err)
+	}
+	if _, err := s.DropBoxByWall(ctx, "wall-token-12345678"); err == nil {
+		t.Error("a box's own token is not a wall")
+	}
+	s.SetDropWall(ctx, b.ID, "")
+	if _, err := s.DropBoxByWall(ctx, "the-wall-token-0123456789012345678901"); err == nil {
+		t.Error("a stopped wall")
+	}
+	s.SetDropWall(ctx, b.ID, "new-wall-token-0123456789012345678901234")
+
+	// messages on the wall
+	s.AddDropMessage(ctx, DropMessage{BoxID: b.ID, Name: "Eve", Text: "Hello"}, nil)
+	s.AddDropMessage(ctx, DropMessage{BoxID: b.ID, Text: "Not chosen"}, nil)
+	all, _ := s.DropMessages(ctx, b.ID, 10)
+	for _, m := range all {
+		if m.Text == "Hello" {
+			s.SetMessageOnWall(ctx, m.ID, true)
+		}
+	}
+	if w, _ := s.WallMessages(ctx, b.ID, 10); len(w) != 1 || w[0].Text != "Hello" || w[0].Name != "Eve" {
+		t.Errorf("wall messages: %+v", w)
+	}
+
+	// the best-of: state and verdicts, replaced as a whole
+	started := time.Now()
+	s.SetDropHighlight(ctx, DropHighlight{BoxID: b.ID, Strictness: "normal", Status: HighlightRunning, Total: 10, Started: started})
+	s.SetDropHighlight(ctx, DropHighlight{BoxID: b.ID, Strictness: "normal", Status: HighlightDone, Total: 10, Done: 10, Kept: 6, Album: "Wall best of", Started: started, Finished: time.Now()})
+	if h, err := s.DropHighlightOf(ctx, b.ID); err != nil || h.Status != HighlightDone || h.Kept != 6 || h.Album != "Wall best of" || h.Finished.IsZero() {
+		t.Errorf("highlight: %+v %v", h, err)
+	}
+	if _, err := s.DropHighlightOf(ctx, other.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("none made: %v", err)
+	}
+	s.ReplaceDropVerdicts(ctx, b.ID, []Verdict{{"a1", "kept", "", "one.jpg"}, {"a2", "blurry", "detail 3", "two.jpg"}, {"a3", "kept", "", "three.jpg"}})
+	s.ReplaceDropVerdicts(ctx, b.ID, []Verdict{{"a1", "kept", "", "one.jpg"}, {"a2", "dark", "brightness 9 of 255", "two.jpg"}})
+	if ex, _ := s.DropVerdicts(ctx, b.ID, true, 10); len(ex) != 1 || ex[0].Verdict != "dark" || ex[0].Detail != "brightness 9 of 255" {
+		t.Errorf("left out: %+v", ex)
+	}
+	if k, _ := s.DropVerdicts(ctx, b.ID, false, 10); len(k) != 1 || k[0].AssetID != "a1" {
+		t.Errorf("kept: %+v", k)
+	}
+
+	// handing on: the choice and what was done
+	s.SetDropOnward(ctx, b.ID, "family", true)
+	if g, _ := s.DropBox(ctx, b.ID); g.OnwardService != "family" || !g.OnwardAuto {
+		t.Errorf("onward: %+v", g)
+	}
+	s.SetDropOnward(ctx, b.ID, "", true)
+	if g, _ := s.DropBox(ctx, b.ID); g.OnwardService != "" || g.OnwardAuto {
+		t.Errorf("cleared: %+v", g)
+	}
+	s.AddDropOnward(ctx, b.ID, DropOnward{Service: "family", Scope: "all", Count: 5, By: "Bob"})
+	s.AddDropOnward(ctx, b.ID, DropOnward{Service: "print", Scope: "best", Count: 2, By: "Bob"})
+	if log, _ := s.DropOnwardLog(ctx, b.ID, 10); len(log) != 2 || log[0].Service != "print" || log[0].Count != 2 || log[1].Scope != "all" {
+		t.Errorf("log: %+v", log)
+	}
+
+	// a revoked box is forgotten with all of it
+	s.SetDropBoxState(ctx, b.ID, DropRevoked, "")
+	s.PruneDropBoxes(ctx, time.Now().Add(time.Hour))
+	if ids, _ := s.DropAssetIDs(ctx, b.ID); len(ids) != 0 {
+		t.Error("a pruned box keeps no photos")
+	}
+	if _, err := s.DropHighlightOf(ctx, b.ID); !errors.Is(err, ErrNotFound) {
+		t.Error("a pruned box keeps no best-of")
+	}
+	if log, _ := s.DropOnwardLog(ctx, b.ID, 10); len(log) != 0 {
+		t.Error("a pruned box keeps no log")
+	}
+}

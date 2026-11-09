@@ -39,6 +39,30 @@ func (e AlbumUserRole) Valid() bool {
 	}
 }
 
+// Defines values for AssetMediaSize.
+const (
+	Fullsize  AssetMediaSize = "fullsize"
+	Original  AssetMediaSize = "original"
+	Preview   AssetMediaSize = "preview"
+	Thumbnail AssetMediaSize = "thumbnail"
+)
+
+// Valid indicates whether the value is a known member of the AssetMediaSize enum.
+func (e AssetMediaSize) Valid() bool {
+	switch e {
+	case Fullsize:
+		return true
+	case Original:
+		return true
+	case Preview:
+		return true
+	case Thumbnail:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetMediaStatus.
 const (
 	AssetMediaStatusCreated   AssetMediaStatus = "created"
@@ -1029,6 +1053,9 @@ type AssetMediaResponseDto struct {
 	// Status Upload status
 	Status AssetMediaStatus `json:"status"`
 }
+
+// AssetMediaSize Asset media size
+type AssetMediaSize string
 
 // AssetMediaStatus Upload status
 type AssetMediaStatus string
@@ -2421,6 +2448,15 @@ type DownloadAssetParams struct {
 	Slug   *string `form:"slug,omitempty" json:"slug,omitempty"`
 }
 
+// ViewAssetParams defines parameters for ViewAsset.
+type ViewAssetParams struct {
+	// Edited Return edited asset if available
+	Edited *bool           `form:"edited,omitempty" json:"edited,omitempty"`
+	Key    *string         `form:"key,omitempty" json:"key,omitempty"`
+	Size   *AssetMediaSize `form:"size,omitempty" json:"size,omitempty"`
+	Slug   *string         `form:"slug,omitempty" json:"slug,omitempty"`
+}
+
 // SearchAssetsParams defines parameters for SearchAssets.
 type SearchAssetsParams struct {
 	Key  *string `form:"key,omitempty" json:"key,omitempty"`
@@ -2462,6 +2498,9 @@ type GetWorkflowLogsParams struct {
 
 // CreateAlbumJSONRequestBody defines body for CreateAlbum for application/json ContentType.
 type CreateAlbumJSONRequestBody = CreateAlbumDto
+
+// RemoveAssetFromAlbumJSONRequestBody defines body for RemoveAssetFromAlbum for application/json ContentType.
+type RemoveAssetFromAlbumJSONRequestBody = BulkIdsDto
 
 // AddAssetsToAlbumJSONRequestBody defines body for AddAssetsToAlbum for application/json ContentType.
 type AddAssetsToAlbumJSONRequestBody = BulkIdsDto
@@ -2613,6 +2652,24 @@ type ClientInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RemoveAssetFromAlbumWithBody Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveAssetFromAlbum Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbum(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AddAssetsToAlbumWithBody Add assets to an album
 	//
 	// Add multiple assets to a specific album by its ID.
@@ -2739,6 +2796,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /assets/{id}/original (the `DownloadAsset` operationId).
 	DownloadAsset(ctx context.Context, id openapi_types.UUID, params *DownloadAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ViewAsset View asset thumbnail
+	//
+	// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+	//
+	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+	ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SearchAssetsWithBody Search assets by metadata
 	//
@@ -3061,6 +3125,44 @@ func (c *Client) CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBod
 	return c.Client.Do(req)
 }
 
+// RemoveAssetFromAlbumWithBody Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *Client) RemoveAssetFromAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveAssetFromAlbumRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveAssetFromAlbum Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *Client) RemoveAssetFromAlbum(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveAssetFromAlbumRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AddAssetsToAlbumWithBody Add assets to an album
 //
 // Add multiple assets to a specific album by its ID.
@@ -3326,6 +3428,23 @@ func (c *Client) GetAssetInfo(ctx context.Context, id openapi_types.UUID, params
 // Corresponds with GET /assets/{id}/original (the `DownloadAsset` operationId).
 func (c *Client) DownloadAsset(ctx context.Context, id openapi_types.UUID, params *DownloadAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDownloadAssetRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ViewAsset View asset thumbnail
+//
+// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+//
+// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+func (c *Client) ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewViewAssetRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4049,6 +4168,53 @@ func NewCreateAlbumRequestWithBody(server string, contentType string, body io.Re
 	return req, nil
 }
 
+// NewRemoveAssetFromAlbumRequest calls the generic RemoveAssetFromAlbum builder with application/json body
+func NewRemoveAssetFromAlbumRequest(server string, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemoveAssetFromAlbumRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRemoveAssetFromAlbumRequestWithBody constructs an http.Request for the RemoveAssetFromAlbum method, with any body, and a specified content type
+func NewRemoveAssetFromAlbumRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s/assets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewAddAssetsToAlbumRequest calls the generic AddAssetsToAlbum builder with application/json body
 func NewAddAssetsToAlbumRequest(server string, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4551,6 +4717,103 @@ func NewDownloadAssetRequest(server string, id openapi_types.UUID, params *Downl
 		if params.Key != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", *params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Slug != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "slug", *params.Slug, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewViewAssetRequest constructs an http.Request for the ViewAsset method
+func NewViewAssetRequest(server string, id openapi_types.UUID, params *ViewAssetParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/assets/%s/thumbnail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Edited != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "edited", *params.Edited, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Key != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", *params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Size != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "size", *params.Size, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -5580,6 +5843,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbumWithResponse(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error)
 
+	// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error)
+
+	// RemoveAssetFromAlbumWithResponse Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error)
+
 	// AddAssetsToAlbumWithBodyWithResponse Add assets to an album
 	//
 	// Add multiple assets to a specific album by its ID.
@@ -5718,6 +5999,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /assets/{id}/original (the `DownloadAsset` operationId).
 	DownloadAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *DownloadAssetParams, reqEditors ...RequestEditorFn) (*DownloadAssetResponse, error)
+
+	// ViewAssetWithResponse View asset thumbnail
+	//
+	// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+	ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error)
 
 	// SearchAssetsWithBodyWithResponse Search assets by metadata
 	//
@@ -6083,6 +6373,47 @@ func (r CreateAlbumResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r CreateAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveAssetFromAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]BulkIdResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RemoveAssetFromAlbumResponse) GetJSON200() *[]BulkIdResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveAssetFromAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveAssetFromAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveAssetFromAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveAssetFromAlbumResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6520,6 +6851,40 @@ func (r DownloadAssetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r DownloadAssetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ViewAssetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ViewAssetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ViewAssetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ViewAssetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ViewAssetResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7418,6 +7783,36 @@ func (c *ClientWithResponses) CreateAlbumWithResponse(ctx context.Context, body 
 	return ParseCreateAlbumResponse(rsp)
 }
 
+// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *ClientWithResponses) RemoveAssetFromAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error) {
+	rsp, err := c.RemoveAssetFromAlbumWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveAssetFromAlbumResponse(rsp)
+}
+
+// RemoveAssetFromAlbumWithResponse Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *ClientWithResponses) RemoveAssetFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error) {
+	rsp, err := c.RemoveAssetFromAlbum(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveAssetFromAlbumResponse(rsp)
+}
+
 // AddAssetsToAlbumWithBodyWithResponse Add assets to an album
 //
 // Add multiple assets to a specific album by its ID.
@@ -7644,6 +8039,21 @@ func (c *ClientWithResponses) DownloadAssetWithResponse(ctx context.Context, id 
 		return nil, err
 	}
 	return ParseDownloadAssetResponse(rsp)
+}
+
+// ViewAssetWithResponse View asset thumbnail
+//
+// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+func (c *ClientWithResponses) ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error) {
+	rsp, err := c.ViewAsset(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseViewAssetResponse(rsp)
 }
 
 // SearchAssetsWithBodyWithResponse Search assets by metadata
@@ -8169,6 +8579,32 @@ func ParseCreateAlbumResponse(rsp *http.Response) (*CreateAlbumResponse, error) 
 	return response, nil
 }
 
+// ParseRemoveAssetFromAlbumResponse parses an HTTP response from a RemoveAssetFromAlbumWithResponse call
+func ParseRemoveAssetFromAlbumResponse(rsp *http.Response) (*RemoveAssetFromAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveAssetFromAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []BulkIdResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAddAssetsToAlbumResponse parses an HTTP response from a AddAssetsToAlbumWithResponse call
 func ParseAddAssetsToAlbumResponse(rsp *http.Response) (*AddAssetsToAlbumResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8425,6 +8861,22 @@ func ParseDownloadAssetResponse(rsp *http.Response) (*DownloadAssetResponse, err
 	}
 
 	response := &DownloadAssetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseViewAssetResponse parses an HTTP response from a ViewAssetWithResponse call
+func ParseViewAssetResponse(rsp *http.Response) (*ViewAssetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ViewAssetResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

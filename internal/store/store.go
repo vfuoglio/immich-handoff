@@ -305,6 +305,50 @@ var migrations = []string{
 	   expires_at TEXT NOT NULL,
 	   created_at TEXT NOT NULL
 	 );`,
+	// Drop boxes: the photos each box kept (for a wall, a best-of and a hand-over), a wall link, a best-of with its
+	// reasons, and a service a box's photos are handed on to.
+	`ALTER TABLE dropboxes ADD COLUMN wall TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN onward_service TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN onward_auto INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_messages ADD COLUMN on_wall INTEGER NOT NULL DEFAULT 0;
+	 CREATE UNIQUE INDEX dropboxes_wall ON dropboxes (wall) WHERE wall <> '';
+	 CREATE TABLE dropbox_assets (
+	   id       INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id   TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   prompt   TEXT NOT NULL DEFAULT '',
+	   at       TEXT NOT NULL,
+	   UNIQUE (box_id, asset_id)
+	 );
+	 CREATE TABLE dropbox_highlights (
+	   box_id     TEXT PRIMARY KEY,
+	   strictness TEXT NOT NULL,
+	   status     TEXT NOT NULL,
+	   total      INTEGER NOT NULL,
+	   done       INTEGER NOT NULL,
+	   kept       INTEGER NOT NULL,
+	   album      TEXT NOT NULL,
+	   note       TEXT NOT NULL,
+	   started_at TEXT NOT NULL,
+	   finished_at TEXT NOT NULL
+	 );
+	 CREATE TABLE dropbox_verdicts (
+	   box_id   TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   verdict  TEXT NOT NULL,
+	   detail   TEXT NOT NULL,
+	   name     TEXT NOT NULL,
+	   PRIMARY KEY (box_id, asset_id)
+	 );
+	 CREATE TABLE dropbox_onward (
+	   id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id  TEXT NOT NULL,
+	   at      TEXT NOT NULL,
+	   service TEXT NOT NULL,
+	   scope   TEXT NOT NULL,
+	   count   INTEGER NOT NULL,
+	   by_name TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

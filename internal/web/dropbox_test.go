@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -93,6 +94,17 @@ func (s *storing) handler() http.Handler {
 			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": "2025-01-02T03:04:05.000Z", "updatedAt": "2025-01-02T03:04:05.000Z"})
 		}
 		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": s.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": "2025-01-02T03:04:05.000Z", "fileModifiedAt": "2025-01-02T03:04:05.000Z"})
+	})
+	mux.HandleFunc("GET /api/assets/{id}/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		_, ok := s.assetTags[r.PathValue("id")]
+		s.mu.Unlock()
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(jpegBytes)
 	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -791,5 +803,154 @@ func TestAClosedBoxThatSharedItsPhotosSaysSoAndNoOtherDoes(t *testing.T) {
 	st.SetDropShare(context.Background(), store.DropShare{BoxID: boxes[0].ID, LinkID: uuid.NewString(), Key: "abc123key", ExpiresAt: time.Now().Add(-time.Hour)})
 	if code, _ := do(t, "GET", app.URL+"/drop/"+token, "", nil); code != 404 {
 		t.Errorf("an expired share: %d", code)
+	}
+}
+
+func TestTheWallIsAScreenWithNoSignInThatSeesOnlyItsBoxesPhotos(t *testing.T) {
+	var st *store.Store
+	wall := strings.Repeat("ab", 32)
+	token := strings.Repeat("c1", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Big screen", InboxTag: "inbox/Big", Wall: wall, GuestBook: true,
+		Prompts: []store.Prompt{{ID: "p1", Text: "The cake"}}}))
+	id := firstBox(t, st)
+	for _, name := range []string{"a.jpg", "b.jpg"} {
+		if code, _, _ := sendFilesAs(t, app.URL+"/drop/"+token+"/upload", map[string]string{"Accept": "application/json"}, map[string][]byte{name: jpegBytes}); code != 200 {
+			t.Fatalf("upload: %d", code)
+		}
+	}
+	// the page is open to anyone with the link and carries what the script needs, and no account's chrome
+	code, p := do(t, "GET", app.URL+"/wall/"+wall, "", nil)
+	for _, want := range []string{`id="wall"`, `data-feed="wall/` + wall + `/feed"`, `data-photo="wall/` + wall + `/photo/"`, `data-mode="single"`, `<base href="../"`, "Waiting for the first photo", "Collage"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the wall lacks %s", want)
+		}
+	}
+	if code != 200 || strings.Contains(p, "Photos you tag in Immich") || strings.Contains(p, token) {
+		t.Errorf("the wall page: %d, and it must not carry the box's own link", code)
+	}
+	if _, p := do(t, "GET", app.URL+"/wall/"+wall+"?mode=grid", "", nil); !strings.Contains(p, `data-mode="grid"`) {
+		t.Error("the layout can be chosen in the address")
+	}
+	// the box's own link is not a wall, and a wall link is not a box
+	for _, path := range []string{"/wall/" + token, "/wall/" + strings.Repeat("0", 64), "/drop/" + wall} {
+		if code, _ := do(t, "GET", app.URL+path, "", nil); code != 404 {
+			t.Errorf("%s: %d, want 404", path, code)
+		}
+	}
+	// what is new, as JSON
+	var feed struct {
+		Items []struct {
+			ID      int64
+			Caption string
+		}
+		Messages []struct{ Name, Text string }
+	}
+	get := func(path string) int {
+		res, err := http.Get(app.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		feed.Items, feed.Messages = nil, nil
+		json.NewDecoder(res.Body).Decode(&feed)
+		return res.StatusCode
+	}
+	if c := get("/wall/" + wall + "/feed?after=0"); c != 200 || len(feed.Items) != 2 {
+		t.Fatalf("feed: %d %+v", c, feed)
+	}
+	first, second := feed.Items[0].ID, feed.Items[1].ID
+	if get("/wall/" + wall + "/feed?after=" + strconv.FormatInt(first, 10)); len(feed.Items) != 1 || feed.Items[0].ID != second {
+		t.Errorf("what is newer: %+v", feed.Items)
+	}
+	// a picture, by its place; another number gives nothing; nothing can be asked for by an id in Immich
+	res, _ := http.Get(app.URL + "/wall/" + wall + "/photo/" + strconv.FormatInt(first, 10))
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/jpeg" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("a picture: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	for _, id := range []string{"999999", "abc", "-1"} {
+		if r, _ := http.Get(app.URL + "/wall/" + wall + "/photo/" + id); r.StatusCode != 404 {
+			t.Errorf("photo %s: %d", id, r.StatusCode)
+		}
+	}
+	// a message shows only once chosen
+	ctx := context.Background()
+	st.AddDropMessage(ctx, store.DropMessage{BoxID: id, Name: "Eve", Text: "Cheers!"}, nil)
+	get("/wall/" + wall + "/feed?after=0")
+	if len(feed.Messages) != 0 {
+		t.Error("a message is not on the wall until chosen")
+	}
+	msgs, _ := st.DropMessages(ctx, id, 5)
+	if code, b := postForm(t, app.URL+"/dropbox/message/wall", "sess=family", "service="+msgs[0].ID+"&on=1"); code != 204 {
+		t.Fatalf("choosing a message: %d %s", code, b)
+	}
+	get("/wall/" + wall + "/feed?after=0")
+	if len(feed.Messages) != 1 || feed.Messages[0].Text != "Cheers!" || feed.Messages[0].Name != "Eve" {
+		t.Errorf("a chosen message: %+v", feed.Messages)
+	}
+	// a paused box still has its wall; a revoked one has none
+	postForm(t, app.URL+"/dropbox/pause", "sess=family", "service="+id+"&paused=1")
+	if c := get("/wall/" + wall + "/feed?after=0"); c != 200 {
+		t.Errorf("a paused box's wall: %d", c)
+	}
+	postForm(t, app.URL+"/dropbox/revoke", "sess=family", "service="+id)
+	if c := get("/wall/" + wall + "/feed?after=0"); c != 404 {
+		t.Errorf("a revoked box's wall: %d", c)
+	}
+}
+
+func TestTheOwnerSeesTheWallTheBestOfAndWhereTheSetWentAndOthersCannotChangeIt(t *testing.T) {
+	var st *store.Store
+	wall, token := strings.Repeat("de", 32), strings.Repeat("c2", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Gala", InboxTag: "inbox/Gala", Wall: wall}))
+	id := firstBox(t, st)
+	ctx := context.Background()
+	// the owner sends to a service, so it can be chosen
+	svc := "family"
+	st.AddLink(ctx, store.Link{Service: svc, Role: store.RoleSender, ImmichUserID: uuid.MustParse(familyID), Name: "Family", Email: "family@x.test", KeyID: uuid.New(), Key: "k-fam", Mode: "copy"})
+	started := time.Now().Add(-time.Minute)
+	st.SetDropHighlight(ctx, store.DropHighlight{BoxID: id, Strictness: "normal", Status: store.HighlightDone, Total: 5, Done: 5, Kept: 3, Album: "Gala best of", Started: started, Finished: time.Now()})
+	st.ReplaceDropVerdicts(ctx, id, []store.Verdict{{AssetID: "a1", Verdict: "kept", Name: "one.jpg"}, {AssetID: "a2", Verdict: "dark", Detail: "brightness 9 of 255", Name: "night.jpg"}, {AssetID: "a3", Verdict: "duplicate", Detail: "same moment as one.jpg", Name: "again.jpg"}})
+	st.SetDropOnward(ctx, id, svc, false)
+	st.AddDropOnward(ctx, id, store.DropOnward{Service: svc, Scope: "all", Count: 7, By: "Family"})
+
+	owner := get(t, app.URL, "sess=family")
+	for _, want := range []string{`data-link="wall/` + wall + `"`, "Open the wall", "Stop the wall", "New wall link", "3 of 5 photos kept in the album Gala best of", "Why 2 photos were left out",
+		"night.jpg", "too dark", "the same moment as a better photo", `option value="family" selected`, "you keep your originals", "Hand everything on now", "Hand the best-of on now", "7 photos (everything) to family"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's page lacks %q", want)
+		}
+	}
+	// another person sees nothing of it, and a manager sees the wall link but cannot stop it or hand anything on
+	if other := get(t, app.URL, "sess=other"); strings.Contains(other, wall) || strings.Contains(other, "Gala best of") {
+		t.Error("a stranger must see nothing")
+	}
+	st.SetDropHost(ctx, id, store.DropHost{UserID: uuid.MustParse(otherID), Name: "Other", Email: "other@x.test", Role: store.HostManage})
+	mgr := get(t, app.URL, "sess=other")
+	if !strings.Contains(mgr, `data-link="wall/`+wall+`"`) || strings.Contains(mgr, "Stop the wall") || strings.Contains(mgr, "Hand everything on now") || strings.Contains(mgr, "Make a best-of") {
+		t.Error("a manager sees the wall's link and none of the owner's controls")
+	}
+	for _, c := range []struct{ path, body string }{
+		{"/dropbox/wall", "service=" + id}, {"/dropbox/wall/stop", "service=" + id}, {"/dropbox/highlights", "service=" + id + "&strictness=normal"},
+		{"/dropbox/onward", "service=" + id + "&target=family"}, {"/dropbox/handon", "service=" + id + "&scope=all"},
+	} {
+		if code, _ := postForm(t, app.URL+c.path, "sess=other", c.body); code != 409 {
+			t.Errorf("%s by a manager: %d, want 409", c.path, code)
+		}
+		if code, _ := postForm(t, app.URL+c.path, "", c.body); code != 401 {
+			t.Errorf("%s with no sign-in: %d, want 401", c.path, code)
+		}
+	}
+	// the owner chooses where to hand on, and only a service they send to
+	if code, _ := postForm(t, app.URL+"/dropbox/onward", "sess=family", "service="+id+"&target=nowhere"); code != 409 {
+		t.Errorf("a service the owner does not send to: %d, want 409", code)
+	}
+	if code, b := postForm(t, app.URL+"/dropbox/onward", "sess=family", "service="+id+"&target=family&auto=1"); code != 204 {
+		t.Fatalf("choosing: %d %s", code, b)
+	}
+	if got, _ := st.DropBox(ctx, id); got.OnwardService != "family" || !got.OnwardAuto {
+		t.Errorf("saved: %+v", got)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/handon", "sess=family", "service="+id+"&scope=weird"); code != 409 {
+		t.Errorf("an unknown scope: %d, want 409", code)
 	}
 }

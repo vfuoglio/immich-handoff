@@ -208,6 +208,13 @@ type DropBoxView struct {
 	GuestBook      bool
 	Messages       []MessageView
 	Share          *ShareView // the shared link guests can see the photos at, when the box has one
+	WallToken      string
+	Highlight      *HighlightView
+	OnwardService  string
+	OnwardAuto     bool
+	OnwardOptions  []OnwardOptionView
+	OnwardLog      []OnwardView
+	HasBest        bool
 
 	Short       string // the short code, if the box has a short link
 	Accent      string
@@ -215,6 +222,30 @@ type DropBoxView struct {
 	MaxDim      int
 	HasCover    bool
 	GuestDelete bool
+}
+
+// HighlightView is a box's best-of as the owner reads it.
+type HighlightView struct {
+	Status, Strictness, Album, Note, When string
+	Total, Done, Kept, OutCount           int
+	Excluded                              []VerdictView
+}
+
+// VerdictView is a photo a best-of left out, and why.
+type VerdictView struct {
+	Name, Reason, Detail string
+}
+
+// OnwardOptionView is a service a box's photos can be handed on to.
+type OnwardOptionView struct {
+	Service string
+	Copy    bool
+}
+
+// OnwardView is one time a box's photos were handed on.
+type OnwardView struct {
+	When, Service, Scope, By string
+	Count                    int
 }
 
 // PromptView is one prompt of a shot list and how many photos came for it.
@@ -227,6 +258,7 @@ type PromptView struct {
 type MessageView struct {
 	ID, Name, Text, When string
 	HasAudio             bool
+	OnWall               bool
 }
 
 // ShareView is the shared link of a box. URL is empty when the app does not know where Immich is; the page then makes
@@ -1537,12 +1569,124 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 								if m.HasAudio {
 									<audio controls preload="none" src={ "dropbox/voice/" + m.ID }></audio>
 								}
+								if m.Text != "" {
+									<button hx-post="dropbox/message/wall" hx-vals={ wallMsgVals(m.ID, !m.OnWall) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+										if m.OnWall {
+											{ t(ctx, "Hide from the wall") }
+										} else {
+											{ t(ctx, "Show on the wall") }
+										}
+									</button>
+								}
 								<button hx-post="dropbox/message/delete" hx-vals={ vals("service", m.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove this message? It cannot be got back.") } data-confirm-title={ t(ctx, "Remove the message?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
 							</li>
 						}
 					</ul>
 				} else if b.GuestBook {
 					<p class="meta">{ t(ctx, "This box has a guest book. Only the people who manage it can read it.") }</p>
+				}
+				if b.Manage {
+					<h3>{ t(ctx, "Wall") }</h3>
+					if b.WallToken != "" {
+						<div class="field">
+							<label for={ "wall-" + id }>{ t(ctx, "Link for a screen (shows the photos as they arrive; no sign-in)") }</label>
+							<div class="row">
+								<input id={ "wall-" + id } class="invite" readonly data-link={ "wall/" + b.WallToken }/>
+								<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+								<button type="button" class="show-qr" data-for={ "wall-" + id } data-alt={ t(ctx, "QR code of the wall link") }>{ t(ctx, "QR code") }</button>
+								<a class="button" href={ templ.SafeURL("wall/" + b.WallToken) } target="_blank" rel="noopener">{ t(ctx, "Open the wall") }</a>
+								<a class="button" href={ templ.SafeURL("wall/" + b.WallToken + "?mode=grid") } target="_blank" rel="noopener">{ t(ctx, "As a grid") }</a>
+								<a class="button" href={ templ.SafeURL("wall/" + b.WallToken + "?mode=collage") } target="_blank" rel="noopener">{ t(ctx, "As a collage") }</a>
+							</div>
+							<div class="qr" id={ "qr-wall-" + id } hidden></div>
+						</div>
+						if b.Owner {
+							<p class="row">
+								<button hx-post="dropbox/wall" hx-vals={ wallVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current wall link stops working. Continue?") } data-confirm-title={ t(ctx, "Make a new wall link?") } data-confirm-label={ t(ctx, "New wall link") }>{ t(ctx, "New wall link") }</button>
+								<button class="danger" hx-post="dropbox/wall/stop" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The wall stops showing photos at once.") } data-confirm-title={ t(ctx, "Stop the wall?") } data-confirm-label={ t(ctx, "Stop the wall") } data-danger="true">{ t(ctx, "Stop the wall") }</button>
+							</p>
+						}
+					} else if b.Owner {
+						<p class="meta">{ t(ctx, "A wall shows the photos full screen, one after another, as they arrive, on a TV or a projector. The screen opens its own link and holds nobody's sign-in. Photos waiting for approval, rejected ones and ones guests took back never show. To show pictures the box's key also gets permission to view photos, which is added with your sign-in and taken off when you stop the wall.") }</p>
+						<p class="row"><button class="primary" hx-post="dropbox/wall" hx-vals={ wallVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Start a wall") }</button></p>
+					} else {
+						<p class="meta">{ t(ctx, "No wall has been started. Only the owner starts one.") }</p>
+					}
+				}
+				if b.Owner {
+					<h3>{ t(ctx, "Best-of") }</h3>
+					if b.Highlight != nil && b.Highlight.Status == "running" {
+						<p class="meta"><span class="chip warn">{ t(ctx, "Working") }</span> { t(ctx, "Looking at the photos: {done} of {total}. Reload the page to see how far it is.", "done", b.Highlight.Done, "total", b.Highlight.Total) }</p>
+					} else if b.Highlight != nil && b.Highlight.Status == "failed" {
+						<p class="meta"><span class="chip bad">{ t(ctx, "Failed") }</span> { b.Highlight.Note }</p>
+					} else if b.Highlight != nil && b.Highlight.Status == "done" {
+						<p class="meta">
+							<span class="chip ok">{ t(ctx, "Done") }</span>
+							{ t(ctx, "{kept} of {total} photos kept in the album {album} ({how}), made {when}. Nothing was deleted.", "kept", b.Highlight.Kept, "total", b.Highlight.Total, "album", b.Highlight.Album, "how", strictnessLabel(ctx, b.Highlight.Strictness), "when", b.Highlight.When) }
+						</p>
+						if len(b.Highlight.Excluded) > 0 {
+							<details class="more">
+								<summary>{ t(ctx, "Why {n} photos were left out", "n", b.Highlight.OutCount) }</summary>
+								<ul class="plain">
+									for _, x := range b.Highlight.Excluded {
+										<li><b>{ x.Name }</b> <span class="meta">{ x.Reason } { x.Detail }</span></li>
+									}
+								</ul>
+							</details>
+						}
+					}
+					<form class="limits" hx-post="dropbox/highlights" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="service" value={ b.ID }/>
+						<label>{ t(ctx, "How much to leave out") }
+							<select name="strictness">
+								for _, s := range []string{"relaxed", "normal", "strict"} {
+									<option value={ s } selected?={ b.Highlight != nil && b.Highlight.Strictness == s || b.Highlight == nil && s == "normal" }>{ strictnessLabel(ctx, s) }</option>
+								}
+							</select>
+						</label>
+						<button type="submit">
+							if b.Highlight != nil && b.Highlight.Status == "done" {
+								{ t(ctx, "Make it again") }
+							} else {
+								{ t(ctx, "Make a best-of") }
+							}
+						</button>
+						<small class="meta">{ t(ctx, "Looks at every photo in this box and leaves out the ones that are too dark, too bright or blurred, and all but the sharpest of shots of the same moment (within an hour). The rest go into an album of yours called \"{name} best of\". It never deletes or changes a photo, and running it again with another setting corrects the album, leaving anything else you put in it alone. Photos Immich keeps only as WebP previews cannot be looked at, so they are kept.", "name", b.Name) }</small>
+					</form>
+					<h3>{ t(ctx, "Hand the photos on") }</h3>
+					if len(b.OnwardOptions) == 0 {
+						<p class="meta">{ t(ctx, "You do not send to any service yet. Join one on this page (under You can join) and you can hand this box's photos on to it, to a family member's library for instance.") }</p>
+					} else {
+						<form class="limits" hx-post="dropbox/onward" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+							<input type="hidden" name="service" value={ b.ID }/>
+							<label>{ t(ctx, "Service") }
+								<select name="target">
+									<option value="" selected?={ b.OnwardService == "" }>{ t(ctx, "None") }</option>
+									for _, o := range b.OnwardOptions {
+										<option value={ o.Service } selected?={ b.OnwardService == o.Service }>{ onwardOptionLabel(ctx, o) }</option>
+									}
+								</select>
+							</label>
+							<label><input name="auto" type="checkbox" value="1" checked?={ b.OnwardAuto }/> { t(ctx, "Hand everything on by itself when the box closes") }</label>
+							<button type="submit">{ t(ctx, "Save") }</button>
+						</form>
+						if b.OnwardService != "" {
+							<p class="row">
+								<button class="primary" hx-post="dropbox/handon" hx-vals={ scopeVals(b.ID, "all") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Hand every photo in this box on to {service} now?", "service", b.OnwardService) } data-confirm-title={ t(ctx, "Hand the photos on?") } data-confirm-label={ t(ctx, "Hand on") }>{ t(ctx, "Hand everything on now") }</button>
+								if b.HasBest {
+									<button hx-post="dropbox/handon" hx-vals={ scopeVals(b.ID, "best") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Hand the best-of on to {service} now?", "service", b.OnwardService) } data-confirm-title={ t(ctx, "Hand the photos on?") } data-confirm-label={ t(ctx, "Hand on") }>{ t(ctx, "Hand the best-of on now") }</button>
+								}
+							</p>
+						}
+						<small class="meta">{ t(ctx, "This tags the photos with the service's tag in your own library, which is what hands them over, so the service's limits, quiet hours, rules, expiry and taking back all apply. If you chose to keep your originals when you joined, they stay; if you chose to move them, they go to your trash after they are handed over.") }</small>
+					}
+					if len(b.OnwardLog) > 0 {
+						<ul class="plain">
+							for _, o := range b.OnwardLog {
+								<li class="meta">{ o.When } \u00b7 { t(ctx, "{n} photos ({what}) to {service}", "n", o.Count, "what", o.Scope, "service", o.Service) } \u00b7 { o.By }</li>
+							}
+						</ul>
+					}
 				}
 				if b.Owner {
 					<details class="more">
@@ -1897,4 +2041,37 @@ templ DropCard(user, name, message, link string) {
 			<p class="no-print"><button type="button" id="card-print" class="primary">{ t(ctx, "Print") }</button></p>
 		</section>
 	}
+}
+
+// WallPage is the slideshow a screen opens: no sign-in, no bar, only the photos and a few controls that fade away.
+templ WallPage(name, token, mode string) {
+	<!DOCTYPE html>
+	<html lang={ loc(ctx).Code() }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="robots" content="noindex"/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ name }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/app.js" defer></script>
+		</head>
+		<body class="wall">
+			<main id="wall" data-feed={ "wall/" + token + "/feed" } data-photo={ "wall/" + token + "/photo/" } data-mode={ mode }>
+				<div class="wall-stage" aria-live="polite"></div>
+				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
+				<div class="wall-note" hidden></div>
+				<nav class="wall-controls" aria-label={ t(ctx, "Wall controls") }>
+					<button type="button" data-mode="single" aria-pressed={ checked(mode == "single") }>{ t(ctx, "Single photo") }</button>
+					<button type="button" data-mode="collage" aria-pressed={ checked(mode == "collage") }>{ t(ctx, "Collage") }</button>
+					<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
+					<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
+				</nav>
+			</main>
+		</body>
+	</html>
 }

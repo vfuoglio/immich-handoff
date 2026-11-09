@@ -540,3 +540,32 @@ textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7r
 .guestbook-form h2 { margin: 0 0 .3rem; }
 
 footer .version { opacity: .75; white-space: nowrap; }
+
+/* the wall */
+body.wall { background: #000; color: #fff; margin: 0; overflow: hidden; }
+body.wall #glow { display: none; }
+#wall { position: fixed; inset: 0; background: #000; }
+.wall-stage { position: absolute; inset: 0; }
+.wall-stage figure { margin: 0; }
+.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; display: grid; place-items: center; }
+.wall-stage.single figure.single.in { opacity: 1; }
+.wall-stage.single img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.wall-stage figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 2rem; font-size: clamp(1.1rem, 3vw, 2.4rem); text-align: center; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+.wall-stage.grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 4px; padding: 4px; }
+.wall-stage.grid figure { position: relative; overflow: hidden; }
+.wall-stage.grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wall-stage.grid figcaption { font-size: 1rem; padding: .5rem; }
+.wall-stage.collage { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 1.2vmin; padding: 3vmin; }
+.wall-stage.collage figure { position: relative; transform: rotate(var(--tilt, 0deg)); box-shadow: 0 6px 24px rgba(0,0,0,.6); border: 1.2vmin solid #fff; border-bottom-width: 3vmin; }
+.wall-stage.collage img { height: 26vmin; width: auto; max-width: 40vmin; object-fit: cover; display: block; }
+.wall-stage.collage figcaption { position: static; color: #111; background: none; padding: .2rem; font-size: 1rem; }
+.wall-stage figure.arrive { animation: wall-arrive 1.2s ease both; }
+@keyframes wall-arrive { from { opacity: 0; transform: scale(.8) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
+.wall-wait { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2rem; opacity: .6; margin: 0; }
+.wall-wait[hidden] { display: none; }
+.wall-note { position: absolute; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.2rem; background: rgba(20,20,40,.82); font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; }
+.wall-controls { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .5rem; opacity: 0; transition: opacity .4s; }
+.wall-controls.on { opacity: 1; }
+.wall-controls button { background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: .6rem; padding: .4rem .8rem; }
+.wall-controls button[aria-pressed="true"] { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .wall-stage figure.arrive { animation: none; } .wall-stage.single figure.single { transition: none; } }

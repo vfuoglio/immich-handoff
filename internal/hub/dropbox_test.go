@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	imgjpeg "image/jpeg"
 	"io"
 	"os"
 	"strings"
@@ -1030,5 +1033,391 @@ func TestSharingTheResultBackWithTheGuests(t *testing.T) {
 	}
 	if len(e.f.trashed) != 0 {
 		t.Error("stopping must not touch the photos")
+	}
+}
+
+// --- the wall, the best-of and handing the set onward ---
+
+func TestTheWallShowsWhatArrivesToAScreenWithNoSignIn(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"": jpeg}
+	b := newBox(t, e, hub.DropParams{Name: "Wall", Prompts: []string{"The cake"}, GuestBook: true, GuestDelete: true})
+	if _, err := e.h.WallBox(ctx, strings.Repeat("a", 64)); err == nil {
+		t.Fatal("a wall nobody started shows nothing")
+	}
+	secret := hub.NewGuestSecret()
+	for i, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		prompt := ""
+		if i == 1 {
+			prompt = "p1"
+		}
+		if _, err := e.h.ReceiveDropFileWith(ctx, b.ID, n, bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: prompt, Secret: secret}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// only the owner starts it, and the key is given the one permission it needs to show pictures
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if _, err := e.h.StartWall(ctx, e.ann, ann, b.ID, false); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host starting the wall: %v", err)
+	}
+	token, err := e.h.StartWall(ctx, e.sess, bob, b.ID, false)
+	if err != nil || len(token) < 64 {
+		t.Fatalf("start: %q %v", token, err)
+	}
+	if !has(e.f.keyPerms[b.KeyID.String()], "asset.view") {
+		t.Errorf("the key must be allowed to fetch thumbnails: %v", e.f.keyPerms[b.KeyID.String()])
+	}
+	if again, _ := e.h.StartWall(ctx, e.sess, bob, b.ID, false); again != token {
+		t.Error("starting twice keeps the link")
+	}
+	wb, err := e.h.WallBox(ctx, token)
+	if err != nil || wb.ID != b.ID {
+		t.Fatalf("the wall's box: %v", err)
+	}
+
+	// a screen with none yet gets the latest, oldest first; one that has some gets only what is newer
+	items, _, err := e.h.WallFeed(ctx, wb, 0)
+	if err != nil || len(items) != 3 || items[1].Caption != "The cake" || items[0].Caption != "" || items[0].ID >= items[2].ID {
+		t.Fatalf("first feed: %+v %v", items, err)
+	}
+	e.h.ReceiveDropFile(ctx, b.ID, "d.jpg", bytes.NewReader(jpeg), "m")
+	newer, _, _ := e.h.WallFeed(ctx, wb, items[2].ID)
+	if len(newer) != 1 || newer[0].ID <= items[2].ID {
+		t.Errorf("what is newer: %+v", newer)
+	}
+	if none, _, _ := e.h.WallFeed(ctx, wb, newer[0].ID); len(none) != 0 {
+		t.Errorf("nothing newer: %+v", none)
+	}
+	// the picture comes by the photo's place in the box's list, with the box's own key
+	data, kind, err := e.h.WallImage(ctx, wb, items[0].ID)
+	if err != nil || kind != "image/jpeg" || len(data) != len(jpeg) {
+		t.Errorf("picture: %s %d %v", kind, len(data), err)
+	}
+	if _, _, err := e.h.WallImage(ctx, wb, 9999); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a photo that is not in the box: %v", err)
+	}
+	other := newBox(t, e, hub.DropParams{Name: "Other wall"})
+	e.h.ReceiveDropFile(ctx, other.ID, "o.jpg", bytes.NewReader(jpeg), "m")
+	otherAssets, _ := e.st.DropAssetsLatest(ctx, other.ID, 1)
+	if _, _, err := e.h.WallImage(ctx, wb, otherAssets[0].ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("another box's photo through this wall: %v", err)
+	}
+
+	// a photo a guest takes back leaves the wall
+	list, _ := e.h.GuestUploads(ctx, b.ID, secret)
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, secret, list[len(list)-1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if after, _, _ := e.h.WallFeed(ctx, wb, 0); len(after) != 3 {
+		t.Errorf("after a take-back: %d photos", len(after))
+	}
+
+	// messages are shown only when the owner says so
+	e.h.LeaveMessage(ctx, wb, "m", "Eve", "Cheers!", nil)
+	msgs, _ := e.h.GuestBook(ctx, bobID, b.ID)
+	if _, m, _ := e.h.WallFeed(ctx, wb, 0); len(m) != 0 {
+		t.Error("a message is not on the wall until chosen")
+	}
+	if err := e.h.SetMessageOnWall(ctx, bob, msgs[0].ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, m, _ := e.h.WallFeed(ctx, wb, 0); len(m) != 1 || m[0].Text != "Cheers!" || m[0].Name != "Eve" {
+		t.Errorf("a chosen message: %+v", m)
+	}
+	e.h.SetMessageOnWall(ctx, bob, msgs[0].ID, false)
+	if _, m, _ := e.h.WallFeed(ctx, wb, 0); len(m) != 0 {
+		t.Error("a message taken off the wall")
+	}
+
+	// a new link ends the old one; stopping ends the wall and takes the permission back
+	token2, err := e.h.StartWall(ctx, e.sess, bob, b.ID, true)
+	if err != nil || token2 == token {
+		t.Fatalf("renew: %v", err)
+	}
+	if _, err := e.h.WallBox(ctx, token); err == nil {
+		t.Error("the old wall link must stop")
+	}
+	if err := e.h.StopWall(ctx, e.sess, bob, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.WallBox(ctx, token2); err == nil {
+		t.Error("a stopped wall shows nothing")
+	}
+	if has(e.f.keyPerms[b.KeyID.String()], "asset.view") {
+		t.Error("stopping the wall must take the permission off the key")
+	}
+	if got, _ := e.st.DropBox(ctx, b.ID); got.Wall != "" {
+		t.Error("the link is gone")
+	}
+}
+
+// pictures for the best-of: a scene full of detail, a lighter copy of it, a blurred one, a dark one, a glaring one, another scene
+func synth(kind string) []byte {
+	var img image.Image
+	switch kind {
+	case "sharp":
+		img = noiseImage(1, 40, 220)
+	case "sharp-copy":
+		img = noiseImage(1, 46, 226)
+	case "scene":
+		img = noiseImage(9, 40, 220)
+	case "dark":
+		img = noiseImage(2, 0, 30)
+	case "bright":
+		img = noiseImage(3, 235, 255)
+	default: // blurred
+		g := image.NewRGBA(image.Rect(0, 0, 400, 300))
+		for y := 0; y < 300; y++ {
+			for x := 0; x < 400; x++ {
+				v := uint8(80 + x*80/400)
+				g.Set(x, y, color.RGBA{v, v, v, 255})
+			}
+		}
+		img = g
+	}
+	var b bytes.Buffer
+	imgjpeg.Encode(&b, img, nil)
+	return b.Bytes()
+}
+
+func noiseImage(seed uint32, lo, hi uint8) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 400, 300))
+	state := seed*2654435761 + 1
+	for y := 0; y < 300; y += 3 {
+		for x := 0; x < 400; x += 3 {
+			state = state*1664525 + 1013904223
+			v := lo + uint8((state>>16)%uint32(hi-lo+1))
+			for dy := 0; dy < 3; dy++ {
+				for dx := 0; dx < 3; dx++ {
+					img.Set(x+dx, y+dy, color.RGBA{v, v, v, 255})
+				}
+			}
+		}
+	}
+	return img
+}
+
+func idOfName(e *env, name string) string {
+	for id, n := range e.f.assetName {
+		if n == name {
+			return id
+		}
+	}
+	return ""
+}
+
+func waitHighlight(t *testing.T, e *env, boxID string) store.DropHighlight {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		if h, err := e.st.DropHighlightOf(context.Background(), boxID); err == nil && h.Status != store.HighlightRunning {
+			return h
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("the best-of did not finish")
+	return store.DropHighlight{}
+}
+
+func TestTheBestOfLeavesOutTheDarkTheBlurredAndTheRepeatsAndSaysWhy(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"sharp1": synth("sharp"), "sharp2": synth("sharp-copy"), "scene": synth("scene"), "blur": synth("blur"), "dark": synth("dark"), "bright": synth("bright")}
+	b := newBox(t, e, hub.DropParams{Name: "Gala"})
+	for _, n := range []string{"sharp1.jpg", "sharp2.jpg", "scene.jpg", "blur.jpg", "dark.jpg", "bright.jpg"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if err := e.h.StartHighlights(ctx, e.ann, ann, b.ID, "normal"); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host making a best-of: %v", err)
+	}
+	if err := e.h.StartHighlights(ctx, e.sess, bob, b.ID, "normal"); err != nil {
+		t.Fatal(err)
+	}
+	h := waitHighlight(t, e, b.ID)
+	if h.Status != store.HighlightDone || h.Total != 6 || h.Kept != 2 || h.Album != "Gala best of" || h.Strictness != "normal" {
+		t.Fatalf("the best-of: %+v", h)
+	}
+	why := map[string]string{}
+	kept := map[string]bool{}
+	all, _ := e.st.DropVerdicts(ctx, b.ID, true, 100)
+	for _, v := range all {
+		why[v.Name] = v.Verdict
+	}
+	ks, _ := e.st.DropVerdicts(ctx, b.ID, false, 100)
+	for _, v := range ks {
+		kept[v.Name] = true
+	}
+	if why["blur.jpg"] != hub.VerdictBlurry || why["dark.jpg"] != hub.VerdictDark || why["bright.jpg"] != hub.VerdictBright || len(why) != 4 {
+		t.Errorf("left out: %v", why)
+	}
+	if len(kept) != 2 || !kept["scene.jpg"] || (kept["sharp1.jpg"] == kept["sharp2.jpg"]) {
+		t.Errorf("kept: %v, left out: %v", kept, why)
+	}
+	for n, v := range why {
+		if v == hub.VerdictDuplicate && !strings.HasPrefix(n, "sharp") {
+			t.Errorf("the repeat must be one of the two sharp shots: %s", n)
+		}
+	}
+	// the album holds exactly the kept photos; nothing was deleted
+	if len(e.f.albums) != 1 || e.f.albums[0]["albumName"] != "Gala best of" {
+		t.Fatalf("albums: %v", e.f.albums)
+	}
+	albumID := e.f.albums[0]["id"].(string)
+	if len(e.f.members[albumID]) != 2 || !e.f.members[albumID][idOfName(e, "scene.jpg")] {
+		t.Errorf("the album: %v", e.f.members[albumID])
+	}
+	if len(e.f.trashed) != 0 {
+		t.Errorf("a best-of must never delete: %v", e.f.trashed)
+	}
+
+	// running it again corrects the album: what is no longer kept goes, and what the owner put in it themselves stays
+	foreign := uuid.NewString()
+	e.f.members[albumID][foreign] = true
+	e.f.members[albumID][idOfName(e, "dark.jpg")] = true
+	if err := e.h.StartHighlights(ctx, e.sess, bob, b.ID, "strict"); err != nil {
+		t.Fatal(err)
+	}
+	again := waitHighlight(t, e, b.ID)
+	if again.Strictness != "strict" || again.Status != store.HighlightDone {
+		t.Fatalf("again: %+v", again)
+	}
+	if e.f.members[albumID][idOfName(e, "dark.jpg")] || !e.f.members[albumID][foreign] || len(e.f.members[albumID]) != 3 {
+		t.Errorf("the corrected album: %v", e.f.members[albumID])
+	}
+}
+
+func TestABestOfOfNothingSaysSo(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Empty"})
+	if err := e.h.StartHighlights(ctx, e.sess, bob, b.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	h := waitHighlight(t, e, b.ID)
+	if h.Status != store.HighlightFailed || !strings.Contains(h.Note, "no photos") || h.Strictness != "normal" {
+		t.Errorf("an empty box: %+v", h)
+	}
+}
+
+func TestAClosedBoxHandsItsPhotosOnThroughTheHandOverThatExists(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	if err := e.h.Join(ctx, e.sess, bob, "family", "", "copy"); err != nil {
+		t.Fatal(err)
+	}
+	if opts := e.h.OnwardOptions(ctx, bobID); len(opts) != 1 || opts[0].Service != "family" || !opts[0].Copy {
+		t.Fatalf("services to hand on to: %+v", opts)
+	}
+	if opts := e.h.OnwardOptions(ctx, annID); len(opts) != 0 {
+		t.Errorf("a person who sends to nothing: %+v", opts)
+	}
+	b := newBox(t, e, hub.DropParams{Name: "Onward"})
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "m")
+	}
+	if _, err := e.h.HandOnward(ctx, bob, b.ID, "all"); !errors.Is(err, hub.ErrNoOnward) {
+		t.Errorf("no service chosen: %v", err)
+	}
+	if err := e.h.SetDropOnward(ctx, bob, b.ID, "nowhere", false); !errors.Is(err, hub.ErrOnwardService) {
+		t.Errorf("a service the person does not send to: %v", err)
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if err := e.h.SetDropOnward(ctx, ann, b.ID, "family", false); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host choosing: %v", err)
+	}
+	if err := e.h.SetDropOnward(ctx, bob, b.ID, "family", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// everything: the photos get the service's tag, which is what hands them over, and a pass is woken
+	before := len(e.f.tagged)
+	n, err := e.h.HandOnward(ctx, bob, b.ID, "all")
+	if err != nil || n != 3 || len(e.f.tagged)-before != 3 {
+		t.Fatalf("hand on: %d %v, tagged %d", n, err, len(e.f.tagged)-before)
+	}
+	if !has(e.woken, "a drop box handed on to family") {
+		t.Errorf("a pass must be woken: %v", e.woken)
+	}
+	if log, _ := e.st.DropOnwardLog(ctx, b.ID, 5); len(log) != 1 || log[0].Service != "family" || log[0].Count != 3 || log[0].Scope != "all" || log[0].By != "Bob" {
+		t.Errorf("the log: %+v", log)
+	}
+	// the best-of needs one first
+	if _, err := e.h.HandOnward(ctx, bob, b.ID, "best"); !errors.Is(err, hub.ErrNoHighlights) {
+		t.Errorf("best-of with none: %v", err)
+	}
+	if _, err := e.h.HandOnward(ctx, bob, b.ID, "some"); !errors.Is(err, hub.ErrBadScope) {
+		t.Errorf("an unknown scope: %v", err)
+	}
+	ids := []string{}
+	for id := range e.f.assetName {
+		ids = append(ids, id)
+	}
+	e.st.ReplaceDropVerdicts(ctx, b.ID, []store.Verdict{{AssetID: ids[0], Verdict: "kept", Name: "a"}, {AssetID: ids[1], Verdict: "kept", Name: "b"}, {AssetID: ids[2], Verdict: "blurry", Name: "c"}})
+	before = len(e.f.tagged)
+	if n, err := e.h.HandOnward(ctx, bob, b.ID, "best"); err != nil || n != 2 || len(e.f.tagged)-before != 2 {
+		t.Errorf("the best-of: %d %v, tagged %d", n, err, len(e.f.tagged)-before)
+	}
+	if _, err := e.h.HandOnward(ctx, ann, b.ID, "all"); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host handing on: %v", err)
+	}
+}
+
+func TestABoxThatHandsOnByItselfDoesItOnceWhenItClosesAndTheSummaryTellsHow(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.h.Join(ctx, e.sess, bob, "family", "", "copy")
+	b := newBox(t, e, hub.DropParams{Name: "Auto", Closes: time.Now().Add(time.Hour)})
+	for _, n := range []string{"a.jpg", "b.jpg"} {
+		e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "m")
+	}
+	if err := e.h.SetDropOnward(ctx, bob, b.ID, "family", true); err != nil {
+		t.Fatal(err)
+	}
+	var told []string
+	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.DropMaintenance(ctx) // still open: nothing is handed on
+	if log, _ := e.st.DropOnwardLog(ctx, b.ID, 5); len(log) != 0 {
+		t.Fatal("an open box hands nothing on")
+	}
+	e.st.SetDropSchedule(ctx, b.ID, time.Time{}, time.Now().Add(-time.Minute)) // it closes
+	before := len(e.f.tagged)
+	e.h.DropMaintenance(ctx)
+	e.h.DropMaintenance(ctx)
+	if len(e.f.tagged)-before != 2 {
+		t.Errorf("handed on %d photos, want 2, once", len(e.f.tagged)-before)
+	}
+	if log, _ := e.st.DropOnwardLog(ctx, b.ID, 5); len(log) != 1 || log[0].Count != 2 {
+		t.Errorf("the log: %+v", log)
+	}
+	closing := ""
+	for _, m := range told {
+		if strings.Contains(m, "closed") {
+			closing = m
+		}
+	}
+	if !strings.Contains(closing, "Handed 2 photos on to family") {
+		t.Errorf("the summary must say it: %v", told)
+	}
+	ev, _ := e.h.DropEvents(ctx, bobID, b.ID, 20)
+	said := false
+	for _, x := range ev {
+		said = said || (x.Kind == store.DropExpired && strings.Contains(x.Text, "Handed 2 photos on to family"))
+	}
+	if !said {
+		t.Error("the box's log must say it too")
+	}
+	// a service the owner has left cannot receive: the summary says so instead of failing silently
+	c := newBox(t, e, hub.DropParams{Name: "Orphan", Closes: time.Now().Add(time.Hour)})
+	e.h.ReceiveDropFile(ctx, c.ID, "a.jpg", bytes.NewReader(jpeg), "m")
+	e.h.SetDropOnward(ctx, bob, c.ID, "family", true)
+	e.h.Leave(ctx, e.sess, bob, "family")
+	e.st.SetDropSchedule(ctx, c.ID, time.Time{}, time.Now().Add(-time.Minute))
+	told = nil
+	e.h.DropMaintenance(ctx)
+	failed := false
+	for _, m := range told {
+		failed = failed || strings.Contains(m, "Could not hand the photos on to family")
+	}
+	if !failed {
+		t.Errorf("a failed hand-on must be in the summary: %v", told)
 	}
 }

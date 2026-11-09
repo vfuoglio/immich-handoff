@@ -42,7 +42,7 @@ func isGuest(ctx context.Context) bool { return guestOf(ctx) != nil }
 
 // dropRoute is whether the path belongs to a drop box's guest pages, which need no Immich login.
 func dropRoute(path string) bool {
-	return strings.HasPrefix(path, "/drop/") || strings.HasPrefix(path, "/d/")
+	return strings.HasPrefix(path, "/drop/") || strings.HasPrefix(path, "/d/") || strings.HasPrefix(path, "/wall/")
 }
 
 // guestSecretCookie is the cookie in which a guest's browser keeps the secret that finds its own uploads again.
@@ -394,8 +394,24 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 			if b.GuestBook {
 				if msgs, err := w.Hub.GuestBook(ctx, me.user.ID, b.ID); err == nil {
 					for _, m := range msgs {
-						v.Messages = append(v.Messages, MessageView{ID: m.ID, Name: m.Name, Text: m.Text, When: loc(ctx).Stamp(m.At.Local()), HasAudio: m.HasAudio})
+						v.Messages = append(v.Messages, MessageView{ID: m.ID, Name: m.Name, Text: m.Text, When: loc(ctx).Stamp(m.At.Local()), HasAudio: m.HasAudio, OnWall: m.OnWall})
 					}
+				}
+			}
+		}
+		if v.Manage {
+			v.WallToken = b.Wall
+			v.Highlight = w.highlightView(ctx, b)
+		}
+		if v.Owner {
+			v.OnwardService, v.OnwardAuto = b.OnwardService, b.OnwardAuto
+			for _, o := range w.Hub.OnwardOptions(ctx, me.user.ID) {
+				v.OnwardOptions = append(v.OnwardOptions, OnwardOptionView{Service: o.Service, Copy: o.Copy})
+			}
+			v.HasBest = v.Highlight != nil && v.Highlight.Status == store.HighlightDone && v.Highlight.Kept > 0
+			if log, err := w.Hub.Store.DropOnwardLog(ctx, b.ID, 10); err == nil {
+				for _, o := range log {
+					v.OnwardLog = append(v.OnwardLog, OnwardView{When: loc(ctx).Stamp(o.At.Local()), Service: o.Service, Scope: onwardScopeLabel(ctx, o.Scope), Count: o.Count, By: o.By})
 				}
 			}
 		}
@@ -1066,4 +1082,187 @@ func (w *Server) unshareDropBox(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "drop box unshared", func(ctx context.Context, me *member, id string) error {
 		return w.Hub.UnshareBack(ctx, me.sess, me.user, id)
 	})
+}
+
+// --- the wall ---
+
+func (w *Server) wallBox(rw http.ResponseWriter, r *http.Request) (store.DropBox, bool) {
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return store.DropBox{}, false
+	}
+	b, err := w.Hub.WallBox(r.Context(), r.PathValue("token"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return b, false
+	}
+	return b, true
+}
+
+// wallPage is the slideshow: full screen, no sign-in, no controls but the ones that fade away.
+func (w *Server) wallPage(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.wallBox(rw, r)
+	if !ok {
+		return
+	}
+	r = w.forGuest(r, b, r.PathValue("token"))
+	mode := r.URL.Query().Get("mode")
+	if mode != "grid" && mode != "collage" {
+		mode = "single"
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+	WallPage(b.Name, r.PathValue("token"), mode).Render(r.Context(), rw)
+}
+
+// wallFeed tells the wall which photos came since the last one it has, and which messages to show.
+func (w *Server) wallFeed(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.wallBox(rw, r)
+	if !ok {
+		return
+	}
+	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+	items, msgs, err := w.Hub.WallFeed(r.Context(), b, after)
+	if err != nil {
+		http.Error(rw, "try again", http.StatusServiceUnavailable)
+		return
+	}
+	type item struct {
+		ID      int64  `json:"id"`
+		Caption string `json:"caption,omitempty"`
+	}
+	type message struct {
+		Name string `json:"name,omitempty"`
+		Text string `json:"text"`
+	}
+	out := struct {
+		Items    []item    `json:"items"`
+		Messages []message `json:"messages"`
+	}{Items: []item{}, Messages: []message{}}
+	for _, i := range items {
+		out.Items = append(out.Items, item{i.ID, i.Caption})
+	}
+	for _, m := range msgs {
+		out.Messages = append(out.Messages, message{m.Name, m.Text})
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(rw).Encode(out)
+}
+
+// wallPhoto gives one picture to the wall: a photo of this box, by its place in the box's list.
+func (w *Server) wallPhoto(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.wallBox(rw, r)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	data, kind, err := w.Hub.WallImage(r.Context(), b, id)
+	if err != nil {
+		if errors.Is(err, hub.ErrDropGone) {
+			http.NotFound(rw, r)
+		} else {
+			http.Error(rw, "try again", http.StatusBadGateway)
+		}
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+// --- the owner's side of the wall, the best-of and handing on ---
+
+func (w *Server) startWall(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "wall started", func(ctx context.Context, me *member, id string) error {
+		_, err := w.Hub.StartWall(ctx, me.sess, me.user, id, r.PostFormValue("renew") == "1")
+		return err
+	})
+}
+
+func (w *Server) stopWall(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "wall stopped", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.StopWall(ctx, me.sess, me.user, id)
+	})
+}
+
+func (w *Server) messageOnWall(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "message on the wall", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SetMessageOnWall(ctx, me.user, id, r.PostFormValue("on") == "1")
+	})
+}
+
+func (w *Server) startHighlights(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "best-of started", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.StartHighlights(ctx, me.sess, me.user, id, r.PostFormValue("strictness"))
+	})
+}
+
+func (w *Server) setOnward(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "hand-on chosen", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SetDropOnward(ctx, me.user, id, r.PostFormValue("target"), r.PostFormValue("auto") == "1")
+	})
+}
+
+func (w *Server) handOn(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "handed on", func(ctx context.Context, me *member, id string) error {
+		_, err := w.Hub.HandOnward(ctx, me.user, id, r.PostFormValue("scope"))
+		return err
+	})
+}
+
+// verdictText is the reason a photo was left out of a best-of, in the person's language.
+func verdictText(ctx context.Context, v store.Verdict) string {
+	switch v.Verdict {
+	case hub.VerdictDark:
+		return t(ctx, "too dark")
+	case hub.VerdictBright:
+		return t(ctx, "too bright")
+	case hub.VerdictBlurry:
+		return t(ctx, "blurry")
+	case hub.VerdictDuplicate:
+		return t(ctx, "the same moment as a better photo")
+	}
+	return v.Verdict
+}
+
+func strictnessLabel(ctx context.Context, name string) string {
+	switch name {
+	case "relaxed":
+		return t(ctx, "relaxed: leaves out little")
+	case "strict":
+		return t(ctx, "strict: leaves out more")
+	}
+	return t(ctx, "normal")
+}
+
+func onwardScopeLabel(ctx context.Context, scope string) string {
+	if scope == "best" {
+		return t(ctx, "the best-of")
+	}
+	return t(ctx, "everything")
+}
+
+// highlightView is a box's best-of as the owner reads it: how far it is, what it kept, and why the rest was left out.
+func (w *Server) highlightView(ctx context.Context, b store.DropBox) *HighlightView {
+	h, err := w.Hub.Store.DropHighlightOf(ctx, b.ID)
+	if err != nil {
+		return nil
+	}
+	v := &HighlightView{Status: h.Status, Strictness: h.Strictness, Total: h.Total, Done: h.Done, Kept: h.Kept, Album: h.Album, Note: h.Note}
+	if h.Status == store.HighlightDone {
+		v.When = loc(ctx).Stamp(h.Finished.Local())
+		if ex, err := w.Hub.Store.DropVerdicts(ctx, b.ID, true, 100); err == nil {
+			v.OutCount = h.Total - h.Kept
+			for _, x := range ex {
+				v.Excluded = append(v.Excluded, VerdictView{Name: x.Name, Reason: verdictText(ctx, x), Detail: x.Detail})
+			}
+		}
+	}
+	return v
 }

@@ -756,3 +756,33 @@ func shareHref(s ShareView) string {
 	}
 	return "/share/" + s.Key
 }
+
+func wallVals(id string, renew bool) string {
+	v := "0"
+	if renew {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "renew": v})
+	return string(b)
+}
+
+func wallMsgVals(id string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "on": v})
+	return string(b)
+}
+
+func scopeVals(id, scope string) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "scope": scope})
+	return string(b)
+}
+
+func onwardOptionLabel(ctx context.Context, o OnwardOptionView) string {
+	if o.Copy {
+		return o.Service + " \u00b7 " + t(ctx, "you keep your originals")
+	}
+	return o.Service + " \u00b7 " + t(ctx, "your originals go to your trash")
+}
