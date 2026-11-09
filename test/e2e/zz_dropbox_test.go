@@ -212,27 +212,26 @@ func TestDropBoxTools(t *testing.T) {
 	}
 	eventually(t, "the approved photo is in the library, and only it", 60*time.Second, func() bool { return len(inbox()) == 1 })
 	id := inbox()[0]
-	a := getFull(t, alice, id)
-	if tags := tagNames(a); !strings.Contains(tags, "Gala") || !strings.Contains(tags, "gala") {
-		t.Errorf("the photo's tags: %q", tags)
-	}
+	// the box's tag, the extra tag and the album are put on one after another, so wait for all of them
+	var tags string
+	eventually(t, "the photo carries both tags", 60*time.Second, func() bool {
+		tags = tagNames(getFull(t, alice, id))
+		return strings.Contains(tags, "Gala") && strings.Contains(tags, "gala")
+	})
 	var albums []struct {
 		AlbumName  string `json:"albumName"`
 		AssetCount int    `json:"assetCount"`
 	}
-	call(t, "GET", "/albums", keyAuth(alice), nil, &albums)
-	found := false
-	for _, al := range albums {
-		if al.AlbumName == "Gala photos" {
-			found = true
-			if al.AssetCount != 1 {
-				t.Errorf("the album holds %d photos, want 1", al.AssetCount)
+	eventually(t, "the album holds the photo", 60*time.Second, func() bool {
+		albums = nil
+		call(t, "GET", "/albums", keyAuth(alice), nil, &albums)
+		for _, al := range albums {
+			if al.AlbumName == "Gala photos" && al.AssetCount == 1 {
+				return true
 			}
 		}
-	}
-	if !found {
-		t.Error("the album must be made on the first arrival")
-	}
+		return false
+	})
 	if strings.Contains(page(t, port, owner), "dropbox/pending/") {
 		t.Error("the queue must be empty")
 	}
