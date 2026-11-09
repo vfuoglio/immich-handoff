@@ -20,10 +20,21 @@ func (w *Server) qrCode(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "a web address of at most 500 characters is needed", http.StatusBadRequest)
 		return
 	}
-	code, err := qr.Encode(text, qr.M)
+	svg, err := qrSVG(text)
 	if err != nil {
 		http.Error(rw, "cannot encode that", http.StatusBadRequest)
 		return
+	}
+	rw.Header().Set("Content-Type", "image/svg+xml")
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Write([]byte(svg))
+}
+
+// qrSVG draws the QR code of a text as an SVG.
+func qrSVG(text string) (string, error) {
+	code, err := qr.Encode(text, qr.M)
+	if err != nil {
+		return "", err
 	}
 	const border = 4
 	size := code.Size + 2*border
@@ -37,7 +48,5 @@ func (w *Server) qrCode(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	b.WriteString(`"/></svg>`)
-	rw.Header().Set("Content-Type", "image/svg+xml")
-	rw.Header().Set("Cache-Control", "no-store")
-	rw.Write([]byte(b.String()))
+	return b.String(), nil
 }

@@ -96,6 +96,23 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
 	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
+	mux.HandleFunc("GET /d/{token}", w.dropPage)
+	mux.HandleFunc("POST /d/{token}/upload", w.dropUpload)
+	mux.HandleFunc("GET /drop/{token}/theme.css", w.dropTheme)
+	mux.HandleFunc("GET /drop/{token}/cover", w.dropCover)
+	mux.HandleFunc("GET /drop/{token}/manifest.webmanifest", w.dropManifest)
+	mux.HandleFunc("GET /drop/{token}/mine", w.dropMine)
+	mux.HandleFunc("POST /drop/{token}/mine/delete", w.dropMineDelete)
+	mux.HandleFunc("GET /d/{token}/mine", w.dropMine)
+	mux.HandleFunc("POST /d/{token}/mine/delete", w.dropMineDelete)
+	mux.HandleFunc("POST /dropbox/short", w.shortDropBox)
+	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
+	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
+	mux.HandleFunc("POST /dropbox/template", w.saveDropTemplate)
+	mux.HandleFunc("POST /dropbox/template/delete", w.deleteDropTemplate)
+	mux.HandleFunc("POST /dropbox/fromtemplate", w.dropFromTemplate)
+	mux.HandleFunc("POST /dropbox/duplicate", w.duplicateDropBox)
+	mux.HandleFunc("GET /dropbox/card/{id}", w.dropCard)
 	mux.HandleFunc("POST /dropbox", w.createDropBox)
 	mux.HandleFunc("POST /dropbox/pause", w.pauseDropBox)
 	mux.HandleFunc("POST /dropbox/revoke", w.revokeDropBox)
@@ -145,7 +162,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
 		upload := dropRoute(r.URL.Path) && strings.HasSuffix(r.URL.Path, "/upload")
-		if r.Method == http.MethodPost && !upload { // a guest's upload is bounded by its drop box instead
+		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
 		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English
@@ -163,12 +180,12 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/invite/") {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
 		}
-		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation, /drop/<token>/upload one deeper
-			base := "../"
-			if upload {
-				base = "../../"
-			}
-			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, true))
+		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
+			base := strings.Repeat("../", len(strings.Split(strings.Trim(r.URL.Path, "/"), "/"))-1)
+			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, &guestInfo{}))
+		}
+		if strings.HasPrefix(r.URL.Path, "/dropbox/card/") { // the printable card is two levels down
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))
 		}
 		next.ServeHTTP(rw, r)
 	})
@@ -417,6 +434,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	d.Owned = w.ownedViews(ctx, me)
 	d.DropBoxes = w.dropBoxViews(ctx, me)
+	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
 		for _, b := range broken {

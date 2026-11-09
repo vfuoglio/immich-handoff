@@ -87,3 +87,17 @@ func (a *API) FindUserByEmail(ctx context.Context, email string) (User, bool, er
 	}
 	return User{}, false, nil
 }
+
+// DropBoxPermissionsFor is the key of a new drop box: the five a box needs, the album ones when it files into an album,
+// and, only when the owner lets guests delete what they sent, asset.read (to check a photo is still in the inbox) and
+// asset.delete (which moves it to the owner's trash, never deletes it for good).
+func DropBoxPermissionsFor(album, guestDelete bool) []Permission {
+	out := append([]Permission{}, DropBoxPermissions...)
+	if album {
+		out = append(out, "album.read", "album.create", "albumAsset.create")
+	}
+	if guestDelete {
+		out = append(out, "asset.read", "asset.delete")
+	}
+	return out
+}

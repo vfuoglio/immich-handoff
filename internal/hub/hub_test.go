@@ -55,6 +55,9 @@ type fakeImmich struct {
 	tagged        []string            // asset ids that were tagged
 	tagNames      []string            // tags that were made
 	albumAdds     []string            // "album name: asset id" for each photo put in an album
+	tagIDs        map[string]string   // tag id -> name
+	assetTags     map[string][]string // asset id -> names of its tags
+	trashed       map[string]bool     // asset ids moved to the trash
 }
 
 type fakeUpload struct {
@@ -199,7 +202,14 @@ func (f *fakeImmich) handler() http.Handler {
 				if strings.HasPrefix(part.FileName(), "dupe") {
 					status, code = "duplicate", 200
 				}
-				j(w, code, map[string]any{"id": uuid.NewString(), "status": status})
+				id := uuid.NewString()
+				f.mu.Lock()
+				if f.assetTags == nil {
+					f.assetTags = map[string][]string{}
+				}
+				f.assetTags[id] = nil
+				f.mu.Unlock()
+				j(w, code, map[string]any{"id": id, "status": status})
 				return
 			}
 		}
@@ -246,11 +256,16 @@ func (f *fakeImmich) handler() http.Handler {
 		json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		f.tagNames = append(f.tagNames, body.Tags...)
-		f.mu.Unlock()
+		if f.tagIDs == nil {
+			f.tagIDs = map[string]string{}
+		}
 		out := []any{}
 		for _, n := range body.Tags {
-			out = append(out, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+			id := uuid.NewString()
+			f.tagIDs[id] = n
+			out = append(out, map[string]any{"id": id, "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
 		}
+		f.mu.Unlock()
 		j(w, 200, out)
 	})
 	mux.HandleFunc("PUT /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
@@ -260,10 +275,44 @@ func (f *fakeImmich) handler() http.Handler {
 		f.mu.Lock()
 		for _, id := range body.Ids {
 			f.tagged = append(f.tagged, id)
+			if f.assetTags == nil {
+				f.assetTags = map[string][]string{}
+			}
+			f.assetTags[id] = append(f.assetTags[id], f.tagIDs[r.PathValue("id")])
 			out = append(out, map[string]any{"id": id, "success": true})
 		}
 		f.mu.Unlock()
 		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		names, ok := f.assetTags[r.PathValue("id")]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		tags := []any{}
+		for _, n := range names {
+			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+	})
+	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids   []string
+			Force bool
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		if f.trashed == nil {
+			f.trashed = map[string]bool{}
+		}
+		for _, id := range body.Ids {
+			f.trashed[id] = !body.Force
+		}
+		f.mu.Unlock()
+		w.WriteHeader(204)
 	})
 	tag := map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { j(w, 200, []any{tag}) })

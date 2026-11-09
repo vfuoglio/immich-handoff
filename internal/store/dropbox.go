@@ -50,6 +50,11 @@ type DropBox struct {
 	Approve                  bool      // files wait for a host's approval before they reach the library
 	StartsAt                 time.Time // zero: open from the start
 	Notified                 int       // bits: 1 the reminder before the end was sent, 2 the closing summary was
+	Short                    string    // a short code that opens the box too (empty: none)
+	Accent, Lang             string    // the guest page's colour (#rrggbb) and language (empty: the guest's own)
+	MaxDim                   int       // photos larger than this many pixels are shrunk in the guest's browser (0: not)
+	GuestDelete              bool      // guests may delete what they sent while it is still in the inbox
+	Removed                  int       // files guests deleted
 	CreatedAt, EndedAt       time.Time
 }
 
@@ -79,7 +84,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, created_at, ended_at`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, created_at, ended_at`
 
 // AddDropBox stores a new box. Its id is made here.
 func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
@@ -94,10 +99,10 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 	}
 	exp := timeText(b.ExpiresAt)
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO dropboxes (`+dropCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO dropboxes (`+dropCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.CreatedAt.Format(time.RFC3339Nano), "")
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, b.CreatedAt.Format(time.RFC3339Nano), "")
 	return b, err
 }
 
@@ -106,7 +111,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &created, &ended); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &created, &ended); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -143,9 +148,9 @@ func (s *Store) DropBoxes(ctx context.Context) ([]DropBox, error) {
 	return out, rows.Err()
 }
 
-// DropBoxByToken finds the box a link opens. A revoked box is not found.
+// DropBoxByToken finds the box a link opens, by its long token or by its short code. A revoked box is not found.
 func (s *Store) DropBoxByToken(ctx context.Context, token string) (DropBox, error) {
-	b, err := s.scanDropBox(s.db.QueryRowContext(ctx, `SELECT `+dropCols+` FROM dropboxes WHERE token = ? AND state <> ?`, token, DropRevoked))
+	b, err := s.scanDropBox(s.db.QueryRowContext(ctx, `SELECT `+dropCols+` FROM dropboxes WHERE (token = ? OR (short <> '' AND short = ?)) AND state <> ?`, token, token, DropRevoked))
 	if errors.Is(err, sql.ErrNoRows) {
 		return b, ErrDropBoxGone
 	}
@@ -264,6 +269,8 @@ func (s *Store) PruneDropBoxes(ctx context.Context, cutoff time.Time) error {
 		`DELETE FROM dropbox_hosts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_hours WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_guests WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_uploads WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_covers WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?`,
 		`DELETE FROM dropbox_events WHERE at < ?`,
 	} {
@@ -483,4 +490,177 @@ func (s *Store) DropSummaryOf(ctx context.Context, boxID string) (DropSummary, e
 		err = nil
 	}
 	return out, err
+}
+
+// SetDropShort gives a box a short code, or takes it away (empty). A code already in use is ErrExists.
+func (s *Store) SetDropShort(ctx context.Context, id, code string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET short = ? WHERE id = ? AND state <> ?`, code, id, DropRevoked)
+	if isUnique(err) {
+		return ErrExists
+	}
+	return err
+}
+
+// SetDropToken replaces a box's long token: the old link stops working.
+func (s *Store) SetDropToken(ctx context.Context, id, token string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET token = ? WHERE id = ? AND state <> ?`, token, id, DropRevoked)
+	return err
+}
+
+// SetDropLook changes how the guest page looks and what the guest's browser does: colour, language, shrinking.
+func (s *Store) SetDropLook(ctx context.Context, id, accent, lang string, maxDim int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET accent = ?, lang = ?, max_dim = ? WHERE id = ? AND state <> ?`, accent, lang, maxDim, id, DropRevoked)
+	return err
+}
+
+// AddDropRemoved counts a file a guest deleted.
+func (s *Store) AddDropRemoved(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET removed = removed + 1 WHERE id = ?`, id)
+	return err
+}
+
+// --- the cover photo ---
+
+// SetDropCover keeps a box's cover photo (empty data: none).
+func (s *Store) SetDropCover(ctx context.Context, id, kind string, data []byte) error {
+	if len(data) == 0 {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_covers WHERE box_id = ?`, id)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_covers (box_id, kind, data) VALUES (?,?,?)
+		ON CONFLICT(box_id) DO UPDATE SET kind = excluded.kind, data = excluded.data`, id, kind, data)
+	return err
+}
+
+// DropCover reads a box's cover photo; ErrNotFound when it has none.
+func (s *Store) DropCover(ctx context.Context, id string) (kind string, data []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT kind, data FROM dropbox_covers WHERE box_id = ?`, id).Scan(&kind, &data)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
+}
+
+// HasDropCover says whether a box has a cover photo.
+func (s *Store) HasDropCover(ctx context.Context, id string) bool {
+	var n int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dropbox_covers WHERE box_id = ?`, id).Scan(&n)
+	return n > 0
+}
+
+// --- templates ---
+
+// DropTemplate is a person's saved settings for a drop box, as JSON the hub reads and writes.
+type DropTemplate struct {
+	ID, OwnerName string
+	OwnerID       uuid.UUID
+	Name, Data    string
+	CreatedAt     time.Time
+}
+
+// AddDropTemplate saves a template.
+func (s *Store) AddDropTemplate(ctx context.Context, t DropTemplate) (DropTemplate, error) {
+	t.ID = uuid.NewString()
+	t.CreatedAt = time.Now().UTC()
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_templates (id, owner_id, name, data, created_at) VALUES (?,?,?,?,?)`,
+		t.ID, t.OwnerID.String(), t.Name, t.Data, t.CreatedAt.Format(time.RFC3339Nano))
+	return t, err
+}
+
+// DropTemplates lists a person's templates, newest first.
+func (s *Store) DropTemplates(ctx context.Context, owner uuid.UUID) ([]DropTemplate, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, data, created_at FROM dropbox_templates WHERE owner_id = ? ORDER BY created_at DESC`, owner.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropTemplate
+	for rows.Next() {
+		t := DropTemplate{OwnerID: owner}
+		var at string
+		if err := rows.Scan(&t.ID, &t.Name, &t.Data, &at); err != nil {
+			return nil, err
+		}
+		t.CreatedAt, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// RemoveDropTemplate deletes one of a person's templates.
+func (s *Store) RemoveDropTemplate(ctx context.Context, owner uuid.UUID, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_templates WHERE id = ? AND owner_id = ?`, id, owner.String())
+	return err
+}
+
+// --- what each guest sent ---
+
+// DropUpload is a file a guest sent, kept so the same guest can see and delete it. Guest is a hash of the secret the
+// guest's browser holds; the secret itself is never stored.
+type DropUpload struct {
+	ID, BoxID, Guest, AssetID, PendingID, Name string
+	Size                                       int64
+	At                                         time.Time
+}
+
+// AddDropUpload records a file a guest sent.
+func (s *Store) AddDropUpload(ctx context.Context, u DropUpload) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_uploads (id, box_id, guest, asset_id, pending_id, name, size, at) VALUES (?,?,?,?,?,?,?,?)`,
+		uuid.NewString(), u.BoxID, u.Guest, u.AssetID, u.PendingID, u.Name, u.Size, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// DropUploadsOf lists what a guest sent to a box, newest first.
+func (s *Store) DropUploadsOf(ctx context.Context, boxID, guest string, limit int) ([]DropUpload, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at FROM dropbox_uploads WHERE box_id = ? AND guest = ? ORDER BY at DESC LIMIT ?`, boxID, guest, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropUpload
+	for rows.Next() {
+		var u DropUpload
+		var at string
+		if err := rows.Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at); err != nil {
+			return nil, err
+		}
+		u.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// DropUploadByID finds one of a guest's files; it must be theirs, in that box.
+func (s *Store) DropUploadByID(ctx context.Context, boxID, guest, id string) (DropUpload, error) {
+	var u DropUpload
+	var at string
+	err := s.db.QueryRowContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at FROM dropbox_uploads WHERE id = ? AND box_id = ? AND guest = ?`, id, boxID, guest).
+		Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return u, ErrNotFound
+	}
+	u.At, _ = time.Parse(time.RFC3339Nano, at)
+	return u, err
+}
+
+// RemoveDropUpload forgets a record of a guest's file; it reports whether it was there.
+func (s *Store) RemoveDropUpload(ctx context.Context, id string) (bool, error) {
+	r, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_uploads WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
+}
+
+// DropUploadApproved says a waiting file was approved and is now this asset in the library.
+func (s *Store) DropUploadApproved(ctx context.Context, pendingID, assetID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropbox_uploads SET asset_id = ?, pending_id = '' WHERE pending_id = ?`, assetID, pendingID)
+	return err
+}
+
+// DropUploadGone forgets the record of a waiting file that was rejected or deleted.
+func (s *Store) DropUploadGone(ctx context.Context, pendingID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_uploads WHERE pending_id = ?`, pendingID)
+	return err
 }

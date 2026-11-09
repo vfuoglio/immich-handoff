@@ -506,3 +506,27 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 
 /* the list of what became of a guest's files */
 ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+
+/* the guest page of a drop box */
+.drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
+.drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.drop-list li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .6rem; align-items: center; }
+.drop-list li progress { grid-column: 1 / -1; width: 100%; height: .4rem; accent-color: var(--accent); }
+.drop-list li.failed .meta { color: var(--bad); }
+.camera-only { display: none; }
+@media (pointer: coarse) { .camera-only { display: grid; } .drop-hint { display: none; } }
+form.inline { display: inline; }
+ul.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: .7rem; }
+ul.thumbs li { display: grid; gap: .3rem; justify-items: start; }
+ul.thumbs img, ul.thumbs .thumb-video { width: 6rem; height: 6rem; object-fit: cover; border-radius: .7rem; background: color-mix(in oklab, var(--accent) 12%, transparent); display: grid; place-items: center; font-size: .8rem; }
+a.button { display: inline-block; padding: .45rem .9rem; border-radius: .7rem; border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); text-decoration: none; }
+
+/* the printable card */
+.card-sheet { text-align: center; display: grid; justify-items: center; gap: 1rem; padding: 2rem 0; }
+.card-qr img { background: #fff; border-radius: .6rem; }
+.card-url { word-break: break-all; font-family: ui-monospace, monospace; font-size: .95rem; }
+@media print {
+  .bar, footer, .no-print, #glow, dialog { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .card-sheet h1, .card-sheet .lead { color: #000 !important; background: none !important; -webkit-text-fill-color: #000 !important; }
+}

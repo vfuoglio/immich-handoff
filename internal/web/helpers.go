@@ -609,6 +609,7 @@ var clientMessages = []string{
 	"{who} resumed sending to {service}", "{who}'s connection to {service} was lost; no photo was touched", "{who}: {photos} already there in {service}",
 	"{who}: {photos} could not be handed over; the originals were kept and it will be retried", "{who}: {photos} refused, the receiver has them in the trash; the originals were kept",
 	"{who}: {photos} wait for the daily limit", "{who}: {photos} wait for the daily limit, until {when}",
+	"Could not be sent", "Received", "Sending", "Sent already", "Waiting for the connection", "Waiting to send",
 }
 
 // clientCatalog is what the page hands its scripts: the language and the translated messages they use.
@@ -707,4 +708,20 @@ func hostRoleLabel(ctx context.Context, manage bool) string {
 		return t(ctx, "approves, pauses and extends")
 	}
 	return t(ctx, "only looks")
+}
+
+func shortVals(id string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "on": v})
+	return string(b)
+}
+
+func dimLabel(ctx context.Context, px int) string {
+	if px == 0 {
+		return t(ctx, "never (send them as they are)")
+	}
+	return t(ctx, "{px} pixels", "px", px)
 }

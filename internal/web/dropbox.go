@@ -2,12 +2,14 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -23,11 +26,41 @@ const maxDropFilesPerRequest = 100
 
 type guestKey struct{}
 
+// guestInfo is what the layout needs to know about a guest's page: whose it is, so that it can link the box's own
+// manifest and colours. The handler of a drop box fills it in; it is set, empty, for every page a guest can see.
+type guestInfo struct {
+	Token  string // the link the guest used, long or short
+	Accent bool   // the box has a colour of its own
+	Cover  bool
+}
+
+func guestOf(ctx context.Context) *guestInfo { g, _ := ctx.Value(guestKey{}).(*guestInfo); return g }
+
 // isGuest is whether the page is one a guest sees (no account, no tabs, nothing about the library).
-func isGuest(ctx context.Context) bool { v, _ := ctx.Value(guestKey{}).(bool); return v }
+func isGuest(ctx context.Context) bool { return guestOf(ctx) != nil }
 
 // dropRoute is whether the path belongs to a drop box's guest pages, which need no Immich login.
-func dropRoute(path string) bool { return strings.HasPrefix(path, "/drop/") }
+func dropRoute(path string) bool {
+	return strings.HasPrefix(path, "/drop/") || strings.HasPrefix(path, "/d/")
+}
+
+// guestSecretCookie is the cookie in which a guest's browser keeps the secret that finds its own uploads again.
+func guestSecretCookie(boxID string) string { return "handoff-drop-" + boxID[:8] }
+
+// forGuest prepares a request for a box's guest page: the box's language when the guest has not chosen one, and what
+// the layout needs (the box's own manifest and colour).
+func (w *Server) forGuest(r *http.Request, b store.DropBox, token string) *http.Request {
+	ctx := r.Context()
+	if g := guestOf(ctx); g != nil {
+		g.Token, g.Accent = token, b.Accent != ""
+	}
+	if b.Lang != "" {
+		if _, err := r.Cookie(LanguageCookie); err != nil {
+			ctx = i18n.With(ctx, i18n.For(i18n.Lang(b.Lang)))
+		}
+	}
+	return r.WithContext(ctx)
+}
 
 // clientAddr is the address a guest comes from. Behind a reverse proxy every request seems to come from the proxy,
 // so the administrator may name the header in which it puts the real one (DROPBOX_CLIENT_IP_HEADER, for example
@@ -65,9 +98,12 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 		w.dropClosed(rw, r)
 		return
 	}
+	r = w.forGuest(r, b, r.PathValue("token"))
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropPage(DropPageView{Token: b.Token, Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly, Approve: b.Approve, Limits: dropLimitText(r.Context(), b)}).Render(r.Context(), rw)
+	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly,
+		Approve: b.Approve, Limits: dropLimitText(r.Context(), b), MaxDim: b.MaxDim, Cover: w.Hub.Store.HasDropCover(r.Context(), b.ID),
+		CanDelete: b.GuestDelete}).Render(r.Context(), rw)
 }
 
 // dropUpload takes what a guest sent. The files are read from the request one by one and streamed on to Immich, so
@@ -84,7 +120,20 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		w.dropClosed(rw, r)
 		return
 	}
-	who := hub.DropWho(token, w.clientAddr(r))
+	r = w.forGuest(r, b, token)
+	ctx = r.Context()
+	who := hub.DropWho(b.Token, w.clientAddr(r)) // the mark is made from the long token, so both ways in tell a guest by the same one
+	asJSON := strings.Contains(r.Header.Get("Accept"), "application/json")
+	secret := ""
+	if b.GuestDelete {
+		if c, err := r.Cookie(guestSecretCookie(b.ID)); err == nil && len(c.Value) == 32 {
+			secret = c.Value
+		} else {
+			secret = hub.NewGuestSecret()
+			http.SetCookie(rw, &http.Cookie{Name: guestSecretCookie(b.ID), Value: secret, Path: "/", MaxAge: 60 * 24 * 3600, HttpOnly: true,
+				SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
+		}
+	}
 	if err := w.Hub.AllowDrop(ctx, b, who); err != nil {
 		rw.Header().Set("Retry-After", "600")
 		rw.WriteHeader(http.StatusTooManyRequests)
@@ -118,7 +167,7 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 				Notice(t(ctx, "Wrong password"), t(ctx, "The password is not right. Go back and try again."), true).Render(ctx, rw)
 				return
 			}
-			outcome, err := w.Hub.ReceiveDropFile(ctx, b.ID, part.FileName(), part, who)
+			outcome, err := w.Hub.ReceiveDropFileFor(ctx, b.ID, part.FileName(), part, who, secret)
 			text := dropReason(ctx, err)
 			if err == nil && outcome == hub.DropHeld {
 				text = t(ctx, "Received, waiting for approval")
@@ -145,7 +194,23 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropDone(b.Name, "drop/"+token, lines).Render(ctx, rw)
+	if asJSON { // the page's own script sends one file at a time and reads the answer
+		type line struct {
+			Name string `json:"name"`
+			Text string `json:"text"`
+			OK   bool   `json:"ok"`
+		}
+		out := struct {
+			Files []line `json:"files"`
+		}{Files: []line{}}
+		for _, l := range lines {
+			out.Files = append(out.Files, line{l.Name, l.Text, l.OK})
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(rw).Encode(out)
+		return
+	}
+	DropDone(b.Name, "drop/"+token, b.GuestDelete, lines).Render(ctx, rw)
 }
 
 // dropReason is what a guest is told about one file.
@@ -297,7 +362,12 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 		b := a.Box
 		v := DropBoxView{ID: b.ID, Name: b.Name, Message: b.Message, State: dropState(b), Note: b.Note, Role: a.Role,
 			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != "",
-			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view"}
+			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
+			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
+		if v.Manage {
+			v.Short = b.Short
+			v.HasCover = w.Hub.Store.HasDropCover(ctx, b.ID)
+		}
 		if v.State != "revoked" && v.Manage {
 			v.Token = b.Token // a co-host who only views does not get the link
 		}
@@ -340,6 +410,9 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 func dropSummaryText(ctx context.Context, b store.DropBox, sum store.DropSummary) string {
 	text := t(ctx, "{files} from {guests}, {size} in all.", "files", n(ctx, "{n} file", "{n} files", b.Files),
 		"guests", n(ctx, "{n} guest", "{n} guests", sum.Guests), "size", megabytes(b.Bytes))
+	if b.Removed > 0 {
+		text += " " + n(ctx, "{n} file taken back by guests.", "{n} files taken back by guests.", b.Removed)
+	}
 	if sum.BusiestFiles > 0 {
 		if h, err := time.Parse("2006-01-02T15", sum.BusiestHour); err == nil {
 			text += " " + t(ctx, "Busiest hour: {hour} ({files}).", "hour", loc(ctx).Stamp(h.Local()), "files", n(ctx, "{n} file", "{n} files", sum.BusiestFiles))
@@ -403,6 +476,7 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 		p.Name, p.Message, p.Password = r.PostFormValue("name"), r.PostFormValue("message"), r.PostFormValue("password")
 		p.PhotosOnly = r.PostFormValue("photos") == "1"
 		p.Approve = r.PostFormValue("approve") == "1"
+		p.GuestDelete = r.PostFormValue("guestdelete") == "1"
 		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
@@ -494,4 +568,308 @@ func (w *Server) pendingFile(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "private, no-store")
 	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	io.Copy(rw, f)
+}
+
+// --- what makes a box's guest page its own: colour, cover, manifest ---
+
+// guestBox finds the box a guest-side resource belongs to; closed boxes give no resources, like no page.
+func (w *Server) guestBox(rw http.ResponseWriter, r *http.Request) (store.DropBox, bool) {
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return store.DropBox{}, false
+	}
+	b, err := w.Hub.OpenDropBox(r.Context(), r.PathValue("token"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return b, false
+	}
+	return b, true
+}
+
+// onAccent is the text colour that reads on a colour: black or white, whichever has the better contrast.
+func onAccent(hex string) string {
+	var r, g, b int
+	fmt.Sscanf(strings.TrimPrefix(hex, "#"), "%02x%02x%02x", &r, &g, &b)
+	if (299*r+587*g+114*b)/1000 > 150 {
+		return "#111111"
+	}
+	return "#ffffff"
+}
+
+func (w *Server) dropTheme(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.guestBox(rw, r)
+	if !ok {
+		return
+	}
+	if b.Accent == "" {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", "text/css; charset=utf-8")
+	rw.Header().Set("Cache-Control", "private, max-age=300")
+	// the accent is checked to be #rrggbb when it is saved, and again here before it goes into a style sheet
+	if !regexp.MustCompile(`^#[0-9a-f]{6}$`).MatchString(b.Accent) {
+		return
+	}
+	fmt.Fprintf(rw, ":root{--accent:%[1]s;--on-accent:%[2]s}\n:root:not([data-theme=\"light\"]){--accent:%[1]s;--on-accent:%[2]s}\n:root[data-theme=\"dark\"]{--accent:%[1]s;--on-accent:%[2]s}\n", b.Accent, onAccent(b.Accent))
+}
+
+func (w *Server) dropCover(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.guestBox(rw, r)
+	if !ok {
+		return
+	}
+	kind, data, err := w.Hub.Store.DropCover(r.Context(), b.ID)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=300")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+// dropManifest lets a guest install a box's page on their phone, under the box's own name.
+func (w *Server) dropManifest(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.guestBox(rw, r)
+	if !ok {
+		return
+	}
+	token := r.PathValue("token")
+	short := []rune(b.Name)
+	if len(short) > 12 {
+		short = short[:12]
+	}
+	color := "#0d0b20"
+	if b.Accent != "" {
+		color = b.Accent
+	}
+	m := map[string]any{
+		"name": b.Name, "short_name": string(short), "description": b.Message,
+		"start_url": "../" + token, "scope": "../", "display": "standalone",
+		"background_color": "#0d0b20", "theme_color": color,
+		"icons": []map[string]string{
+			{"src": "../../static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+			{"src": "../../static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+			{"src": "../../static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+		},
+	}
+	rw.Header().Set("Content-Type", "application/manifest+json")
+	rw.Header().Set("Cache-Control", "private, max-age=300")
+	json.NewEncoder(rw).Encode(m)
+}
+
+// --- a guest's own uploads ---
+
+// guestSecret is the secret this guest's browser holds for the box ("" when it has none).
+func guestSecret(r *http.Request, b store.DropBox) string {
+	if c, err := r.Cookie(guestSecretCookie(b.ID)); err == nil && len(c.Value) == 32 {
+		return c.Value
+	}
+	return ""
+}
+
+func (w *Server) dropMine(rw http.ResponseWriter, r *http.Request) {
+	if w.Hub == nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	token := r.PathValue("token")
+	b, err := w.Hub.DropBoxForGuest(r.Context(), token)
+	if err != nil || !b.GuestDelete {
+		w.dropClosed(rw, r)
+		return
+	}
+	r = w.forGuest(r, b, token)
+	files, _ := w.Hub.GuestUploads(r.Context(), b.ID, guestSecret(r, b))
+	view := make([]GuestFileView, 0, len(files))
+	for _, f := range files {
+		view = append(view, GuestFileView{ID: f.ID, Name: f.Name, Size: megabytes(f.Size), Waiting: f.Waiting})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+	DropMine(b.Name, token, view, r.URL.Query().Get("msg")).Render(r.Context(), rw)
+}
+
+func (w *Server) dropMineDelete(rw http.ResponseWriter, r *http.Request) {
+	if w.Hub == nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	token := r.PathValue("token")
+	b, err := w.Hub.DropBoxForGuest(r.Context(), token)
+	if err != nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	r = w.forGuest(r, b, token)
+	r.ParseForm()
+	msg := "deleted"
+	if err := w.Hub.DeleteGuestUpload(r.Context(), b.ID, guestSecret(r, b), r.PostFormValue("id")); err != nil {
+		msg = "kept"
+		if !errors.Is(err, hub.ErrDropKept) {
+			msg = "failed"
+		}
+	}
+	// back to the list, which says what happened; relative, so it works under a path prefix
+	rw.Header().Set("Location", "../mine?msg="+msg)
+	rw.WriteHeader(http.StatusSeeOther)
+}
+
+func guestMessage(ctx context.Context, msg string) string {
+	switch msg {
+	case "deleted":
+		return t(ctx, "Taken back. It is in the owner's trash, not in their library.")
+	case "kept":
+		return t(ctx, "The owner has already filed this photo in their library. Ask them if you want it removed.")
+	case "failed":
+		return t(ctx, "That could not be taken back right now. Please try again.")
+	}
+	return ""
+}
+
+// --- more owner actions: ways in, look, templates ---
+
+func (w *Server) shortDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box short link", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SetDropShort(ctx, me.user, id, r.PostFormValue("on") == "1")
+	})
+}
+
+func (w *Server) renewDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box new link", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.RenewDropToken(ctx, me.user, id)
+	})
+}
+
+// lookDropBox saves the colour, language, shrinking size and cover photo of a box's guest page. It is a multipart
+// form (a cover photo comes with it); its body may be a little over the cover's limit.
+func (w *Server) lookDropBox(rw http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(rw, r.Body, 1<<20+256<<10)
+	w.membership(rw, r, "drop box look", func(ctx context.Context, me *member, id string) error {
+		if err := r.ParseMultipartForm(1 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+			return hub.ErrBadCover
+		}
+		dim := 0
+		if v := strings.TrimSpace(r.PostFormValue("maxdim")); v != "" {
+			var err error
+			if dim, err = strconv.Atoi(v); err != nil {
+				return hub.ErrBadDropLook
+			}
+		}
+		var cover []byte
+		if f, _, err := r.FormFile("cover"); err == nil {
+			defer f.Close()
+			cover, _ = io.ReadAll(io.LimitReader(f, 1<<20))
+		}
+		return w.Hub.SetDropLook(ctx, me.user, id, r.PostFormValue("accent"), r.PostFormValue("lang"), dim, cover, r.PostFormValue("nocover") == "1")
+	})
+}
+
+func (w *Server) saveDropTemplate(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box template saved", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SaveDropTemplate(ctx, me.user, id, r.PostFormValue("name"))
+	})
+}
+
+func (w *Server) deleteDropTemplate(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box template deleted", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.DeleteDropTemplate(ctx, me.user, id)
+	})
+}
+
+// dropFromTemplate makes a box with the settings of a template and the name and times the person gives.
+func (w *Server) dropFromTemplate(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box from a template", func(ctx context.Context, me *member, id string) error {
+		p, err := w.Hub.TemplateParams(ctx, me.user.ID, id, r.PostFormValue("name"))
+		if err != nil {
+			return err
+		}
+		return w.makeFrom(ctx, me, r, p)
+	})
+}
+
+// duplicateDropBox makes a box with the settings of another one of the person's.
+func (w *Server) duplicateDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box duplicated", func(ctx context.Context, me *member, id string) error {
+		p, err := w.Hub.DuplicateParams(ctx, me.user.ID, id, r.PostFormValue("name"))
+		if err != nil {
+			return err
+		}
+		return w.makeFrom(ctx, me, r, p)
+	})
+}
+
+func (w *Server) makeFrom(ctx context.Context, me *member, r *http.Request, p hub.DropParams) error {
+	var err error
+	var opens, closes time.Time
+	if opens, err = clockField(r, "opens"); err != nil {
+		return err
+	}
+	if closes, err = clockField(r, "closes"); err != nil {
+		return err
+	}
+	p.Opens, p.Closes = opens, closes
+	_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
+	return err
+}
+
+// dropCard is a page to print: the box's name and message and a QR code of its link, for table cards and posters. The
+// address is made in the browser (it depends on where the page is served), like the invitation links.
+func (w *Server) dropCard(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	b, err := w.Hub.DropBoxAccess(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	link := "drop/" + b.Token
+	if r.URL.Query().Get("way") == "short" && b.Short != "" {
+		link = "d/" + b.Short
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+	DropCard(me.user.Name, b.Name, b.Message, link).Render(r.Context(), rw)
+}
+
+// templateViews is what the person can start a drop box from.
+func (w *Server) templateViews(ctx context.Context, me *member) []TemplateView {
+	list, err := w.Hub.DropTemplates(ctx, me.user.ID)
+	if err != nil {
+		return nil
+	}
+	var out []TemplateView
+	for _, tp := range list {
+		name := tp.Name
+		if tp.Builtin {
+			name = t(ctx, tp.Name)
+		}
+		out = append(out, TemplateView{ID: tp.ID, Name: name, Builtin: tp.Builtin, Summary: templateSummary(ctx, tp.Settings)})
+	}
+	return out
+}
+
+func templateSummary(ctx context.Context, s hub.DropSettings) string {
+	var parts []string
+	if s.Days > 0 {
+		parts = append(parts, n(ctx, "{n} day", "{n} days", s.Days))
+	}
+	if s.MaxFileMB > 0 {
+		parts = append(parts, t(ctx, "up to {mb} MB each", "mb", s.MaxFileMB))
+	}
+	if s.PhotosOnly {
+		parts = append(parts, t(ctx, "photos only"))
+	}
+	if s.Approve {
+		parts = append(parts, t(ctx, "files are looked at before they are kept"))
+	}
+	if s.Album != "" {
+		parts = append(parts, t(ctx, "in the album {album}", "album", s.Album))
+	}
+	return strings.Join(parts, " \u00b7 ")
 }

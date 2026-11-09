@@ -241,6 +241,38 @@ var migrations = []string{
 	   who    TEXT NOT NULL,
 	   PRIMARY KEY (box_id, who)
 	 );`,
+	// Drop boxes: a short link, the look of the guest page (colour, language, cover), a size photos are shrunk to in
+	// the guest's browser, guests deleting what they sent, saved templates, and what each guest sent.
+	`ALTER TABLE dropboxes ADD COLUMN short TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN accent TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN lang TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN max_dim INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN guest_delete INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN removed INTEGER NOT NULL DEFAULT 0;
+	 CREATE UNIQUE INDEX dropboxes_short ON dropboxes (short) WHERE short <> '';
+	 CREATE TABLE dropbox_covers (
+	   box_id TEXT PRIMARY KEY,
+	   kind   TEXT NOT NULL,
+	   data   BLOB NOT NULL
+	 );
+	 CREATE TABLE dropbox_templates (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   data       TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE dropbox_uploads (
+	   id         TEXT PRIMARY KEY,
+	   box_id     TEXT NOT NULL,
+	   guest      TEXT NOT NULL,
+	   asset_id   TEXT NOT NULL,
+	   pending_id TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   size       INTEGER NOT NULL,
+	   at         TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_uploads_guest ON dropbox_uploads (box_id, guest);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

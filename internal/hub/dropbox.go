@@ -43,6 +43,12 @@ var (
 	ErrBadHostRole   = errors.New("a co-host manages the box or only views it")
 	ErrTooManyHosts  = errors.New("a drop box has at most ten co-hosts")
 	ErrNoEnd         = errors.New("this drop box has no end to extend")
+	ErrBadDropLook   = errors.New("the colour is six hex digits such as #4250af, the language one of those the pages come in, and the size between 800 and 8000 pixels")
+	ErrBadCover      = errors.New("the cover photo is a JPEG, PNG or WebP of at most 900 KB")
+	ErrBadTemplate   = errors.New("a template needs a name of 2 to 60 characters, and a person has at most 20")
+	ErrNoTemplate    = errors.New("there is no such template")
+	ErrDropDeleteOff = errors.New("guests cannot delete what they sent from this drop box")
+	ErrDropKept      = errors.New("this photo is already filed in the owner's library: ask them to remove it")
 	ErrNothingChosen = errors.New("choose the files first")
 	ErrSomeNotStored = errors.New("some files could not be stored right now and stay waiting; try again")
 
@@ -84,6 +90,9 @@ type DropParams struct {
 	PhotosOnly              bool
 	Album, ExtraTag         string // where files are filed besides the inbox tag
 	Approve                 bool   // files wait for a host's approval
+	Accent, Lang            string // the guest page's colour (#rrggbb) and language
+	MaxDim                  int    // photos larger than this many pixels are shrunk in the guest's browser
+	GuestDelete             bool   // guests may delete what they sent while it is in the inbox
 }
 
 func checkDropParams(p DropParams) error {
@@ -104,6 +113,9 @@ func checkDropParams(p DropParams) error {
 	}
 	if p.Days < 0 || p.Days > 365 {
 		return ErrBadDropLimit
+	}
+	if err := checkDropLook(p.Accent, p.Lang, p.MaxDim); err != nil {
+		return err
 	}
 	for _, v := range []string{p.Album, p.ExtraTag} {
 		if utf8.RuneCountInString(v) > 100 || strings.ContainsAny(v, "/,\r\n\x00") {
@@ -141,10 +153,7 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 	if p.Approve && h.StageDir == "" {
 		return store.DropBox{}, ErrNoStaging
 	}
-	perms := immich.DropBoxPermissions
-	if p.Album != "" {
-		perms = immich.DropBoxPermissionsAlbum
-	}
+	perms := immich.DropBoxPermissionsFor(p.Album != "", p.GuestDelete)
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(p.Name)+" (drop box)", perms)
 	if err != nil {
 		return store.DropBox{}, fmt.Errorf("could not create an API key in your Immich account: %w", err)
@@ -166,6 +175,7 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		KeyID: keyID, Key: secret, InboxTag: h.Options.InboxTag + "/" + p.Name,
 		MaxFiles: p.MaxFiles, MaxMB: p.MaxMB, MaxFileMB: p.MaxFileMB, PhotosOnly: p.PhotosOnly,
 		Album: p.Album, ExtraTag: p.ExtraTag, Approve: p.Approve, StartsAt: p.Opens,
+		Accent: strings.ToLower(p.Accent), Lang: p.Lang, MaxDim: p.MaxDim, GuestDelete: p.GuestDelete,
 	}
 	switch {
 	case !p.Closes.IsZero():
@@ -303,6 +313,8 @@ func (h *Hub) RevokeDropBox(ctx context.Context, sess *immich.API, owner immich.
 		return err
 	}
 	h.purgePending(ctx, b.ID, "")
+	_ = h.Store.SetDropShort(ctx, b.ID, "")
+	_ = h.Store.SetDropCover(ctx, b.ID, "", nil)
 	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} revoked the drop box", "name", owner.Name), "")
 	h.Log.Info("drop box revoked", "name", b.Name, "owner", owner.Email)
 	return nil
@@ -409,7 +421,7 @@ func DropWho(token, addr string) string {
 // OpenDropBox finds the box a link opens. A link that is unknown, revoked, paused or past its end gives the same
 // answer, so nobody can tell which it was.
 func (h *Hub) OpenDropBox(ctx context.Context, token string) (store.DropBox, error) {
-	if h.Store == nil || len(token) < 16 || len(token) > 128 {
+	if h.Store == nil || len(token) < 8 || len(token) > 128 {
 		return store.DropBox{}, ErrDropGone
 	}
 	b, err := h.Store.DropBoxByToken(ctx, token)
@@ -658,6 +670,12 @@ func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int
 // copy, or, in a box that needs approval, kept on disk until a host decides. What is refused, and why, is written in the
 // box's log; the caller shows the guest the error. The first bytes decide what the file is, not its name.
 func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file io.Reader, who string) (DropOutcome, error) {
+	return h.ReceiveDropFileFor(ctx, boxID, filename, file, who, "")
+}
+
+// ReceiveDropFileFor is ReceiveDropFile for a guest who holds a secret (see NewGuestSecret): in a box that lets guests
+// take back what they sent, the file is recorded under it, so only that guest can see and delete it.
+func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, file io.Reader, who, secret string) (DropOutcome, error) {
 	b, err := h.Store.TakeDropSlot(ctx, boxID)
 	if err != nil {
 		if errors.Is(err, store.ErrDropFull) {
@@ -692,8 +710,13 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 	cr := &capReader{r: br, max: limit}
 	name := dropFileName(filename, ext)
 
+	guest := ""
+	if b.GuestDelete && secret != "" {
+		guest = GuestKey(secret)
+	}
 	if b.Approve {
-		if err := h.stage(ctx, b, name, kind, who, cr); err != nil {
+		p, err := h.stage(ctx, b, name, kind, who, cr)
+		if err != nil {
 			if cr.hit || errors.Is(err, ErrDropTooBig) {
 				h.RejectDrop(ctx, b, who, filename, ErrDropTooBig)
 				return 0, ErrDropTooBig
@@ -704,6 +727,9 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 			return 0, err
 		}
 		kept = true
+		if guest != "" {
+			_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, PendingID: p.ID, Name: name, Size: p.Size})
+		}
 		return DropHeld, nil
 	}
 
@@ -727,26 +753,30 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 	kept = true
 	h.fileDrop(ctx, api, b, id)
 	h.kept(ctx, b, who, name, cr.n, true)
+	if guest != "" {
+		_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, AssetID: id.String(), Name: name, Size: cr.n})
+	}
 	return DropStored, nil
 }
 
 // stage keeps a file that waits for approval on disk, in a folder of its own for the box, and records it.
-func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string, r io.Reader) error {
+func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string, r io.Reader) (store.DropPending, error) {
+	var none store.DropPending
 	if h.StageDir == "" {
-		return ErrNoStaging
+		return none, ErrNoStaging
 	}
 	if n, size, err := h.Store.DropPendingTotals(ctx, b.ID); err != nil {
-		return err
+		return none, err
 	} else if n >= dropPendingFiles || size >= dropPendingBytes {
-		return ErrDropFull
+		return none, ErrDropFull
 	}
 	dir := filepath.Join(h.StageDir, b.ID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+		return none, err
 	}
 	f, err := os.CreateTemp(dir, "p-*")
 	if err != nil {
-		return err
+		return none, err
 	}
 	n, err := io.Copy(f, r)
 	if cerr := f.Close(); err == nil {
@@ -754,16 +784,17 @@ func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string
 	}
 	if err != nil {
 		os.Remove(f.Name())
-		return err
+		return none, err
 	}
 	c := context.WithoutCancel(ctx)
-	if _, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name()}); err != nil {
+	p, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name()})
+	if err != nil {
 		os.Remove(f.Name())
-		return err
+		return none, err
 	}
 	_ = h.Store.AddDropBytes(c, b.ID, n)
 	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} waits for approval ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
-	return nil
+	return p, nil
 }
 
 // DropPending lists the files of a box that wait for a decision, for the owner and the co-hosts who manage it.
@@ -809,6 +840,7 @@ func (h *Hub) purgePending(ctx context.Context, boxID, only string) {
 		}
 		if ok, _ := h.Store.RemoveDropPending(context.WithoutCancel(ctx), p.ID); ok {
 			os.Remove(p.Path)
+			_ = h.Store.DropUploadGone(context.WithoutCancel(ctx), p.ID)
 		}
 	}
 	if only == "" && h.StageDir != "" {
@@ -851,6 +883,7 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 			os.Remove(p.Path)
 			_ = h.Store.ReleaseDropSlot(c, b.ID)
 			_ = h.Store.AddDropBytes(c, b.ID, -p.Size)
+			_ = h.Store.DropUploadGone(c, p.ID)
 			done++
 			continue
 		}
@@ -871,8 +904,10 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 		if dup {
 			_ = h.Store.ReleaseDropSlot(c, b.ID)
 			_ = h.Store.AddDropBytes(c, b.ID, -p.Size)
+			_ = h.Store.DropUploadGone(c, p.ID)
 			h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} was already in the library", "file", p.Name), p.Who)
 		} else {
+			_ = h.Store.DropUploadApproved(c, p.ID, imageID.String())
 			h.fileDrop(ctx, api, b, imageID)
 			h.kept(ctx, b, p.Who, p.Name, p.Size, false)
 		}
@@ -925,6 +960,7 @@ func (h *Hub) DropMaintenance(ctx context.Context) {
 		for _, p := range old {
 			if ok, _ := h.Store.RemoveDropPending(ctx, p.ID); ok {
 				os.Remove(p.Path)
+				_ = h.Store.DropUploadGone(ctx, p.ID)
 				_ = h.Store.ReleaseDropSlot(ctx, p.BoxID)
 				_ = h.Store.AddDropBytes(ctx, p.BoxID, -p.Size)
 				h.dropEvent(ctx, p.BoxID, store.DropRejected, i18n.Pack("{file} was deleted: nobody decided on it in two weeks", "file", p.Name), p.Who)
@@ -941,6 +977,9 @@ func (h *Hub) dropClosingText(ctx context.Context, b store.DropBox) string {
 	text := fmt.Sprintf("%d files (%.1f MB) from %d guests", b.Files, float64(b.Bytes)/(1<<20), sum.Guests)
 	if waiting > 0 {
 		text += fmt.Sprintf(", %d still waiting for approval", waiting)
+	}
+	if b.Removed > 0 {
+		text += fmt.Sprintf(", %d taken back by guests", b.Removed)
 	}
 	return text + "."
 }

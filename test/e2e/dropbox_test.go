@@ -5,14 +5,22 @@ package e2e
 import (
 	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chromedp/chromedp"
 )
 
 // guestUpload sends files to a drop box's link the way a browser form does, with no cookie at all.
@@ -250,4 +258,262 @@ func TestDropBoxTools(t *testing.T) {
 	if !strings.Contains(page(t, port, owner), "The link stops working") {
 		t.Error("the owner's page must say when the link stops working")
 	}
+}
+
+// bigJPEG is a photo wider than any size a drop box shrinks to.
+func bigJPEG(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			img.Set(x, y, color.RGBA{uint8(x * 255 / w), uint8(y * 255 / h), uint8((x + y) % 256), 255})
+		}
+	}
+	var b bytes.Buffer
+	jpeg.Encode(&b, img, &jpeg.Options{Quality: 90})
+	return b.Bytes()
+}
+
+// TestDropBoxGuests: the short link, a printable card, a new long link, templates and copies, and a guest taking back
+// what they sent while it is in the inbox, all with a real Immich and the permissions the box's key really has.
+func TestDropBoxGuests(t *testing.T) {
+	alice, _, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 52)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner := loginCookie(t, "alice@e2e.test")
+
+	code, body := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Undo"}, "guestdelete": {"1"}, "opendays": {"5"}})
+	if code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, body)
+	}
+	perms := keyPermissions(t, alice, "handoff: Undo (drop box)")
+	if !has(perms, "asset.read") || !has(perms, "asset.delete") || !has(perms, "asset.upload") || has(perms, "album.read") {
+		t.Errorf("a box that lets guests take back what they sent: %v", perms)
+	}
+	op := page(t, port, owner)
+	long := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	if code, _ := postBody(t, port, "/dropbox/short", owner, url.Values{"service": {boxID}, "on": {"1"}}); code != 204 {
+		t.Fatalf("short link: %d", code)
+	}
+	short := regexp.MustCompile(`data-link="d/([a-z0-9]{10})"`).FindStringSubmatch(page(t, port, owner))[1]
+	inbox := func() []string { return searchTag(t, alice, "inbox/Undo", false) }
+
+	// a guest uses the short link, with a browser that keeps its cookies
+	jar, _ := cookiejar.New(nil)
+	guest := &http.Client{Jar: jar}
+	sendAs := func(path string, name string, data []byte) string {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		fw, _ := mw.CreateFormFile("files", name)
+		fw.Write(data)
+		mw.Close()
+		req, _ := http.NewRequest("POST", "http://localhost:"+port+path, &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Accept", "application/json")
+		res, err := guest.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	for i, n := range []string{"one.jpg", "two.jpg"} {
+		if r := sendAs("/d/"+short+"/upload", n, jpegBytes(7200+i)); !strings.Contains(r, `"ok":true`) {
+			t.Fatalf("upload %s: %s", n, r)
+		}
+	}
+	eventually(t, "both photos arrive", 60*time.Second, func() bool { return len(inbox()) == 2 })
+	mine := func() string {
+		res, err := guest.Get("http://localhost:" + port + "/d/" + short + "/mine")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	ids := regexp.MustCompile(`name="id" value="([0-9a-f-]{36})"`).FindAllStringSubmatch(mine(), -1)
+	if len(ids) != 2 {
+		t.Fatalf("the guest must see both files: %v", ids)
+	}
+	if stranger, _ := http.Get("http://localhost:" + port + "/d/" + short + "/mine"); stranger != nil {
+		b, _ := io.ReadAll(stranger.Body)
+		stranger.Body.Close()
+		if strings.Contains(string(b), "one.jpg") {
+			t.Error("a browser that did not send them must not see them")
+		}
+	}
+	takeBack := func(id string) string {
+		noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := noFollow.PostForm("http://localhost:"+port+"/d/"+short+"/mine/delete", url.Values{"id": {id}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.Header.Get("Location")
+	}
+	// taking one back puts it in the owner's trash
+	before := inbox()
+	if loc := takeBack(ids[0][1]); !strings.Contains(loc, "deleted") {
+		t.Fatalf("taking back: %q", loc)
+	}
+	eventually(t, "the photo is in the owner's trash", 30*time.Second, func() bool { return len(inbox()) == 1 })
+	gone := ""
+	for _, id := range before {
+		if _, c := getAsset(t, alice, id); c == 200 {
+			if a, _ := getAsset(t, alice, id); a.IsTrashed {
+				gone = id
+			}
+		}
+	}
+	if gone == "" {
+		t.Error("the photo the guest took back must be in the trash, not deleted for good")
+	}
+	// once the owner takes the inbox tag off, the other photo is theirs
+	var tags []struct{ ID, Name string }
+	call(t, "GET", "/tags", keyAuth(alice), nil, &tags)
+	for _, tg := range tags {
+		if tg.Name == "Undo" {
+			call(t, "DELETE", "/tags/"+tg.ID+"/assets", keyAuth(alice), map[string]any{"ids": inbox()}, nil)
+		}
+	}
+	if loc := takeBack(ids[1][1]); !strings.Contains(loc, "kept") {
+		t.Errorf("a photo the owner has filed: %q", loc)
+	}
+	for _, id := range before {
+		if id != gone {
+			if a, _ := getAsset(t, alice, id); a.IsTrashed {
+				t.Error("a filed photo must stay out of the trash")
+			}
+		}
+	}
+
+	// the card, and ending each way in on its own
+	if code, p := guestGetAs(t, owner, port, "/dropbox/card/"+boxID); code != 200 || !strings.Contains(p, `data-card-link="drop/`+long+`"`) {
+		t.Errorf("card: %d", code)
+	}
+	if code, _ := postBody(t, port, "/dropbox/renew", owner, url.Values{"service": {boxID}}); code != 204 {
+		t.Fatal("renew")
+	}
+	if code, _ := guestGet(t, port, "/drop/"+long); code != 404 {
+		t.Errorf("the old long link: %d", code)
+	}
+	if code, _ := guestGet(t, port, "/d/"+short); code != 200 {
+		t.Errorf("the short link must keep working: %d", code)
+	}
+	postBody(t, port, "/dropbox/short", owner, url.Values{"service": {boxID}, "on": {"0"}})
+	if code, _ := guestGet(t, port, "/d/"+short); code != 404 {
+		t.Errorf("the removed short link: %d", code)
+	}
+
+	// templates and copies make new boxes with real keys
+	if code, b := postBody(t, port, "/dropbox/template", owner, url.Values{"service": {boxID}, "name": {"My template"}}); code != 204 {
+		t.Fatalf("save a template: %d %s", code, b)
+	}
+	tid := regexp.MustCompile(`value="([0-9a-f-]{36})"\s*/?>\s*<b>My template</b>`).FindStringSubmatch(page(t, port, owner))
+	if tid == nil {
+		t.Fatal("the template must be listed")
+	}
+	if code, b := postBody(t, port, "/dropbox/fromtemplate", owner, url.Values{"service": {tid[1]}, "name": {"From template"}}); code != 204 {
+		t.Fatalf("from a template: %d %s", code, b)
+	}
+	if code, b := postBody(t, port, "/dropbox/fromtemplate", owner, url.Values{"service": {"builtin:wedding"}, "name": {"Built in"}}); code != 204 {
+		t.Fatalf("from a built-in template: %d %s", code, b)
+	}
+	if code, b := postBody(t, port, "/dropbox/duplicate", owner, url.Values{"service": {boxID}, "name": {"A copy"}}); code != 204 {
+		t.Fatalf("copy: %d %s", code, b)
+	}
+	if !has(keyPermissions(t, alice, "handoff: From template (drop box)"), "asset.delete") {
+		t.Error("a box made from a template that lets guests take back must have the key for it")
+	}
+	if p := keyPermissions(t, alice, "handoff: Built in (drop box)"); len(p) != 5 {
+		t.Errorf("a plain template makes a plain key: %v", p)
+	}
+	keyPermissions(t, alice, "handoff: A copy (drop box)")
+}
+
+func guestGetAs(t *testing.T, cookie, port, path string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+path, nil)
+	req.Header.Set("Cookie", cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b)
+}
+
+// TestDropBoxGuestPage drives the guest page in a real browser, on a phone: it takes several photos, shows a progress
+// bar, shrinks the big one when the owner asked for it, remembers what was sent so that it is not sent twice, and
+// shows the box's own colour.
+func TestDropBoxGuestPage(t *testing.T) {
+	alice, _, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 53)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner := loginCookie(t, "alice@e2e.test")
+	if code, b := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Phone party"}, "message": {"Send your photos"}, "opendays": {"3"}}); code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, b)
+	}
+	op := page(t, port, owner)
+	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	if code, b := postBody(t, port, "/dropbox/look", owner, url.Values{"service": {boxID}, "accent": {"#c2185b"}, "maxdim": {"1600"}}); code != 204 {
+		t.Fatalf("look: %d %s", code, b)
+	}
+
+	dir := t.TempDir()
+	small, big := filepath.Join(dir, "small.jpg"), filepath.Join(dir, "big.jpg")
+	os.WriteFile(small, jpegBytes(7301), 0o644)
+	bigBytes := bigJPEG(3200, 2000)
+	os.WriteFile(big, bigBytes, 0o644)
+
+	ctx := browse(t, port, "visitor=1", look{w: 390, h: 800, touch: true})
+	guestURL := "http://localhost:" + port + "/drop/" + token
+	run(t, ctx, chromedp.Navigate(guestURL), chromedp.WaitVisible(`form.drop-form`, chromedp.ByQuery))
+	// the box's colour is applied, and the page can be installed under the box's name
+	until(t, ctx, "the box's colour", `getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#c2185b'`, 10*time.Second)
+	if m := js[string](t, ctx, `document.querySelector('link[rel=manifest]').getAttribute('href')`); m != "drop/"+token+"/manifest.webmanifest" {
+		t.Errorf("manifest link: %q", m)
+	}
+	if !js[bool](t, ctx, `document.querySelector('input[name=camera]').getAttribute('capture') === 'environment' && getComputedStyle(document.querySelector('.camera-only')).display !== 'none'`) {
+		t.Error("a phone must be offered the camera")
+	}
+	run(t, ctx, chromedp.SetUploadFiles(`#drop-files`, []string{small, big}, chromedp.ByQuery))
+	until(t, ctx, "both files are listed", `document.querySelectorAll('.drop-list li').length === 2`, 10*time.Second)
+	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	until(t, ctx, "both files are received", `[...document.querySelectorAll('.drop-list li')].every(li => li.textContent.includes('Received'))`, 60*time.Second)
+
+	inbox := func() []string { return searchTag(t, alice, "inbox/Phone party", false) }
+	eventually(t, "both photos are in the owner's library", 60*time.Second, func() bool { return len(inbox()) == 2 })
+	// the big one was shrunk in the browser: it is narrower than what was chosen, and the small one is untouched
+	narrow := false
+	eventually(t, "Immich reads their sizes", 60*time.Second, func() bool {
+		widths := map[int]bool{}
+		for _, id := range inbox() {
+			if w := getFull(t, alice, id).Width; w != nil {
+				widths[*w] = true
+			}
+		}
+		narrow = widths[1600] && widths[64]
+		return len(widths) == 2
+	})
+	if !narrow {
+		t.Error("the big photo must be shrunk to 1600 pixels and the small one left alone")
+	}
+
+	// reloading and choosing the same files again does not send them again
+	run(t, ctx, chromedp.Navigate(guestURL), chromedp.WaitVisible(`form.drop-form`, chromedp.ByQuery),
+		chromedp.SetUploadFiles(`#drop-files`, []string{small}, chromedp.ByQuery))
+	until(t, ctx, "the file is known as sent", `document.querySelector('.drop-list li')?.textContent.includes('Sent already')`, 10*time.Second)
+	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	time.Sleep(2 * time.Second)
+	if n := len(inbox()); n != 2 {
+		t.Errorf("a file sent before must not be sent again: %d photos", n)
+	}
+	_ = bigBytes
 }

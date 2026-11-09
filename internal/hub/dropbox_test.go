@@ -504,3 +504,270 @@ func TestTheSummaryCountsGuestsAndTheBusiestHour(t *testing.T) {
 		t.Errorf("summary: %+v", sum)
 	}
 }
+
+// --- templates, more ways in, the look of the page, and guests taking back what they sent ---
+
+func TestTemplatesKeepSettingsAndStartNewBoxes(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Wedding 2026", Message: "Hi!", Days: 10, MaxFileMB: 50, MaxMB: 900, MaxFiles: 40, PhotosOnly: true, Album: "Wedding", ExtraTag: "wed", Accent: "#AA3355", Lang: "it", MaxDim: 2000, Password: "secret"})
+	if err := e.h.SaveDropTemplate(ctx, bob, b.ID, "Every wedding"); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := e.h.DropTemplates(ctx, bobID)
+	if len(all) != 4 || !all[0].Builtin || all[3].Name != "Every wedding" {
+		t.Fatalf("templates: %+v", all)
+	}
+	// what is copied: the settings. What is not: the name, the link, the password, the guests
+	p, err := e.h.TemplateParams(ctx, bobID, all[3].ID, "Wedding 2027")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name != "Wedding 2027" || p.Message != "Hi!" || p.Days != 10 || p.MaxFileMB != 50 || p.MaxMB != 900 || p.MaxFiles != 40 || !p.PhotosOnly ||
+		p.Album != "Wedding" || p.ExtraTag != "wed" || p.Accent != "#aa3355" || p.Lang != "it" || p.MaxDim != 2000 || p.Password != "" {
+		t.Errorf("params: %+v", p)
+	}
+	n := newBox(t, e, p)
+	if n.Token == b.Token || n.Album != "Wedding" || n.Password != "" {
+		t.Errorf("the new box: %+v", n)
+	}
+	// duplicating a box needs no template
+	d, err := e.h.DuplicateParams(ctx, bobID, b.ID, "Copy")
+	if err != nil || d.Name != "Copy" || d.MaxFiles != 40 {
+		t.Errorf("duplicate: %+v %v", d, err)
+	}
+	// the built-in one that needs approval does not where files cannot wait
+	if sp, _ := e.h.TemplateParams(ctx, bobID, "builtin:school", "Trip"); sp.Approve || !sp.PhotosOnly {
+		t.Errorf("school trip without a staging folder: %+v", sp)
+	}
+	e.h.StageDir = t.TempDir()
+	if sp, _ := e.h.TemplateParams(ctx, bobID, "builtin:school", "Trip"); !sp.Approve {
+		t.Errorf("school trip with one: %+v", sp)
+	}
+	// templates belong to their owner
+	if mine, _ := e.h.DropTemplates(ctx, annID); len(mine) != 3 {
+		t.Errorf("another person sees %d templates", len(mine))
+	}
+	if _, err := e.h.TemplateParams(ctx, annID, all[3].ID, "x"); !errors.Is(err, hub.ErrNoTemplate) {
+		t.Errorf("another person's template: %v", err)
+	}
+	if err := e.h.SaveDropTemplate(ctx, ann, b.ID, "Mine now"); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("saving from a box that is not yours: %v", err)
+	}
+	if err := e.h.SaveDropTemplate(ctx, bob, b.ID, "x"); !errors.Is(err, hub.ErrBadTemplate) {
+		t.Errorf("a one-letter name: %v", err)
+	}
+	e.h.DeleteDropTemplate(ctx, ann, all[3].ID) // not hers: nothing happens
+	if again, _ := e.h.DropTemplates(ctx, bobID); len(again) != 4 {
+		t.Error("another person deleted a template")
+	}
+	e.h.DeleteDropTemplate(ctx, bob, all[3].ID)
+	if again, _ := e.h.DropTemplates(ctx, bobID); len(again) != 3 {
+		t.Error("deleting a template")
+	}
+}
+
+func TestEachWayInIsEndedOnItsOwn(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Ways"})
+	if err := e.h.SetDropShort(ctx, bob, b.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.st.DropBox(ctx, b.ID)
+	if len(got.Short) != 10 || got.Short == b.Token {
+		t.Fatalf("short code: %q", got.Short)
+	}
+	for _, way := range []string{b.Token, got.Short} {
+		if _, err := e.h.OpenDropBox(ctx, way); err != nil {
+			t.Errorf("%s does not open the box: %v", way, err)
+		}
+	}
+	// ending the short one leaves the long one
+	e.h.SetDropShort(ctx, bob, b.ID, false)
+	if _, err := e.h.OpenDropBox(ctx, got.Short); err == nil {
+		t.Error("the short link must stop")
+	}
+	if _, err := e.h.OpenDropBox(ctx, b.Token); err != nil {
+		t.Errorf("the long link must stay: %v", err)
+	}
+	// a new long link leaves the short one, and stops the old long one
+	e.h.SetDropShort(ctx, bob, b.ID, true)
+	short, _ := e.st.DropBox(ctx, b.ID)
+	if err := e.h.RenewDropToken(ctx, bob, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.OpenDropBox(ctx, b.Token); err == nil {
+		t.Error("the old long link must stop")
+	}
+	if _, err := e.h.OpenDropBox(ctx, short.Short); err != nil {
+		t.Errorf("the short link must stay: %v", err)
+	}
+	// who may: a co-host who manages makes a short link, not a new long one
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if err := e.h.SetDropShort(ctx, ann, b.ID, false); err != nil {
+		t.Errorf("a manager removing the short link: %v", err)
+	}
+	if err := e.h.RenewDropToken(ctx, ann, b.ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a manager renewing the long link: %v", err)
+	}
+	// two boxes never share a code, and a revoked box gives its code up
+	e.h.SetDropShort(ctx, bob, b.ID, true)
+	other := newBox(t, e, hub.DropParams{Name: "Other"})
+	e.h.SetDropShort(ctx, bob, other.ID, true)
+	a, _ := e.st.DropBox(ctx, b.ID)
+	o, _ := e.st.DropBox(ctx, other.ID)
+	if a.Short == "" || o.Short == "" || a.Short == o.Short {
+		t.Errorf("codes: %q %q", a.Short, o.Short)
+	}
+	e.h.RevokeDropBox(ctx, e.sess, bob, b.ID)
+	if _, err := e.h.OpenDropBox(ctx, a.Short); err == nil {
+		t.Error("a revoked box's short link must stop")
+	}
+}
+
+func TestTheLookOfTheGuestPageIsChecked(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Pretty"})
+	png := append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 100)...)
+	if err := e.h.SetDropLook(ctx, bob, b.ID, "#112233", "de", 2400, png, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.st.DropBox(ctx, b.ID)
+	if got.Accent != "#112233" || got.Lang != "de" || got.MaxDim != 2400 || !e.st.HasDropCover(ctx, b.ID) {
+		t.Errorf("look: %+v", got)
+	}
+	for _, c := range []struct {
+		accent, lang string
+		dim          int
+		cover        []byte
+	}{{"red", "", 0, nil}, {"#12345", "", 0, nil}, {"", "xx", 0, nil}, {"", "", 100, nil}, {"", "", 9000, nil}, {"", "", 0, page}, {"", "", 0, make([]byte, 1<<20)}} {
+		if err := e.h.SetDropLook(ctx, bob, b.ID, c.accent, c.lang, c.dim, c.cover, false); err == nil {
+			t.Errorf("%+v was taken", c)
+		}
+	}
+	// leaving the cover alone keeps it; asking removes it
+	e.h.SetDropLook(ctx, bob, b.ID, "", "", 0, nil, false)
+	if !e.st.HasDropCover(ctx, b.ID) {
+		t.Error("the cover must stay when nothing is said about it")
+	}
+	e.h.SetDropLook(ctx, bob, b.ID, "", "", 0, nil, true)
+	if e.st.HasDropCover(ctx, b.ID) {
+		t.Error("the cover must go when asked")
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostView)
+	if err := e.h.SetDropLook(ctx, ann, b.ID, "#000000", "", 0, nil, false); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer changing the look: %v", err)
+	}
+}
+
+func TestGuestsTakeBackWhatTheySentWhileItIsInTheInbox(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Undo", GuestDelete: true})
+	if !has(e.f.lastPerms, "asset.delete") || !has(e.f.lastPerms, "asset.read") {
+		t.Fatalf("a box that lets guests delete needs asset.read and asset.delete: %v", e.f.lastPerms)
+	}
+	plain := newBox(t, e, hub.DropParams{Name: "Plain"})
+	if has(e.f.lastPerms, "asset.delete") || has(e.f.lastPerms, "asset.read") {
+		t.Errorf("an ordinary box must not be able to read or delete: %v", e.f.lastPerms)
+	}
+	mine, theirs := hub.NewGuestSecret(), hub.NewGuestSecret()
+	for _, n := range []string{"one.jpg", "two.jpg", "three.jpg"} {
+		if _, err := e.h.ReceiveDropFileFor(ctx, b.ID, n, bytes.NewReader(jpeg), "mark", mine); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.h.ReceiveDropFileFor(ctx, b.ID, "other.jpg", bytes.NewReader(jpeg), "mark2", theirs)
+	list, err := e.h.GuestUploads(ctx, b.ID, mine)
+	if err != nil || len(list) != 3 {
+		t.Fatalf("my files: %d %v", len(list), err)
+	}
+	if o, _ := e.h.GuestUploads(ctx, b.ID, theirs); len(o) != 1 {
+		t.Errorf("their files: %d", len(o))
+	}
+	if _, err := e.h.GuestUploads(ctx, b.ID, "nobody"); err != nil && len(list) == 0 {
+		t.Error("an unknown guest sees no files")
+	}
+	if none, _ := e.h.GuestUploads(ctx, b.ID, "nobody"); len(none) != 0 {
+		t.Errorf("a stranger sees files: %v", none)
+	}
+	// a guest cannot delete somebody else's file
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, theirs, list[0].ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("deleting another guest's file: %v", err)
+	}
+	// deleting moves it to the owner's trash and gives the room back
+	before, _ := e.st.DropBox(ctx, b.ID)
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, mine, list[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := e.st.DropBox(ctx, b.ID)
+	trashed := 0
+	for _, v := range e.f.trashed {
+		if v {
+			trashed++
+		}
+	}
+	if trashed != 1 || after.Files != before.Files-1 || after.Bytes >= before.Bytes || after.Removed != 1 {
+		t.Errorf("trashed %d, files %d->%d, bytes %d->%d, removed %d", trashed, before.Files, after.Files, before.Bytes, after.Bytes, after.Removed)
+	}
+	if again, _ := e.h.GuestUploads(ctx, b.ID, mine); len(again) != 2 {
+		t.Errorf("after deleting: %d", len(again))
+	}
+	// once the owner takes the inbox tag off, the photo is theirs: the guest is told to ask
+	for id, names := range e.f.assetTags {
+		for _, n := range names {
+			if n == "inbox/Undo" {
+				e.f.assetTags[id] = nil
+			}
+		}
+	}
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, mine, list[1].ID); !errors.Is(err, hub.ErrDropKept) {
+		t.Errorf("a filed photo: %v", err)
+	}
+	// a box that does not let guests delete records nothing and refuses
+	e.h.ReceiveDropFileFor(ctx, plain.ID, "p.jpg", bytes.NewReader(jpeg), "m", mine)
+	if _, err := e.h.GuestUploads(ctx, plain.ID, mine); err == nil {
+		t.Error("an ordinary box must not list guests' files")
+	}
+	if err := e.h.DeleteGuestUpload(ctx, plain.ID, mine, "x"); !errors.Is(err, hub.ErrDropDeleteOff) {
+		t.Errorf("deleting where it is off: %v", err)
+	}
+}
+
+func TestAGuestTakesBackAFileThatStillWaitsForApproval(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.h.StageDir = t.TempDir()
+	b := newBox(t, e, hub.DropParams{Name: "Wait", Approve: true, GuestDelete: true})
+	secret := hub.NewGuestSecret()
+	e.h.ReceiveDropFileFor(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "m", secret)
+	e.h.ReceiveDropFileFor(ctx, b.ID, "b.jpg", bytes.NewReader(jpeg), "m", secret)
+	list, _ := e.h.GuestUploads(ctx, b.ID, secret)
+	if len(list) != 2 || !list[0].Waiting {
+		t.Fatalf("files: %+v", list)
+	}
+	pend, _, _ := e.h.DropPending(ctx, bobID, b.ID, 10)
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, secret, list[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	left, n, _ := e.h.DropPending(ctx, bobID, b.ID, 10)
+	if n != 1 || len(left) != 1 {
+		t.Errorf("one must be gone from the queue: %d", n)
+	}
+	for _, p := range pend {
+		if p.ID != left[0].ID {
+			if _, err := os.Stat(p.Path); !os.IsNotExist(err) {
+				t.Errorf("the file must leave the disk: %v", err)
+			}
+		}
+	}
+	if len(e.f.uploads) != 0 {
+		t.Error("nothing was ever stored")
+	}
+	// approving turns the other record into a file in the library, which the guest can still take back
+	e.h.DecideDrop(ctx, bob, b.ID, nil, true)
+	now, _ := e.h.GuestUploads(ctx, b.ID, secret)
+	if len(now) != 1 || now[0].Waiting {
+		t.Fatalf("after approval: %+v", now)
+	}
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, secret, now[0].ID); err != nil {
+		t.Errorf("taking back an approved file: %v", err)
+	}
+}

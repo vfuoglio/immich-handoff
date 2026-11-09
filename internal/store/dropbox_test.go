@@ -164,3 +164,85 @@ func TestDropBoxHostsPendingAndSummary(t *testing.T) {
 		t.Errorf("schedule: %+v", g)
 	}
 }
+
+func TestDropBoxShortLookCoverTemplatesAndUploads(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	a, _ := s.AddDropBox(ctx, DropBox{Token: "long-token-one-1234", Name: "A", Key: "k", Short: "shortcode1", Accent: "#112233", Lang: "fr", MaxDim: 2000, GuestDelete: true})
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "long-token-two-1234", Name: "B", Key: "k"})
+	// a short code opens the box as the long token does, is unique, and can be taken away or the long token changed
+	if got, err := s.DropBoxByToken(ctx, "shortcode1"); err != nil || got.ID != a.ID || got.Accent != "#112233" || got.Lang != "fr" || got.MaxDim != 2000 || !got.GuestDelete {
+		t.Errorf("by short: %+v %v", got, err)
+	}
+	if err := s.SetDropShort(ctx, b.ID, "shortcode1"); !errors.Is(err, ErrExists) {
+		t.Errorf("a code in use: %v", err)
+	}
+	s.SetDropShort(ctx, a.ID, "")
+	if _, err := s.DropBoxByToken(ctx, "shortcode1"); err == nil {
+		t.Error("a removed code must not open the box")
+	}
+	s.SetDropShort(ctx, b.ID, "shortcode1")
+	s.SetDropToken(ctx, b.ID, "brand-new-token-1234")
+	if _, err := s.DropBoxByToken(ctx, "long-token-two-1234"); err == nil {
+		t.Error("the old long token must stop")
+	}
+	if got, err := s.DropBoxByToken(ctx, "shortcode1"); err != nil || got.Token != "brand-new-token-1234" {
+		t.Errorf("the short code still opens it: %+v %v", got, err)
+	}
+	// cover
+	if _, _, err := s.DropCover(ctx, a.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("no cover: %v", err)
+	}
+	s.SetDropCover(ctx, a.ID, "image/png", []byte{1, 2, 3})
+	if k, d, err := s.DropCover(ctx, a.ID); err != nil || k != "image/png" || len(d) != 3 {
+		t.Errorf("cover: %s %v %v", k, d, err)
+	}
+	s.SetDropCover(ctx, a.ID, "", nil)
+	if s.HasDropCover(ctx, a.ID) {
+		t.Error("removed cover")
+	}
+	// templates belong to their person
+	me, other := uuid.New(), uuid.New()
+	tp, _ := s.AddDropTemplate(ctx, DropTemplate{OwnerID: me, Name: "Mine", Data: `{"Days":3}`})
+	if l, _ := s.DropTemplates(ctx, me); len(l) != 1 || l[0].Data != `{"Days":3}` {
+		t.Errorf("templates: %+v", l)
+	}
+	if l, _ := s.DropTemplates(ctx, other); len(l) != 0 {
+		t.Errorf("another person's: %+v", l)
+	}
+	s.RemoveDropTemplate(ctx, other, tp.ID)
+	if l, _ := s.DropTemplates(ctx, me); len(l) != 1 {
+		t.Error("another person removed it")
+	}
+	s.RemoveDropTemplate(ctx, me, tp.ID)
+	if l, _ := s.DropTemplates(ctx, me); len(l) != 0 {
+		t.Error("removing a template")
+	}
+	// what a guest sent: found by that guest only; a waiting file becomes an asset; a rejected one is forgotten
+	s.AddDropUpload(ctx, DropUpload{BoxID: a.ID, Guest: "g1", PendingID: "p1", Name: "w.jpg", Size: 5})
+	s.AddDropUpload(ctx, DropUpload{BoxID: a.ID, Guest: "g1", AssetID: "asset1", Name: "s.jpg", Size: 6})
+	s.AddDropUpload(ctx, DropUpload{BoxID: a.ID, Guest: "g2", AssetID: "asset2", Name: "x.jpg", Size: 7})
+	mine, _ := s.DropUploadsOf(ctx, a.ID, "g1", 10)
+	if len(mine) != 2 {
+		t.Fatalf("uploads: %+v", mine)
+	}
+	if _, err := s.DropUploadByID(ctx, a.ID, "g2", mine[0].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("someone else's file: %v", err)
+	}
+	s.DropUploadApproved(ctx, "p1", "asset9")
+	if u, _ := s.DropUploadsOf(ctx, a.ID, "g1", 10); u[0].PendingID != "" && u[1].PendingID != "" {
+		t.Errorf("approval: %+v", u)
+	}
+	s.AddDropUpload(ctx, DropUpload{BoxID: a.ID, Guest: "g1", PendingID: "p2", Name: "r.jpg", Size: 1})
+	s.DropUploadGone(ctx, "p2")
+	if u, _ := s.DropUploadsOf(ctx, a.ID, "g1", 10); len(u) != 2 {
+		t.Errorf("rejected file forgotten: %+v", u)
+	}
+	if ok, _ := s.RemoveDropUpload(ctx, mine[0].ID); !ok {
+		t.Error("remove")
+	}
+	s.AddDropRemoved(ctx, a.ID)
+	if g, _ := s.DropBox(ctx, a.ID); g.Removed != 1 {
+		t.Errorf("removed counter: %d", g.Removed)
+	}
+}

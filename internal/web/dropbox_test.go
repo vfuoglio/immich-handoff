@@ -26,8 +26,11 @@ var jpegBytes = append([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, 'J', 'F', 'I', 'F
 
 // storing is an Immich that takes uploads and tags, and remembers what it was given.
 type storing struct {
-	mu    sync.Mutex
-	names []string
+	mu        sync.Mutex
+	names     []string
+	tags      map[string]string   // tag id -> name
+	assetTags map[string][]string // asset id -> tag names
+	trashed   map[string]bool
 }
 
 func (s *storing) handler() http.Handler {
@@ -46,26 +49,77 @@ func (s *storing) handler() http.Handler {
 			}
 			if p.FormName() == "assetData" {
 				io.Copy(io.Discard, p)
+				id := uuid.NewString()
 				s.mu.Lock()
 				s.names = append(s.names, p.FileName())
+				if s.assetTags == nil {
+					s.assetTags = map[string][]string{}
+				}
+				s.assetTags[id] = nil
 				s.mu.Unlock()
-				j(w, 201, map[string]any{"id": uuid.NewString(), "status": "created"})
+				j(w, 201, map[string]any{"id": id, "status": "created"})
 				return
 			}
 		}
 		http.Error(w, "no", 400)
 	})
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
-		j(w, 200, []any{map[string]any{"id": uuid.NewString(), "name": "inbox/Wedding", "value": "inbox/Wedding", "createdAt": "2025-01-02T03:04:05.000Z", "updatedAt": "2025-01-02T03:04:05.000Z"}})
+		var body struct{ Tags []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.tags == nil {
+			s.tags = map[string]string{}
+		}
+		out := []any{}
+		for _, n := range body.Tags {
+			id := uuid.NewString()
+			s.tags[id] = n
+			out = append(out, map[string]any{"id": id, "name": n, "value": n, "createdAt": "2025-01-02T03:04:05.000Z", "updatedAt": "2025-01-02T03:04:05.000Z"})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		names, ok := s.assetTags[r.PathValue("id")]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		tags := []any{}
+		for _, n := range names {
+			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": "2025-01-02T03:04:05.000Z", "updatedAt": "2025-01-02T03:04:05.000Z"})
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": s.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": "2025-01-02T03:04:05.000Z", "fileModifiedAt": "2025-01-02T03:04:05.000Z"})
+	})
+	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids   []string
+			Force bool
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		s.mu.Lock()
+		if s.trashed == nil {
+			s.trashed = map[string]bool{}
+		}
+		for _, id := range body.Ids {
+			s.trashed[id] = !body.Force
+		}
+		s.mu.Unlock()
+		w.WriteHeader(204)
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { j(w, 200, []any{}) })
 	mux.HandleFunc("PUT /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Ids []string }
 		json.NewDecoder(r.Body).Decode(&body)
 		out := []any{}
+		s.mu.Lock()
 		for _, id := range body.Ids {
+			s.assetTags[id] = append(s.assetTags[id], s.tags[r.PathValue("id")])
 			out = append(out, map[string]any{"id": id, "success": true})
 		}
+		s.mu.Unlock()
 		j(w, 200, out)
 	})
 	return mux
@@ -99,6 +153,29 @@ func withDrop(t *testing.T, st **store.Store, im *storing, box store.DropBox) fu
 		srv.Hub = h
 		srv.S.Provider = h
 	}
+}
+
+func sendFilesAs(t *testing.T, url string, header map[string]string, files map[string][]byte) (int, string, []*http.Cookie) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for name, data := range files {
+		fw, _ := mw.CreateFormFile("files", name)
+		fw.Write(data)
+	}
+	mw.Close()
+	req, _ := http.NewRequest("POST", url, &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b), res.Cookies()
 }
 
 func sendFiles(t *testing.T, url string, fields map[string]string, files map[string][]byte) (int, string) {
@@ -300,5 +377,214 @@ func TestAnApprovalBoxHoldsFilesAndOnlyItsHostsSeeThem(t *testing.T) {
 	}
 	if code, _ := postForm(t, app.URL+"/dropbox/revoke", "sess=other", "service="+id); code != 409 {
 		t.Errorf("a manager revoking: %d, want 409", code)
+	}
+}
+
+var pngBytes = append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 200)...)
+
+func TestTheGuestPageHasItsOwnLookNameAndWaysIn(t *testing.T) {
+	var st *store.Store
+	token, short := strings.Repeat("78", 16), "abcdefghjk"
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Short: short, Name: "Gala", Message: "Hello guests", InboxTag: "inbox/Gala", Accent: "#aa3355", Lang: "it", MaxDim: 2400}))
+	st.SetDropCover(context.Background(), firstBox(t, st), "image/png", pngBytes)
+
+	// the short link opens the same page, in the box's language, with its colour, cover, manifest and shrinking size
+	for _, way := range []string{"/d/" + short, "/drop/" + token} {
+		code, p := do(t, "GET", app.URL+way, "", nil)
+		if code != 200 || !strings.Contains(p, "Hello guests") || !strings.Contains(p, "Invia") {
+			t.Fatalf("%s: %d %.300s", way, code, p)
+		}
+		id := short
+		if way == "/drop/"+token {
+			id = token
+		}
+		for _, want := range []string{`href="drop/` + id + `/manifest.webmanifest"`, `href="drop/` + id + `/theme.css"`, `src="drop/` + id + `/cover"`, `data-maxdim="2400"`, `capture="environment"`, `<base href="../"`} {
+			if !strings.Contains(p, want) {
+				t.Errorf("%s lacks %s", way, want)
+			}
+		}
+	}
+	// a guest who chose English gets English, whatever the box says
+	if _, p := do(t, "GET", app.URL+"/d/"+short, "", map[string]string{"Cookie": "handoff-lang=en"}); !strings.Contains(p, "Choose your photos") {
+		t.Error("the guest's own language choice wins")
+	}
+	res, _ := http.Get(app.URL + "/drop/" + short + "/theme.css")
+	css, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/css") || !strings.Contains(string(css), "--accent:#aa3355") || !strings.Contains(string(css), "--on-accent:#ffffff") {
+		t.Errorf("theme: %d %s", res.StatusCode, css)
+	}
+	res, _ = http.Get(app.URL + "/drop/" + token + "/cover")
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/png" {
+		t.Errorf("cover: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	res, _ = http.Get(app.URL + "/drop/" + token + "/manifest.webmanifest")
+	var m struct {
+		Name     string `json:"name"`
+		StartURL string `json:"start_url"`
+		Scope    string `json:"scope"`
+		Theme    string `json:"theme_color"`
+	}
+	json.NewDecoder(res.Body).Decode(&m)
+	if res.Header.Get("Content-Type") != "application/manifest+json" || m.Name != "Gala" || m.StartURL != "../"+token || m.Scope != "../" || m.Theme != "#aa3355" {
+		t.Errorf("manifest: %+v", m)
+	}
+	// an upload through the short link works, and the log marks the guest the same way as the long link would
+	if code, _, _ := sendFilesAs(t, app.URL+"/d/"+short+"/upload", nil, map[string][]byte{"a.jpg": jpegBytes}); code != 200 {
+		t.Errorf("upload by the short link: %d", code)
+	}
+	// none of it exists once the box is closed
+	postForm(t, app.URL+"/dropbox/pause", "sess=family", "service="+firstBox(t, st)+"&paused=1")
+	for _, path := range []string{"/drop/" + token + "/theme.css", "/drop/" + token + "/cover", "/drop/" + token + "/manifest.webmanifest", "/d/" + short} {
+		if code, _ := do(t, "GET", app.URL+path, "", nil); code != 404 {
+			t.Errorf("%s while paused: %d", path, code)
+		}
+	}
+}
+
+func TestAGuestSeesAndTakesBackOnlyTheirOwnUploads(t *testing.T) {
+	var st *store.Store
+	im := &storing{}
+	token := strings.Repeat("9a", 16)
+	app, _ := setup(t, withDrop(t, &st, im, store.DropBox{Token: token, Name: "Undo", InboxTag: "inbox/Undo", GuestDelete: true}))
+	asJSON := map[string]string{"Accept": "application/json"}
+
+	code, body, cookies := sendFilesAs(t, app.URL+"/drop/"+token+"/upload", asJSON, map[string][]byte{"mine.jpg": jpegBytes})
+	var answer struct {
+		Files []struct {
+			Name string
+			OK   bool
+		}
+	}
+	if err := json.Unmarshal([]byte(body), &answer); err != nil || code != 200 || len(answer.Files) != 1 || !answer.Files[0].OK {
+		t.Fatalf("a script upload is answered in JSON: %d %s", code, body)
+	}
+	var secret *http.Cookie
+	for _, c := range cookies {
+		if strings.HasPrefix(c.Name, "handoff-drop-") {
+			secret = c
+		}
+	}
+	if secret == nil || !secret.HttpOnly || secret.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("the guest must be given a secret cookie that scripts cannot read: %+v", cookies)
+	}
+	// someone else uploads too, with a secret of their own
+	sendFilesAs(t, app.URL+"/drop/"+token+"/upload", asJSON, map[string][]byte{"theirs.jpg": jpegBytes})
+
+	mine := func(cookie string) string {
+		_, p := do(t, "GET", app.URL+"/drop/"+token+"/mine", "", map[string]string{"Cookie": cookie})
+		return p
+	}
+	c := secret.Name + "=" + secret.Value
+	p := mine(c)
+	if !strings.Contains(p, "mine.jpg") || strings.Contains(p, "theirs.jpg") || !strings.Contains(p, "Take back") {
+		t.Fatalf("a guest sees only their own: %.500s", p)
+	}
+	if strings.Contains(mine(""), "mine.jpg") {
+		t.Error("a browser with no secret sees nothing")
+	}
+	id := regexp.MustCompile(`name="id" value="([0-9a-f-]{36})"`).FindStringSubmatch(p)[1]
+
+	// deleting: another browser cannot; the owner of the secret can, and is sent back to the list
+	post := func(cookie string) (int, string) {
+		req, _ := http.NewRequest("POST", app.URL+"/drop/"+token+"/mine/delete", strings.NewReader("id="+id))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode, res.Header.Get("Location")
+	}
+	if code, loc := post("handoff-drop-" + token[:8] + "=" + strings.Repeat("0", 32)); code != 303 || !strings.Contains(loc, "failed") {
+		t.Errorf("another browser deleting: %d %s", code, loc)
+	}
+	if len(im.trashed) != 0 {
+		t.Fatal("nothing may be deleted by someone else")
+	}
+	if code, loc := post(c); code != 303 || loc != "../mine?msg=deleted" {
+		t.Errorf("deleting: %d %s", code, loc)
+	}
+	trashed := 0
+	for _, v := range im.trashed {
+		if v {
+			trashed++
+		}
+	}
+	if trashed != 1 {
+		t.Errorf("the photo must be in the owner's trash: %v", im.trashed)
+	}
+	if after := mine(c); strings.Contains(after, "mine.jpg") {
+		t.Error("a deleted file leaves the list")
+	}
+	if _, p := do(t, "GET", app.URL+"/drop/"+token+"/mine?msg=kept", "", map[string]string{"Cookie": c}); !strings.Contains(p, "already filed") {
+		t.Error("the page must say when the owner has filed a photo")
+	}
+}
+
+func TestOwnersPrintCardsAndOnlyOwnersSeeThem(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("bc", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Short: "mnpqrstuvw", Name: "Reunion", Message: "See you", InboxTag: "inbox/Reunion"}))
+	id := firstBox(t, st)
+	for who, want := range map[string]int{"sess=family": 200, "sess=other": 404, "": 401} {
+		if code, _ := do(t, "GET", app.URL+"/dropbox/card/"+id, who, nil); code != want {
+			t.Errorf("card as %q: %d, want %d", who, code, want)
+		}
+	}
+	_, card := do(t, "GET", app.URL+"/dropbox/card/"+id, "sess=family", nil)
+	if !strings.Contains(card, `data-card-link="drop/`+token+`"`) || !strings.Contains(card, "Reunion") || !strings.Contains(card, `<base href="../../"`) {
+		t.Errorf("long card: %.400s", card)
+	}
+	if _, short := do(t, "GET", app.URL+"/dropbox/card/"+id+"?way=short", "sess=family", nil); !strings.Contains(short, `data-card-link="d/mnpqrstuvw"`) {
+		t.Error("the short card must carry the short link")
+	}
+	// the owner's page shows both ways in
+	if owner := get(t, app.URL, "sess=family"); !strings.Contains(owner, `data-link="d/mnpqrstuvw"`) || !strings.Contains(owner, "Printable card") {
+		t.Error("the owner must see the short link and the card")
+	}
+	// the owner's look form takes a cover; a bad one is refused
+	form := func(fields map[string]string, cover []byte) int {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		mw.WriteField("service", id)
+		for k, v := range fields {
+			mw.WriteField(k, v)
+		}
+		if cover != nil {
+			fw, _ := mw.CreateFormFile("cover", "c.png")
+			fw.Write(cover)
+		}
+		mw.Close()
+		req, _ := http.NewRequest("POST", app.URL+"/dropbox/look", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Cookie", "sess=family")
+		req.Header.Set("X-Requested-With", "immich-handoff")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := form(map[string]string{"accent": "#112233", "lang": "fr", "maxdim": "2400"}, pngBytes); code != 204 {
+		t.Errorf("look: %d", code)
+	}
+	if code := form(map[string]string{"accent": "javascript:alert(1)"}, nil); code != 409 {
+		t.Errorf("a bad colour: %d, want 409", code)
+	}
+	if code := form(nil, []byte("<html>not an image</html>")); code != 409 {
+		t.Errorf("a bad cover: %d, want 409", code)
+	}
+	if got, _ := st.DropBox(context.Background(), id); got.Accent != "#112233" || got.Lang != "fr" || got.MaxDim != 2400 || !st.HasDropCover(context.Background(), id) {
+		t.Errorf("saved: %+v", got)
+	}
+	for _, path := range []string{"/dropbox/short", "/dropbox/renew", "/dropbox/template", "/dropbox/duplicate", "/dropbox/fromtemplate"} {
+		if code, _ := postForm(t, app.URL+path, "", "service=x"); code != 401 {
+			t.Errorf("%s without signing in: %d, want 401", path, code)
+		}
 	}
 }
