@@ -637,6 +637,20 @@ const (
 	DropHeld                         // it waits for a host's approval
 )
 
+// dropRetagAfter is how long after filing a photo its tags are put on a second time.
+var dropRetagAfter = 6 * time.Second
+
+// tagDrop puts the tags on a photo; a tag that cannot be made or put on is logged.
+func (h *Hub) tagDrop(ctx context.Context, api *immich.API, b store.DropBox, tags []string, id uuid.UUID) {
+	for _, name := range tags {
+		if tag, err := api.FindTag(ctx, name, true); err != nil {
+			h.Log.Warn("drop box: could not find or make a tag", "box", b.Name, "tag", name, "err", err)
+		} else if err := api.TagAssets(ctx, *tag, id); err != nil {
+			h.Log.Warn("drop box: could not tag a photo", "box", b.Name, "tag", name, "err", err)
+		}
+	}
+}
+
 // fileDrop files a stored photo as the box says: its inbox tag, the box's own tag, and its album. Failing to file
 // does not lose the photo, which is already in the library: it is logged and the photo stays where it is.
 func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id uuid.UUID, prompt string) {
@@ -649,13 +663,12 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 			tags = append(tags, b.InboxTag+"/"+pr.Text)
 		}
 	}
-	for _, name := range tags {
-		if tag, err := api.FindTag(ctx, name, true); err != nil {
-			h.Log.Warn("drop box: could not find or make a tag", "box", b.Name, "tag", name, "err", err)
-		} else if err := api.TagAssets(ctx, *tag, id); err != nil {
-			h.Log.Warn("drop box: could not tag a photo", "box", b.Name, "tag", name, "err", err)
-		}
-	}
+	h.tagDrop(ctx, api, b, tags, id)
+	// Immich now and then drops a tag put on in the first moments after an upload (see docs/immich-api-notes.md), and
+	// the box's key cannot read a photo's tags to check. Putting them on again a little later costs nothing when they
+	// are there and mends the photo when one was dropped.
+	retag := context.WithoutCancel(ctx)
+	time.AfterFunc(dropRetagAfter, func() { h.tagDrop(retag, api, b, tags, id) })
 	if b.Album == "" {
 		return
 	}
