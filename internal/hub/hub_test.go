@@ -47,17 +47,19 @@ type fakeImmich struct {
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
-	lastPerms     []string            // permissions of the most recent key created
-	keyPerms      map[string][]string // key id -> permissions
-	keyUpdates    int                 // how many times a key's permissions were changed
-	albums        []map[string]any    // bob's own albums
-	uploads       []fakeUpload        // files stored through an upload
-	tagged        []string            // asset ids that were tagged
-	tagNames      []string            // tags that were made
-	albumAdds     []string            // "album name: asset id" for each photo put in an album
-	tagIDs        map[string]string   // tag id -> name
-	assetTags     map[string][]string // asset id -> names of its tags
-	trashed       map[string]bool     // asset ids moved to the trash
+	lastPerms     []string                  // permissions of the most recent key created
+	keyPerms      map[string][]string       // key id -> permissions
+	keyUpdates    int                       // how many times a key's permissions were changed
+	albums        []map[string]any          // bob's own albums
+	uploads       []fakeUpload              // files stored through an upload
+	tagged        []string                  // asset ids that were tagged
+	tagNames      []string                  // tags that were made
+	albumAdds     []string                  // "album name: asset id" for each photo put in an album
+	tagIDs        map[string]string         // tag id -> name
+	assetTags     map[string][]string       // asset id -> names of its tags
+	trashed       map[string]bool           // asset ids moved to the trash
+	links         map[string]map[string]any // shared links made, by id
+	removedLinks  []string
 }
 
 type fakeUpload struct {
@@ -315,7 +317,59 @@ func (f *fakeImmich) handler() http.Handler {
 		w.WriteHeader(204)
 	})
 	tag := map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}
-	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { j(w, 200, []any{tag}) })
+	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := []any{tag}
+		for id, n := range f.tagIDs {
+			out = append(out, map[string]any{"id": id, "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			TagIds []string `json:"tagIds"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		items := []any{}
+		for id, names := range f.assetTags {
+			if f.trashed[id] {
+				continue
+			}
+			for _, tid := range body.TagIds {
+				for _, n := range names {
+					if f.tagIDs[tid] == n {
+						items = append(items, map[string]any{"id": id, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+						goto next
+					}
+				}
+			}
+		next:
+		}
+		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+	})
+	mux.HandleFunc("POST /api/shared-links", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		id := uuid.NewString()
+		f.mu.Lock()
+		if f.links == nil {
+			f.links = map[string]map[string]any{}
+		}
+		body["key"] = "key-" + id[:8]
+		f.links[id] = body
+		f.mu.Unlock()
+		j(w, 201, map[string]any{"id": id, "key": "key-" + id[:8], "type": body["type"], "allowDownload": true, "allowUpload": false, "assets": []any{}, "createdAt": ts, "description": body["description"], "password": body["password"], "showMetadata": false, "slug": nil, "userId": bobID.String(), "expiresAt": body["expiresAt"]})
+	})
+	mux.HandleFunc("DELETE /api/shared-links/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		delete(f.links, r.PathValue("id"))
+		f.removedLinks = append(f.removedLinks, r.PathValue("id"))
+		f.mu.Unlock()
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /api/workflows", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()

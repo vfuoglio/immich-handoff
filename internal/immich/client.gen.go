@@ -690,6 +690,24 @@ func (e SearchOrderField) Valid() bool {
 	}
 }
 
+// Defines values for SharedLinkType.
+const (
+	ALBUM      SharedLinkType = "ALBUM"
+	INDIVIDUAL SharedLinkType = "INDIVIDUAL"
+)
+
+// Valid indicates whether the value is a known member of the SharedLinkType enum.
+func (e SharedLinkType) Valid() bool {
+	switch e {
+	case ALBUM:
+		return true
+	case INDIVIDUAL:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserAvatarColor.
 const (
 	Amber   UserAvatarColor = "amber"
@@ -1896,6 +1914,90 @@ type ServerVersionResponseDto struct {
 	Prerelease *int `json:"prerelease"`
 }
 
+// SharedLinkCreateDto defines model for SharedLinkCreateDto.
+type SharedLinkCreateDto struct {
+	// AlbumId Album ID (for album sharing)
+	AlbumId *openapi_types.UUID `json:"albumId,omitempty"`
+
+	// AllowDownload Allow downloads
+	AllowDownload *bool `json:"allowDownload,omitempty"`
+
+	// AllowUpload Allow uploads
+	AllowUpload *bool `json:"allowUpload,omitempty"`
+
+	// AssetIds Asset IDs (for individual assets)
+	AssetIds *[]openapi_types.UUID `json:"assetIds,omitempty"`
+
+	// Description Link description
+	Description *string `json:"description,omitempty"`
+
+	// ExpiresAt Expiration date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// Password Link password
+	Password *string `json:"password,omitempty"`
+
+	// ShowMetadata Show metadata
+	ShowMetadata *bool `json:"showMetadata,omitempty"`
+
+	// Slug Custom URL slug
+	Slug *string `json:"slug,omitempty"`
+
+	// Type Shared link type
+	Type SharedLinkType `json:"type"`
+}
+
+// SharedLinkResponseDto Shared link response
+type SharedLinkResponseDto struct {
+	Album *AlbumResponseDto `json:"album,omitempty"`
+
+	// AllowDownload Allow downloads
+	AllowDownload bool `json:"allowDownload"`
+
+	// AllowUpload Allow uploads
+	AllowUpload bool               `json:"allowUpload"`
+	Assets      []AssetResponseDto `json:"assets"`
+
+	// CreatedAt Creation date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Description Link description
+	Description *string `json:"description"`
+
+	// ExpiresAt Expiration date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ExpiresAt *time.Time `json:"expiresAt"`
+
+	// Id Shared link ID
+	Id openapi_types.UUID `json:"id"`
+
+	// Key Encryption key (base64url)
+	Key string `json:"key"`
+
+	// Password Has password
+	Password *string `json:"password"`
+
+	// ShowMetadata Show metadata
+	ShowMetadata bool `json:"showMetadata"`
+
+	// Slug Custom URL slug
+	Slug *string `json:"slug"`
+
+	// Type Shared link type
+	Type SharedLinkType `json:"type"`
+
+	// UserId Owner user ID
+	UserId openapi_types.UUID `json:"userId"`
+}
+
+// SharedLinkType Shared link type
+type SharedLinkType string
+
 // SharedLinksResponse defines model for SharedLinksResponse.
 type SharedLinksResponse struct {
 	// Enabled Whether shared links are enabled
@@ -2381,6 +2483,9 @@ type UploadAssetMultipartRequestBody = AssetMediaCreateDto
 // SearchAssetsJSONRequestBody defines body for SearchAssets for application/json ContentType.
 type SearchAssetsJSONRequestBody = MetadataSearchDto
 
+// CreateSharedLinkJSONRequestBody defines body for CreateSharedLink for application/json ContentType.
+type CreateSharedLinkJSONRequestBody = SharedLinkCreateDto
+
 // CreateStackJSONRequestBody defines body for CreateStack for application/json ContentType.
 type CreateStackJSONRequestBody = StackCreateDto
 
@@ -2659,6 +2764,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSharedLinkWithBody Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSharedLink Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLink(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveSharedLink Delete a shared link
+	//
+	// Delete a specific shared link by its ID.
+	//
+	// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+	RemoveSharedLink(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateStackWithBody Create a stack
 	//
@@ -3251,6 +3381,61 @@ func (c *Client) SearchAssets(ctx context.Context, params *SearchAssetsParams, b
 // Corresponds with GET /server/version (the `GetServerVersion` operationId).
 func (c *Client) GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetServerVersionRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSharedLinkWithBody Create a shared link
+//
+// Create a new shared link.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *Client) CreateSharedLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSharedLinkRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSharedLink Create a shared link
+//
+// Create a new shared link.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *Client) CreateSharedLink(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSharedLinkRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveSharedLink Delete a shared link
+//
+// Delete a specific shared link by its ID.
+//
+// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+func (c *Client) RemoveSharedLink(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveSharedLinkRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -4507,6 +4692,80 @@ func NewGetServerVersionRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewCreateSharedLinkRequest calls the generic CreateSharedLink builder with application/json body
+func NewCreateSharedLinkRequest(server string, body CreateSharedLinkJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSharedLinkRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateSharedLinkRequestWithBody constructs an http.Request for the CreateSharedLink method, with any body, and a specified content type
+func NewCreateSharedLinkRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shared-links")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveSharedLinkRequest constructs an http.Request for the RemoveSharedLink method
+func NewRemoveSharedLinkRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shared-links/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreateStackRequest calls the generic CreateStack builder with application/json body
 func NewCreateStackRequest(server string, body CreateStackJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -5487,6 +5746,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetServerVersionResponse, error)
 
+	// CreateSharedLinkWithBodyWithResponse Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error)
+
+	// CreateSharedLinkWithResponse Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithResponse(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error)
+
+	// RemoveSharedLinkWithResponse Delete a shared link
+	//
+	// Delete a specific shared link by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+	RemoveSharedLinkWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveSharedLinkResponse, error)
+
 	// CreateStackWithBodyWithResponse Create a stack
 	//
 	// Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
@@ -6316,6 +6602,81 @@ func (r GetServerVersionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetServerVersionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSharedLinkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *SharedLinkResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSharedLinkResponse) GetJSON201() *SharedLinkResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSharedLinkResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSharedLinkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSharedLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSharedLinkResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveSharedLinkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveSharedLinkResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveSharedLinkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveSharedLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveSharedLinkResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -7330,6 +7691,51 @@ func (c *ClientWithResponses) GetServerVersionWithResponse(ctx context.Context, 
 	return ParseGetServerVersionResponse(rsp)
 }
 
+// CreateSharedLinkWithBodyWithResponse Create a shared link
+//
+// Create a new shared link.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *ClientWithResponses) CreateSharedLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error) {
+	rsp, err := c.CreateSharedLinkWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSharedLinkResponse(rsp)
+}
+
+// CreateSharedLinkWithResponse Create a shared link
+//
+// Create a new shared link.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *ClientWithResponses) CreateSharedLinkWithResponse(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error) {
+	rsp, err := c.CreateSharedLink(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSharedLinkResponse(rsp)
+}
+
+// RemoveSharedLinkWithResponse Delete a shared link
+//
+// Delete a specific shared link by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+func (c *ClientWithResponses) RemoveSharedLinkWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveSharedLinkResponse, error) {
+	rsp, err := c.RemoveSharedLink(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveSharedLinkResponse(rsp)
+}
+
 // CreateStackWithBodyWithResponse Create a stack
 //
 // Create a new stack by providing a name and a list of asset IDs to include in the stack. If any of the provided asset IDs are primary assets of an existing stack, the existing stack will be merged into the newly created stack.
@@ -8073,6 +8479,48 @@ func ParseGetServerVersionResponse(rsp *http.Response) (*GetServerVersionRespons
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseCreateSharedLinkResponse parses an HTTP response from a CreateSharedLinkWithResponse call
+func ParseCreateSharedLinkResponse(rsp *http.Response) (*CreateSharedLinkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSharedLinkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SharedLinkResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveSharedLinkResponse parses an HTTP response from a RemoveSharedLinkWithResponse call
+func ParseRemoveSharedLinkResponse(rsp *http.Response) (*RemoveSharedLinkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveSharedLinkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

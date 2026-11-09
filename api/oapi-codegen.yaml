@@ -40,3 +40,5 @@ output-options:
     - getStack
     - createStack
     - searchUsers
+    - createSharedLink
+    - removeSharedLink

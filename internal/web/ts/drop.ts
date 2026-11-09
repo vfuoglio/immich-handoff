@@ -27,6 +27,7 @@ const TRIES = 8;
 
 interface Item {
   file: File;
+  prompt: string; // the id of the prompt of the shot list it is for ("" for none)
   li: HTMLLIElement;
   status: HTMLElement;
   bar: HTMLProgressElement;
@@ -81,10 +82,11 @@ interface Answer {
 }
 
 /** One try at sending one file. Resolves with the server's answer, or rejects with whether it is worth trying again. */
-function post(url: string, password: string | null, file: File, onProgress: (fraction: number) => void): Promise<Answer> {
+function post(url: string, password: string | null, prompt: string, file: File, onProgress: (fraction: number) => void): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const body = new FormData();
     if (password !== null) body.append("password", password); // before the files: the server reads in order
+    if (prompt !== "") body.append("prompt", prompt);
     body.append("files", file, file.name);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -125,6 +127,7 @@ export function initDrop(): void {
   const input = form.querySelector<HTMLInputElement>('input[type="file"][name="files"]');
   const camera = form.querySelector<HTMLInputElement>('input[type="file"][name="camera"]');
   const password = form.querySelector<HTMLInputElement>('input[name="password"]');
+  const promptSelect = form.querySelector<HTMLSelectElement>('select[name="prompt"]');
   const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
   if (!input) return;
   const key = form.dataset.key ?? "";
@@ -134,11 +137,24 @@ export function initDrop(): void {
   let busy = false;
 
   const add = (files: FileList | File[] | null): void => {
+    const prompt = promptSelect?.value ?? "";
+    if (promptSelect?.required && prompt === "" && (files?.length ?? 0) > 0) {
+      // every photo has to say what it is for: ask before queueing anything
+      promptSelect.focus();
+      const li = document.createElement("li");
+      li.className = "failed";
+      li.textContent = t("Choose what the photo is for");
+      list.append(li);
+      list.hidden = false;
+      setTimeout(() => li.remove(), 4000);
+      return;
+    }
+    const promptText = promptSelect && prompt !== "" ? (promptSelect.selectedOptions[0]?.textContent ?? "") : "";
     for (const file of Array.from(files ?? [])) {
       if (items.some((i) => fileKey(i.file) === fileKey(file))) continue;
       const li = document.createElement("li");
       const name = document.createElement("span");
-      name.textContent = file.name;
+      name.textContent = promptText ? `${file.name} \u00b7 ${promptText}` : file.name;
       const status = document.createElement("span");
       status.className = "meta";
       const bar = document.createElement("progress");
@@ -146,7 +162,7 @@ export function initDrop(): void {
       bar.value = 0;
       li.append(name, " ", status, " ", bar);
       list.append(li);
-      const item: Item = { file, li, status, bar, done: done.has(fileKey(file)) };
+      const item: Item = { file, prompt, li, status, bar, done: done.has(fileKey(file)) };
       status.textContent = item.done ? t("Sent already") : t("Waiting to send");
       if (item.done) bar.value = 1;
       items.push(item);
@@ -163,7 +179,7 @@ export function initDrop(): void {
       item.status.textContent = failures === 0 ? t("Sending") : t("Waiting for the connection");
       try {
         const file = failures === 0 ? await shrink(item.file, maxDim) : item.file;
-        const answer = await post(url, password ? password.value : null, file, (f) => {
+        const answer = await post(url, password ? password.value : null, item.prompt, file, (f) => {
           item.bar.value = f;
         });
         const line = answer.files?.[0];
@@ -252,4 +268,79 @@ export function initCard(): void {
     .catch(() => {
       box.textContent = t("The QR code could not be made.");
     });
+}
+
+/** The guest book: a message, and a voice note recorded in the browser when it can. Without a script the form still sends the words. */
+export function initGuestBook(): void {
+  const form = document.querySelector<HTMLFormElement>("form.guestbook-form");
+  if (!form) return;
+  const tools = form.querySelector<HTMLElement>(".voice-tools");
+  const record = form.querySelector<HTMLButtonElement>("button.voice-record");
+  const preview = form.querySelector<HTMLAudioElement>("audio.voice-preview");
+  const status = form.querySelector<HTMLElement>(".guestbook-status");
+  let voice: Blob | null = null;
+  let recorder: MediaRecorder | null = null;
+  let stopTimer: ReturnType<typeof setTimeout> | undefined;
+  const canRecord = typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+  if (tools && record && preview && canRecord) {
+    tools.hidden = false;
+    record.addEventListener("click", () => {
+      if (recorder) {
+        recorder.stop();
+        return;
+      }
+      void navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          const chunks: Blob[] = [];
+          const r = new MediaRecorder(stream);
+          recorder = r;
+          r.ondataavailable = (e) => chunks.push(e.data);
+          r.onstop = () => {
+            stream.getTracks().forEach((track) => track.stop());
+            clearTimeout(stopTimer);
+            voice = new Blob(chunks, { type: r.mimeType });
+            preview.src = URL.createObjectURL(voice);
+            preview.hidden = false;
+            record.textContent = t("Record again");
+            recorder = null;
+          };
+          r.start();
+          record.textContent = t("Stop recording");
+          stopTimer = setTimeout(() => r.stop(), 90_000); // a voice note is a greeting, not a recording of the party
+        })
+        .catch(() => {
+          if (status) status.textContent = t("The microphone is not available");
+        });
+    });
+  }
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const body = new FormData(form);
+    if (voice) body.append("voice", voice, "voice");
+    void fetch(form.action, { method: "POST", headers: { Accept: "application/json" }, body })
+      .then(async (r) => ({ ok: r.ok, answer: (await r.json()) as { ok?: boolean; text?: string } }))
+      .then(({ ok, answer }) => {
+        if (status) status.textContent = ok && answer.ok ? t("Thank you for your message!") : (answer.text ?? t("Could not send the message"));
+        if (ok && answer.ok) {
+          form.reset();
+          voice = null;
+          if (preview) preview.hidden = true;
+          if (record) record.textContent = t("Record a voice message");
+        }
+      })
+      .catch(() => {
+        if (status) status.textContent = t("Could not send the message");
+      });
+  });
+}
+
+/** The address of a box's shared photos: Immich's page, on the server the browser is already talking to unless the app was told where Immich is. */
+export function initShare(): void {
+  document.querySelectorAll<HTMLElement>("[data-share-key]").forEach((el) => {
+    const key = el.dataset.shareKey ?? "";
+    const url = el.dataset.shareUrl || new URL("/share/" + key, location.origin).href;
+    if (el instanceof HTMLInputElement) el.value = url;
+    if (el instanceof HTMLAnchorElement) el.href = url;
+  });
 }

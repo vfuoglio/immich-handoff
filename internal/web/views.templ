@@ -202,12 +202,37 @@ type DropBoxView struct {
 	Pending             []PendingView
 	Hosts               []HostView
 
+	Prompts        []PromptView
+	PromptsText    string // the shot list, one per line, as the form edits it
+	PromptRequired bool
+	GuestBook      bool
+	Messages       []MessageView
+	Share          *ShareView // the shared link guests can see the photos at, when the box has one
+
 	Short       string // the short code, if the box has a short link
 	Accent      string
 	Lang        string
 	MaxDim      int
 	HasCover    bool
 	GuestDelete bool
+}
+
+// PromptView is one prompt of a shot list and how many photos came for it.
+type PromptView struct {
+	ID, Text string
+	Files    int
+}
+
+// MessageView is a message in a box's guest book, as the owner reads it.
+type MessageView struct {
+	ID, Name, Text, When string
+	HasAudio             bool
+}
+
+// ShareView is the shared link of a box. URL is empty when the app does not know where Immich is; the page then makes
+// the address in the browser from the key.
+type ShareView struct {
+	Key, URL, Expires, Message string
 }
 
 // TemplateView is a template a drop box can be started from.
@@ -244,6 +269,9 @@ type DropPageView struct {
 	MaxDim               int  // photos larger than this are shrunk in the browser (0: not)
 	Cover                bool // the box has a cover photo
 	CanDelete            bool // guests may take back what they sent
+	Prompts              []PromptView
+	PromptRequired       bool
+	GuestBook            bool
 }
 
 // DropResultLine is what became of one file a guest sent.
@@ -1466,6 +1494,84 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 						</form>
 					</details>
 				}
+				if b.Manage {
+					<details class="more">
+						<summary>{ t(ctx, "Shot list and guest book") }</summary>
+						<form class="limits" hx-post="dropbox/extras" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+							<input type="hidden" name="service" value={ b.ID }/>
+							<label>{ t(ctx, "Shot list: what guests are asked to photograph, one per line") }<textarea name="prompts" rows="4">{ b.PromptsText }</textarea></label>
+							<label><input name="required" type="checkbox" value="1" checked?={ b.PromptRequired }/> { t(ctx, "Every photo must say which one it is for") }</label>
+							<label><input name="guestbook" type="checkbox" value="1" checked?={ b.GuestBook }/> { t(ctx, "A guest book: guests may leave a message and a voice note") }</label>
+							<button type="submit">{ t(ctx, "Save") }</button>
+							<small class="meta">{ t(ctx, "Photos for a prompt are also tagged with it in your library, under the box's inbox tag, so Immich lists them together. Guests see the list with a tick on what already has a photo. Changing the list never changes photos already tagged.") }</small>
+						</form>
+					</details>
+				}
+				if len(b.Prompts) > 0 {
+					<h3>{ t(ctx, "Shot list") }</h3>
+					<ul class="plain">
+						for _, p := range b.Prompts {
+							<li><span class={ "chip", templ.KV("ok", p.Files > 0) }>{ n(ctx, "{n} photo", "{n} photos", p.Files) }</span> { p.Text }</li>
+						}
+					</ul>
+				}
+				if b.GuestBook && b.Manage {
+					<h3>{ t(ctx, "Guest book") } <span class="count-badge">{ fmt.Sprint(len(b.Messages)) }</span></h3>
+					if len(b.Messages) == 0 {
+						<p class="meta">{ t(ctx, "Nothing here yet. Messages and voice notes guests leave appear here, for you and your co-hosts only. They are kept in this app's own data file, not in Immich.") }</p>
+					} else {
+						<p class="row"><a class="button" href={ templ.SafeURL("dropbox/guestbook/" + b.ID) }>{ t(ctx, "Download the guest book") }</a></p>
+					}
+					<ul class="plain guestbook">
+						for _, m := range b.Messages {
+							<li>
+								<span class="meta">{ messageAuthor(ctx, m.Name) } \u00b7 { m.When }</span>
+								if m.Text != "" {
+									<span>{ m.Text }</span>
+								}
+								if m.HasAudio {
+									<audio controls preload="none" src={ "dropbox/voice/" + m.ID }></audio>
+								}
+								<button hx-post="dropbox/message/delete" hx-vals={ vals("service", m.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove this message? It cannot be got back.") } data-confirm-title={ t(ctx, "Remove the message?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+							</li>
+						}
+					</ul>
+				} else if b.GuestBook {
+					<p class="meta">{ t(ctx, "This box has a guest book. Only the people who manage it can read it.") }</p>
+				}
+				if b.Owner {
+					<details class="more">
+						<summary>{ t(ctx, "Share the photos back with the guests") }</summary>
+						if b.Share != nil {
+							<div class="field">
+								<label for={ "share-" + id }>{ t(ctx, "Link for guests to see and download the photos") }</label>
+								<div class="row">
+									<input id={ "share-" + id } class="invite" readonly data-share-key={ b.Share.Key } data-share-url={ b.Share.URL }/>
+									<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+									<button type="button" class="copy-message" data-for={ "share-" + id } data-message={ t(ctx, "Thank you for being there! The photos are here: {link}", "link", "{link}") }>{ t(ctx, "Copy a message") }</button>
+									<button type="button" class="show-qr" data-for={ "share-" + id } data-alt={ t(ctx, "QR code of the link to the photos") }>{ t(ctx, "QR code") }</button>
+								</div>
+								<div class="qr" id={ "qr-share-" + id } hidden></div>
+								<p class="meta">{ t(ctx, "Open until {when}.", "when", b.Share.Expires) }</p>
+							</div>
+							<p class="row"><button class="danger" hx-post="dropbox/unshare" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The link stops working. The album and the photos stay in your library.") } data-confirm-title={ t(ctx, "Stop sharing?") } data-confirm-label={ t(ctx, "Stop sharing") } data-danger="true">{ t(ctx, "Stop sharing") }</button></p>
+						}
+						<form class="limits" hx-post="dropbox/share" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+							<input type="hidden" name="service" value={ b.ID }/>
+							<label>{ t(ctx, "Open for (days)") } <input name="days" type="number" min="1" max="365" value="30" class="narrow"/></label>
+							<label>{ t(ctx, "Password (optional)") } <input name="password" maxlength="64" autocomplete="off"/></label>
+							<label>{ t(ctx, "Thank-you message (optional)") } <input name="message" maxlength="300"/></label>
+							<button type="submit" class="primary">
+								if b.Share != nil {
+									{ t(ctx, "Share again with what came since") }
+								} else {
+									{ t(ctx, "Share the photos") }
+								}
+							</button>
+							<small class="meta">{ t(ctx, "This puts what the box received into an album of yours (the box's album, or one named after the box) and makes a link to it in Immich that anyone who has it can open, with no account, to look at the photos and download them. It cannot upload or change anything. Use a password if the photos are private. Doing it again adds what came since and replaces the link.") }</small>
+						</form>
+					</details>
+				}
 				if b.PendingN > 0 {
 					<h3>{ t(ctx, "Waiting for approval") } <span class="count-badge">{ fmt.Sprint(b.PendingN) }</span></h3>
 					if b.Manage {
@@ -1588,6 +1694,12 @@ templ DropBoxForm() {
 			</div>
 			<label class="wide"><input name="photos" type="checkbox" value="1"/> { t(ctx, "Photos only (no videos)") }</label>
 			<label class="wide"><input name="approve" type="checkbox" value="1"/> { t(ctx, "I look at every file before it is kept") }</label>
+			<div class="field wide">
+				<label for="drop-prompts">{ t(ctx, "Shot list (optional, one per line, at most 20)") }</label>
+				<textarea id="drop-prompts" name="prompts" rows="3" placeholder={ t(ctx, "The first dance\nThe oldest guest\nThe best hat") }></textarea>
+			</div>
+			<label class="wide"><input name="required" type="checkbox" value="1"/> { t(ctx, "Every photo must say which one it is for") }</label>
+			<label class="wide"><input name="guestbook" type="checkbox" value="1"/> { t(ctx, "A guest book: guests may leave a message and a voice note") }</label>
 			<label class="wide"><input name="guestdelete" type="checkbox" value="1"/> { t(ctx, "Guests may take back what they sent, while it is still in the inbox") }</label>
 			<small class="meta wide">{ t(ctx, "For that the box's key also gets permission to read photos and move them to your trash (never to delete them for good). Guests keep a secret in their browser, so only they can take back their own files.") }</small>
 			<small class="meta wide">{ t(ctx, "An album gives the key permission to find, make and add to albums, nothing more. Files that wait for you are kept on this server's disk until you decide, and deleted after two weeks.") }</small>
@@ -1618,6 +1730,26 @@ templ DropPage(d DropPageView) {
 					<input id="drop-pw" name="password" type="password" required autocomplete="off"/>
 				</div>
 			}
+			if len(d.Prompts) > 0 {
+				<div class="field">
+					<label for="drop-prompt">{ t(ctx, "What is the photo for?") }</label>
+					<select id="drop-prompt" name="prompt" required?={ d.PromptRequired }>
+						if d.PromptRequired {
+							<option value="">{ t(ctx, "Choose one") }</option>
+						} else {
+							<option value="">{ t(ctx, "Anything") }</option>
+						}
+						for _, p := range d.Prompts {
+							<option value={ p.ID }>{ p.Text }</option>
+						}
+					</select>
+				</div>
+				<ul class="plain checklist">
+					for _, p := range d.Prompts {
+						<li><span class={ "chip", templ.KV("ok", p.Files > 0) }>{ promptState(ctx, p.Files) }</span> { p.Text }</li>
+					}
+				</ul>
+			}
 			<div class="field drop-zone">
 				<label for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
 				<input id="drop-files" name="files" type="file" multiple required accept={ dropAccept(d.PhotosOnly) }/>
@@ -1638,6 +1770,56 @@ templ DropPage(d DropPageView) {
 			}
 			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send") }</button></p>
 		</form>
+		if d.GuestBook {
+			<form class="card offer-form guestbook-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/message" }>
+				<h2>{ t(ctx, "Leave a message") }</h2>
+				<div class="field">
+					<label for="gb-name">{ t(ctx, "Your name (optional)") }</label>
+					<input id="gb-name" name="name" maxlength="60" autocomplete="name"/>
+				</div>
+				<div class="field">
+					<label for="gb-text">{ t(ctx, "Your message") }</label>
+					<textarea id="gb-text" name="text" rows="3" maxlength="1000"></textarea>
+				</div>
+				<div class="field voice-tools" hidden>
+					<button type="button" class="voice-record">{ t(ctx, "Record a voice message") }</button>
+					<audio class="voice-preview" controls hidden></audio>
+				</div>
+				<p class="meta">{ t(ctx, "Only the person who made this link and the people who help them can read or hear it.") }</p>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send the message") }</button></p>
+				<p class="meta guestbook-status" role="status" aria-live="polite"></p>
+			</form>
+		}
+	}
+}
+
+// DropMessageDone thanks a guest whose message was kept, on a page with no script.
+templ DropMessageDone(name, back string) {
+	@Layout(name, "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "Thank you for your message!") }</h1>
+		</section>
+		<p class="meta"><a href={ templ.SafeURL(back) }>{ t(ctx, "Send photos") }</a></p>
+	}
+}
+
+// DropThanks is what the link of a box that has closed shows when its owner has shared the photos back.
+templ DropThanks(name, message string, share ShareView) {
+	@Layout(name, "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "Thank you!") }</h1>
+			if message != "" {
+				<p class="lead">{ message }</p>
+			} else {
+				<p class="lead">{ t(ctx, "The photos from {name} are ready to see and download.", "name", name) }</p>
+			}
+		</section>
+		<p class="row">
+			<a class="button primary share-link" data-share-key={ share.Key } data-share-url={ share.URL } href={ templ.SafeURL(shareHref(share)) }>{ t(ctx, "See the photos") }</a>
+		</p>
+		if share.Expires != "" {
+			<p class="meta">{ t(ctx, "Open until {when}.", "when", share.Expires) }</p>
+		}
 	}
 }
 

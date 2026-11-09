@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -586,5 +587,209 @@ func TestOwnersPrintCardsAndOnlyOwnersSeeThem(t *testing.T) {
 		if code, _ := postForm(t, app.URL+path, "", "service=x"); code != 401 {
 			t.Errorf("%s without signing in: %d, want 401", path, code)
 		}
+	}
+}
+
+func TestTheShotListIsOnTheGuestPageAndTagsWhatArrives(t *testing.T) {
+	var st *store.Store
+	im := &storing{}
+	token := strings.Repeat("de", 16)
+	app, _ := setup(t, withDrop(t, &st, im, store.DropBox{Token: token, Name: "Hunt", InboxTag: "inbox/Hunt", PromptRequired: true,
+		Prompts: []store.Prompt{{ID: "p1", Text: "The cake"}, {ID: "p2", Text: "The oldest guest"}}}))
+
+	_, p := do(t, "GET", app.URL+"/drop/"+token, "", nil)
+	for _, want := range []string{`name="prompt"`, `required`, "The cake", "The oldest guest", "no photo yet", "Choose one"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the guest page lacks %q", want)
+		}
+	}
+	upload := func(fields map[string]string) string {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		for k, v := range fields {
+			mw.WriteField(k, v)
+		}
+		fw, _ := mw.CreateFormFile("files", "a.jpg")
+		fw.Write(jpegBytes)
+		mw.Close()
+		req, _ := http.NewRequest("POST", app.URL+"/drop/"+token+"/upload", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Accept", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	if r := upload(nil); !strings.Contains(r, `"ok":false`) || !strings.Contains(r, "Choose what the photo is for") {
+		t.Errorf("no prompt: %s", r)
+	}
+	if len(im.names) != 0 {
+		t.Fatal("a photo that does not say what it is for must not be stored")
+	}
+	if r := upload(map[string]string{"prompt": "p1"}); !strings.Contains(r, `"ok":true`) {
+		t.Errorf("with a prompt: %s", r)
+	}
+	tagged := false
+	for _, n := range im.tags {
+		tagged = tagged || n == "inbox/Hunt/The cake"
+	}
+	if !tagged {
+		t.Errorf("tags made: %v", im.tags)
+	}
+	// the list now shows the cake as covered, to everybody
+	if _, p := do(t, "GET", app.URL+"/drop/"+token, "", nil); !strings.Contains(p, "1 photo") {
+		t.Error("the checklist must show what has a photo")
+	}
+	// the owner edits the list; a viewer cannot
+	id := firstBox(t, st)
+	if code, b := postForm(t, app.URL+"/dropbox/extras", "sess=family", "service="+id+"&prompts=The+cake%0D%0AThe+band&guestbook=1"); code != 204 {
+		t.Fatalf("extras: %d %s", code, b)
+	}
+	if got, _ := st.DropBox(context.Background(), id); len(got.Prompts) != 2 || got.Prompts[0].ID != "p1" || got.Prompts[1].Text != "The band" || got.PromptRequired || !got.GuestBook {
+		t.Errorf("saved: %+v", got)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/extras", "sess=family", "service="+id+"&prompts=a%2Fb"); code != 409 {
+		t.Errorf("a slash in a prompt: %d, want 409", code)
+	}
+	st.SetDropHost(context.Background(), id, store.DropHost{UserID: uuid.MustParse(otherID), Name: "Other", Email: "other@x.test", Role: store.HostView})
+	if code, _ := postForm(t, app.URL+"/dropbox/extras", "sess=other", "service="+id+"&prompts=x"); code != 409 {
+		t.Errorf("a viewer editing the list: %d, want 409", code)
+	}
+	if owner := get(t, app.URL, "sess=family"); !strings.Contains(owner, "The band") || !strings.Contains(owner, "Shot list") {
+		t.Error("the owner sees the list with its counts")
+	}
+}
+
+func TestTheGuestBookTakesMessagesAndPlaysThemToTheHostsOnly(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("ef", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Book", InboxTag: "inbox/Book", GuestBook: true}))
+	id := firstBox(t, st)
+	webm := append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 300)...)
+
+	if _, p := do(t, "GET", app.URL+"/drop/"+token, "", nil); !strings.Contains(p, "Leave a message") || !strings.Contains(p, "voice-record") || !strings.Contains(p, `action="drop/`+token+`/message"`) {
+		t.Fatal("the guest page must offer the guest book")
+	}
+	send := func(fields map[string]string, voice []byte, json bool) (int, string) {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		for k, v := range fields {
+			mw.WriteField(k, v)
+		}
+		if voice != nil {
+			fw, _ := mw.CreateFormFile("voice", "voice")
+			fw.Write(voice)
+		}
+		mw.Close()
+		req, _ := http.NewRequest("POST", app.URL+"/drop/"+token+"/message", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		if json {
+			req.Header.Set("Accept", "application/json")
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, b := send(map[string]string{"name": "Eve", "text": "Congratulations!"}, webm, true); code != 200 || !strings.Contains(b, `"ok":true`) {
+		t.Fatalf("a message with a voice note: %d %s", code, b)
+	}
+	if code, p := send(map[string]string{"text": "No script here"}, nil, false); code != 200 || !strings.Contains(p, "Thank you for your message") {
+		t.Errorf("a plain form: %d %.200s", code, p)
+	}
+	for name, c := range map[string]struct {
+		fields map[string]string
+		voice  []byte
+	}{"empty": {nil, nil}, "a page as a voice note": {map[string]string{"text": "x"}, []byte("<!DOCTYPE html><html><script>alert(1)</script></html>")}, "too long": {map[string]string{"text": strings.Repeat("x", 1001)}, nil}} {
+		if code, b := send(c.fields, c.voice, true); code != 422 || !strings.Contains(b, `"ok":false`) {
+			t.Errorf("%s: %d %s", name, code, b)
+		}
+	}
+	msgs, _ := st.DropMessages(context.Background(), id, 10)
+	if len(msgs) != 2 {
+		t.Fatalf("kept: %+v", msgs)
+	}
+	var voiced store.DropMessage
+	for _, m := range msgs {
+		if m.HasAudio {
+			voiced = m
+		}
+	}
+
+	// the owner reads and plays; another person cannot; a viewer sees nothing of it
+	owner := get(t, app.URL, "sess=family")
+	if !strings.Contains(owner, "Congratulations!") || !strings.Contains(owner, `src="dropbox/voice/`+voiced.ID+`"`) || !strings.Contains(owner, "Download the guest book") {
+		t.Errorf("the owner's guest book: %.300s", owner)
+	}
+	for who, want := range map[string]int{"sess=family": 200, "sess=other": 404, "": 401} {
+		if code, _ := do(t, "GET", app.URL+"/dropbox/voice/"+voiced.ID, who, nil); code != want {
+			t.Errorf("voice note as %q: %d, want %d", who, code, want)
+		}
+	}
+	res, _ := http.DefaultClient.Do(func() *http.Request {
+		r, _ := http.NewRequest("GET", app.URL+"/dropbox/guestbook/"+id, nil)
+		r.Header.Set("Cookie", "sess=family")
+		return r
+	}())
+	zipBytes, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "application/zip" || !bytes.HasPrefix(zipBytes, []byte("PK")) {
+		t.Errorf("export: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	if code, _ := do(t, "GET", app.URL+"/dropbox/guestbook/"+id, "sess=other", nil); code != 404 {
+		t.Errorf("export by a stranger: %d", code)
+	}
+	st.SetDropHost(context.Background(), id, store.DropHost{UserID: uuid.MustParse(otherID), Name: "Other", Email: "other@x.test", Role: store.HostView})
+	if view := get(t, app.URL, "sess=other"); strings.Contains(view, "Congratulations!") || strings.Contains(view, "dropbox/voice/") {
+		t.Error("a viewer must not see the messages")
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/message/delete", "sess=other", "service="+voiced.ID); code != 409 {
+		t.Errorf("a viewer removing: %d, want 409", code)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/message/delete", "sess=family", "service="+voiced.ID); code != 204 {
+		t.Errorf("the owner removing: %d", code)
+	}
+	if left, _ := st.DropMessages(context.Background(), id, 10); len(left) != 1 {
+		t.Errorf("after removing: %d", len(left))
+	}
+	// a box with no guest book takes nothing
+	st.SetDropGuestBook(context.Background(), id, false)
+	if code, _ := send(map[string]string{"text": "hi"}, nil, true); code != 422 {
+		t.Errorf("a box without a guest book: %d", code)
+	}
+}
+
+func TestAClosedBoxThatSharedItsPhotosSaysSoAndNoOtherDoes(t *testing.T) {
+	var st *store.Store
+	token, plain := strings.Repeat("f0", 16), strings.Repeat("f1", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Shared", InboxTag: "inbox/Shared"}), func(s *web.Server) { s.PublicImmichURL = "https://photos.example.org/" })
+	// a second box that shared nothing
+	owner := uuid.MustParse(familyID)
+	st.AddDropBox(context.Background(), store.DropBox{Token: plain, Name: "Quiet", OwnerID: owner, Key: "k", InboxTag: "inbox/Quiet"})
+	boxes, _ := st.DropBoxes(context.Background())
+	for _, b := range boxes {
+		st.SetDropBoxState(context.Background(), b.ID, store.DropPaused, "")
+	}
+	st.SetDropShare(context.Background(), store.DropShare{BoxID: boxes[0].ID, LinkID: uuid.NewString(), Key: "abc123key", Message: "Thank you all!", ExpiresAt: time.Now().Add(48 * time.Hour)})
+
+	code, p := do(t, "GET", app.URL+"/drop/"+token, "", nil)
+	if code != 200 || !strings.Contains(p, "Thank you all!") || !strings.Contains(p, `href="https://photos.example.org/share/abc123key"`) || !strings.Contains(p, "See the photos") {
+		t.Fatalf("shared: %d %.400s", code, p)
+	}
+	if strings.Contains(p, `type="file"`) {
+		t.Error("a closed box takes no photos, whatever it shared")
+	}
+	if code, _ := do(t, "GET", app.URL+"/drop/"+plain, "", nil); code != 404 {
+		t.Errorf("a closed box that shared nothing: %d", code)
+	}
+	// an expired share says nothing
+	st.SetDropShare(context.Background(), store.DropShare{BoxID: boxes[0].ID, LinkID: uuid.NewString(), Key: "abc123key", ExpiresAt: time.Now().Add(-time.Hour)})
+	if code, _ := do(t, "GET", app.URL+"/drop/"+token, "", nil); code != 404 {
+		t.Errorf("an expired share: %d", code)
 	}
 }

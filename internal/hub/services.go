@@ -325,7 +325,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare} {
 		if errors.Is(err, e) {
 			return true
 		}

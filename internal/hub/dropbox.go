@@ -28,29 +28,38 @@ import (
 // Errors about drop boxes. The first group is shown to the owner as it is; the second is what a guest's upload can
 // run into (the page words them for the guest).
 var (
-	ErrBadDropName   = errors.New("a drop box needs a name of 2 to 60 characters, without slashes or commas")
-	ErrBadDropLimit  = errors.New("the limits of a drop box are whole numbers, and the days at most 365")
-	ErrBadDropText   = errors.New("the message to guests is at most 300 characters")
-	ErrBadDropSecret = errors.New("a password is at most 64 characters")
-	ErrNoDropBox     = errors.New("there is no such drop box")
-	ErrDropFinished  = errors.New("this drop box has been revoked")
-	ErrDropRole      = errors.New("your part in this drop box does not allow that")
-	ErrBadDropAlbum  = errors.New("the album and the tag are at most 100 characters, with no line breaks, slashes or commas")
-	ErrBadDropWhen   = errors.New("a drop box closes after it opens, and within a year from now")
-	ErrNoStaging     = errors.New("approving before files arrive needs a place to keep them while they wait, and this install has none (it has no data folder)")
-	ErrNoSuchPerson  = errors.New("nobody on this Immich server has that email address")
-	ErrHostSelf      = errors.New("you already own this drop box")
-	ErrBadHostRole   = errors.New("a co-host manages the box or only views it")
-	ErrTooManyHosts  = errors.New("a drop box has at most ten co-hosts")
-	ErrNoEnd         = errors.New("this drop box has no end to extend")
-	ErrBadDropLook   = errors.New("the colour is six hex digits such as #4250af, the language one of those the pages come in, and the size between 800 and 8000 pixels")
-	ErrBadCover      = errors.New("the cover photo is a JPEG, PNG or WebP of at most 900 KB")
-	ErrBadTemplate   = errors.New("a template needs a name of 2 to 60 characters, and a person has at most 20")
-	ErrNoTemplate    = errors.New("there is no such template")
-	ErrDropDeleteOff = errors.New("guests cannot delete what they sent from this drop box")
-	ErrDropKept      = errors.New("this photo is already filed in the owner's library: ask them to remove it")
-	ErrNothingChosen = errors.New("choose the files first")
-	ErrSomeNotStored = errors.New("some files could not be stored right now and stay waiting; try again")
+	ErrBadDropName    = errors.New("a drop box needs a name of 2 to 60 characters, without slashes or commas")
+	ErrBadDropLimit   = errors.New("the limits of a drop box are whole numbers, and the days at most 365")
+	ErrBadDropText    = errors.New("the message to guests is at most 300 characters")
+	ErrBadDropSecret  = errors.New("a password is at most 64 characters")
+	ErrNoDropBox      = errors.New("there is no such drop box")
+	ErrDropFinished   = errors.New("this drop box has been revoked")
+	ErrDropRole       = errors.New("your part in this drop box does not allow that")
+	ErrBadDropAlbum   = errors.New("the album and the tag are at most 100 characters, with no line breaks, slashes or commas")
+	ErrBadDropWhen    = errors.New("a drop box closes after it opens, and within a year from now")
+	ErrNoStaging      = errors.New("approving before files arrive needs a place to keep them while they wait, and this install has none (it has no data folder)")
+	ErrNoSuchPerson   = errors.New("nobody on this Immich server has that email address")
+	ErrHostSelf       = errors.New("you already own this drop box")
+	ErrBadHostRole    = errors.New("a co-host manages the box or only views it")
+	ErrTooManyHosts   = errors.New("a drop box has at most ten co-hosts")
+	ErrNoEnd          = errors.New("this drop box has no end to extend")
+	ErrBadDropLook    = errors.New("the colour is six hex digits such as #4250af, the language one of those the pages come in, and the size between 800 and 8000 pixels")
+	ErrBadCover       = errors.New("the cover photo is a JPEG, PNG or WebP of at most 900 KB")
+	ErrBadTemplate    = errors.New("a template needs a name of 2 to 60 characters, and a person has at most 20")
+	ErrNoTemplate     = errors.New("there is no such template")
+	ErrDropDeleteOff  = errors.New("guests cannot delete what they sent from this drop box")
+	ErrDropKept       = errors.New("this photo is already filed in the owner's library: ask them to remove it")
+	ErrBadPrompts     = errors.New("a shot list has at most 20 prompts, each 1 to 60 characters without slashes or commas, and no two alike")
+	ErrDropPrompt     = errors.New("choose what the photo is for")
+	ErrBadMessage     = errors.New("a message is at most 1000 characters, a name at most 60, and it needs words or a voice note")
+	ErrBadVoice       = errors.New("the voice note is not a recording this page makes, or it is too large")
+	ErrGuestBookOff   = errors.New("this drop box has no guest book")
+	ErrGuestBookFull  = errors.New("the guest book is full")
+	ErrNoShare        = errors.New("this drop box has nothing shared")
+	ErrBadShare       = errors.New("a shared link stays open for 1 to 365 days, its password is at most 64 characters and its message at most 300")
+	ErrNothingToShare = errors.New("there are no photos in this drop box's inbox to share yet")
+	ErrNothingChosen  = errors.New("choose the files first")
+	ErrSomeNotStored  = errors.New("some files could not be stored right now and stay waiting; try again")
 
 	ErrDropType     = errors.New("this kind of file is not accepted")
 	ErrDropTooBig   = errors.New("the file is larger than this drop box takes")
@@ -88,11 +97,14 @@ type DropParams struct {
 	MaxFiles, MaxMB         int       // the most the box takes in all
 	MaxFileMB               int       // the largest single file
 	PhotosOnly              bool
-	Album, ExtraTag         string // where files are filed besides the inbox tag
-	Approve                 bool   // files wait for a host's approval
-	Accent, Lang            string // the guest page's colour (#rrggbb) and language
-	MaxDim                  int    // photos larger than this many pixels are shrunk in the guest's browser
-	GuestDelete             bool   // guests may delete what they sent while it is in the inbox
+	Album, ExtraTag         string   // where files are filed besides the inbox tag
+	Approve                 bool     // files wait for a host's approval
+	Accent, Lang            string   // the guest page's colour (#rrggbb) and language
+	MaxDim                  int      // photos larger than this many pixels are shrunk in the guest's browser
+	GuestDelete             bool     // guests may delete what they sent while it is in the inbox
+	Prompts                 []string // the shot list: what guests are asked to photograph
+	PromptRequired          bool     // every photo must say which prompt it is for
+	GuestBook               bool     // guests may leave a message and a voice note
 }
 
 func checkDropParams(p DropParams) error {
@@ -115,6 +127,9 @@ func checkDropParams(p DropParams) error {
 		return ErrBadDropLimit
 	}
 	if err := checkDropLook(p.Accent, p.Lang, p.MaxDim); err != nil {
+		return err
+	}
+	if _, err := newPrompts(p.Prompts); err != nil {
 		return err
 	}
 	for _, v := range []string{p.Album, p.ExtraTag} {
@@ -176,6 +191,7 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		MaxFiles: p.MaxFiles, MaxMB: p.MaxMB, MaxFileMB: p.MaxFileMB, PhotosOnly: p.PhotosOnly,
 		Album: p.Album, ExtraTag: p.ExtraTag, Approve: p.Approve, StartsAt: p.Opens,
 		Accent: strings.ToLower(p.Accent), Lang: p.Lang, MaxDim: p.MaxDim, GuestDelete: p.GuestDelete,
+		GuestBook: p.GuestBook,
 	}
 	switch {
 	case !p.Closes.IsZero():
@@ -193,6 +209,11 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 			return store.DropBox{}, err
 		}
 	}
+	if b.Prompts, err = newPrompts(p.Prompts); err != nil {
+		undo()
+		return store.DropBox{}, err
+	}
+	b.PromptRequired = p.PromptRequired && len(b.Prompts) > 0
 	if b, err = h.Store.AddDropBox(ctx, b); err != nil {
 		undo()
 		return store.DropBox{}, err
@@ -618,10 +639,15 @@ const (
 
 // fileDrop files a stored photo as the box says: its inbox tag, the box's own tag, and its album. Failing to file
 // does not lose the photo, which is already in the library: it is logged and the photo stays where it is.
-func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id uuid.UUID) {
+func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id uuid.UUID, prompt string) {
 	tags := []string{b.InboxTag}
 	if b.ExtraTag != "" {
 		tags = append(tags, b.ExtraTag)
+	}
+	for _, pr := range b.Prompts {
+		if pr.ID == prompt { // a photo of a prompt is also tagged inbox/<box>/<prompt>, so Immich lists them together
+			tags = append(tags, b.InboxTag+"/"+pr.Text)
+		}
 	}
 	for _, name := range tags {
 		if tag, err := api.FindTag(ctx, name, true); err != nil {
@@ -650,8 +676,11 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 
 // kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
 // allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
-func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool) {
+func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt string) {
 	c := context.WithoutCancel(ctx)
+	if prompt != "" {
+		_ = h.Store.AddPromptCount(c, b.ID, prompt, 1)
+	}
 	if countBytes {
 		_ = h.Store.AddDropBytes(c, b.ID, n)
 	}
@@ -676,6 +705,18 @@ func (h *Hub) ReceiveDropFile(ctx context.Context, boxID, filename string, file 
 // ReceiveDropFileFor is ReceiveDropFile for a guest who holds a secret (see NewGuestSecret): in a box that lets guests
 // take back what they sent, the file is recorded under it, so only that guest can see and delete it.
 func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, file io.Reader, who, secret string) (DropOutcome, error) {
+	return h.ReceiveDropFileWith(ctx, boxID, filename, file, who, DropMeta{Secret: secret})
+}
+
+// DropMeta is what a guest says about a file besides the file: the secret that finds their uploads again, and which
+// prompt of the shot list it is for (the prompt's id).
+type DropMeta struct {
+	Secret, Prompt string
+}
+
+// ReceiveDropFileWith is ReceiveDropFileFor for a guest who also names the prompt a file is for.
+func (h *Hub) ReceiveDropFileWith(ctx context.Context, boxID, filename string, file io.Reader, who string, meta DropMeta) (DropOutcome, error) {
+	secret := meta.Secret
 	b, err := h.Store.TakeDropSlot(ctx, boxID)
 	if err != nil {
 		if errors.Is(err, store.ErrDropFull) {
@@ -690,6 +731,16 @@ func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, fi
 		}
 	}()
 
+	prompt := ""
+	for _, pr := range b.Prompts {
+		if pr.ID == meta.Prompt {
+			prompt = pr.ID
+		}
+	}
+	if prompt == "" && b.PromptRequired {
+		h.RejectDrop(ctx, b, who, filename, ErrDropPrompt)
+		return 0, ErrDropPrompt
+	}
 	br := bufio.NewReaderSize(file, 4096)
 	head, _ := br.Peek(512)
 	if len(head) == 0 {
@@ -715,7 +766,7 @@ func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, fi
 		guest = GuestKey(secret)
 	}
 	if b.Approve {
-		p, err := h.stage(ctx, b, name, kind, who, cr)
+		p, err := h.stage(ctx, b, name, kind, who, prompt, cr)
 		if err != nil {
 			if cr.hit || errors.Is(err, ErrDropTooBig) {
 				h.RejectDrop(ctx, b, who, filename, ErrDropTooBig)
@@ -728,7 +779,7 @@ func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, fi
 		}
 		kept = true
 		if guest != "" {
-			_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, PendingID: p.ID, Name: name, Size: p.Size})
+			_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, PendingID: p.ID, Name: name, Size: p.Size, Prompt: prompt})
 		}
 		return DropHeld, nil
 	}
@@ -751,16 +802,16 @@ func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, fi
 		return DropDuplicate, nil
 	}
 	kept = true
-	h.fileDrop(ctx, api, b, id)
-	h.kept(ctx, b, who, name, cr.n, true)
+	h.fileDrop(ctx, api, b, id, prompt)
+	h.kept(ctx, b, who, name, cr.n, true, prompt)
 	if guest != "" {
-		_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, AssetID: id.String(), Name: name, Size: cr.n})
+		_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, AssetID: id.String(), Name: name, Size: cr.n, Prompt: prompt})
 	}
 	return DropStored, nil
 }
 
 // stage keeps a file that waits for approval on disk, in a folder of its own for the box, and records it.
-func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string, r io.Reader) (store.DropPending, error) {
+func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who, prompt string, r io.Reader) (store.DropPending, error) {
 	var none store.DropPending
 	if h.StageDir == "" {
 		return none, ErrNoStaging
@@ -787,7 +838,7 @@ func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who string
 		return none, err
 	}
 	c := context.WithoutCancel(ctx)
-	p, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name()})
+	p, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name(), Prompt: prompt})
 	if err != nil {
 		os.Remove(f.Name())
 		return none, err
@@ -908,8 +959,8 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 			h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} was already in the library", "file", p.Name), p.Who)
 		} else {
 			_ = h.Store.DropUploadApproved(c, p.ID, imageID.String())
-			h.fileDrop(ctx, api, b, imageID)
-			h.kept(ctx, b, p.Who, p.Name, p.Size, false)
+			h.fileDrop(ctx, api, b, imageID, p.Prompt)
+			h.kept(ctx, b, p.Who, p.Name, p.Size, false, p.Prompt)
 		}
 		done++
 	}

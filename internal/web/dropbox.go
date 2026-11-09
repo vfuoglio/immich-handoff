@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -95,6 +96,16 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	b, err := w.Hub.OpenDropBox(r.Context(), r.PathValue("token"))
 	if err != nil {
+		// a box that has shared its photos back says so, to the people who have its link
+		if gb, gerr := w.Hub.DropBoxForGuest(r.Context(), r.PathValue("token")); gerr == nil {
+			if sh, ok := w.Hub.DropShareFor(r.Context(), gb.ID); ok {
+				r = w.forGuest(r, gb, r.PathValue("token"))
+				rw.Header().Set("Cache-Control", "no-store")
+				rw.Header().Set("Referrer-Policy", "no-referrer")
+				DropThanks(gb.Name, sh.Message, w.shareView(sh)).Render(r.Context(), rw)
+				return
+			}
+		}
 		w.dropClosed(rw, r)
 		return
 	}
@@ -103,7 +114,7 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly,
 		Approve: b.Approve, Limits: dropLimitText(r.Context(), b), MaxDim: b.MaxDim, Cover: w.Hub.Store.HasDropCover(r.Context(), b.ID),
-		CanDelete: b.GuestDelete}).Render(r.Context(), rw)
+		CanDelete: b.GuestDelete, Prompts: w.promptViews(r.Context(), b), PromptRequired: b.PromptRequired, GuestBook: b.GuestBook}).Render(r.Context(), rw)
 }
 
 // dropUpload takes what a guest sent. The files are read from the request one by one and streamed on to Immich, so
@@ -151,6 +162,7 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unlocked := b.Password == ""
+	prompt := "" // the prompt of the shot list the next file is for (a field sent before it)
 	var lines []DropResultLine
 	for len(lines) < maxDropFilesPerRequest {
 		part, err := mr.NextPart()
@@ -161,13 +173,16 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		case part.FormName() == "password":
 			given, _ := io.ReadAll(io.LimitReader(part, 200))
 			unlocked = w.Hub.CheckDropPassword(ctx, b, who, string(given))
+		case part.FormName() == "prompt":
+			v, _ := io.ReadAll(io.LimitReader(part, 20))
+			prompt = string(v)
 		case part.FormName() == "files" && part.FileName() != "":
 			if !unlocked {
 				rw.WriteHeader(http.StatusForbidden)
 				Notice(t(ctx, "Wrong password"), t(ctx, "The password is not right. Go back and try again."), true).Render(ctx, rw)
 				return
 			}
-			outcome, err := w.Hub.ReceiveDropFileFor(ctx, b.ID, part.FileName(), part, who, secret)
+			outcome, err := w.Hub.ReceiveDropFileWith(ctx, b.ID, part.FileName(), part, who, hub.DropMeta{Secret: secret, Prompt: prompt})
 			text := dropReason(ctx, err)
 			if err == nil && outcome == hub.DropHeld {
 				text = t(ctx, "Received, waiting for approval")
@@ -224,6 +239,8 @@ func dropReason(ctx context.Context, err error) string {
 		return t(ctx, "Too large")
 	case errors.Is(err, hub.ErrDropFull):
 		return t(ctx, "This box is full")
+	case errors.Is(err, hub.ErrDropPrompt):
+		return t(ctx, "Choose what the photo is for")
 	case errors.Is(err, hub.ErrDropEmpty):
 		return t(ctx, "Empty file")
 	case errors.Is(err, hub.ErrDropGone):
@@ -364,9 +381,29 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != "",
 			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
 			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
+		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
 		if v.Manage {
 			v.Short = b.Short
 			v.HasCover = w.Hub.Store.HasDropCover(ctx, b.ID)
+			var lines []string
+			for _, ps := range w.Hub.PromptStatuses(ctx, b) {
+				lines = append(lines, ps.Text)
+				v.Prompts = append(v.Prompts, PromptView{ID: ps.ID, Text: ps.Text, Files: ps.Files})
+			}
+			v.PromptsText = strings.Join(lines, "\n")
+			if b.GuestBook {
+				if msgs, err := w.Hub.GuestBook(ctx, me.user.ID, b.ID); err == nil {
+					for _, m := range msgs {
+						v.Messages = append(v.Messages, MessageView{ID: m.ID, Name: m.Name, Text: m.Text, When: loc(ctx).Stamp(m.At.Local()), HasAudio: m.HasAudio})
+					}
+				}
+			}
+		}
+		if v.Owner {
+			if sh, ok := w.Hub.DropShareFor(ctx, b.ID); ok {
+				sv := w.shareView(sh)
+				v.Share = &sv
+			}
 		}
 		if v.State != "revoked" && v.Manage {
 			v.Token = b.Token // a co-host who only views does not get the link
@@ -477,6 +514,9 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 		p.PhotosOnly = r.PostFormValue("photos") == "1"
 		p.Approve = r.PostFormValue("approve") == "1"
 		p.GuestDelete = r.PostFormValue("guestdelete") == "1"
+		p.Prompts = strings.Split(strings.ReplaceAll(r.PostFormValue("prompts"), "\r", ""), "\n")
+		p.PromptRequired = r.PostFormValue("required") == "1"
+		p.GuestBook = r.PostFormValue("guestbook") == "1"
 		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
@@ -872,4 +912,158 @@ func templateSummary(ctx context.Context, s hub.DropSettings) string {
 		parts = append(parts, t(ctx, "in the album {album}", "album", s.Album))
 	}
 	return strings.Join(parts, " \u00b7 ")
+}
+
+// --- the shot list, the guest book and sharing back: the guest's side ---
+
+func (w *Server) promptViews(ctx context.Context, b store.DropBox) []PromptView {
+	var out []PromptView
+	for _, ps := range w.Hub.PromptStatuses(ctx, b) {
+		out = append(out, PromptView{ID: ps.ID, Text: ps.Text, Files: ps.Files})
+	}
+	return out
+}
+
+// shareView is a box's shared link as the pages show it: the address of Immich's shared page when the administrator told
+// the app where Immich is (PUBLIC_IMMICH_URL), and otherwise the key, which the page turns into an address in the browser.
+func (w *Server) shareView(sh store.DropShare) ShareView {
+	v := ShareView{Key: sh.Key, Expires: "", Message: sh.Message}
+	if base := strings.TrimRight(w.PublicImmichURL, "/"); base != "" {
+		v.URL = base + "/share/" + sh.Key
+	}
+	if !sh.ExpiresAt.IsZero() {
+		v.Expires = sh.ExpiresAt.Local().Format("2006-01-02 15:04")
+	}
+	return v
+}
+
+// dropMessage takes a guest's message and voice note for the guest book.
+func (w *Server) dropMessage(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if w.Hub == nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	token := r.PathValue("token")
+	b, err := w.Hub.OpenDropBox(ctx, token)
+	if err != nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	r = w.forGuest(r, b, token)
+	ctx = r.Context()
+	who := hub.DropWho(b.Token, w.clientAddr(r))
+	asJSON := strings.Contains(r.Header.Get("Accept"), "application/json")
+	answer := func(status int, err error) {
+		text := ""
+		if err != nil {
+			text = t(ctx, "The message could not be kept: {reason}", "reason", t(ctx, err.Error()))
+		}
+		if asJSON {
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(status)
+			json.NewEncoder(rw).Encode(map[string]any{"ok": err == nil, "text": text})
+			return
+		}
+		rw.Header().Set("Cache-Control", "no-store")
+		rw.WriteHeader(status)
+		if err != nil {
+			Notice(t(ctx, "The message was not kept"), text, true).Render(ctx, rw)
+			return
+		}
+		DropMessageDone(b.Name, "drop/"+token).Render(ctx, rw)
+	}
+	if err := w.Hub.AllowDrop(ctx, b, who); err != nil {
+		rw.Header().Set("Retry-After", "600")
+		answer(http.StatusTooManyRequests, err)
+		return
+	}
+	defer w.Hub.DoneDrop(b)
+	r.Body = http.MaxBytesReader(rw, r.Body, 3<<20)
+	if err := r.ParseMultipartForm(3 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		answer(http.StatusBadRequest, hub.ErrBadMessage)
+		return
+	}
+	var voice []byte
+	if f, _, err := r.FormFile("voice"); err == nil {
+		defer f.Close()
+		voice, _ = io.ReadAll(io.LimitReader(f, 2<<20+1))
+	}
+	if err := w.Hub.LeaveMessage(ctx, b, who, r.PostFormValue("name"), r.PostFormValue("text"), voice); err != nil {
+		status := http.StatusInternalServerError
+		if hub.IsUserError(err) {
+			status = http.StatusUnprocessableEntity
+		}
+		answer(status, err)
+		return
+	}
+	answer(http.StatusOK, nil)
+}
+
+// --- the owner's side of them ---
+
+func (w *Server) extrasDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box extras", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SetDropExtras(ctx, me.user, id, strings.Split(strings.ReplaceAll(r.PostFormValue("prompts"), "\r", ""), "\n"),
+			r.PostFormValue("required") == "1", r.PostFormValue("guestbook") == "1")
+	})
+}
+
+func (w *Server) deleteMessage(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "guest book message removed", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.DeleteGuestMessage(ctx, me.user, id)
+	})
+}
+
+// voiceNote plays a guest's voice note to the owner or a co-host who manages the box.
+func (w *Server) voiceNote(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	kind, data, err := w.Hub.GuestBookAudio(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, no-store")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+// exportGuestBook hands the guest book to its owner as a zip.
+func (w *Server) exportGuestBook(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	var buf bytes.Buffer
+	if err := w.Hub.ExportGuestBook(r.Context(), me.user.ID, r.PathValue("id"), &buf); err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", "application/zip")
+	rw.Header().Set("Content-Disposition", `attachment; filename="guest-book.zip"`)
+	rw.Header().Set("Cache-Control", "private, no-store")
+	rw.Write(buf.Bytes())
+}
+
+func (w *Server) shareDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box shared", func(ctx context.Context, me *member, id string) error {
+		days, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
+		if err != nil {
+			return hub.ErrBadShare
+		}
+		_, err = w.Hub.ShareBack(ctx, me.sess, me.user, id, days, r.PostFormValue("password"), r.PostFormValue("message"))
+		return err
+	})
+}
+
+func (w *Server) unshareDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box unshared", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.UnshareBack(ctx, me.sess, me.user, id)
+	})
 }

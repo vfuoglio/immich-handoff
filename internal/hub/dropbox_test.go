@@ -1,10 +1,12 @@
 package hub_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -769,5 +771,264 @@ func TestAGuestTakesBackAFileThatStillWaitsForApproval(t *testing.T) {
 	}
 	if err := e.h.DeleteGuestUpload(ctx, b.ID, secret, now[0].ID); err != nil {
 		t.Errorf("taking back an approved file: %v", err)
+	}
+}
+
+// --- the shot list, the guest book and sharing back ---
+
+func TestAShotListTagsPhotosByPromptAndCountsWhatIsCovered(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Hunt", Prompts: []string{"First dance", " The oldest guest ", "", "The best hat"}, PromptRequired: true})
+	if len(b.Prompts) != 3 || b.Prompts[0].ID != "p1" || b.Prompts[1].Text != "The oldest guest" || !b.PromptRequired {
+		t.Fatalf("prompts: %+v", b.Prompts)
+	}
+	// a photo must say what it is for, and what it says must be on the list
+	for _, prompt := range []string{"", "p9"} {
+		if _, err := e.h.ReceiveDropFileWith(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: prompt}); !errors.Is(err, hub.ErrDropPrompt) {
+			t.Errorf("prompt %q: %v", prompt, err)
+		}
+	}
+	if got, _ := e.st.DropBox(ctx, b.ID); got.Files != 0 {
+		t.Errorf("a refused photo uses no room: %+v", got)
+	}
+	if _, err := e.h.ReceiveDropFileWith(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: "p1"}); err != nil {
+		t.Fatal(err)
+	}
+	e.h.ReceiveDropFileWith(ctx, b.ID, "b.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: "p1"})
+	if !has(e.f.tagNames, "inbox/Hunt") || !has(e.f.tagNames, "inbox/Hunt/First dance") {
+		t.Errorf("tags: %v", e.f.tagNames)
+	}
+	got, _ := e.st.DropBox(ctx, b.ID)
+	var covered []string
+	for _, ps := range e.h.PromptStatuses(ctx, got) {
+		covered = append(covered, fmt.Sprint(ps.Text, "=", ps.Files))
+	}
+	if strings.Join(covered, ",") != "First dance=2,The oldest guest=0,The best hat=0" {
+		t.Errorf("what is covered: %v", covered)
+	}
+
+	// editing keeps the ids of prompts that stay, gives new ones new ids, and a list that is not allowed changes nothing
+	if err := e.h.SetDropExtras(ctx, bob, b.ID, []string{"The best hat", "first dance", "Sunset"}, false, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = e.st.DropBox(ctx, b.ID)
+	if len(got.Prompts) != 3 || got.Prompts[0].ID != "p3" || got.Prompts[1].ID != "p1" || got.Prompts[2].ID != "p4" || got.PromptRequired {
+		t.Errorf("after editing: %+v", got.Prompts)
+	}
+	if c, _ := e.st.PromptCounts(ctx, b.ID); c["p1"] != 2 {
+		t.Errorf("a prompt that stayed keeps its count: %v", c)
+	}
+	long := strings.Repeat("x", 61)
+	tooMany := make([]string, 21)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprint("prompt ", i)
+	}
+	for _, list := range [][]string{{"a", "A"}, {"a/b"}, {"a,b"}, {long}, tooMany} {
+		if err := e.h.SetDropExtras(ctx, bob, b.ID, list, false, false); !errors.Is(err, hub.ErrBadPrompts) {
+			t.Errorf("%v: %v", list, err)
+		}
+	}
+	if _, err := e.h.CreateDropBox(ctx, e.sess, bob, hub.DropParams{Name: "Bad", Prompts: []string{"a", "a"}}); !errors.Is(err, hub.ErrBadPrompts) {
+		t.Errorf("a box with a bad list: %v", err)
+	}
+	// with no list nothing is required, and a prompt a guest names that is not there is ignored
+	if _, err := e.h.ReceiveDropFileWith(ctx, newBox(t, e, hub.DropParams{Name: "Plain"}).ID, "a.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: "zzz"}); err != nil {
+		t.Errorf("no list: %v", err)
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostView)
+	if err := e.h.SetDropExtras(ctx, ann, b.ID, []string{"x"}, false, false); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer editing the list: %v", err)
+	}
+}
+
+func TestAPromptSurvivesApprovalAndATakeBack(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.h.StageDir = t.TempDir()
+	b := newBox(t, e, hub.DropParams{Name: "Careful hunt", Approve: true, GuestDelete: true, Prompts: []string{"The cake"}})
+	secret := hub.NewGuestSecret()
+	e.h.ReceiveDropFileWith(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: "p1", Secret: secret})
+	e.h.ReceiveDropFileWith(ctx, b.ID, "b.jpg", bytes.NewReader(jpeg), "m", hub.DropMeta{Prompt: "p1", Secret: secret})
+	if c, _ := e.st.PromptCounts(ctx, b.ID); c["p1"] != 0 {
+		t.Errorf("a waiting photo is not counted yet: %v", c)
+	}
+	e.h.DecideDrop(ctx, bob, b.ID, nil, true)
+	if c, _ := e.st.PromptCounts(ctx, b.ID); c["p1"] != 2 {
+		t.Errorf("approved photos are counted: %v", c)
+	}
+	if !has(e.f.tagNames, "inbox/Careful hunt/The cake") {
+		t.Errorf("approved photos get the prompt's tag: %v", e.f.tagNames)
+	}
+	list, _ := e.h.GuestUploads(ctx, b.ID, secret)
+	if err := e.h.DeleteGuestUpload(ctx, b.ID, secret, list[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := e.st.PromptCounts(ctx, b.ID); c["p1"] != 1 {
+		t.Errorf("a photo taken back is not counted: %v", c)
+	}
+}
+
+func TestTheGuestBookKeepsMessagesAndVoiceNotesForTheHosts(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	closed := newBox(t, e, hub.DropParams{Name: "No book"})
+	if err := e.h.LeaveMessage(ctx, closed, "m", "Eve", "Hello", nil); !errors.Is(err, hub.ErrGuestBookOff) {
+		t.Errorf("a box with no guest book: %v", err)
+	}
+	b := newBox(t, e, hub.DropParams{Name: "Book", GuestBook: true})
+	webm := append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 500)...)
+	if err := e.h.LeaveMessage(ctx, b, "m1", " Eve ", " Congratulations! ", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.LeaveMessage(ctx, b, "m2", "", "", webm); err != nil {
+		t.Fatalf("a voice note alone: %v", err)
+	}
+	if err := e.h.LeaveMessage(ctx, b, "m3", "Bo", "Words and voice", webm); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		name, text string
+		voice      []byte
+		want       error
+	}{
+		"nothing":      {"", "", nil, hub.ErrBadMessage},
+		"long text":    {"", strings.Repeat("x", 1001), nil, hub.ErrBadMessage},
+		"long name":    {strings.Repeat("n", 61), "hi", nil, hub.ErrBadMessage},
+		"a page":       {"", "", page, hub.ErrBadVoice},
+		"a huge voice": {"", "", append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 3<<20)...), hub.ErrBadVoice},
+	} {
+		if err := e.h.LeaveMessage(ctx, b, "m", c.name, c.text, c.voice); !errors.Is(err, c.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	msgs, err := e.h.GuestBook(ctx, bobID, b.ID)
+	if err != nil || len(msgs) != 3 {
+		t.Fatalf("the guest book: %d %v", len(msgs), err)
+	}
+	if msgs[2].Name != "Eve" || msgs[2].Text != "Congratulations!" || msgs[2].HasAudio || !msgs[0].HasAudio {
+		t.Errorf("messages: %+v", msgs)
+	}
+	// nobody but the hosts can read it, and a viewer cannot either
+	if _, err := e.h.GuestBook(ctx, annID, b.ID); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("a stranger reads it: %v", err)
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostView)
+	if _, err := e.h.GuestBook(ctx, annID, b.ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer reads it: %v", err)
+	}
+	if _, _, err := e.h.GuestBookAudio(ctx, annID, msgs[0].ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer plays a voice note: %v", err)
+	}
+	kind, data, err := e.h.GuestBookAudio(ctx, bobID, msgs[0].ID)
+	if err != nil || kind != "audio/webm" || len(data) != len(webm) {
+		t.Errorf("the voice note: %s %d %v", kind, len(data), err)
+	}
+	if _, _, err := e.h.GuestBookAudio(ctx, bobID, msgs[2].ID); err == nil {
+		t.Error("a message without a voice note has none to play")
+	}
+	// the export is a zip with the messages and the voice notes
+	var buf bytes.Buffer
+	if err := e.h.ExportGuestBook(ctx, bobID, b.ID, &buf); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		files[f.Name] = string(b)
+	}
+	if len(files) != 3 || !strings.Contains(files["messages.txt"], "Eve") || !strings.Contains(files["messages.txt"], "Congratulations!") || !strings.Contains(files["messages.txt"], "voice-001.webm") {
+		t.Errorf("export: %v", files)
+	}
+	if strings.Index(files["messages.txt"], "Eve") > strings.Index(files["messages.txt"], "Bo") {
+		t.Error("the export reads oldest first, like a guest book")
+	}
+	// removing a message removes its voice note
+	if err := e.h.DeleteGuestMessage(ctx, bob, msgs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := e.h.GuestBook(ctx, bobID, b.ID); len(after) != 2 {
+		t.Errorf("after removing: %d", len(after))
+	}
+	if err := e.h.DeleteGuestMessage(ctx, ann, msgs[1].ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a viewer removing: %v", err)
+	}
+	// the book has a size
+	for i := 0; i < 600; i++ {
+		if err := e.h.LeaveMessage(ctx, b, "m", "", "x", nil); err != nil {
+			if !errors.Is(err, hub.ErrGuestBookFull) || i < 400 {
+				t.Fatalf("message %d: %v", i, err)
+			}
+			return
+		}
+	}
+	t.Error("the guest book must have a limit")
+}
+
+func TestSharingTheResultBackWithTheGuests(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Gala night"})
+	if _, err := e.h.ShareBack(ctx, e.sess, bob, b.ID, 30, "", ""); !errors.Is(err, hub.ErrNothingToShare) {
+		t.Errorf("nothing to share yet: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		e.h.ReceiveDropFile(ctx, b.ID, fmt.Sprint(i, ".jpg"), bytes.NewReader(jpeg), "m")
+	}
+	sh, err := e.h.ShareBack(ctx, e.sess, bob, b.ID, 14, "swordfish", "Thank you all!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the album is named after the box and holds what arrived; the link is view-only with an end, a password and the thanks
+	if len(e.f.albums) != 1 || e.f.albums[0]["albumName"] != "Gala night" || len(e.f.albumAdds) != 3 {
+		t.Errorf("albums %v, adds %v", e.f.albums, e.f.albumAdds)
+	}
+	var link map[string]any
+	for _, l := range e.f.links {
+		link = l
+	}
+	if link["type"] != "ALBUM" || link["allowDownload"] != true || link["allowUpload"] != false || link["password"] != "swordfish" || link["description"] != "Thank you all!" || link["expiresAt"] == nil {
+		t.Errorf("link: %v", link)
+	}
+	if got, ok := e.h.DropShareFor(ctx, b.ID); !ok || got.Key != sh.Key || !strings.HasPrefix(got.Key, "key-") || got.Message != "Thank you all!" {
+		t.Errorf("the box's share: %+v %v", got, ok)
+	}
+	// sharing again adds what came since, and replaces the link
+	e.h.ReceiveDropFile(ctx, b.ID, "late.jpg", bytes.NewReader(jpeg), "m")
+	sh2, err := e.h.ShareBack(ctx, e.sess, bob, b.ID, 30, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sh2.Key == sh.Key || len(e.f.links) != 1 || len(e.f.removedLinks) != 1 || len(e.f.albums) != 1 {
+		t.Errorf("replaced: links %d removed %d albums %d", len(e.f.links), len(e.f.removedLinks), len(e.f.albums))
+	}
+	// only the owner may, and the limits are checked
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if _, err := e.h.ShareBack(ctx, e.ann, ann, b.ID, 30, "", ""); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host sharing: %v", err)
+	}
+	for _, c := range []struct {
+		days int
+		pw   string
+		msg  string
+	}{{0, "", ""}, {366, "", ""}, {5, strings.Repeat("p", 65), ""}, {5, "", strings.Repeat("m", 301)}} {
+		if _, err := e.h.ShareBack(ctx, e.sess, bob, b.ID, c.days, c.pw, c.msg); !errors.Is(err, hub.ErrBadShare) {
+			t.Errorf("%+v: %v", c, err)
+		}
+	}
+	// stopping ends the link and leaves the photos
+	if err := e.h.UnshareBack(ctx, e.sess, bob, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.h.DropShareFor(ctx, b.ID); ok || len(e.f.links) != 0 {
+		t.Error("the share must be gone")
+	}
+	if err := e.h.UnshareBack(ctx, e.sess, bob, b.ID); !errors.Is(err, hub.ErrNoShare) {
+		t.Errorf("stopping twice: %v", err)
+	}
+	if len(e.f.trashed) != 0 {
+		t.Error("stopping must not touch the photos")
 	}
 }

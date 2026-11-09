@@ -530,3 +530,11 @@ a.button { display: inline-block; padding: .45rem .9rem; border-radius: .7rem; b
   body { background: #fff !important; color: #000 !important; }
   .card-sheet h1, .card-sheet .lead { color: #000 !important; background: none !important; -webkit-text-fill-color: #000 !important; }
 }
+
+/* shot list and guest book */
+ul.checklist { display: flex; flex-wrap: wrap; gap: .4rem .8rem; }
+ul.checklist li { font-size: .9rem; }
+ul.guestbook li { display: grid; gap: .3rem; padding: .6rem 0; border-top: 1px solid color-mix(in oklab, var(--accent) 15%, transparent); }
+ul.guestbook audio { width: 100%; max-width: 22rem; }
+textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7rem; border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent); background: transparent; color: inherit; }
+.guestbook-form h2 { margin: 0 0 .3rem; }

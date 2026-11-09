@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,14 +22,15 @@ const (
 
 // Kinds of entries in a drop box's log.
 const (
-	DropCreated  = "created"
-	DropUploaded = "uploaded"
-	DropRejected = "rejected" // a file that was refused: its type, its size, a limit
-	DropBlocked  = "blocked"  // a guest was turned away: too many requests, a wrong password
-	DropPausedOn = "paused"
-	DropResumed  = "resumed"
-	DropRevokedK = "revoked"
-	DropExpired  = "expired"
+	DropCreated      = "created"
+	DropUploaded     = "uploaded"
+	DropRejected     = "rejected" // a file that was refused: its type, its size, a limit
+	DropBlocked      = "blocked"  // a guest was turned away: too many requests, a wrong password
+	DropPausedOn     = "paused"
+	DropResumed      = "resumed"
+	DropRevokedK     = "revoked"
+	DropExpired      = "expired"
+	DropMessageEvent = "message" // a guest left a message in the guest book
 )
 
 // DropBox is a link through which people without an Immich account send photos to its owner.
@@ -55,6 +58,9 @@ type DropBox struct {
 	MaxDim                   int       // photos larger than this many pixels are shrunk in the guest's browser (0: not)
 	GuestDelete              bool      // guests may delete what they sent while it is still in the inbox
 	Removed                  int       // files guests deleted
+	Prompts                  []Prompt  // the shot list: what guests are asked to photograph
+	PromptRequired           bool      // every photo must say which prompt it is for
+	GuestBook                bool      // guests may leave a message and a voice note
 	CreatedAt, EndedAt       time.Time
 }
 
@@ -84,7 +90,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, created_at, ended_at`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, created_at, ended_at`
 
 // AddDropBox stores a new box. Its id is made here.
 func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
@@ -99,25 +105,26 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 	}
 	exp := timeText(b.ExpiresAt)
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO dropboxes (`+dropCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, b.CreatedAt.Format(time.RFC3339Nano), "")
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.CreatedAt.Format(time.RFC3339Nano), "")
 	return b, err
 }
 
 func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error) {
 	var b DropBox
-	var owner, keyID, exp, starts, created, ended string
+	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &created, &ended); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &created, &ended); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
 	b.KeyID, _ = uuid.Parse(keyID)
 	b.ExpiresAt, _ = time.Parse(time.RFC3339Nano, exp)
 	b.StartsAt, _ = time.Parse(time.RFC3339Nano, starts)
+	_ = json.Unmarshal([]byte(prompts), &b.Prompts)
 	b.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	b.EndedAt, _ = time.Parse(time.RFC3339Nano, ended)
 	if b.State != DropRevoked {
@@ -270,6 +277,9 @@ func (s *Store) PruneDropBoxes(ctx context.Context, cutoff time.Time) error {
 		`DELETE FROM dropbox_hours WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_guests WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_uploads WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_messages WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_prompt_counts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_shares WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_covers WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?`,
 		`DELETE FROM dropbox_events WHERE at < ?`,
@@ -374,6 +384,7 @@ func (s *Store) HostedBoxes(ctx context.Context, user uuid.UUID) (map[string]str
 // DropPending is a file a guest sent that waits for a host's approval. Its bytes are on disk, at Path.
 type DropPending struct {
 	ID, BoxID, Name, Kind, Who, Path string
+	Prompt                           string // the id of the prompt it is for
 	Size                             int64
 	At                               time.Time
 }
@@ -384,8 +395,8 @@ func (s *Store) AddDropPending(ctx context.Context, p DropPending) (DropPending,
 		p.ID = uuid.NewString()
 	}
 	p.At = time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_pending (id, box_id, name, size, kind, who, at, path) VALUES (?,?,?,?,?,?,?,?)`,
-		p.ID, p.BoxID, p.Name, p.Size, p.Kind, p.Who, p.At.Format(time.RFC3339Nano), p.Path)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_pending (id, box_id, name, size, kind, who, at, path, prompt) VALUES (?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.BoxID, p.Name, p.Size, p.Kind, p.Who, p.At.Format(time.RFC3339Nano), p.Path, p.Prompt)
 	return p, err
 }
 
@@ -395,7 +406,7 @@ func scanPending(rows *sql.Rows) ([]DropPending, error) {
 	for rows.Next() {
 		var p DropPending
 		var at string
-		if err := rows.Scan(&p.ID, &p.BoxID, &p.Name, &p.Size, &p.Kind, &p.Who, &at, &p.Path); err != nil {
+		if err := rows.Scan(&p.ID, &p.BoxID, &p.Name, &p.Size, &p.Kind, &p.Who, &at, &p.Path, &p.Prompt); err != nil {
 			return nil, err
 		}
 		p.At, _ = time.Parse(time.RFC3339Nano, at)
@@ -404,7 +415,7 @@ func scanPending(rows *sql.Rows) ([]DropPending, error) {
 	return out, rows.Err()
 }
 
-const pendingCols = `id, box_id, name, size, kind, who, at, path`
+const pendingCols = `id, box_id, name, size, kind, who, at, path, prompt`
 
 // DropPendingOf lists a box's waiting files, oldest first, at most limit of them.
 func (s *Store) DropPendingOf(ctx context.Context, boxID string, limit int) ([]DropPending, error) {
@@ -599,20 +610,21 @@ func (s *Store) RemoveDropTemplate(ctx context.Context, owner uuid.UUID, id stri
 // guest's browser holds; the secret itself is never stored.
 type DropUpload struct {
 	ID, BoxID, Guest, AssetID, PendingID, Name string
+	Prompt                                     string
 	Size                                       int64
 	At                                         time.Time
 }
 
 // AddDropUpload records a file a guest sent.
 func (s *Store) AddDropUpload(ctx context.Context, u DropUpload) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_uploads (id, box_id, guest, asset_id, pending_id, name, size, at) VALUES (?,?,?,?,?,?,?,?)`,
-		uuid.NewString(), u.BoxID, u.Guest, u.AssetID, u.PendingID, u.Name, u.Size, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_uploads (id, box_id, guest, asset_id, pending_id, name, size, at, prompt) VALUES (?,?,?,?,?,?,?,?,?)`,
+		uuid.NewString(), u.BoxID, u.Guest, u.AssetID, u.PendingID, u.Name, u.Size, time.Now().UTC().Format(time.RFC3339Nano), u.Prompt)
 	return err
 }
 
 // DropUploadsOf lists what a guest sent to a box, newest first.
 func (s *Store) DropUploadsOf(ctx context.Context, boxID, guest string, limit int) ([]DropUpload, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at FROM dropbox_uploads WHERE box_id = ? AND guest = ? ORDER BY at DESC LIMIT ?`, boxID, guest, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at, prompt FROM dropbox_uploads WHERE box_id = ? AND guest = ? ORDER BY at DESC LIMIT ?`, boxID, guest, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -621,7 +633,7 @@ func (s *Store) DropUploadsOf(ctx context.Context, boxID, guest string, limit in
 	for rows.Next() {
 		var u DropUpload
 		var at string
-		if err := rows.Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at); err != nil {
+		if err := rows.Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at, &u.Prompt); err != nil {
 			return nil, err
 		}
 		u.At, _ = time.Parse(time.RFC3339Nano, at)
@@ -634,8 +646,8 @@ func (s *Store) DropUploadsOf(ctx context.Context, boxID, guest string, limit in
 func (s *Store) DropUploadByID(ctx context.Context, boxID, guest, id string) (DropUpload, error) {
 	var u DropUpload
 	var at string
-	err := s.db.QueryRowContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at FROM dropbox_uploads WHERE id = ? AND box_id = ? AND guest = ?`, id, boxID, guest).
-		Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at)
+	err := s.db.QueryRowContext(ctx, `SELECT id, box_id, guest, asset_id, pending_id, name, size, at, prompt FROM dropbox_uploads WHERE id = ? AND box_id = ? AND guest = ?`, id, boxID, guest).
+		Scan(&u.ID, &u.BoxID, &u.Guest, &u.AssetID, &u.PendingID, &u.Name, &u.Size, &at, &u.Prompt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -662,5 +674,183 @@ func (s *Store) DropUploadApproved(ctx context.Context, pendingID, assetID strin
 // DropUploadGone forgets the record of a waiting file that was rejected or deleted.
 func (s *Store) DropUploadGone(ctx context.Context, pendingID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_uploads WHERE pending_id = ?`, pendingID)
+	return err
+}
+
+// --- the shot list ---
+
+// Prompt is one thing guests are asked to photograph. Its id stays the same when the list is edited, so photos stay
+// counted under it.
+type Prompt struct {
+	ID, Text string
+}
+
+func promptsJSON(p []Prompt) string {
+	if len(p) == 0 {
+		return "[]"
+	}
+	b, _ := json.Marshal(p)
+	return string(b)
+}
+
+// SetDropPrompts replaces a box's shot list.
+func (s *Store) SetDropPrompts(ctx context.Context, id string, prompts []Prompt, required bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET prompts = ?, prompt_required = ? WHERE id = ? AND state <> ?`, promptsJSON(prompts), b2i(required && len(prompts) > 0), id, DropRevoked)
+	return err
+}
+
+// SetDropGuestBook switches a box's guest book on or off.
+func (s *Store) SetDropGuestBook(ctx context.Context, id string, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET guest_book = ? WHERE id = ? AND state <> ?`, b2i(on), id, DropRevoked)
+	return err
+}
+
+// AddPromptCount counts a file kept under a prompt (a negative n takes one back).
+func (s *Store) AddPromptCount(ctx context.Context, boxID, prompt string, n int) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_prompt_counts (box_id, prompt, files) VALUES (?,?,MAX(?,0))
+		ON CONFLICT(box_id, prompt) DO UPDATE SET files = MAX(files + ?, 0)`, boxID, prompt, n, n)
+	return err
+}
+
+// PromptCounts says how many files are kept under each prompt of a box.
+func (s *Store) PromptCounts(ctx context.Context, boxID string) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT prompt, files FROM dropbox_prompt_counts WHERE box_id = ?`, boxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var p string
+		var n int
+		if err := rows.Scan(&p, &n); err != nil {
+			return nil, err
+		}
+		out[p] = n
+	}
+	return out, rows.Err()
+}
+
+// --- the guest book ---
+
+// DropMessage is something a guest left for the owner: a few words, a voice note, or both.
+type DropMessage struct {
+	ID, BoxID, Who, Name, Text string
+	AudioKind                  string // "" when there is no voice note
+	HasAudio                   bool
+	At                         time.Time
+}
+
+// AddDropMessage keeps a message; audio may be empty.
+func (s *Store) AddDropMessage(ctx context.Context, m DropMessage, audio []byte) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_messages (id, box_id, who, name, text, audio, audio_kind, at) VALUES (?,?,?,?,?,?,?,?)`,
+		uuid.NewString(), m.BoxID, m.Who, m.Name, m.Text, audio, m.AudioKind, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// DropMessages lists a box's messages, newest first, without their audio.
+func (s *Store) DropMessages(ctx context.Context, boxID string, limit int) ([]DropMessage, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, who, name, text, audio_kind, at, COALESCE(length(audio), 0) > 0 FROM dropbox_messages WHERE box_id = ? ORDER BY at DESC LIMIT ?`, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []DropMessage
+	for rows.Next() {
+		var m DropMessage
+		var at string
+		if err := rows.Scan(&m.ID, &m.BoxID, &m.Who, &m.Name, &m.Text, &m.AudioKind, &at, &m.HasAudio); err != nil {
+			return nil, err
+		}
+		m.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// DropMessageCount says how many messages a box holds.
+func (s *Store) DropMessageCount(ctx context.Context, boxID string) int {
+	var n int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dropbox_messages WHERE box_id = ?`, boxID).Scan(&n)
+	return n
+}
+
+// DropMessageAudio reads one message's voice note and says which box it is in.
+func (s *Store) DropMessageAudio(ctx context.Context, id string) (boxID, kind string, data []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT box_id, audio_kind, audio FROM dropbox_messages WHERE id = ?`, id).Scan(&boxID, &kind, &data)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && len(data) == 0) {
+		err = ErrNotFound
+	}
+	return
+}
+
+// DropMessageBox says which box a message is in.
+func (s *Store) DropMessageBox(ctx context.Context, id string) (string, error) {
+	var box string
+	err := s.db.QueryRowContext(ctx, `SELECT box_id FROM dropbox_messages WHERE id = ?`, id).Scan(&box)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return box, err
+}
+
+// RemoveDropMessage deletes a message and its voice note.
+func (s *Store) RemoveDropMessage(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_messages WHERE id = ?`, id)
+	return err
+}
+
+// DropMessageAudios lists a box's voice notes with their messages, oldest first, for an export.
+func (s *Store) DropMessageAudios(ctx context.Context, boxID string) (map[string][]byte, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, audio FROM dropbox_messages WHERE box_id = ? AND COALESCE(length(audio), 0) > 0`, boxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]byte{}
+	for rows.Next() {
+		var id string
+		var data []byte
+		if err := rows.Scan(&id, &data); err != nil {
+			return nil, err
+		}
+		out[id] = data
+	}
+	return out, rows.Err()
+}
+
+// --- sharing the result back ---
+
+// DropShare is the shared link a box's owner made so guests can see and download the photos.
+type DropShare struct {
+	BoxID, LinkID, Key, Message string
+	ExpiresAt, CreatedAt        time.Time
+}
+
+// SetDropShare keeps a box's shared link (one per box).
+func (s *Store) SetDropShare(ctx context.Context, sh DropShare) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_shares (box_id, link_id, key, message, expires_at, created_at) VALUES (?,?,?,?,?,?)
+		ON CONFLICT(box_id) DO UPDATE SET link_id = excluded.link_id, key = excluded.key, message = excluded.message, expires_at = excluded.expires_at, created_at = excluded.created_at`,
+		sh.BoxID, sh.LinkID, sh.Key, sh.Message, timeText(sh.ExpiresAt), time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// DropShareOf reads a box's shared link; ErrNotFound when it has none.
+func (s *Store) DropShareOf(ctx context.Context, boxID string) (DropShare, error) {
+	var sh DropShare
+	var exp, created string
+	err := s.db.QueryRowContext(ctx, `SELECT box_id, link_id, key, message, expires_at, created_at FROM dropbox_shares WHERE box_id = ?`, boxID).
+		Scan(&sh.BoxID, &sh.LinkID, &sh.Key, &sh.Message, &exp, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return sh, ErrNotFound
+	}
+	sh.ExpiresAt, _ = time.Parse(time.RFC3339Nano, exp)
+	sh.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	return sh, err
+}
+
+// RemoveDropShare forgets a box's shared link.
+func (s *Store) RemoveDropShare(ctx context.Context, boxID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_shares WHERE box_id = ?`, boxID)
 	return err
 }

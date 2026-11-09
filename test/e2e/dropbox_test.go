@@ -517,3 +517,135 @@ func TestDropBoxGuestPage(t *testing.T) {
 	}
 	_ = bigBytes
 }
+
+// TestDropBoxExtras: a shot list that tags photos by prompt, a guest book with a voice note, and sharing the result back
+// with guests through a real Immich shared link that anyone can open without an account.
+func TestDropBoxExtras(t *testing.T) {
+	alice, _, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 54)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner := loginCookie(t, "alice@e2e.test")
+
+	code, body := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Hunt"}, "opendays": {"5"}, "prompts": {"The cake\r\nThe oldest guest"}, "required": {"1"}, "guestbook": {"1"}})
+	if code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, body)
+	}
+	op := page(t, port, owner)
+	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	if g, p := guestGet(t, port, "/drop/"+token); g != 200 || !strings.Contains(p, "The oldest guest") || !strings.Contains(p, "Leave a message") {
+		t.Fatalf("guest page: %d", g)
+	}
+	send := func(prompt string, name string, data []byte) string {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		if prompt != "" {
+			mw.WriteField("prompt", prompt)
+		}
+		fw, _ := mw.CreateFormFile("files", name)
+		fw.Write(data)
+		mw.Close()
+		req, _ := http.NewRequest("POST", "http://localhost:"+port+"/drop/"+token+"/upload", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Accept", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	inbox := func() []string { return searchTag(t, alice, "inbox/Hunt", false) }
+	if r := send("", "none.jpg", jpegBytes(7401)); !strings.Contains(r, "Choose what the photo is for") {
+		t.Errorf("a photo with no prompt: %s", r)
+	}
+	if r := send("p1", "cake.jpg", jpegBytes(7402)); !strings.Contains(r, `"ok":true`) {
+		t.Fatalf("a photo of the cake: %s", r)
+	}
+	send("p1", "cake2.jpg", jpegBytes(7403))
+	send("p2", "guest.jpg", jpegBytes(7404))
+	eventually(t, "three photos arrive", 60*time.Second, func() bool { return len(inbox()) == 3 })
+	// each prompt is a tag of its own, under the box's tag, and Immich lists the photos by it
+	cake := searchTag(t, alice, "inbox/Hunt/The cake", false)
+	if len(cake) != 2 || len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)) != 1 {
+		t.Errorf("photos by prompt: %d and %d", len(cake), len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)))
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "2 photos") || !strings.Contains(p, "The cake") {
+		t.Error("the owner sees how many photos came for each prompt")
+	}
+
+	// the guest book: words and a voice note, read and played by the owner only
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	mw.WriteField("name", "Eve")
+	mw.WriteField("text", "Congratulations!")
+	fw, _ := mw.CreateFormFile("voice", "voice")
+	fw.Write(append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 400)...))
+	mw.Close()
+	req, _ := http.NewRequest("POST", "http://localhost:"+port+"/drop/"+token+"/message", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != 200 {
+		t.Fatalf("leave a message: %v %v", err, res)
+	}
+	op = page(t, port, owner)
+	voice := regexp.MustCompile(`src="dropbox/voice/([0-9a-f-]{36})"`).FindStringSubmatch(op)
+	if voice == nil || !strings.Contains(op, "Congratulations!") {
+		t.Fatalf("the owner reads the guest book: %.300s", op)
+	}
+	if c, _ := guestGetAs(t, owner, port, "/dropbox/voice/"+voice[1]); c != 200 {
+		t.Errorf("the owner plays it: %d", c)
+	}
+	if c, _ := guestGet(t, port, "/dropbox/voice/"+voice[1]); c != 401 {
+		t.Errorf("a stranger plays it: %d", c)
+	}
+
+	// sharing back: an album with the photos and a link anyone can open
+	if code, b := postBody(t, port, "/dropbox/share", owner, url.Values{"service": {boxID}, "days": {"7"}, "message": {"Thank you all!"}}); code != 204 {
+		t.Fatalf("share: %d %s", code, b)
+	}
+	op = page(t, port, owner)
+	key := regexp.MustCompile(`data-share-key="([^"]+)"`).FindStringSubmatch(op)
+	if key == nil || !strings.Contains(op, "Stop sharing") {
+		t.Fatalf("the owner sees the link: %.200s", op)
+	}
+	var shared struct {
+		AllowDownload bool `json:"allowDownload"`
+		AllowUpload   bool `json:"allowUpload"`
+		Description   string
+		Assets        []struct{ ID string } `json:"assets"`
+		Album         *struct {
+			AlbumName  string `json:"albumName"`
+			AssetCount int    `json:"assetCount"`
+		} `json:"album"`
+	}
+	if c := call(t, "GET", "/shared-links/me?key="+key[1], nil, nil, &shared); c != 200 {
+		t.Fatalf("a stranger opens the shared link: %d", c)
+	}
+	if !shared.AllowDownload || shared.AllowUpload || shared.Description != "Thank you all!" || shared.Album == nil || shared.Album.AlbumName != "Hunt" {
+		t.Errorf("the shared link: %+v", shared)
+	}
+	if shared.Album.AssetCount != 3 {
+		t.Errorf("the album holds %d photos, want 3", shared.Album.AssetCount)
+	}
+	// the box's own link, once closed, leads to the photos
+	postBody(t, port, "/dropbox/pause", owner, url.Values{"service": {boxID}, "paused": {"1"}})
+	if c, p := guestGet(t, port, "/drop/"+token); c != 200 || !strings.Contains(p, "Thank you all!") || !strings.Contains(p, `data-share-key="`+key[1]+`"`) || strings.Contains(p, `type="file"`) {
+		t.Errorf("the closed box's page: %d", c)
+	}
+	// stopping ends the link and leaves the photos
+	if code, b := postBody(t, port, "/dropbox/unshare", owner, url.Values{"service": {boxID}}); code != 204 {
+		t.Fatalf("unshare: %d %s", code, b)
+	}
+	if c := call(t, "GET", "/shared-links/me?key="+key[1], nil, nil, nil); c < 400 {
+		t.Errorf("a stopped link still opens: %d", c)
+	}
+	if n := len(inbox()); n != 3 {
+		t.Errorf("stopping must leave the photos: %d", n)
+	}
+	if c, _ := guestGet(t, port, "/drop/"+token); c != 404 {
+		t.Errorf("after stopping, the closed box answers like any closed one: %d", c)
+	}
+}

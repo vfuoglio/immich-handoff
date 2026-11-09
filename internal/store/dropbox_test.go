@@ -246,3 +246,78 @@ func TestDropBoxShortLookCoverTemplatesAndUploads(t *testing.T) {
 		t.Errorf("removed counter: %d", g.Removed)
 	}
 }
+
+func TestDropBoxPromptsMessagesAndShare(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "prompt-token-1234567", Name: "Hunt", Key: "k", Prompts: []Prompt{{"p1", "The cake"}, {"p2", "The band"}}, PromptRequired: true, GuestBook: true})
+	got, _ := s.DropBox(ctx, b.ID)
+	if len(got.Prompts) != 2 || got.Prompts[1].Text != "The band" || !got.PromptRequired || !got.GuestBook {
+		t.Errorf("round trip: %+v", got)
+	}
+	// a required list needs a list
+	s.SetDropPrompts(ctx, b.ID, nil, true)
+	if g, _ := s.DropBox(ctx, b.ID); len(g.Prompts) != 0 || g.PromptRequired {
+		t.Errorf("an empty list requires nothing: %+v", g)
+	}
+	s.SetDropPrompts(ctx, b.ID, []Prompt{{"p1", "The cake"}}, true)
+	s.SetDropGuestBook(ctx, b.ID, false)
+	if g, _ := s.DropBox(ctx, b.ID); len(g.Prompts) != 1 || !g.PromptRequired || g.GuestBook {
+		t.Errorf("edit: %+v", g)
+	}
+	// counts go up and down and never below nothing
+	s.AddPromptCount(ctx, b.ID, "p1", 1)
+	s.AddPromptCount(ctx, b.ID, "p1", 1)
+	s.AddPromptCount(ctx, b.ID, "p2", 1)
+	s.AddPromptCount(ctx, b.ID, "p2", -1)
+	s.AddPromptCount(ctx, b.ID, "p2", -1)
+	if c, _ := s.PromptCounts(ctx, b.ID); c["p1"] != 2 || c["p2"] != 0 {
+		t.Errorf("counts: %v", c)
+	}
+	// a waiting file remembers its prompt
+	p, _ := s.AddDropPending(ctx, DropPending{BoxID: b.ID, Name: "a.jpg", Size: 1, Kind: "image", Path: "/x", Prompt: "p1"})
+	if got, _ := s.DropPendingByID(ctx, p.ID); got.Prompt != "p1" {
+		t.Errorf("pending prompt: %+v", got)
+	}
+
+	// messages: kept with or without a voice note, listed newest first, played, removed
+	s.AddDropMessage(ctx, DropMessage{BoxID: b.ID, Who: "w1", Name: "Eve", Text: "first"}, nil)
+	time.Sleep(2 * time.Millisecond)
+	s.AddDropMessage(ctx, DropMessage{BoxID: b.ID, Who: "w2", Text: "second", AudioKind: "audio/webm"}, []byte{1, 2, 3})
+	msgs, _ := s.DropMessages(ctx, b.ID, 10)
+	if len(msgs) != 2 || msgs[0].Text != "second" || !msgs[0].HasAudio || msgs[1].HasAudio || s.DropMessageCount(ctx, b.ID) != 2 {
+		t.Fatalf("messages: %+v", msgs)
+	}
+	if box, kind, data, err := s.DropMessageAudio(ctx, msgs[0].ID); err != nil || box != b.ID || kind != "audio/webm" || len(data) != 3 {
+		t.Errorf("audio: %s %s %v %v", box, kind, data, err)
+	}
+	if _, _, _, err := s.DropMessageAudio(ctx, msgs[1].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("no audio: %v", err)
+	}
+	if all, _ := s.DropMessageAudios(ctx, b.ID); len(all) != 1 {
+		t.Errorf("audios: %v", all)
+	}
+	s.RemoveDropMessage(ctx, msgs[0].ID)
+	if s.DropMessageCount(ctx, b.ID) != 1 {
+		t.Error("removing a message")
+	}
+
+	// the share: one per box, replaced by a new one, gone when removed, and forgotten with a revoked box
+	if _, err := s.DropShareOf(ctx, b.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("no share yet: %v", err)
+	}
+	end := time.Now().Add(time.Hour)
+	s.SetDropShare(ctx, DropShare{BoxID: b.ID, LinkID: "l1", Key: "k1", Message: "thanks", ExpiresAt: end})
+	s.SetDropShare(ctx, DropShare{BoxID: b.ID, LinkID: "l2", Key: "k2", Message: "thanks again", ExpiresAt: end})
+	if sh, _ := s.DropShareOf(ctx, b.ID); sh.Key != "k2" || sh.LinkID != "l2" || sh.Message != "thanks again" || sh.ExpiresAt.Sub(end) > time.Second {
+		t.Errorf("share: %+v", sh)
+	}
+	s.SetDropBoxState(ctx, b.ID, DropRevoked, "")
+	s.PruneDropBoxes(ctx, time.Now().Add(time.Hour))
+	if _, err := s.DropShareOf(ctx, b.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a pruned box keeps no share: %v", err)
+	}
+	if s.DropMessageCount(ctx, b.ID) != 0 {
+		t.Error("a pruned box keeps no messages")
+	}
+}

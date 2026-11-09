@@ -273,6 +273,38 @@ var migrations = []string{
 	   at         TEXT NOT NULL
 	 );
 	 CREATE INDEX dropbox_uploads_guest ON dropbox_uploads (box_id, guest);`,
+	// Drop boxes: a shot list (each prompt is a tag), a guest book of messages and voice notes, and sharing the result
+	// back with the guests as an Immich shared link.
+	`ALTER TABLE dropboxes ADD COLUMN prompts TEXT NOT NULL DEFAULT '[]';
+	 ALTER TABLE dropboxes ADD COLUMN prompt_required INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN guest_book INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_pending ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropbox_uploads ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_prompt_counts (
+	   box_id TEXT NOT NULL,
+	   prompt TEXT NOT NULL,
+	   files  INTEGER NOT NULL,
+	   PRIMARY KEY (box_id, prompt)
+	 );
+	 CREATE TABLE dropbox_messages (
+	   id         TEXT PRIMARY KEY,
+	   box_id     TEXT NOT NULL,
+	   who        TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   text       TEXT NOT NULL,
+	   audio      BLOB,
+	   audio_kind TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_messages_box ON dropbox_messages (box_id, at);
+	 CREATE TABLE dropbox_shares (
+	   box_id     TEXT PRIMARY KEY,
+	   link_id    TEXT NOT NULL,
+	   key        TEXT NOT NULL,
+	   message    TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

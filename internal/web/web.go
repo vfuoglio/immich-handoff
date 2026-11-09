@@ -105,6 +105,14 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /drop/{token}/mine/delete", w.dropMineDelete)
 	mux.HandleFunc("GET /d/{token}/mine", w.dropMine)
 	mux.HandleFunc("POST /d/{token}/mine/delete", w.dropMineDelete)
+	mux.HandleFunc("POST /drop/{token}/message", w.dropMessage)
+	mux.HandleFunc("POST /d/{token}/message", w.dropMessage)
+	mux.HandleFunc("POST /dropbox/extras", w.extrasDropBox)
+	mux.HandleFunc("POST /dropbox/message/delete", w.deleteMessage)
+	mux.HandleFunc("GET /dropbox/voice/{id}", w.voiceNote)
+	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
+	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
+	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
 	mux.HandleFunc("POST /dropbox/short", w.shortDropBox)
 	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
 	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
@@ -154,14 +162,14 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		img += " " + u.Scheme + "://" + u.Host
 	}
 	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; img-src " + img +
-		"; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+		"; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
 		h.Set("Content-Security-Policy", csp)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
-		upload := dropRoute(r.URL.Path) && strings.HasSuffix(r.URL.Path, "/upload")
+		upload := dropRoute(r.URL.Path) && (strings.HasSuffix(r.URL.Path, "/upload") || strings.HasSuffix(r.URL.Path, "/message"))
 		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}

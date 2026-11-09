@@ -610,6 +610,8 @@ var clientMessages = []string{
 	"{who}: {photos} could not be handed over; the originals were kept and it will be retried", "{who}: {photos} refused, the receiver has them in the trash; the originals were kept",
 	"{who}: {photos} wait for the daily limit", "{who}: {photos} wait for the daily limit, until {when}",
 	"Could not be sent", "Received", "Sending", "Sent already", "Waiting for the connection", "Waiting to send",
+	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
+	"The microphone is not available", "Thank you for your message!",
 }
 
 // clientCatalog is what the page hands its scripts: the language and the translated messages they use.
@@ -724,4 +726,27 @@ func dimLabel(ctx context.Context, px int) string {
 		return t(ctx, "never (send them as they are)")
 	}
 	return t(ctx, "{px} pixels", "px", px)
+}
+
+func messageAuthor(ctx context.Context, name string) string {
+	if name == "" {
+		return t(ctx, "A guest")
+	}
+	return name
+}
+
+func promptState(ctx context.Context, files int) string {
+	if files == 0 {
+		return t(ctx, "no photo yet")
+	}
+	return n(ctx, "{n} photo", "{n} photos", files)
+}
+
+// shareHref is where "See the photos" leads: the full address when the app knows where Immich is, or the shared page's
+// path (the page's script makes it a full address from the key).
+func shareHref(s ShareView) string {
+	if s.URL != "" {
+		return s.URL
+	}
+	return "/share/" + s.Key
 }

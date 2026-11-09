@@ -101,3 +101,42 @@ func DropBoxPermissionsFor(album, guestDelete bool) []Permission {
 	}
 	return out
 }
+
+// CreateAlbumLink makes a view-only shared link for an album of this account, so people with no Immich account can
+// look at it and download from it. It returns the link's id (to remove it later) and its key (the address is
+// <Immich>/share/<key>). A zero expiry means it does not expire; an empty password means none. This needs the
+// signed-in person's own session (or a key with sharedLink.create), never a drop box's key.
+func (a *API) CreateAlbumLink(ctx context.Context, album openapi_types.UUID, expires time.Time, password, description string) (id openapi_types.UUID, key string, err error) {
+	// Immich lets a shared link allow downloads only when it also shows metadata (dates, places, cameras), so both are on
+	yes, no := true, false
+	body := CreateSharedLinkJSONRequestBody{Type: ALBUM, AlbumId: &album, AllowDownload: &yes, AllowUpload: &no, ShowMetadata: &yes}
+	if !expires.IsZero() {
+		body.ExpiresAt = &expires
+	}
+	if password != "" {
+		body.Password = &password
+	}
+	if description != "" {
+		body.Description = &description
+	}
+	r, err := a.c.CreateSharedLinkWithResponse(ctx, body)
+	if err != nil {
+		return id, "", err
+	}
+	if r.JSON201 == nil {
+		return id, "", statusErr("createSharedLink", r.StatusCode(), r.Body)
+	}
+	return r.JSON201.Id, r.JSON201.Key, nil
+}
+
+// RemoveLink ends a shared link of this account. One that is already gone is not an error.
+func (a *API) RemoveLink(ctx context.Context, id openapi_types.UUID) error {
+	r, err := a.c.RemoveSharedLinkWithResponse(ctx, id)
+	if err != nil {
+		return err
+	}
+	if c := r.StatusCode(); (c < 200 || c > 299) && c != 404 {
+		return statusErr("removeSharedLink", c, r.Body)
+	}
+	return nil
+}

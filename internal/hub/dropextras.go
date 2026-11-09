@@ -156,12 +156,19 @@ type DropSettings struct {
 	Accent, Lang    string
 	MaxDim          int
 	GuestDelete     bool
+	Prompts         []string
+	PromptRequired  bool
+	GuestBook       bool
 }
 
 // SettingsOf reads a box's settings.
 func SettingsOf(b store.DropBox) DropSettings {
 	s := DropSettings{Message: b.Message, MaxFiles: b.MaxFiles, MaxMB: b.MaxMB, MaxFileMB: b.MaxFileMB, PhotosOnly: b.PhotosOnly,
-		Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
+		Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete,
+		PromptRequired: b.PromptRequired, GuestBook: b.GuestBook}
+	for _, pr := range b.Prompts {
+		s.Prompts = append(s.Prompts, pr.Text)
+	}
 	if !b.ExpiresAt.IsZero() {
 		from := b.CreatedAt
 		if b.StartsAt.After(from) {
@@ -178,7 +185,7 @@ func SettingsOf(b store.DropBox) DropSettings {
 func (s DropSettings) Params(name string) DropParams {
 	return DropParams{Name: name, Message: s.Message, Days: s.Days, MaxFiles: s.MaxFiles, MaxMB: s.MaxMB, MaxFileMB: s.MaxFileMB,
 		PhotosOnly: s.PhotosOnly, Album: s.Album, ExtraTag: s.ExtraTag, Approve: s.Approve, Accent: s.Accent, Lang: s.Lang,
-		MaxDim: s.MaxDim, GuestDelete: s.GuestDelete}
+		MaxDim: s.MaxDim, GuestDelete: s.GuestDelete, Prompts: s.Prompts, PromptRequired: s.PromptRequired, GuestBook: s.GuestBook}
 }
 
 // TemplateInfo is a template as the page lists it.
@@ -338,7 +345,7 @@ func (h *Hub) DeleteGuestUpload(ctx context.Context, boxID, secret, uploadID str
 			_ = h.Store.ReleaseDropSlot(c, b.ID)
 			_ = h.Store.AddDropBytes(c, b.ID, -u.Size)
 			_ = h.Store.DropUploadGone(c, u.PendingID)
-			h.removedByGuest(ctx, b, u)
+			h.removedByGuest(ctx, b, u, false)
 			return nil
 		}
 		// a host decided first: look again, the file may be in the library now
@@ -382,11 +389,14 @@ func (h *Hub) DeleteGuestUpload(ctx context.Context, boxID, secret, uploadID str
 	_, _ = h.Store.RemoveDropUpload(c, u.ID)
 	_ = h.Store.ReleaseDropSlot(c, b.ID)
 	_ = h.Store.AddDropBytes(c, b.ID, -u.Size)
-	h.removedByGuest(ctx, b, u)
+	h.removedByGuest(ctx, b, u, true)
 	return nil
 }
 
-func (h *Hub) removedByGuest(ctx context.Context, b store.DropBox, u store.DropUpload) {
+func (h *Hub) removedByGuest(ctx context.Context, b store.DropBox, u store.DropUpload, counted bool) {
+	if counted && u.Prompt != "" {
+		_ = h.Store.AddPromptCount(context.WithoutCancel(ctx), b.ID, u.Prompt, -1)
+	}
 	_ = h.Store.AddDropRemoved(context.WithoutCancel(ctx), b.ID)
 	h.dropEvent(ctx, b.ID, store.DropRejected, i18n.Pack("A guest took back {file}", "file", u.Name), "")
 }
