@@ -39,3 +39,8 @@ output-options:
     - getWorkflowLogs
     - getStack
     - createStack
+    - searchUsers
+    - createSharedLink
+    - removeSharedLink
+    - viewAsset
+    - removeAssetFromAlbum

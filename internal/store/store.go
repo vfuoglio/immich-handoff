@@ -169,6 +169,186 @@ var migrations = []string{
 	   taken_back     INTEGER NOT NULL DEFAULT 0
 	 );
 	 CREATE INDEX handover_items_link ON handover_items (link_id, at);`,
+	// A drop box is a link through which people without an Immich account send photos to its owner. Its key is
+	// the owner's, made with the owner's own session, and sealed like every other key. The log keeps what happened.
+	`CREATE TABLE dropboxes (
+	   id          TEXT PRIMARY KEY,
+	   token       TEXT NOT NULL UNIQUE,
+	   name        TEXT NOT NULL,
+	   message     TEXT NOT NULL DEFAULT '',
+	   owner_id    TEXT NOT NULL,
+	   owner_name  TEXT NOT NULL,
+	   key_id      TEXT NOT NULL,
+	   key_enc     BLOB NOT NULL,
+	   inbox_tag   TEXT NOT NULL,
+	   expires_at  TEXT NOT NULL DEFAULT '',
+	   max_files   INTEGER NOT NULL DEFAULT 0,
+	   max_mb      INTEGER NOT NULL DEFAULT 0,
+	   max_file_mb INTEGER NOT NULL DEFAULT 0,
+	   photos_only INTEGER NOT NULL DEFAULT 0,
+	   password    TEXT NOT NULL DEFAULT '',
+	   state       TEXT NOT NULL DEFAULT 'active',
+	   note        TEXT NOT NULL DEFAULT '',
+	   files       INTEGER NOT NULL DEFAULT 0,
+	   bytes       INTEGER NOT NULL DEFAULT 0,
+	   created_at  TEXT NOT NULL,
+	   ended_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE TABLE dropbox_events (
+	   id     INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id TEXT NOT NULL,
+	   at     TEXT NOT NULL,
+	   kind   TEXT NOT NULL,
+	   text   TEXT NOT NULL,
+	   who    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX dropbox_events_box ON dropbox_events (box_id, id);`,
+	// Drop boxes grow: filing on arrival (an album, a tag of their own), approval before anything is stored, a start,
+	// co-hosts, and what a summary needs (files per hour, which guests came).
+	`ALTER TABLE dropboxes ADD COLUMN album TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN extra_tag TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN approve INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN starts_at TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN notified INTEGER NOT NULL DEFAULT 0;
+	 CREATE TABLE dropbox_hosts (
+	   box_id   TEXT NOT NULL,
+	   user_id  TEXT NOT NULL,
+	   name     TEXT NOT NULL,
+	   email    TEXT NOT NULL,
+	   role     TEXT NOT NULL,
+	   added_at TEXT NOT NULL,
+	   PRIMARY KEY (box_id, user_id)
+	 );
+	 CREATE TABLE dropbox_pending (
+	   id     TEXT PRIMARY KEY,
+	   box_id TEXT NOT NULL,
+	   name   TEXT NOT NULL,
+	   size   INTEGER NOT NULL,
+	   kind   TEXT NOT NULL,
+	   who    TEXT NOT NULL,
+	   at     TEXT NOT NULL,
+	   path   TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_pending_box ON dropbox_pending (box_id, at);
+	 CREATE TABLE dropbox_hours (
+	   box_id TEXT NOT NULL,
+	   hour   TEXT NOT NULL,
+	   files  INTEGER NOT NULL,
+	   PRIMARY KEY (box_id, hour)
+	 );
+	 CREATE TABLE dropbox_guests (
+	   box_id TEXT NOT NULL,
+	   who    TEXT NOT NULL,
+	   PRIMARY KEY (box_id, who)
+	 );`,
+	// Drop boxes: a short link, the look of the guest page (colour, language, cover), a size photos are shrunk to in
+	// the guest's browser, guests deleting what they sent, saved templates, and what each guest sent.
+	`ALTER TABLE dropboxes ADD COLUMN short TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN accent TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN lang TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN max_dim INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN guest_delete INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN removed INTEGER NOT NULL DEFAULT 0;
+	 CREATE UNIQUE INDEX dropboxes_short ON dropboxes (short) WHERE short <> '';
+	 CREATE TABLE dropbox_covers (
+	   box_id TEXT PRIMARY KEY,
+	   kind   TEXT NOT NULL,
+	   data   BLOB NOT NULL
+	 );
+	 CREATE TABLE dropbox_templates (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   data       TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE dropbox_uploads (
+	   id         TEXT PRIMARY KEY,
+	   box_id     TEXT NOT NULL,
+	   guest      TEXT NOT NULL,
+	   asset_id   TEXT NOT NULL,
+	   pending_id TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   size       INTEGER NOT NULL,
+	   at         TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_uploads_guest ON dropbox_uploads (box_id, guest);`,
+	// Drop boxes: a shot list (each prompt is a tag), a guest book of messages and voice notes, and sharing the result
+	// back with the guests as an Immich shared link.
+	`ALTER TABLE dropboxes ADD COLUMN prompts TEXT NOT NULL DEFAULT '[]';
+	 ALTER TABLE dropboxes ADD COLUMN prompt_required INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN guest_book INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_pending ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropbox_uploads ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_prompt_counts (
+	   box_id TEXT NOT NULL,
+	   prompt TEXT NOT NULL,
+	   files  INTEGER NOT NULL,
+	   PRIMARY KEY (box_id, prompt)
+	 );
+	 CREATE TABLE dropbox_messages (
+	   id         TEXT PRIMARY KEY,
+	   box_id     TEXT NOT NULL,
+	   who        TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   text       TEXT NOT NULL,
+	   audio      BLOB,
+	   audio_kind TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL
+	 );
+	 CREATE INDEX dropbox_messages_box ON dropbox_messages (box_id, at);
+	 CREATE TABLE dropbox_shares (
+	   box_id     TEXT PRIMARY KEY,
+	   link_id    TEXT NOT NULL,
+	   key        TEXT NOT NULL,
+	   message    TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
+	// Drop boxes: the photos each box kept (for a wall, a best-of and a hand-over), a wall link, a best-of with its
+	// reasons, and a service a box's photos are handed on to.
+	`ALTER TABLE dropboxes ADD COLUMN wall TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN onward_service TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropboxes ADD COLUMN onward_auto INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_messages ADD COLUMN on_wall INTEGER NOT NULL DEFAULT 0;
+	 CREATE UNIQUE INDEX dropboxes_wall ON dropboxes (wall) WHERE wall <> '';
+	 CREATE TABLE dropbox_assets (
+	   id       INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id   TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   prompt   TEXT NOT NULL DEFAULT '',
+	   at       TEXT NOT NULL,
+	   UNIQUE (box_id, asset_id)
+	 );
+	 CREATE TABLE dropbox_highlights (
+	   box_id     TEXT PRIMARY KEY,
+	   strictness TEXT NOT NULL,
+	   status     TEXT NOT NULL,
+	   total      INTEGER NOT NULL,
+	   done       INTEGER NOT NULL,
+	   kept       INTEGER NOT NULL,
+	   album      TEXT NOT NULL,
+	   note       TEXT NOT NULL,
+	   started_at TEXT NOT NULL,
+	   finished_at TEXT NOT NULL
+	 );
+	 CREATE TABLE dropbox_verdicts (
+	   box_id   TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   verdict  TEXT NOT NULL,
+	   detail   TEXT NOT NULL,
+	   name     TEXT NOT NULL,
+	   PRIMARY KEY (box_id, asset_id)
+	 );
+	 CREATE TABLE dropbox_onward (
+	   id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	   box_id  TEXT NOT NULL,
+	   at      TEXT NOT NULL,
+	   service TEXT NOT NULL,
+	   scope   TEXT NOT NULL,
+	   count   INTEGER NOT NULL,
+	   by_name TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -3,6 +3,6 @@
 # Every Test* in test/e2e must be in exactly one group: .github/scripts/e2e_groups_test.sh checks that, so a new test
 # cannot be left out of CI by accident.
 E2E_GROUPS="browser core hub"
-E2E_GROUP_browser='^TestBrowser$'
-E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents)$'
+E2E_GROUP_browser='^(TestBrowser|TestDropBoxGuests|TestDropBoxGuestPage|TestDropBoxExtras|TestDropBoxWallBestOfAndHandingOn)$'
+E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents|TestDropBox|TestDropBoxTools)$'
 E2E_GROUP_hub='^(TestAlbumWatch|TestSelfService|TestLinkHealth|TestCopyMode|TestBackupAndRestore|TestPauseAndLimits|TestTakeBackAndExpiry|TestReceiverDeleteSwitch)$'

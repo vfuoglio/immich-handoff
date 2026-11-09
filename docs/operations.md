@@ -48,6 +48,8 @@ With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for 
 
 ## Backups
 
+A backup is the data file, which also holds the [guest book](using.md#the-guest-book) of every drop box (messages and voice notes). Files that wait for approval in a [drop box](using.md#approving-files-before-they-are-kept) are kept beside it in `dropbox-pending` and are not in the backup (they are deleted after two weeks anyway).
+
 Only installs that let people join keep data: one file, `handoff.db`, in the `handoff-data` volume (its name starts with the folder name; see `docker volume ls`). It holds the services, the memberships and the saved API keys. Fixed-account installs store nothing.
 
 Ask the running app for a backup:
@@ -183,6 +185,16 @@ What it needs from you:
 - **There is no service worker, and nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut.
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
+
+## Letting guests reach a drop box
+
+A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages (`/drop/<link>`, the short `/d/<code>`, and what hangs off them, such as `/upload` and `/mine`; and, for a [wall](using.md#the-wall), `/wall/<link>`) must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
+
+- **Same hostname rule.** Guests only need the link, so the hostname does not matter to them, but the link is built from the address the owner has the page open on. Owners should open the page on the address guests can reach.
+- **Behind single sign-on at the proxy** (Authelia, Authentik, oauth2-proxy and the like): add a rule that lets `/handoff/drop/`, `/handoff/d/` and `/handoff/wall/` (or `/drop/`, `/d/` and `/wall/` on the page's own address) through without the login. Leave everything else behind it.
+- **Large files.** The nginx example above already has `client_max_body_size 0`. Add `proxy_request_buffering off;` to the `/handoff/` location so a big video streams to Immich instead of being stored by the proxy first, and keep `proxy_read_timeout` generous.
+- **Guests' addresses.** Set `DROPBOX_CLIENT_IP_HEADER` (for nginx, `proxy_set_header X-Forwarded-For $remote_addr;` and `DROPBOX_CLIENT_IP_HEADER=X-Forwarded-For`) so the log and the per-guest limits can tell guests apart.
+- **Limit what you expose.** If you do not want any open endpoint, do not make drop boxes: nothing is open until an owner makes one, and revoking every box leaves `/drop/` answering as if it never existed.
 
 ## Monitoring
 

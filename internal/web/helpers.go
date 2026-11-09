@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -223,6 +224,12 @@ func reasonLabel(ctx context.Context, reason string) string {
 }
 
 type baseKey struct{}
+
+type versionKey struct{}
+
+// versionOf is the version of the app that is running: set when it was built (a release says 1.2.0, a build from a
+// checkout says dev), and read from the running program, not written into the pages.
+func versionOf(ctx context.Context) string { v, _ := ctx.Value(versionKey{}).(string); return v }
 
 type adminKey struct{}
 
@@ -608,6 +615,9 @@ var clientMessages = []string{
 	"{who} resumed sending to {service}", "{who}'s connection to {service} was lost; no photo was touched", "{who}: {photos} already there in {service}",
 	"{who}: {photos} could not be handed over; the originals were kept and it will be retried", "{who}: {photos} refused, the receiver has them in the trash; the originals were kept",
 	"{who}: {photos} wait for the daily limit", "{who}: {photos} wait for the daily limit, until {when}",
+	"Could not be sent", "Received", "Sending", "Sent already", "Waiting for the connection", "Waiting to send",
+	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
+	"The microphone is not available", "Thank you for your message!",
 }
 
 // clientCatalog is what the page hands its scripts: the language and the translated messages they use.
@@ -679,4 +689,100 @@ func createConfirm(ctx context.Context, deleteOK bool) string {
 		msg += " " + t(ctx, "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.")
 	}
 	return msg
+}
+
+func extendVals(id string, days int) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "days": strconv.Itoa(days)})
+	return string(b)
+}
+
+func allVals(id string) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "all": "1"})
+	return string(b)
+}
+
+// hostVals is the form of removing a co-host (an empty user: the person asking stops helping).
+func hostVals(id, user string) string {
+	m := map[string]string{"service": id}
+	if user != "" {
+		m["user"] = user
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+func hostRoleLabel(ctx context.Context, manage bool) string {
+	if manage {
+		return t(ctx, "approves, pauses and extends")
+	}
+	return t(ctx, "only looks")
+}
+
+func shortVals(id string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "on": v})
+	return string(b)
+}
+
+func dimLabel(ctx context.Context, px int) string {
+	if px == 0 {
+		return t(ctx, "never (send them as they are)")
+	}
+	return t(ctx, "{px} pixels", "px", px)
+}
+
+func messageAuthor(ctx context.Context, name string) string {
+	if name == "" {
+		return t(ctx, "A guest")
+	}
+	return name
+}
+
+func promptState(ctx context.Context, files int) string {
+	if files == 0 {
+		return t(ctx, "no photo yet")
+	}
+	return n(ctx, "{n} photo", "{n} photos", files)
+}
+
+// shareHref is where "See the photos" leads: the full address when the app knows where Immich is, or the shared page's
+// path (the page's script makes it a full address from the key).
+func shareHref(s ShareView) string {
+	if s.URL != "" {
+		return s.URL
+	}
+	return "/share/" + s.Key
+}
+
+func wallVals(id string, renew bool) string {
+	v := "0"
+	if renew {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "renew": v})
+	return string(b)
+}
+
+func wallMsgVals(id string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	b, _ := json.Marshal(map[string]string{"service": id, "on": v})
+	return string(b)
+}
+
+func scopeVals(id, scope string) string {
+	b, _ := json.Marshal(map[string]string{"service": id, "scope": scope})
+	return string(b)
+}
+
+func onwardOptionLabel(ctx context.Context, o OnwardOptionView) string {
+	if o.Copy {
+		return o.Service + " \u00b7 " + t(ctx, "you keep your originals")
+	}
+	return o.Service + " \u00b7 " + t(ctx, "your originals go to your trash")
 }

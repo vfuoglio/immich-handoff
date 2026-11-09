@@ -22,6 +22,8 @@ Both choices are kept in this browser. The code next to them (en, de, fr, es, it
 
 A few small touches make it feel alive and can be ignored: the light behind the page drifts slowly, leans toward your pointer and flares when a photo lands, cards tilt a little toward a mouse, and numbers roll like a departures board. They are skipped with a touch screen or when your browser asks for reduced motion, and nothing moves while the page is idle.
 
+
+The footer of every page says which **version** of Immich Handoff is running, after the line about tagging. It is read from the running program (a release says `1.2.0`, a build from a checkout says `dev`), so it is what you are running, not what the page was written for. It is shown only to people signed in to Immich, never on the sign-in page or to a drop box's guests.
 ## The Overview
 
 The page opens with what matters, in this order:
@@ -82,7 +84,7 @@ Some services need the owner's approval. You press **Ask to join**, the owner ap
 Instead of tagging photos one by one, you can link one of your own albums to a service you joined from this page. On the service's card press **Hand over a whole album**, choose the album, and confirm. Everything in it is handed over to that service, **now and whatever you add to it later**, with no tag.
 
 - **Why not just tag the album?** Immich tags belong to single photos, not to albums, so there is no such thing as tagging an album. Linking is different: the app keeps looking at the album.
-- **It is checked on a timer.** Immich sends no event when a photo is added to an album (see [why the inbox tag takes minutes to go](#when-the-inbox-tag-goes-away)), so the app looks at linked albums every 15 minutes (`ALBUM_CHECK_MINUTES`). Tagging a photo is still instant.
+- **It is checked on a timer.** Immich sends no event when a photo is added to an album (see [why the inbox tag takes minutes to go](#when-the-inbox-tag-goes-away)), so the app looks at linked albums every 15 minutes (`ALBUM_CHECK_MINUTES`). Linking an album starts a pass at once, so what is already in it goes within seconds; photos added to it later wait for the next round. Tagging a photo is still instant.
 - **Each photo goes once.** With **keep my originals**, a handed-over photo stays in your album and is marked with the `handed-over` tag, which is how the app knows to leave it alone. With **move**, the original goes to your trash. A photo the receiver refused (they have it in their trash) is tagged `share-duplicate` and left alone until you remove that tag.
 - **Only your own photos.** An album can hold other people's photos (a shared album); those are never handed over.
 - **One album per service.** Linking another replaces the first. **Stop handing over this album** on the card unlinks it. Photos already handed over stay where they are.
@@ -192,6 +194,115 @@ A sender who joined from the page sees **Take back the last hand-over** on a ser
 - A copy the receiver has **already filed in an album** is theirs now: it stays, and so does your original's state. The page says how many stayed.
 - A stack and a live photo (with its motion clip) are taken back whole.
 - It takes back the most recent hand-over not yet taken back, so pressing it again takes back the one before. Only people who joined from the page have it (accounts set up in `.env` or the routes file are not recorded). It needs `RECEIVER_DELETE` (on by default); if the owner's key cannot move photos to the trash yet, the page asks the sender to tell the owner to open the page once.
+
+## Drop boxes: photos from people who do not have Immich
+
+A drop box is a link for people without an Immich account: relatives at a wedding, guests at an event. You make one on the **Services** tab, under **Make a drop box**, and share its link, a message with it, or its QR code. Guests open it in any browser, choose photos and send them. What arrives goes into **your** library, tagged `inbox/<name of the box>`, to look through before you file it. Nothing else changes: it is not a service, nobody has to be approved, and there is no sender.
+
+What a guest sees: the name of the box, your message, a form to choose photos (and videos, unless the box is for photos only), and afterwards what became of each file. **They cannot see your library, what other guests sent, or even what they sent themselves once they leave the page.** Immich's own shared link with uploads switched on shows guests the whole album; a drop box does not.
+
+What you set, all optional:
+
+| Setting | What it does |
+|---|---|
+| **Open for (days)**, **Opens at**, **Closes at** | When the link works. By default it opens now and stops after the days you give (at most 365). Set **Opens at** to open later, and **Closes at** for an exact end (it replaces the days), for example Saturday 14:00 to Sunday 12:00. Times are in the app's time zone (`TZ`). Before it opens and after it closes the link looks like one that does not exist. |
+| **Message for guests** | Shown above the form. |
+| **Largest file / most megabytes / most files** | The most one file may weigh, and the most the box takes in all. A file that would go past the total is refused before it is stored. `0` is no limit. |
+| **Album**, **Another tag** | Where what arrives is filed besides the `inbox/<name>` tag: an album of yours with that name (made when the first photo arrives) and a tag of your own, for example the event's name. Choosing an album gives the box's key permission to find, make and add to albums, nothing more. The same photo sent twice is stored once: Immich recognises it by its checksum, the second copy is not kept, and the guest is told it was already there. |
+| **Shot list**, **Every photo must say which one it is for** | See [A shot list](#a-shot-list). |
+| **A guest book** | See [The guest book](#the-guest-book). |
+| Wall, best-of, hand the photos on | See [The wall](#the-wall), [A best-of](#a-best-of) and [Handing the photos on](#handing-the-photos-on). |
+| **I look at every file before it is kept** | See [Approving files before they are kept](#approving-files-before-they-are-kept). |
+| **Guests may take back what they sent** | See [Guests taking back what they sent](#guests-taking-back-what-they-sent). |
+| **Photos only** | Videos are turned away. |
+| **Password** | Guests must give it. Five wrong tries from one guest in ten minutes silence that guest for ten minutes. |
+
+What a drop box checks: it looks at the first bytes of every file, not at its name, and takes only what Immich can show as a photo or a video (JPEG, PNG, GIF, WebP, BMP, HEIC, AVIF, TIFF and DNG, MP4, MOV, WebM, 3GP). Pages, programs and archives are turned away and the log says so. A file is stored under a clean name with the extension its content calls for.
+
+From the box's row you can see what it has taken so far (files, guests, the busiest hour), **Pause** it (the link then looks like one that does not exist), **Resume** it, copy its link or message, show its **QR code**, read its **log**, and **Revoke** it. Revoking ends it for good: the link stops working at once and the key is deleted from your Immich account. The photos already received stay in your library, and the log stays readable for a month.
+
+### Approving files before they are kept
+
+With **I look at every file before it is kept**, nothing a guest sends reaches your library until you say so. The file is checked as usual, then kept on the server's disk (in the data folder, under `dropbox-pending`, and not in backups) and shown to you on the box's row as a thumbnail with its name and size. Tick the ones you want and press **Approve chosen** or **Reject chosen**, or **Approve all** or **Reject all**. An approved file is stored in your library and filed (tags and album); a rejected one is deleted and its room goes back to the box's limits. Files nobody decides on are deleted after two weeks, and at most 1000 files or 10 GB wait in one box; past that the box tells guests it is full. Guests are told their files will be looked at, and see "waiting for approval" next to each. This needs the app to have a data folder (self-service switched on). Thumbnails are shown for photos; a video appears as a label with its name and size.
+
+### Co-hosts
+
+An owner can ask other people on the same Immich server to help with a box: under **Co-hosts** on the box's row, give their email and choose **Approve, pause and extend** or **Only look**. They find the box on their own Services tab. A co-host who manages can approve and reject files, pause and resume the box, extend it and see its log and link; one who only looks sees the summary and the log (and that files are waiting, not what they are), and not the link. **Nobody but the owner can end the box or choose co-hosts**, and no co-host ever sees your library or the key: they act through the app, which uses the box's key. A co-host can stop helping at any time from the box's row, and the owner can remove one. A box has at most ten.
+
+### Closing time
+
+A box with an end reminds and sums up. About a day before it closes, `NOTIFY_URL` is told (so you remember); when it has closed, the log and `NOTIFY_URL` say what it took ("42 files (310.5 MB) from 12 guests"). On the box's row, **Extend by a day** or **by a week** (the owner and co-hosts who manage) moves the end later, from the old end or from now if it already ended, and opens the box again; extending resets the reminder and the summary. A box can never be set to end more than a year from now.
+
+### The guest page
+
+On a phone the page offers the camera ("Or take a photo now"); on a computer you can also drop files on it. Each file is sent on its own, with a progress bar, and the page says what became of it. **Interrupted uploads carry on:** if the connection drops, the page waits for it (it notices when the phone is back online) and tries the file again, up to eight times with growing pauses; a file that cannot be sent is marked, and the others are not held up. The page also remembers, in the guest's browser, which files it has already sent, so reloading and choosing the same files again skips them. This works file by file: a file cut off halfway is sent again from its start, not from where it stopped, and a photo sent twice is stored once anyway (the library recognises it). Without JavaScript the page is a plain form that still works.
+
+Under **The look of the guest page** on a box's row you can set:
+
+| Setting | What it does |
+|---|---|
+| **Colour** | The page's accent (`#rrggbb`), also the colour of the installed app's bar. |
+| **Language** | The language of the page for guests who have not chosen one. A guest's own choice in the language menu wins. Default: their browser's. |
+| **Cover photo** | A JPEG, PNG or WebP of up to 900 KB above the name. |
+| **Shrink photos larger than** | 1600, 2400 or 4000 pixels, or never. Done **in the guest's browser** before sending, which saves their data and your storage. A shrunk photo is re-saved as a JPEG and **loses its metadata** (date, place); a photo the browser cannot decode (HEIC in most browsers) is sent as it is, and a shrunk file is never bigger than the original. It is off by default: leave it off to keep every photo exactly as taken. |
+
+The page can be **installed** on a phone ("Add to home screen") under the box's name and colour, like the app's own pages; it only works while the box is open.
+
+### More ways in
+
+A box has a long link, which cannot be guessed, and can have more:
+
+- **A short link** (**Make a short link**): ten letters and digits, `.../d/xxxxxxxxxx`, easy to type or read out. It opens the same box. It is easier to guess than the long link, so for a box that must stay private give it a password too. **Remove short link** ends it and leaves the long link and anything printed with it working; **New long link** (the owner only) ends the long link, and every card printed with it, and leaves the short one working. The long link, the short one and the printed cards are ended one at a time.
+- **A printable card** (**Printable card with a QR code**): a page with the box's name, your message and a QR code of the link, to print for table cards or a poster (the print dialog leaves out everything else). There is one for the short link too.
+- **By email**, so a guest can send photos by mail, is **not** offered. It needs the app to read a mailbox, which is a different kind of access (and different settings) from everything else here; it is better decided on its own than slipped in.
+
+### Templates and copies
+
+**Templates and copies** on a box's row, and **Start from a template** under the list, save time when you hold the same kind of event again. A template keeps a box's settings (message, limits, filing, approval, the look, how many days it stays open), not its name, link, password, cover photo, guests or co-hosts. **Save template** keeps the settings of a box under a name; **Start from a template** makes a new box from one, with the name you give and, if you want, when it opens and closes; **Make a copy** does the same from a box directly. Wedding, Birthday and School trip are there for everyone (School trip is photos only, approved by you, and shrunk to 4000 pixels); yours are private, at most twenty. A built-in template that needs approval makes a box without it on an install that has no place to keep waiting files.
+
+### Guests taking back what they sent
+
+Switch on **Guests may take back what they sent, while it is still in the inbox** when you make a box. The guest's browser then keeps a secret (a cookie, `HttpOnly`; the server stores only a hash of it), the page links to **your uploads**, and each of a guest's files has **Take back**. A file that still waits for your approval is deleted. A photo already in your library goes to **your trash** (never deleted for good) if it still carries the box's inbox tag; **once you have taken that tag off or filed the photo, it is yours**, and the guest is told to ask you. A guest sees only what their own browser sent, and only in that browser. For this the box's key also gets `asset.read` and `asset.delete`, so it is the one kind of box whose key can move a photo to the trash; it is off unless you choose it, and it cannot be switched on later for a box that exists (make a copy instead). Taken-back files are counted in the summary and the log.
+
+### A shot list
+
+Give a box a **shot list** (one prompt per line, at most twenty, each up to 60 characters, no slash or comma: "The first dance", "The oldest guest", "The best hat") and the guest page asks "What is the photo for?" with the list to choose from, and shows it as a checklist with a tick on each prompt that already has a photo, so guests can see what is still missing. Tick **Every photo must say which one it is for** to make the choice compulsory; a photo with none is refused. With a list, a photo for a prompt is tagged `inbox/<box>/<prompt>` as well as `inbox/<box>`, so **Immich lists the photos grouped by prompt** (open the tag in Immich). Each prompt on the owner's page shows how many photos came for it. The list can be edited later under **Shot list and guest book** (the owner and co-hosts who manage): a prompt that stays keeps its photos and its count, a new one starts at none, and photos already tagged keep their tags. Each guest chooses a prompt for the files they add at that moment, so one visit can cover several prompts. A prompt is shown as written; it is not translated per guest.
+
+### The guest book
+
+Switch on **A guest book** and the guest page has a **Leave a message** form: a name (optional), a few words (up to 1000 characters) and, on a browser that can record, a **voice message** of up to 90 seconds. A message needs words or a voice note, or both. **Messages and voice notes are not photos, so they are not put in Immich: they are kept in this app's own data file** (and so in its backups), and only the owner and the co-hosts who manage the box can read and play them, on the box's row under **Guest book**. A viewer co-host cannot. The owner can remove a message, or **download the guest book** as a zip with every message, oldest first, and each voice note as a file. A box holds at most 500 messages, a voice note is at most 2 MB, and the file's first bytes must say it is audio (WebM, Ogg, MP4/M4A, WAV or MP3). Without a script the form still sends the words. Recording needs the browser's permission to use the microphone, and over HTTPS.
+
+### Sharing the photos back
+
+When the event is over, **Share the photos back with the guests** (the owner only, under that name on the box's row) gives them something in return. It puts what the box received (every photo under its inbox tag) into an album of yours, the box's own album if it has one, otherwise one named after the box, and makes a **link in Immich's own shared-link page**, view-only, that anyone who has it can open **without an account**, to look at the photos and download them one by one or all at once. You choose how many days it stays open (1 to 365), an optional password, and a thank-you message that Immich shows with the album. It cannot upload or change anything. Copy the link, a ready-written message or its QR code and send them to the guests. The app does it with **your own session**, so the box's key gets no new permission. Press the button again later to add what came since: the new link replaces the old one. **Stop sharing** ends the link; the album and the photos stay in your library.
+
+Two things to know. **Immich only allows downloads on a link that also shows the photos' details** (dates, places, cameras), so this link does: guests who open it can see those details of every photo, not only their own. And the box's own link, once the box has closed, **leads to the photos** while a shared link is open (a guest who opens their old link sees your thanks and a **See the photos** button); a closed box that shared nothing still looks like a link that does not exist.
+
+### The wall
+
+A **wall** shows a box's photos full screen on a TV or a projector, one after another, as they arrive. The owner starts it on the box's row under **Wall**; the screen opens the link it gives, with **no sign-in**, so nobody's session is left on a shared device, and the wall has a link of its own that can be renewed (**New wall link**) or ended (**Stop the wall**) without touching the box or its other links. The page asks the app every few seconds what is new, so a photo appears within a few seconds of arriving. Choose how it looks with the buttons that appear when you move the mouse, or in the address: **Single photo** (a gentle cross-fade, new photos first), **Collage** (the newest nine, a little tilted) or **Grid** (the newest twelve); **Full screen** is there too. When a photo has a prompt (a [shot list](#a-shot-list)) its name is shown as a caption, and **guest-book messages** you mark **Show on the wall** appear now and then; none do until you choose them.
+
+What it shows: only photos the box has put in the library. Files waiting for approval, rejected ones and photos a guest took back never show. To fetch the pictures the box's key gets **one more permission** (to view photos), added with your own sign-in when you start the wall and taken off when you stop it; only the owner can start or stop it, and co-hosts who manage can see its link. A wall keeps working after the box has closed, until you stop it.
+
+### A best-of
+
+Under **Best-of** the owner can ask for a **suggested best-of set** of a box's photos. The app looks at each photo in the box's inbox tag (through the small picture Immich made of it) and leaves out:
+
+- photos that are **too dark** or **too bright**,
+- photos that are **blurred** (little fine detail),
+- and, of what is left, all but the sharpest of any shots of **the same moment**: pictures that look alike and were taken within an hour of each other.
+
+What is kept goes into an album of yours called "*box name* best of". **Nothing is deleted or changed**, and the box's own photos stay where they are. **How much to leave out** is **relaxed**, **normal** or **strict**; running it again with another setting **corrects the album** (what is no longer kept leaves it, and anything you put in it yourself stays). **Why N photos were left out** lists each photo left out with its reason ("too dark, brightness 9 of 255", "the same moment as a better photo"), so you can overrule it by adding the photo to the album in Immich. It runs in the background and the row says how far it is (reload the page to see). Only the owner can ask for one, because it reads the photos with the owner's own sign-in. It looks at the photos' content only: it uses no face recognition and no model, so it cannot tell a good moment from a boring one, only a technically poor shot from a good one. Photos Immich keeps only as WebP previews cannot be looked at here and are kept. It can be run at any time, not only when a box has closed.
+
+### Handing the photos on
+
+When the event is over the whole set can go through the hand-over that already exists, to a service you send to: a family member's library, a print service. Under **Hand the photos on** (the owner) choose the **service**, one you have joined as a sender, and then **Hand everything on now** or, once you have made a best-of, **Hand the best-of on now**. The app **tags the photos with the service's tag in your own library**, which is what hands a photo over, so all the usual rules apply: the service's daily limit, quiet hours and accept rules, the receiver's copy that expires, and the sender's **Take back the last hand-over**. If you chose to keep your originals when you joined the service they stay; **if you chose to move them, they go to your trash once handed over** (the list shows which each service does). Tick **Hand everything on by itself when the box closes** and it happens once, when the box closes, with everything (never the best-of: that waits for you to look at it); the box's closing summary and its log say how many photos went and where, or why they could not (for example if you have left the service). Each time is kept in the list under the box, with when, what, where and by whom.
+
+**The log** shows each file that arrived or was turned away, and each time a guest was refused for asking too much, with a short mark such as `guest 3fa9c1` instead of an address, so you can tell guests apart without the app keeping where they are. Nothing in it is a name or an address.
+
+**Protection against abuse.** One guest can make 30 upload requests in ten minutes and 300 files in an hour; a box takes four uploads at once and the whole app sixteen. If a box takes 1000 files in ten minutes, or turns away 200 files or guests in ten minutes, it **pauses by itself**, the log says why, and `NOTIFY_URL` is told. Look at the log, then resume it. The limits are the same for every box. More on what a link allows is in [Security](security.md#drop-boxes).
+
+**Making the link reachable.** Guests do not have your Immich login, so `/drop/` on the page must be open to the internet *without* any sign-in in front of it. See [Letting guests reach a drop box](operations.md#letting-guests-reach-a-drop-box).
 
 ## Leaving, and when a connection breaks
 

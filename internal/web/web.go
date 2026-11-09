@@ -53,6 +53,7 @@ type Server struct {
 	BackupDownload  bool            // HANDOFF_ADMIN_BACKUP_DOWNLOAD: the administrator's page may hand out a backup (off by default)
 	DownloadGap     time.Duration   // the least time between two downloads (default 10 minutes)
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
+	ClientIPHeader  string          // DROPBOX_CLIENT_IP_HEADER: the header in which a reverse proxy puts a guest's real address (empty: the connection's)
 
 	limiter limiter
 	gate    downloadGate
@@ -93,6 +94,51 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
+	mux.HandleFunc("GET /drop/{token}", w.dropPage)
+	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
+	mux.HandleFunc("GET /d/{token}", w.dropPage)
+	mux.HandleFunc("POST /d/{token}/upload", w.dropUpload)
+	mux.HandleFunc("GET /drop/{token}/theme.css", w.dropTheme)
+	mux.HandleFunc("GET /drop/{token}/cover", w.dropCover)
+	mux.HandleFunc("GET /drop/{token}/manifest.webmanifest", w.dropManifest)
+	mux.HandleFunc("GET /drop/{token}/mine", w.dropMine)
+	mux.HandleFunc("POST /drop/{token}/mine/delete", w.dropMineDelete)
+	mux.HandleFunc("GET /d/{token}/mine", w.dropMine)
+	mux.HandleFunc("POST /d/{token}/mine/delete", w.dropMineDelete)
+	mux.HandleFunc("POST /drop/{token}/message", w.dropMessage)
+	mux.HandleFunc("POST /d/{token}/message", w.dropMessage)
+	mux.HandleFunc("POST /dropbox/extras", w.extrasDropBox)
+	mux.HandleFunc("POST /dropbox/message/delete", w.deleteMessage)
+	mux.HandleFunc("GET /dropbox/voice/{id}", w.voiceNote)
+	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
+	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
+	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
+	mux.HandleFunc("GET /wall/{token}", w.wallPage)
+	mux.HandleFunc("GET /wall/{token}/feed", w.wallFeed)
+	mux.HandleFunc("GET /wall/{token}/photo/{id}", w.wallPhoto)
+	mux.HandleFunc("POST /dropbox/wall", w.startWall)
+	mux.HandleFunc("POST /dropbox/wall/stop", w.stopWall)
+	mux.HandleFunc("POST /dropbox/message/wall", w.messageOnWall)
+	mux.HandleFunc("POST /dropbox/highlights", w.startHighlights)
+	mux.HandleFunc("POST /dropbox/onward", w.setOnward)
+	mux.HandleFunc("POST /dropbox/handon", w.handOn)
+	mux.HandleFunc("POST /dropbox/short", w.shortDropBox)
+	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
+	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
+	mux.HandleFunc("POST /dropbox/template", w.saveDropTemplate)
+	mux.HandleFunc("POST /dropbox/template/delete", w.deleteDropTemplate)
+	mux.HandleFunc("POST /dropbox/fromtemplate", w.dropFromTemplate)
+	mux.HandleFunc("POST /dropbox/duplicate", w.duplicateDropBox)
+	mux.HandleFunc("GET /dropbox/card/{id}", w.dropCard)
+	mux.HandleFunc("POST /dropbox", w.createDropBox)
+	mux.HandleFunc("POST /dropbox/pause", w.pauseDropBox)
+	mux.HandleFunc("POST /dropbox/revoke", w.revokeDropBox)
+	mux.HandleFunc("POST /dropbox/extend", w.extendDropBox)
+	mux.HandleFunc("POST /dropbox/approve", w.decideDropBox(true))
+	mux.HandleFunc("POST /dropbox/reject", w.decideDropBox(false))
+	mux.HandleFunc("POST /dropbox/host", w.addDropHost)
+	mux.HandleFunc("POST /dropbox/host/remove", w.removeDropHost)
+	mux.HandleFunc("GET /dropbox/pending/{id}", w.pendingFile)
 	mux.HandleFunc("GET /fragments/count", w.countFragment)
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
@@ -125,14 +171,15 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		img += " " + u.Scheme + "://" + u.Host
 	}
 	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; img-src " + img +
-		"; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+		"; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
 		h.Set("Content-Security-Policy", csp)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
-		if r.Method == http.MethodPost {
+		upload := dropRoute(r.URL.Path) && (strings.HasSuffix(r.URL.Path, "/upload") || strings.HasSuffix(r.URL.Path, "/message"))
+		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
 		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English
@@ -144,11 +191,18 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("Content-Language", string(lang))
 		h.Add("Vary", "Accept-Language")
 		h.Add("Vary", "Cookie")
-		r = r.WithContext(i18n.With(r.Context(), i18n.For(lang)))
+		r = r.WithContext(context.WithValue(i18n.With(r.Context(), i18n.For(lang)), versionKey{}, w.Version))
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
+		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
+			base := strings.Repeat("../", len(strings.Split(strings.Trim(r.URL.Path, "/"), "/"))-1)
+			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, &guestInfo{}))
+		}
+		if strings.HasPrefix(r.URL.Path, "/dropbox/card/") { // the printable card is two levels down
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))
 		}
 		next.ServeHTTP(rw, r)
 	})
@@ -396,6 +450,8 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 		}
 	}
 	d.Owned = w.ownedViews(ctx, me)
+	d.DropBoxes = w.dropBoxViews(ctx, me)
+	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
 		for _, b := range broken {

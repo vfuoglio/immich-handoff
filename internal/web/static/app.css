@@ -503,3 +503,69 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 
 .qr { margin-top: .8rem; }
 .qr img { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+
+/* the list of what became of a guest's files */
+ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+
+/* the guest page of a drop box */
+.drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
+.drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.drop-list li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .6rem; align-items: center; }
+.drop-list li progress { grid-column: 1 / -1; width: 100%; height: .4rem; accent-color: var(--accent); }
+.drop-list li.failed .meta { color: var(--bad); }
+.camera-only { display: none; }
+@media (pointer: coarse) { .camera-only { display: grid; } .drop-hint { display: none; } }
+form.inline { display: inline; }
+ul.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: .7rem; }
+ul.thumbs li { display: grid; gap: .3rem; justify-items: start; }
+ul.thumbs img, ul.thumbs .thumb-video { width: 6rem; height: 6rem; object-fit: cover; border-radius: .7rem; background: color-mix(in oklab, var(--accent) 12%, transparent); display: grid; place-items: center; font-size: .8rem; }
+a.button { display: inline-block; padding: .45rem .9rem; border-radius: .7rem; border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); text-decoration: none; }
+
+/* the printable card */
+.card-sheet { text-align: center; display: grid; justify-items: center; gap: 1rem; padding: 2rem 0; }
+.card-qr img { background: #fff; border-radius: .6rem; }
+.card-url { word-break: break-all; font-family: ui-monospace, monospace; font-size: .95rem; }
+@media print {
+  .bar, footer, .no-print, #glow, dialog { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .card-sheet h1, .card-sheet .lead { color: #000 !important; background: none !important; -webkit-text-fill-color: #000 !important; }
+}
+
+/* shot list and guest book */
+ul.checklist { display: flex; flex-wrap: wrap; gap: .4rem .8rem; }
+ul.checklist li { font-size: .9rem; }
+ul.guestbook li { display: grid; gap: .3rem; padding: .6rem 0; border-top: 1px solid color-mix(in oklab, var(--accent) 15%, transparent); }
+ul.guestbook audio { width: 100%; max-width: 22rem; }
+textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7rem; border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent); background: transparent; color: inherit; }
+.guestbook-form h2 { margin: 0 0 .3rem; }
+
+footer .version { opacity: .75; white-space: nowrap; }
+
+/* the wall */
+body.wall { background: #000; color: #fff; margin: 0; overflow: hidden; }
+body.wall #glow { display: none; }
+#wall { position: fixed; inset: 0; background: #000; }
+.wall-stage { position: absolute; inset: 0; }
+.wall-stage figure { margin: 0; }
+.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; display: grid; place-items: center; }
+.wall-stage.single figure.single.in { opacity: 1; }
+.wall-stage.single img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.wall-stage figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 2rem; font-size: clamp(1.1rem, 3vw, 2.4rem); text-align: center; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+.wall-stage.grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 4px; padding: 4px; }
+.wall-stage.grid figure { position: relative; overflow: hidden; }
+.wall-stage.grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wall-stage.grid figcaption { font-size: 1rem; padding: .5rem; }
+.wall-stage.collage { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 1.2vmin; padding: 3vmin; }
+.wall-stage.collage figure { position: relative; transform: rotate(var(--tilt, 0deg)); box-shadow: 0 6px 24px rgba(0,0,0,.6); border: 1.2vmin solid #fff; border-bottom-width: 3vmin; }
+.wall-stage.collage img { height: 26vmin; width: auto; max-width: 40vmin; object-fit: cover; display: block; }
+.wall-stage.collage figcaption { position: static; color: #111; background: none; padding: .2rem; font-size: 1rem; }
+.wall-stage figure.arrive { animation: wall-arrive 1.2s ease both; }
+@keyframes wall-arrive { from { opacity: 0; transform: scale(.8) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
+.wall-wait { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2rem; opacity: .6; margin: 0; }
+.wall-wait[hidden] { display: none; }
+.wall-note { position: absolute; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.2rem; background: rgba(20,20,40,.82); font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; }
+.wall-controls { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .5rem; opacity: 0; transition: opacity .4s; }
+.wall-controls.on { opacity: 1; }
+.wall-controls button { background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: .6rem; padding: .4rem .8rem; }
+.wall-controls button[aria-pressed="true"] { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .wall-stage figure.arrive { animation: none; } .wall-stage.single figure.single { transition: none; } }

@@ -578,3 +578,23 @@ func TestThePageSpeaksTheLanguageTheCookieOrTheBrowserAsksFor(t *testing.T) {
 		}
 	}
 }
+
+func TestTheFooterShowsTheRunningVersionAndGuestsDoNotSeeIt(t *testing.T) {
+	app, _ := setup(t, func(s *web.Server) { s.Version = "9.8.7" })
+	_, p := do(t, "GET", app.URL+"/", "sess=other", nil)
+	if !strings.Contains(p, "Photos you tag in Immich are handed over automatically.") || !strings.Contains(p, "Immich Handoff 9.8.7") {
+		t.Errorf("the footer must say which version is running: %s", p[strings.Index(p, "<footer"):][:300])
+	}
+	// another build says another thing: nothing is written into the pages
+	other, _ := setup(t, func(s *web.Server) { s.Version = "dev" })
+	if _, p := do(t, "GET", other.URL+"/", "sess=other", nil); !strings.Contains(p, "Immich Handoff dev") || strings.Contains(p, "9.8.7") {
+		t.Error("the version is the one the program was built with")
+	}
+	// only people signed in to Immich are told: not someone who has not signed in, and not a drop box's guests
+	if _, p := do(t, "GET", app.URL+"/", "", nil); strings.Contains(p, "9.8.7") || !strings.Contains(p, "Sign in to Immich first") {
+		t.Error("the sign-in page must not tell the version")
+	}
+	if _, p := do(t, "GET", app.URL+"/drop/"+strings.Repeat("a", 32), "", nil); strings.Contains(p, "9.8.7") {
+		t.Error("a guest must not be told the version")
+	}
+}

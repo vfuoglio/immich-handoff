@@ -47,10 +47,28 @@ type fakeImmich struct {
 	deletedKeys   []string
 	workflows     map[string]string // id -> name
 	deletedFlows  []string
-	lastPerms     []string            // permissions of the most recent key created
-	keyPerms      map[string][]string // key id -> permissions
-	keyUpdates    int                 // how many times a key's permissions were changed
-	albums        []map[string]any    // bob's own albums
+	lastPerms     []string                   // permissions of the most recent key created
+	keyPerms      map[string][]string        // key id -> permissions
+	keyUpdates    int                        // how many times a key's permissions were changed
+	albums        []map[string]any           // bob's own albums
+	uploads       []fakeUpload               // files stored through an upload
+	tagged        []string                   // asset ids that were tagged
+	tagNames      []string                   // tags that were made
+	albumAdds     []string                   // "album name: asset id" for each photo put in an album
+	tagIDs        map[string]string          // tag id -> name
+	assetTags     map[string][]string        // asset id -> names of its tags
+	trashed       map[string]bool            // asset ids moved to the trash
+	links         map[string]map[string]any  // shared links made, by id
+	assetName     map[string]string          // asset id -> the name it was stored under
+	created       map[string]string          // asset id -> its capture time (RFC 3339), when a test sets one
+	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
+	members       map[string]map[string]bool // album id -> asset ids in it
+	removedLinks  []string
+}
+
+type fakeUpload struct {
+	person, name string
+	size         int
 }
 
 // person is who a request is from: a session cookie ("sess=bob") or one of the keys created for them.
@@ -163,8 +181,259 @@ func (f *fakeImmich) handler() http.Handler {
 		}
 		w.WriteHeader(204)
 	})
+	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		who := f.person(r)
+		f.mu.Unlock()
+		mr, err := r.MultipartReader()
+		if err != nil {
+			http.Error(w, "no", 400)
+			return
+		}
+		for {
+			part, err := mr.NextPart()
+			if err != nil {
+				break
+			}
+			if part.FormName() == "assetData" {
+				n, err := io.Copy(io.Discard, part)
+				if err != nil {
+					http.Error(w, "broken", 400)
+					return
+				}
+				f.mu.Lock()
+				f.uploads = append(f.uploads, fakeUpload{who, part.FileName(), int(n)})
+				f.mu.Unlock()
+				status, code := "created", 201
+				if strings.HasPrefix(part.FileName(), "dupe") {
+					status, code = "duplicate", 200
+				}
+				id := uuid.NewString()
+				f.mu.Lock()
+				if f.assetTags == nil {
+					f.assetTags = map[string][]string{}
+				}
+				f.assetTags[id] = nil
+				if f.assetName == nil {
+					f.assetName = map[string]string{}
+				}
+				f.assetName[id] = part.FileName()
+				f.mu.Unlock()
+				j(w, code, map[string]any{"id": id, "status": status})
+				return
+			}
+		}
+		http.Error(w, "no file", 400)
+	})
+	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
+		out := []any{}
+		for _, p := range people {
+			out = append(out, map[string]any{"id": p.id, "name": p.name, "email": p.email, "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("POST /api/albums", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AlbumName string `json:"albumName"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		id := uuid.NewString()
+		f.albums = append(f.albums, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0})
+		f.mu.Unlock()
+		j(w, 201, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0})
+	})
+	mux.HandleFunc("DELETE /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			delete(f.members[r.PathValue("id")], id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/assets/{id}/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		name, ok := f.assetName[r.PathValue("id")]
+		var data []byte
+		for prefix, d := range f.thumbs {
+			if strings.HasPrefix(name, prefix) {
+				data = d
+			}
+		}
+		f.mu.Unlock()
+		if !ok || data == nil {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(data)
+	})
+	mux.HandleFunc("PUT /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		name := r.PathValue("id")
+		for _, a := range f.albums {
+			if a["id"] == r.PathValue("id") {
+				name, _ = a["albumName"].(string)
+			}
+		}
+		for _, id := range body.Ids {
+			f.albumAdds = append(f.albumAdds, name+": "+id)
+			if f.members == nil {
+				f.members = map[string]map[string]bool{}
+			}
+			if f.members[r.PathValue("id")] == nil {
+				f.members[r.PathValue("id")] = map[string]bool{}
+			}
+			f.members[r.PathValue("id")][id] = true
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
+	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Tags []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.tagNames = append(f.tagNames, body.Tags...)
+		if f.tagIDs == nil {
+			f.tagIDs = map[string]string{}
+		}
+		out := []any{}
+		for _, n := range body.Tags {
+			id := uuid.NewString()
+			f.tagIDs[id] = n
+			out = append(out, map[string]any{"id": id, "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
+	mux.HandleFunc("PUT /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			f.tagged = append(f.tagged, id)
+			if f.assetTags == nil {
+				f.assetTags = map[string][]string{}
+			}
+			f.assetTags[id] = append(f.assetTags[id], f.tagIDs[r.PathValue("id")])
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		names, ok := f.assetTags[r.PathValue("id")]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		tags := []any{}
+		for _, n := range names {
+			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+	})
+	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids   []string
+			Force bool
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		if f.trashed == nil {
+			f.trashed = map[string]bool{}
+		}
+		for _, id := range body.Ids {
+			f.trashed[id] = !body.Force
+		}
+		f.mu.Unlock()
+		w.WriteHeader(204)
+	})
 	tag := map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}
-	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) { j(w, 200, []any{tag}) })
+	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := []any{tag}
+		for id, n := range f.tagIDs {
+			out = append(out, map[string]any{"id": id, "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
+		}
+		j(w, 200, out)
+	})
+	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			TagIds   []string `json:"tagIds"`
+			AlbumIds []string `json:"albumIds"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		items := []any{}
+		add := func(id string) {
+			created := ts
+			if c := f.created[id]; c != "" {
+				created = c
+			}
+			name := f.assetName[id]
+			if name == "" {
+				name = "x.jpg"
+			}
+			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+		}
+		if len(body.AlbumIds) > 0 {
+			for _, aid := range body.AlbumIds {
+				for id := range f.members[aid] {
+					add(id)
+				}
+			}
+		} else {
+			for id, names := range f.assetTags {
+				if f.trashed[id] {
+					continue
+				}
+				for _, tid := range body.TagIds {
+					for _, n := range names {
+						if f.tagIDs[tid] == n {
+							add(id)
+							goto next
+						}
+					}
+				}
+			next:
+			}
+		}
+		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+	})
+	mux.HandleFunc("POST /api/shared-links", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		id := uuid.NewString()
+		f.mu.Lock()
+		if f.links == nil {
+			f.links = map[string]map[string]any{}
+		}
+		body["key"] = "key-" + id[:8]
+		f.links[id] = body
+		f.mu.Unlock()
+		j(w, 201, map[string]any{"id": id, "key": "key-" + id[:8], "type": body["type"], "allowDownload": true, "allowUpload": false, "assets": []any{}, "createdAt": ts, "description": body["description"], "password": body["password"], "showMetadata": false, "slug": nil, "userId": bobID.String(), "expiresAt": body["expiresAt"]})
+	})
+	mux.HandleFunc("DELETE /api/shared-links/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		delete(f.links, r.PathValue("id"))
+		f.removedLinks = append(f.removedLinks, r.PathValue("id"))
+		f.mu.Unlock()
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /api/workflows", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -847,6 +1116,9 @@ func TestLinkingAnAlbumGivesTheKeyAlbumReadAndTheSenderAWatch(t *testing.T) {
 	before := len(e.f.keyPerms)
 	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", album); err != nil {
 		t.Fatal(err)
+	}
+	if !has(e.woken, "album linked: bob@x.test") {
+		t.Errorf("linking an album must start a pass at once, not wait for the timer or for a tagged photo: %v", e.woken)
 	}
 	snd := e.h.Services()[0].Senders[0]
 	if snd.WatchAlbum != album || snd.WatchAlbumName != "To send" {

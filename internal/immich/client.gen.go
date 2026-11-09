@@ -39,6 +39,30 @@ func (e AlbumUserRole) Valid() bool {
 	}
 }
 
+// Defines values for AssetMediaSize.
+const (
+	Fullsize  AssetMediaSize = "fullsize"
+	Original  AssetMediaSize = "original"
+	Preview   AssetMediaSize = "preview"
+	Thumbnail AssetMediaSize = "thumbnail"
+)
+
+// Valid indicates whether the value is a known member of the AssetMediaSize enum.
+func (e AssetMediaSize) Valid() bool {
+	switch e {
+	case Fullsize:
+		return true
+	case Original:
+		return true
+	case Preview:
+		return true
+	case Thumbnail:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetMediaStatus.
 const (
 	AssetMediaStatusCreated   AssetMediaStatus = "created"
@@ -690,6 +714,24 @@ func (e SearchOrderField) Valid() bool {
 	}
 }
 
+// Defines values for SharedLinkType.
+const (
+	ALBUM      SharedLinkType = "ALBUM"
+	INDIVIDUAL SharedLinkType = "INDIVIDUAL"
+)
+
+// Valid indicates whether the value is a known member of the SharedLinkType enum.
+func (e SharedLinkType) Valid() bool {
+	switch e {
+	case ALBUM:
+		return true
+	case INDIVIDUAL:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserAvatarColor.
 const (
 	Amber   UserAvatarColor = "amber"
@@ -1011,6 +1053,9 @@ type AssetMediaResponseDto struct {
 	// Status Upload status
 	Status AssetMediaStatus `json:"status"`
 }
+
+// AssetMediaSize Asset media size
+type AssetMediaSize string
 
 // AssetMediaStatus Upload status
 type AssetMediaStatus string
@@ -1896,6 +1941,90 @@ type ServerVersionResponseDto struct {
 	Prerelease *int `json:"prerelease"`
 }
 
+// SharedLinkCreateDto defines model for SharedLinkCreateDto.
+type SharedLinkCreateDto struct {
+	// AlbumId Album ID (for album sharing)
+	AlbumId *openapi_types.UUID `json:"albumId,omitempty"`
+
+	// AllowDownload Allow downloads
+	AllowDownload *bool `json:"allowDownload,omitempty"`
+
+	// AllowUpload Allow uploads
+	AllowUpload *bool `json:"allowUpload,omitempty"`
+
+	// AssetIds Asset IDs (for individual assets)
+	AssetIds *[]openapi_types.UUID `json:"assetIds,omitempty"`
+
+	// Description Link description
+	Description *string `json:"description,omitempty"`
+
+	// ExpiresAt Expiration date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// Password Link password
+	Password *string `json:"password,omitempty"`
+
+	// ShowMetadata Show metadata
+	ShowMetadata *bool `json:"showMetadata,omitempty"`
+
+	// Slug Custom URL slug
+	Slug *string `json:"slug,omitempty"`
+
+	// Type Shared link type
+	Type SharedLinkType `json:"type"`
+}
+
+// SharedLinkResponseDto Shared link response
+type SharedLinkResponseDto struct {
+	Album *AlbumResponseDto `json:"album,omitempty"`
+
+	// AllowDownload Allow downloads
+	AllowDownload bool `json:"allowDownload"`
+
+	// AllowUpload Allow uploads
+	AllowUpload bool               `json:"allowUpload"`
+	Assets      []AssetResponseDto `json:"assets"`
+
+	// CreatedAt Creation date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Description Link description
+	Description *string `json:"description"`
+
+	// ExpiresAt Expiration date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ExpiresAt *time.Time `json:"expiresAt"`
+
+	// Id Shared link ID
+	Id openapi_types.UUID `json:"id"`
+
+	// Key Encryption key (base64url)
+	Key string `json:"key"`
+
+	// Password Has password
+	Password *string `json:"password"`
+
+	// ShowMetadata Show metadata
+	ShowMetadata bool `json:"showMetadata"`
+
+	// Slug Custom URL slug
+	Slug *string `json:"slug"`
+
+	// Type Shared link type
+	Type SharedLinkType `json:"type"`
+
+	// UserId Owner user ID
+	UserId openapi_types.UUID `json:"userId"`
+}
+
+// SharedLinkType Shared link type
+type SharedLinkType string
+
 // SharedLinksResponse defines model for SharedLinksResponse.
 type SharedLinksResponse struct {
 	// Enabled Whether shared links are enabled
@@ -2319,6 +2448,15 @@ type DownloadAssetParams struct {
 	Slug   *string `form:"slug,omitempty" json:"slug,omitempty"`
 }
 
+// ViewAssetParams defines parameters for ViewAsset.
+type ViewAssetParams struct {
+	// Edited Return edited asset if available
+	Edited *bool           `form:"edited,omitempty" json:"edited,omitempty"`
+	Key    *string         `form:"key,omitempty" json:"key,omitempty"`
+	Size   *AssetMediaSize `form:"size,omitempty" json:"size,omitempty"`
+	Slug   *string         `form:"slug,omitempty" json:"slug,omitempty"`
+}
+
 // SearchAssetsParams defines parameters for SearchAssets.
 type SearchAssetsParams struct {
 	Key  *string `form:"key,omitempty" json:"key,omitempty"`
@@ -2361,6 +2499,9 @@ type GetWorkflowLogsParams struct {
 // CreateAlbumJSONRequestBody defines body for CreateAlbum for application/json ContentType.
 type CreateAlbumJSONRequestBody = CreateAlbumDto
 
+// RemoveAssetFromAlbumJSONRequestBody defines body for RemoveAssetFromAlbum for application/json ContentType.
+type RemoveAssetFromAlbumJSONRequestBody = BulkIdsDto
+
 // AddAssetsToAlbumJSONRequestBody defines body for AddAssetsToAlbum for application/json ContentType.
 type AddAssetsToAlbumJSONRequestBody = BulkIdsDto
 
@@ -2380,6 +2521,9 @@ type UploadAssetMultipartRequestBody = AssetMediaCreateDto
 
 // SearchAssetsJSONRequestBody defines body for SearchAssets for application/json ContentType.
 type SearchAssetsJSONRequestBody = MetadataSearchDto
+
+// CreateSharedLinkJSONRequestBody defines body for CreateSharedLink for application/json ContentType.
+type CreateSharedLinkJSONRequestBody = SharedLinkCreateDto
 
 // CreateStackJSONRequestBody defines body for CreateStack for application/json ContentType.
 type CreateStackJSONRequestBody = StackCreateDto
@@ -2508,6 +2652,24 @@ type ClientInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RemoveAssetFromAlbumWithBody Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveAssetFromAlbum Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbum(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AddAssetsToAlbumWithBody Add assets to an album
 	//
 	// Add multiple assets to a specific album by its ID.
@@ -2635,6 +2797,13 @@ type ClientInterface interface {
 	// Corresponds with GET /assets/{id}/original (the `DownloadAsset` operationId).
 	DownloadAsset(ctx context.Context, id openapi_types.UUID, params *DownloadAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ViewAsset View asset thumbnail
+	//
+	// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+	//
+	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+	ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SearchAssetsWithBody Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -2659,6 +2828,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSharedLinkWithBody Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateSharedLink Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLink(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveSharedLink Delete a shared link
+	//
+	// Delete a specific shared link by its ID.
+	//
+	// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+	RemoveSharedLink(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateStackWithBody Create a stack
 	//
@@ -2763,6 +2957,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 	RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchUsers Get all users
+	//
+	// Retrieve a list of all users on the server.
+	//
+	// Corresponds with GET /users (the `SearchUsers` operationId).
+	SearchUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMyUser Get current user
 	//
@@ -2914,6 +3115,44 @@ func (c *Client) CreateAlbumWithBody(ctx context.Context, contentType string, bo
 // Corresponds with POST /albums (the `CreateAlbum` operationId).
 func (c *Client) CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateAlbumRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveAssetFromAlbumWithBody Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *Client) RemoveAssetFromAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveAssetFromAlbumRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveAssetFromAlbum Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *Client) RemoveAssetFromAlbum(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveAssetFromAlbumRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3199,6 +3438,23 @@ func (c *Client) DownloadAsset(ctx context.Context, id openapi_types.UUID, param
 	return c.Client.Do(req)
 }
 
+// ViewAsset View asset thumbnail
+//
+// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+//
+// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+func (c *Client) ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewViewAssetRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SearchAssetsWithBody Search assets by metadata
 //
 // Search for assets based on various metadata criteria.
@@ -3244,6 +3500,61 @@ func (c *Client) SearchAssets(ctx context.Context, params *SearchAssetsParams, b
 // Corresponds with GET /server/version (the `GetServerVersion` operationId).
 func (c *Client) GetServerVersion(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetServerVersionRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSharedLinkWithBody Create a shared link
+//
+// Create a new shared link.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *Client) CreateSharedLinkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSharedLinkRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateSharedLink Create a shared link
+//
+// Create a new shared link.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *Client) CreateSharedLink(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSharedLinkRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveSharedLink Delete a shared link
+//
+// Delete a specific shared link by its ID.
+//
+// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+func (c *Client) RemoveSharedLink(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveSharedLinkRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3468,6 +3779,23 @@ func (c *Client) RestoreAssetsWithBody(ctx context.Context, contentType string, 
 // Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 func (c *Client) RestoreAssets(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRestoreAssetsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchUsers Get all users
+//
+// Retrieve a list of all users on the server.
+//
+// Corresponds with GET /users (the `SearchUsers` operationId).
+func (c *Client) SearchUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchUsersRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -3831,6 +4159,53 @@ func NewCreateAlbumRequestWithBody(server string, contentType string, body io.Re
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveAssetFromAlbumRequest calls the generic RemoveAssetFromAlbum builder with application/json body
+func NewRemoveAssetFromAlbumRequest(server string, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemoveAssetFromAlbumRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRemoveAssetFromAlbumRequestWithBody constructs an http.Request for the RemoveAssetFromAlbum method, with any body, and a specified content type
+func NewRemoveAssetFromAlbumRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s/assets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -4377,6 +4752,103 @@ func NewDownloadAssetRequest(server string, id openapi_types.UUID, params *Downl
 	return req, nil
 }
 
+// NewViewAssetRequest constructs an http.Request for the ViewAsset method
+func NewViewAssetRequest(server string, id openapi_types.UUID, params *ViewAssetParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/assets/%s/thumbnail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Edited != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "edited", *params.Edited, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Key != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", *params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Size != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "size", *params.Size, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Slug != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "slug", *params.Slug, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSearchAssetsRequest calls the generic SearchAssets builder with application/json body
 func NewSearchAssetsRequest(server string, params *SearchAssetsParams, body SearchAssetsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4476,6 +4948,80 @@ func NewGetServerVersionRequest(server string) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateSharedLinkRequest calls the generic CreateSharedLink builder with application/json body
+func NewCreateSharedLinkRequest(server string, body CreateSharedLinkJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateSharedLinkRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateSharedLinkRequestWithBody constructs an http.Request for the CreateSharedLink method, with any body, and a specified content type
+func NewCreateSharedLinkRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shared-links")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveSharedLinkRequest constructs an http.Request for the RemoveSharedLink method
+func NewRemoveSharedLinkRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shared-links/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -4754,6 +5300,33 @@ func NewRestoreAssetsRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewSearchUsersRequest constructs an http.Request for the SearchUsers method
+func NewSearchUsersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -5270,6 +5843,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbumWithResponse(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error)
 
+	// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error)
+
+	// RemoveAssetFromAlbumWithResponse Remove assets from an album
+	//
+	// Remove multiple assets from a specific album by its ID.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+	RemoveAssetFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error)
+
 	// AddAssetsToAlbumWithBodyWithResponse Add assets to an album
 	//
 	// Add multiple assets to a specific album by its ID.
@@ -5409,6 +6000,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /assets/{id}/original (the `DownloadAsset` operationId).
 	DownloadAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *DownloadAssetParams, reqEditors ...RequestEditorFn) (*DownloadAssetResponse, error)
 
+	// ViewAssetWithResponse View asset thumbnail
+	//
+	// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+	ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error)
+
 	// SearchAssetsWithBodyWithResponse Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -5435,6 +6035,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /server/version (the `GetServerVersion` operationId).
 	GetServerVersionWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetServerVersionResponse, error)
+
+	// CreateSharedLinkWithBodyWithResponse Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error)
+
+	// CreateSharedLinkWithResponse Create a shared link
+	//
+	// Create a new shared link.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+	CreateSharedLinkWithResponse(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error)
+
+	// RemoveSharedLinkWithResponse Delete a shared link
+	//
+	// Delete a specific shared link by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+	RemoveSharedLinkWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveSharedLinkResponse, error)
 
 	// CreateStackWithBodyWithResponse Create a stack
 	//
@@ -5543,6 +6170,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /trash/restore/assets (the `RestoreAssets` operationId).
 	RestoreAssetsWithResponse(ctx context.Context, body RestoreAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*RestoreAssetsResponse, error)
+
+	// SearchUsersWithResponse Get all users
+	//
+	// Retrieve a list of all users on the server.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /users (the `SearchUsers` operationId).
+	SearchUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SearchUsersResponse, error)
 
 	// GetMyUserWithResponse Get current user
 	//
@@ -5737,6 +6373,47 @@ func (r CreateAlbumResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r CreateAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveAssetFromAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]BulkIdResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RemoveAssetFromAlbumResponse) GetJSON200() *[]BulkIdResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveAssetFromAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveAssetFromAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveAssetFromAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveAssetFromAlbumResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6180,6 +6857,40 @@ func (r DownloadAssetResponse) ContentType() string {
 	return ""
 }
 
+type ViewAssetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ViewAssetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ViewAssetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ViewAssetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ViewAssetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SearchAssetsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6256,6 +6967,81 @@ func (r GetServerVersionResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetServerVersionResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateSharedLinkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *SharedLinkResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateSharedLinkResponse) GetJSON201() *SharedLinkResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateSharedLinkResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateSharedLinkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateSharedLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateSharedLinkResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveSharedLinkResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveSharedLinkResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveSharedLinkResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveSharedLinkResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveSharedLinkResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6543,6 +7329,47 @@ func (r RestoreAssetsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RestoreAssetsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SearchUsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]UserResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchUsersResponse) GetJSON200() *[]UserResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchUsersResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchUsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchUsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchUsersResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6956,6 +7783,36 @@ func (c *ClientWithResponses) CreateAlbumWithResponse(ctx context.Context, body 
 	return ParseCreateAlbumResponse(rsp)
 }
 
+// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *ClientWithResponses) RemoveAssetFromAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error) {
+	rsp, err := c.RemoveAssetFromAlbumWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveAssetFromAlbumResponse(rsp)
+}
+
+// RemoveAssetFromAlbumWithResponse Remove assets from an album
+//
+// Remove multiple assets from a specific album by its ID.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /albums/{id}/assets (the `RemoveAssetFromAlbum` operationId).
+func (c *ClientWithResponses) RemoveAssetFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*RemoveAssetFromAlbumResponse, error) {
+	rsp, err := c.RemoveAssetFromAlbum(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveAssetFromAlbumResponse(rsp)
+}
+
 // AddAssetsToAlbumWithBodyWithResponse Add assets to an album
 //
 // Add multiple assets to a specific album by its ID.
@@ -7184,6 +8041,21 @@ func (c *ClientWithResponses) DownloadAssetWithResponse(ctx context.Context, id 
 	return ParseDownloadAssetResponse(rsp)
 }
 
+// ViewAssetWithResponse View asset thumbnail
+//
+// Retrieve the thumbnail image for the specified asset. Viewing the fullsize thumbnail might redirect to downloadAsset, which requires a different permission.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
+func (c *ClientWithResponses) ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error) {
+	rsp, err := c.ViewAsset(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseViewAssetResponse(rsp)
+}
+
 // SearchAssetsWithBodyWithResponse Search assets by metadata
 //
 // Search for assets based on various metadata criteria.
@@ -7227,6 +8099,51 @@ func (c *ClientWithResponses) GetServerVersionWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseGetServerVersionResponse(rsp)
+}
+
+// CreateSharedLinkWithBodyWithResponse Create a shared link
+//
+// Create a new shared link.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *ClientWithResponses) CreateSharedLinkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error) {
+	rsp, err := c.CreateSharedLinkWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSharedLinkResponse(rsp)
+}
+
+// CreateSharedLinkWithResponse Create a shared link
+//
+// Create a new shared link.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /shared-links (the `CreateSharedLink` operationId).
+func (c *ClientWithResponses) CreateSharedLinkWithResponse(ctx context.Context, body CreateSharedLinkJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSharedLinkResponse, error) {
+	rsp, err := c.CreateSharedLink(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateSharedLinkResponse(rsp)
+}
+
+// RemoveSharedLinkWithResponse Delete a shared link
+//
+// Delete a specific shared link by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /shared-links/{id} (the `RemoveSharedLink` operationId).
+func (c *ClientWithResponses) RemoveSharedLinkWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveSharedLinkResponse, error) {
+	rsp, err := c.RemoveSharedLink(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveSharedLinkResponse(rsp)
 }
 
 // CreateStackWithBodyWithResponse Create a stack
@@ -7407,6 +8324,21 @@ func (c *ClientWithResponses) RestoreAssetsWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseRestoreAssetsResponse(rsp)
+}
+
+// SearchUsersWithResponse Get all users
+//
+// Retrieve a list of all users on the server.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /users (the `SearchUsers` operationId).
+func (c *ClientWithResponses) SearchUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*SearchUsersResponse, error) {
+	rsp, err := c.SearchUsers(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchUsersResponse(rsp)
 }
 
 // GetMyUserWithResponse Get current user
@@ -7641,6 +8573,32 @@ func ParseCreateAlbumResponse(rsp *http.Response) (*CreateAlbumResponse, error) 
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveAssetFromAlbumResponse parses an HTTP response from a RemoveAssetFromAlbumWithResponse call
+func ParseRemoveAssetFromAlbumResponse(rsp *http.Response) (*RemoveAssetFromAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveAssetFromAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []BulkIdResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 
@@ -7910,6 +8868,22 @@ func ParseDownloadAssetResponse(rsp *http.Response) (*DownloadAssetResponse, err
 	return response, nil
 }
 
+// ParseViewAssetResponse parses an HTTP response from a ViewAssetWithResponse call
+func ParseViewAssetResponse(rsp *http.Response) (*ViewAssetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ViewAssetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseSearchAssetsResponse parses an HTTP response from a SearchAssetsWithResponse call
 func ParseSearchAssetsResponse(rsp *http.Response) (*SearchAssetsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7957,6 +8931,48 @@ func ParseGetServerVersionResponse(rsp *http.Response) (*GetServerVersionRespons
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseCreateSharedLinkResponse parses an HTTP response from a CreateSharedLinkWithResponse call
+func ParseCreateSharedLinkResponse(rsp *http.Response) (*CreateSharedLinkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateSharedLinkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SharedLinkResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveSharedLinkResponse parses an HTTP response from a RemoveSharedLinkWithResponse call
+func ParseRemoveSharedLinkResponse(rsp *http.Response) (*RemoveSharedLinkResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveSharedLinkResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
@@ -8134,6 +9150,32 @@ func ParseRestoreAssetsResponse(rsp *http.Response) (*RestoreAssetsResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest TrashResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchUsersResponse parses an HTTP response from a SearchUsersWithResponse call
+func ParseSearchUsersResponse(rsp *http.Response) (*SearchUsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchUsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []UserResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
