@@ -950,6 +950,9 @@ func TestLinkingAnAlbumGivesTheKeyAlbumReadAndTheSenderAWatch(t *testing.T) {
 	if err := e.h.LinkAlbum(ctx, e.sess, bob, "family", album); err != nil {
 		t.Fatal(err)
 	}
+	if !has(e.woken, "album linked: bob@x.test") {
+		t.Errorf("linking an album must start a pass at once, not wait for the timer or for a tagged photo: %v", e.woken)
+	}
 	snd := e.h.Services()[0].Senders[0]
 	if snd.WatchAlbum != album || snd.WatchAlbumName != "To send" {
 		t.Errorf("the sender's account must carry the album: %v %q", snd.WatchAlbum, snd.WatchAlbumName)

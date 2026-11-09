@@ -63,7 +63,15 @@ func (h *Hub) LinkAlbum(ctx context.Context, sess *immich.API, user immich.User,
 	}
 	h.event(ctx, service, user.ID, "album", i18n.Pack("{name} linked the album {album} to {service}: everything in it is handed over", "name", user.Name, "album", name, "service", service))
 	h.Log.Info("album linked", "service", service, "user", user.Email, "album", name)
-	return h.Reload(ctx)
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	// Immich sends no event for an album, so without this the photos already in it would wait for the next timer
+	// round (ALBUM_CHECK_MINUTES, 15 by default), or for a photo to be tagged, which does start a pass.
+	if h.Wake != nil {
+		h.Wake("album linked: " + user.Email)
+	}
+	return nil
 }
 
 // UnlinkAlbum stops handing over an album. Photos already handed over stay where they are. The key keeps its
