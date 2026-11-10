@@ -278,7 +278,15 @@ func (s *Syncer) Tidy(ctx context.Context) {
 	if !s.mu.TryLock() {
 		return
 	}
-	defer s.mu.Unlock()
+	// A pass asked for while this runs found the lock taken and left a note for "the pass that is running" to go round
+	// once more; a tidy is not one, so it must start that pass itself or the event is lost until the next trigger.
+	defer func() {
+		pending := s.rerun.Load()
+		s.mu.Unlock()
+		if pending {
+			go s.Run(ctx, "after a tidy", false)
+		}
+	}()
 	if n, errs := s.cleanupAll(ctx); n > 0 || errs > 0 {
 		s.Log.Info("tidy finished", "untagged", n, "errors", errs)
 	}

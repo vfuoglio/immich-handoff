@@ -18,6 +18,7 @@
 - **The footer of the pages says which version is running** (for example "Immich Handoff 1.2.0"), taken from the running program, to people who are signed in.
 
 ### Fixes
+- **A photo tagged while the short tidy-up timer was running could wait until the next trigger.** The tidy-up (`CLEANUP_INTERVAL_MINUTES`) holds the same lock as a pass, and an event that arrived meanwhile left a note that only a pass read, so the event was lost. The tidy-up now starts that pass itself when it ends.
 - **Linking an album now hands over what is already in it at once.** Until now a newly linked album waited for the next timer round (15 minutes by default) or for a photo to be tagged, which is what started a pass. Photos added to a linked album later still wait for the timer, as Immich sends no event for an album.
 - The administrator is now told (through `NOTIFY_URL`) when a stored key stops working, as the log already said it would; the notification was never connected.
 
