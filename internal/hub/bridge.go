@@ -17,11 +17,14 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
-// bridgeBackoff is how long an unreachable server is left alone after its n-th failure in a row: a minute, doubling,
-// up to an hour. A variable so that tests can shorten it.
-var bridgeBackoff = func(failures int) time.Duration {
-	d := time.Minute << min(max(failures-1, 0), 6)
-	return min(d, time.Hour)
+// bridgeBackoff is how long an unreachable server is left alone after its n-th failure in a row: BRIDGE_RETRY_MINUTES
+// (a minute by default), doubling, up to an hour.
+func (h *Hub) bridgeBackoff(failures int) time.Duration {
+	base := h.Bridge.RetryBase
+	if base <= 0 {
+		base = time.Minute
+	}
+	return min(base<<min(max(failures-1, 0), 6), max(time.Hour, base))
 }
 
 // remoteEntry is a receiver on another server, kept between reloads so its connections are reused. It is replaced
@@ -137,7 +140,7 @@ func (h *Hub) bridgeUnreachable(ctx context.Context, b store.Bridge, owner store
 	failures, retry := b.Failures, b.RetryAt
 	if b.State != store.BridgeUnreachable || !time.Now().Before(b.RetryAt) {
 		failures++
-		retry = time.Now().Add(bridgeBackoff(failures))
+		retry = time.Now().Add(h.bridgeBackoff(failures))
 	}
 	changed, err := h.Store.SetBridgeState(ctx, b.Service, store.BridgeUnreachable, why, version, failures, retry)
 	if err != nil {

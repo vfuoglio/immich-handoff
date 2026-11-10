@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -234,6 +235,10 @@ func RedirectTarget(resp *http.Response) string {
 type Settings struct {
 	Enabled bool // BRIDGE_ENABLE: bridges to other servers exist at all (off by default)
 	Policy       // BRIDGE_ALLOW_PRIVATE: private addresses and plain http:// (off by default)
+
+	// RetryBase is the first pause before an unreachable server is tried again; it doubles with every failure in
+	// a row, up to an hour (BRIDGE_RETRY_MINUTES, default 1).
+	RetryBase time.Duration
 }
 
 // SettingsFrom reads the switches from the environment.
@@ -245,5 +250,9 @@ func SettingsFrom(env func(string) string) Settings {
 		}
 		return false
 	}
-	return Settings{Enabled: on("BRIDGE_ENABLE"), Policy: Policy{AllowPrivate: on("BRIDGE_ALLOW_PRIVATE")}}
+	s := Settings{Enabled: on("BRIDGE_ENABLE"), Policy: Policy{AllowPrivate: on("BRIDGE_ALLOW_PRIVATE")}, RetryBase: time.Minute}
+	if m, err := strconv.ParseFloat(strings.TrimSpace(env("BRIDGE_RETRY_MINUTES")), 64); err == nil && m > 0 {
+		s.RetryBase = time.Duration(m * float64(time.Minute))
+	}
+	return s
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestPublic(t *testing.T) {
@@ -212,8 +213,14 @@ func TestRealDialerRefusesLoopback(t *testing.T) {
 
 func TestSettingsFrom(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	if s := SettingsFrom(env(nil)); s.Enabled || s.AllowPrivate {
-		t.Fatalf("both are off by default: %+v", s)
+	if s := SettingsFrom(env(nil)); s.Enabled || s.AllowPrivate || s.RetryBase != time.Minute {
+		t.Fatalf("both are off by default and the first pause is a minute: %+v", s)
+	}
+	if s := SettingsFrom(env(map[string]string{"BRIDGE_RETRY_MINUTES": "0.05"})); s.RetryBase != 3*time.Second {
+		t.Fatalf("%v", s.RetryBase)
+	}
+	if s := SettingsFrom(env(map[string]string{"BRIDGE_RETRY_MINUTES": "nonsense"})); s.RetryBase != time.Minute {
+		t.Fatalf("%v", s.RetryBase)
 	}
 	if s := SettingsFrom(env(map[string]string{"BRIDGE_ENABLE": "true", "BRIDGE_ALLOW_PRIVATE": " ON "})); !s.Enabled || !s.AllowPrivate {
 		t.Fatalf("%+v", s)

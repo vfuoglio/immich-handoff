@@ -1,6 +1,6 @@
 # Bridges: handing photos over to another Immich server
 
-The conclusion of #17, and the design #77 is built from.
+The conclusion of #17, and the design #77 is built from. **Built** in 1.3.0 (first slice: the sender's app holds the key; one remote receiver per service, in addition to the owner's own). How to use it: [Using it](using.md#receiving-on-another-immich-server). What it can and cannot do: [Security](security.md#bridges-a-receiver-on-another-server). Where the build differs from the plan below: the tag on the other side is `from/<sender>`; a copy there is trusted on Immich's answer to the upload, because the key cannot read it back to compare checksums; the pause before a retry is `BRIDGE_RETRY_MINUTES`; and a service with a bridge does not run at all while the bridge is down or switched off, for the owner either, since an original is removed only once every receiver has its copy.
 
 ## Conclusion
 

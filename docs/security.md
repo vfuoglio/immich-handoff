@@ -12,6 +12,18 @@ The receiver's key can upload photos, read the receiver's library and add tags. 
 
 Each key is named `handoff: <service>` in the owner's own Immich settings, so people can see exactly what exists and delete it whenever they like. Deleting it ends the connection at once: Immich refuses the key, the app notices and pauses, and no photo is touched.
 
+## Bridges: a receiver on another server
+
+A [bridge](using.md#receiving-on-another-immich-server) makes the app hold a key to a library on a server **it does not run**, and connect to an address a stranger typed. Both are risks, so each is made as small as it can be. Bridges do not exist until an administrator sets `BRIDGE_ENABLE=true`.
+
+**What the key can do.** Exactly `user.read`, `tag.create`, `tag.asset` and `asset.upload`: it can upload a photo and put a tag on it. It cannot read or search the library, download anything, list albums, tags, people or keys, or delete a photo, and it cannot change itself. This was checked against a real Immich, not assumed. The app refuses a key with more, and a key with less, when a bridge is made and again at every pass, so it never holds power it does not need. The receiver makes the key in their own Immich, sees what it can do, and deletes it whenever they like: Immich then refuses it at once, the app stops, and nothing is lost. What the receiver can see of a sender is the photo (with the details Immich carries in the file) and the tag `from/<name>`; no account detail is sent. What the sender sees of the receiver is the name they chose, the version of their Immich and whether the connection works; never their library.
+
+**Where the app will connect.** Only to an address that starts with `https://` and whose name resolves to **public** addresses. Loopback, private, link-local (which includes the cloud metadata address), unique-local IPv6, carrier-grade NAT, multicast and reserved ranges are refused, an address written as IPv6 is judged as the IPv4 address it is, and **the judgement is made again on the real connection**, so a name that changes between the check and the connection cannot slip through. Redirects are never followed (a server that redirects is treated as unreachable, and `doctor` says where it points). Proxies from the environment are ignored. Calls give up quickly on silence. A page that refuses an address says only that it is not one the app may connect to, whether or not something answers there, so it cannot be used to map your network. Attempts on the invitation page are limited to 10 an hour per address and 20 an hour per link (see [`DROPBOX_CLIENT_IP_HEADER`](settings.md)). `BRIDGE_ALLOW_PRIVATE=true` lifts the address rules and allows `http://`, for people who run both servers themselves behind a VPN; with it, **an address someone types can make the app reach into your own network**, so leave it off otherwise.
+
+**What the app never does.** It never calls `GET /users` on a remote server (any key with `user.read` can list every user and email there), and it keeps nothing a remote server returns beyond its version. The key is stored encrypted like every other key and never shown.
+
+**The invitation link** names the service and the person who offers it, and nothing else. Anyone who has it can connect their own server to the service until it is used, replaced or a week old; a link that is unknown, used or old gives the same page.
+
 ## Drop boxes
 
 A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.

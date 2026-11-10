@@ -304,6 +304,26 @@ When the event is over the whole set can go through the hand-over that already e
 
 **Making the link reachable.** Guests do not have your Immich login, so `/drop/` on the page must be open to the internet *without* any sign-in in front of it. See [Letting guests reach a drop box](operations.md#letting-guests-reach-a-drop-box).
 
+## Receiving on another Immich server
+
+Someone you share with may run an Immich of their own. A service can hand its photos to them as well: this is a **bridge**. It is off until an administrator sets `BRIDGE_ENABLE=true` ([Settings](settings.md)).
+
+1. On the service's card, press **Invite someone on another server**. You get a link, good for a week and for one connection; a new link replaces the old one. Send it to them.
+2. They open it. **They need no login on your server.** The page says who is asking, tells them to make a key in their own Immich with exactly four permissions (`user.read`, `tag.create`, `tag.asset`, `asset.upload`) and asks for their server's address, the key and a name.
+3. Nothing is kept until the address is allowed and the server and key pass the checks: the server answers as a supported Immich, and the key has exactly those four permissions. A key that can do more, **for example one that can read their library, is refused** with the reason, and so is one that can do less. Their mistake is corrected on the same page.
+
+From then on every photo tagged for the service goes to **you and to them**. It arrives in their library with the tag `from/<the sender's name>`. The original is touched only after both of you hold the copy.
+
+**What the other side cannot do.** The key can upload photos and put a tag on them, and that is all: it cannot read, search, download or delete anything in their library, and the app never asks it to. So **taking a hand-over back and letting copies expire do not work across servers** (the page says so before they connect), and photos arrive as separate photos (no stacks, no album). The app cannot read the copy back to compare its checksum, so a copy is trusted on Immich's answer to the upload.
+
+**When their server is away or the key is revoked.** Photos stay tagged in the senders' libraries, and **nothing is handed over by the service until it works again, to you either**, because a photo is only removed once every receiver has it.
+
+- If their server cannot be reached, the card says **Cannot be reached**, you are told once (`NOTIFY_URL`), and the app tries again after a minute, then two, four and so on up to an hour (`BRIDGE_RETRY_MINUTES`). When it answers, waiting photos go and you are told that too.
+- If their key was deleted or revoked, the card says **Key revoked**, you are told once, and **the app does not try again** until they make a new key and you send a new link.
+- **Remove** on the card ends the connection; waiting photos then go to you alone, and what already arrived there stays there.
+
+`immich-handoff doctor` checks the connection and says what is wrong. See [Security](security.md#bridges-a-receiver-on-another-server).
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.
