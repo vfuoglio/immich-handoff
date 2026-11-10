@@ -46,7 +46,7 @@ func (h *Hub) remoteFor(b store.Bridge) (syncer.Remote, string) {
 	r, err := bridge.NewRemote(b.DisplayName, b.Address, b.Key, h.Bridge.Policy)
 	if err != nil {
 		h.Log.Error("cannot use the stored bridge", "service", b.Service, "err", err)
-		return nil, "its receiver on another server cannot be used"
+		return nil, "its receiver on another server cannot be used (see the log)"
 	}
 	service := b.Service
 	r.Gate = func() error { return h.bridgeGate(service) }
@@ -322,6 +322,58 @@ func (h *Hub) AcceptBridge(ctx context.Context, token, address, key, name string
 	}
 	if h.Wake != nil {
 		h.Wake("bridge connected: " + info.Service)
+	}
+	return nil
+}
+
+// BridgeStatus is what the owner's page shows of a service's receiver on another server.
+type BridgeStatus struct {
+	Name, State, Note, Version string
+	Checked, RetryAt           time.Time
+}
+
+// BridgeStatus returns the state of the service's receiver on another server.
+func (h *Hub) BridgeStatus(ctx context.Context, service string) (BridgeStatus, bool) {
+	if h.Store == nil {
+		return BridgeStatus{}, false
+	}
+	b, err := h.Store.Bridge(ctx, service)
+	if err != nil {
+		return BridgeStatus{}, false
+	}
+	return BridgeStatus{Name: b.DisplayName, State: b.State, Note: b.Note, Version: b.Version, Checked: b.CheckedAt, RetryAt: b.RetryAt}, true
+}
+
+// ErrNoBridge: the service has no receiver on another server.
+var ErrNoBridge = errors.New("this service has no receiver on another server")
+
+// RemoveBridge ends the connection to the service's receiver on another server. Photos that were waiting for it then
+// go to the service's own receiver alone; what already arrived on the other server stays there, and the receiver can
+// delete their key when they like.
+func (h *Hub) RemoveBridge(ctx context.Context, owner immich.User, service string) error {
+	if _, err := h.ownedService(ctx, owner, service); err != nil {
+		return err
+	}
+	b, err := h.Store.Bridge(ctx, service)
+	if err != nil {
+		return ErrNoBridge
+	}
+	if err := h.Store.RemoveBridge(ctx, service); err != nil {
+		return err
+	}
+	h.mu.Lock()
+	if t := h.retries[service]; t != nil {
+		t.Stop()
+		delete(h.retries, service)
+	}
+	h.mu.Unlock()
+	h.event(ctx, service, owner.ID, "left", i18n.Pack("{name} stopped sending {service} to {receiver} on another server", "name", owner.Name, "service", service, "receiver", b.DisplayName))
+	h.show(ctx, live.Restored, service, "", "service", true)
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	if h.Wake != nil {
+		h.Wake("bridge removed: " + service)
 	}
 	return nil
 }

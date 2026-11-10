@@ -148,3 +148,13 @@ func (r *Remote) clean(msg string) string {
 	}
 	return msg
 }
+
+// Diagnose is Check for the doctor: it asks the same two questions and changes nothing (no state, no gate, no report).
+// The address is judged again against the current rules first, because the administrator may have tightened them
+// since the receiver was connected.
+func (r *Remote) Diagnose(ctx context.Context) (Info, error) {
+	if _, err := r.Policy.Address(r.Address); err != nil {
+		return Info{}, err
+	}
+	return Check(ctx, r.hc, r.Address, r.key)
+}

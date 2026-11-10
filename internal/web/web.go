@@ -95,6 +95,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
+	mux.HandleFunc("POST /services/bridge/remove", w.removeBridge)
 	mux.HandleFunc("GET /bridge/{token}", w.bridgePage)
 	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
@@ -407,6 +408,18 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 			LifetimeDays: o.Service.LifetimeDays, DeleteOK: w.Hub.ReceiverDelete, QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
 			AcceptOrient: o.Service.Accept.Orientation, AcceptMaxMB: o.Service.Accept.MaxMB,
 			BridgeOn: w.Hub.Bridge.Enabled, BridgeInvite: w.Hub.BridgeInviteOf(ctx, o.Service.Label())}
+		if o.Service.BrokenFix != "" { // not a receiver key that stopped working: reconnecting would not help
+			ov.Broken, ov.BridgeStopped = "", o.Service.Broken+" "+o.Service.BrokenFix
+		}
+		if st, ok := w.Hub.BridgeStatus(ctx, o.Service.Label()); ok {
+			ov.HasBridge, ov.BridgeName, ov.BridgeState, ov.BridgeNote, ov.BridgeVersion = true, st.Name, st.State, st.Note, st.Version
+			if !st.Checked.IsZero() {
+				ov.BridgeChecked = loc(ctx).Stamp(st.Checked.Local())
+			}
+			if !st.RetryAt.IsZero() {
+				ov.BridgeRetry = st.RetryAt.Local().Format("15:04")
+			}
+		}
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
 		}
@@ -542,6 +555,19 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				Text: t(ctx, "{reason} Senders are paused until you reconnect.", "reason", unpack(ctx, o.Broken)),
 				Actions: []NeedAction{{Label: t(ctx, "Reconnect"), Path: "reconnect", Vals: vals("service", o.Name), Primary: true,
 					Confirm: t(ctx, "Reconnecting creates a new receiver key in your Immich account.")}}})
+		}
+		if o.BridgeStopped != "" {
+			lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Stopped"), Title: o.Name, Text: o.BridgeStopped})
+		}
+		if o.HasBridge && o.BridgeState != "ok" {
+			tone, chip := "warn", t(ctx, "Other server")
+			if o.BridgeState == "revoked" {
+				tone = "bad"
+			}
+			lost = append(lost, NeedView{Tone: tone, Chip: chip, Title: t(ctx, "{service}: {name} on another server", "service", o.Name, "name", o.BridgeName),
+				Text: o.BridgeNote + " " + t(ctx, "Photos wait, still tagged, until it works again."),
+				Actions: []NeedAction{{Label: t(ctx, "Remove"), Path: "services/bridge/remove", Vals: vals("service", o.Name),
+					Confirm: t(ctx, "Stop sending {name} to the receiver on another server? Photos waiting for it then go to you alone. What already arrived there stays there.", "name", o.Name)}}})
 		}
 		for _, r := range o.Requests {
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Request"), Title: t(ctx, "{name} wants to send to {service}", "name", r.Name, "service", o.Name),

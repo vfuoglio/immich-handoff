@@ -99,3 +99,10 @@ func bridgeReason(ctx context.Context, err error) string {
 	}
 	return t(ctx, "Something went wrong on our side. Try again later.")
 }
+
+// removeBridge ends the connection to a service's receiver on another server.
+func (w *Server) removeBridge(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "bridge removal", func(ctx context.Context, me *member, service string) error {
+		return w.Hub.RemoveBridge(ctx, me.user, service)
+	})
+}

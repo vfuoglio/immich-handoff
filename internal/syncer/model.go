@@ -57,6 +57,7 @@ type Service struct {
 	Quiet         Quiet     // when the service hands photos over (empty: any time); the app-wide default applies when this is empty
 	Accept        Accept    // what the service takes in
 	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
+	BrokenFix     string    // when set, what to do about Broken instead of reconnecting the receiver key (which would not help)
 }
 
 // Remote is a receiver that lives on another Immich server (a bridge). The app holds a key there that can only upload

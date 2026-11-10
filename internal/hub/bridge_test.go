@@ -377,3 +377,35 @@ func TestAttemptsAreRationedPerAddressAndPerInvitation(t *testing.T) {
 		t.Error("a twenty-first attempt on one invitation")
 	}
 }
+
+func TestTheOwnerCanRemoveTheBridgeAndWaitingPhotosThenGoToTheOwnerAlone(t *testing.T) {
+	o := newOtherServer(t)
+	e, _ := withBridge(t, o)
+	ctx := context.Background()
+	var woken []string
+	var mu sync.Mutex
+	e.h.Wake = func(r string) { mu.Lock(); woken = append(woken, r); mu.Unlock() }
+
+	st, ok := e.h.BridgeStatus(ctx, "holiday")
+	if !ok || st.Name != "Aunt Lia" || st.State != store.BridgeOK {
+		t.Fatalf("%+v %v", st, ok)
+	}
+	if err := e.h.RemoveBridge(ctx, bob, "holiday"); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("someone else: %v", err)
+	}
+	if err := e.h.RemoveBridge(ctx, ann, "holiday"); err != nil {
+		t.Fatal(err)
+	}
+	if svc := service(e, "holiday"); svc.Remote != nil || svc.Broken != "" || len(svc.Receivers) != 1 {
+		t.Fatalf("%+v", svc)
+	}
+	if _, ok := e.h.BridgeStatus(ctx, "holiday"); ok {
+		t.Error("still there")
+	}
+	if len(woken) != 1 {
+		t.Errorf("a pass must be woken so waiting photos go: %v", woken)
+	}
+	if err := e.h.RemoveBridge(ctx, ann, "holiday"); !errors.Is(err, hub.ErrNoBridge) || !hub.IsUserError(err) {
+		t.Errorf("none left: %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -224,5 +225,36 @@ func TestOnlyTheOwnerMakesTheLinkAndItAppearsOnTheirPage(t *testing.T) {
 	_, page := do(t, "GET", app.URL+"/", "sess=family", nil)
 	if !strings.Contains(page, `data-link="bridge/`+i.Token+`"`) {
 		t.Error("the owner's page must show the link")
+	}
+}
+
+func TestTheOwnerSeesTheStateOfTheBridgeAndCanRemoveIt(t *testing.T) {
+	var st *store.Store
+	far := farServer(t, fourPerms)
+	app, _ := setup(t, withBridges(t, &st, "", bridge.Policy{AllowPrivate: true}))
+	ctx := context.Background()
+	if err := st.SetBridge(ctx, store.Bridge{Service: "holiday", Address: far.URL, Key: "FAR-KEY", DisplayName: "Aunt Lia", Version: "v3.2.0"}); err != nil {
+		t.Fatal(err)
+	}
+	// a state that needs the owner shows on the page and in "Needs you", with the way to remove it
+	st.SetBridgeState(ctx, "holiday", store.BridgeRevoked, "The other server does not accept the key any more.", "", 0, time.Time{})
+	hub0 := app.URL + "/"
+	_, page := do(t, "GET", hub0, "sess=family", nil)
+	for _, want := range []string{"Aunt Lia", "Key revoked", "v3.2.0", "does not accept the key any more", "Photos wait, still tagged", "services/bridge/remove"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if code, _ := postForm(t, app.URL+"/services/bridge/remove", "sess=alice", "service=holiday"); code != 409 {
+		t.Errorf("someone who does not own it: %d", code)
+	}
+	if code, body := postForm(t, app.URL+"/services/bridge/remove", "sess=family", "service=holiday"); code != 204 {
+		t.Fatalf("%d %s", code, body)
+	}
+	if _, err := st.Bridge(ctx, "holiday"); err == nil {
+		t.Fatal("not removed")
+	}
+	if _, page := do(t, "GET", hub0, "sess=family", nil); strings.Contains(page, "Key revoked") {
+		t.Error("the page still shows it")
 	}
 }

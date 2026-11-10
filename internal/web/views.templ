@@ -72,6 +72,14 @@ type OwnedView struct {
 	DeleteOK          bool // the administrator allows it (RECEIVER_DELETE)
 	BridgeOn          bool   // the administrator allows receivers on other servers (BRIDGE_ENABLE)
 	BridgeInvite      string // the open link for someone on another server, if there is one
+	HasBridge         bool   // the service has a receiver on another server
+	BridgeName        string
+	BridgeState       string // ok | unreachable | revoked
+	BridgeNote        string // why it is not ok
+	BridgeVersion     string // the other server's Immich version at the last check
+	BridgeChecked     string // when it was last checked
+	BridgeRetry       string // when an unreachable server is tried again
+	BridgeStopped     string // why the service does not run for a reason that is not its receiver key (bridges switched off)
 }
 
 // MemberView is a sender of a service the person owns.
@@ -868,6 +876,35 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 						<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current link will stop working. Continue?") } data-confirm-title={ t(ctx, "Make a new link?") } data-confirm-label={ t(ctx, "New link") }>{ t(ctx, "New link") }</button>
 					</div>
 					<div class="qr" id={ "qr-inv-" + id } hidden></div>
+				</div>
+			}
+			if o.BridgeStopped != "" {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Stopped") }</span> { o.BridgeStopped }</p>
+			}
+			if o.HasBridge {
+				<div class="field">
+					<label>{ t(ctx, "Receiving on another server") }</label>
+					<p class="meta">
+						<strong>{ o.BridgeName }</strong>
+						<span class={ "chip", bridgeTone(o.BridgeState) }>{ bridgeStateLabel(o.BridgeState) }</span>
+						if o.BridgeVersion != "" {
+							Immich { o.BridgeVersion }
+						}
+						if o.BridgeChecked != "" {
+							&middot; { t(ctx, "last checked") } { o.BridgeChecked }
+						}
+					</p>
+					if o.BridgeState != "ok" && o.BridgeNote != "" {
+						<p class="meta">{ o.BridgeNote }
+							if o.BridgeState == "unreachable" && o.BridgeRetry != "" {
+								{ t(ctx, "Tried again at") } { o.BridgeRetry }.
+							}
+							{ t(ctx, "Photos wait, still tagged, until it works again.") }
+						</p>
+					}
+					<div class="row">
+						<button class="danger" hx-post="services/bridge/remove" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sending {name} to the receiver on another server? Photos waiting for it then go to you alone. What already arrived there stays there.", "name", o.Name) } data-confirm-title={ t(ctx, "Remove the receiver on another server?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+					</div>
 				</div>
 			}
 			if o.BridgeOn {
@@ -2159,4 +2196,24 @@ templ BridgePage(d BridgePageView) {
 			</div>
 		}
 	}
+}
+
+func bridgeTone(state string) string {
+	switch state {
+	case "ok":
+		return "ok"
+	case "unreachable":
+		return "warn"
+	}
+	return "bad"
+}
+
+func bridgeStateLabel(state string) string {
+	switch state {
+	case "ok":
+		return "Connected"
+	case "unreachable":
+		return "Cannot be reached"
+	}
+	return "Key revoked"
 }

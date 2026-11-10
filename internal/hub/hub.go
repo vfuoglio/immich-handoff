@@ -162,7 +162,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			if r, why := h.remoteFor(b); r != nil {
 				svc.Remote = r
 			} else {
-				svc.Broken, svc.Receivers = why, nil
+				svc.Broken, svc.BrokenFix, svc.Receivers = why, "Set BRIDGE_ENABLE=true again, or remove the receiver on another server on the service's card.", nil
 			}
 		}
 		if v.State == store.StateBroken {
