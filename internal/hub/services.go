@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -325,7 +326,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable} {
 		if errors.Is(err, e) {
 			return true
 		}

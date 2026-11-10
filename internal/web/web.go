@@ -94,6 +94,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
+	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
+	mux.HandleFunc("GET /bridge/{token}", w.bridgePage)
+	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
 	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
 	mux.HandleFunc("GET /d/{token}", w.dropPage)
@@ -402,7 +405,8 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 		ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
 			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB,
 			LifetimeDays: o.Service.LifetimeDays, DeleteOK: w.Hub.ReceiverDelete, QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
-			AcceptOrient: o.Service.Accept.Orientation, AcceptMaxMB: o.Service.Accept.MaxMB}
+			AcceptOrient: o.Service.Accept.Orientation, AcceptMaxMB: o.Service.Accept.MaxMB,
+			BridgeOn: w.Hub.Bridge.Enabled, BridgeInvite: w.Hub.BridgeInviteOf(ctx, o.Service.Label())}
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
 		}

@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -163,4 +167,161 @@ func (h *Hub) bridgeRetryAt(service string, t time.Time) {
 		old.Stop()
 	}
 	h.retries[service] = time.AfterFunc(time.Until(t)+time.Second, func() { h.Wake("bridge retry: " + service) })
+}
+
+// Errors about bridges, shown as they are (the page words them for the receiver).
+var (
+	ErrBridgesOff     = errors.New("connecting to other servers is not switched on")
+	ErrBridgeInvite   = errors.New("this invitation is not valid any more")
+	ErrBadBridgeName  = errors.New("a name needs 1 to 40 characters")
+	ErrBridgeAttempts = errors.New("too many attempts; try again later")
+)
+
+// bridgeInviteLife is how long an invitation to a server stays open.
+const bridgeInviteLife = 7 * 24 * time.Hour
+
+// BridgeInviteInfo is what the invitation page may say: the service and who offers it, nothing else.
+type BridgeInviteInfo struct{ Service, Owner string }
+
+// NewBridgeInvite makes the link the owner of a service sends to someone on another Immich server. An older
+// one stops working.
+func (h *Hub) NewBridgeInvite(ctx context.Context, owner immich.User, service string) (string, error) {
+	if !h.Bridge.Enabled {
+		return "", ErrBridgesOff
+	}
+	if _, err := h.ownedService(ctx, owner, service); err != nil {
+		return "", err
+	}
+	token := newToken()
+	if err := h.Store.SetBridgeInvite(ctx, service, token); err != nil {
+		return "", err
+	}
+	h.event(ctx, service, owner.ID, "invite", i18n.Pack("{name} made a link for someone on another Immich server to receive {service}", "name", owner.Name, "service", service))
+	return token, nil
+}
+
+// BridgeInviteOf is the open invitation of a service the person owns, or "".
+func (h *Hub) BridgeInviteOf(ctx context.Context, service string) string {
+	if h.Store == nil || !h.Bridge.Enabled {
+		return ""
+	}
+	if i, err := h.Store.BridgeInviteOf(ctx, service); err == nil && time.Since(i.CreatedAt) < bridgeInviteLife {
+		return i.Token
+	}
+	return ""
+}
+
+// BridgeInvite says what an invitation is for, or ErrBridgeInvite for one that is unknown, replaced, used or old, and
+// for a service that is gone (the same answer for all, so the page tells nothing to a guesser).
+func (h *Hub) BridgeInvite(ctx context.Context, token string) (BridgeInviteInfo, error) {
+	if h.Store == nil || !h.Bridge.Enabled || token == "" {
+		return BridgeInviteInfo{}, ErrBridgeInvite
+	}
+	i, err := h.Store.BridgeInviteByToken(ctx, token)
+	if err != nil || time.Since(i.CreatedAt) > bridgeInviteLife {
+		return BridgeInviteInfo{}, ErrBridgeInvite
+	}
+	all, err := h.Store.Services(ctx)
+	if err != nil {
+		return BridgeInviteInfo{}, err
+	}
+	for _, v := range all {
+		if v.Name == i.Service {
+			return BridgeInviteInfo{Service: v.Name, Owner: v.OwnerName}, nil
+		}
+	}
+	return BridgeInviteInfo{}, ErrBridgeInvite
+}
+
+// bridgeGuard counts the attempts of people who have no account, in memory (it is about the last hour).
+type bridgeGuard struct {
+	mu   sync.Mutex
+	seen map[string][]time.Time
+}
+
+// AllowBridgeAttempt limits how often an address, and an invitation, may try to connect: each attempt makes the app
+// contact an address a stranger typed, so it is rationed. Ten an hour per address and twenty per invitation.
+func (h *Hub) AllowBridgeAttempt(who, token string) bool {
+	g := &h.bridgeTries
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.seen == nil {
+		g.seen = map[string][]time.Time{}
+	}
+	now := time.Now()
+	if len(g.seen) > 20000 {
+		for k, v := range g.seen {
+			if len(v) == 0 || now.Sub(v[len(v)-1]) > time.Hour {
+				delete(g.seen, k)
+			}
+		}
+	}
+	ok := true
+	for _, c := range []struct {
+		key   string
+		limit int
+	}{{"ip|" + who, 10}, {"token|" + token, 20}} {
+		recent := within(g.seen[c.key], time.Hour, now)
+		if len(recent) >= c.limit {
+			ok = false
+		}
+		g.seen[c.key] = recent
+	}
+	if ok {
+		for _, k := range []string{"ip|" + who, "token|" + token} {
+			g.seen[k] = append(g.seen[k], now)
+		}
+	}
+	return ok
+}
+
+// AcceptBridge connects the service to the server the receiver named. Nothing is stored until the address passes the
+// rules and the server and key pass the checks; the invitation is used up only then, so a mistake can be corrected
+// on the same page.
+func (h *Hub) AcceptBridge(ctx context.Context, token, address, key, name string) error {
+	info, err := h.BridgeInvite(ctx, token)
+	if err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if n := len([]rune(name)); n < 1 || n > 40 || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return ErrBadBridgeName
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return &bridge.Failure{Kind: bridge.ErrRevoked}
+	}
+	addr, err := h.Bridge.Policy.Address(address)
+	if err != nil {
+		return err
+	}
+	hc := h.Bridge.Policy.HTTPClient()
+	defer hc.CloseIdleConnections()
+	got, err := bridge.Check(ctx, hc, addr, key)
+	if err != nil {
+		return err
+	}
+	if err := h.Store.SetBridge(ctx, store.Bridge{Service: info.Service, Address: addr, Key: key, DisplayName: name, Version: got.Version, CheckedAt: time.Now()}); err != nil {
+		return err
+	}
+	h.Store.DeleteBridgeInvite(ctx, token)
+	var owner store.Service
+	if all, err := h.Store.Services(ctx); err == nil {
+		for _, v := range all {
+			if v.Name == info.Service {
+				owner = v
+			}
+		}
+	}
+	h.event(ctx, info.Service, owner.OwnerID, "joined", i18n.Pack("{name} on another Immich server will now receive {service}", "name", name, "service", info.Service))
+	h.show(ctx, live.Restored, info.Service, "", "service", true)
+	h.tell(fmt.Sprintf("%s on another Immich server now receives %q.", name, info.Service))
+	h.Log.Info("a receiver on another server was connected", "service", info.Service, "version", got.Version)
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	if h.Wake != nil {
+		h.Wake("bridge connected: " + info.Service)
+	}
+	return nil
 }

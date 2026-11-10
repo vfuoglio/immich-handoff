@@ -57,15 +57,16 @@ type Hub struct {
 	// StageDir is where files wait for a host's approval in a drop box that asks for it (empty: no such drop boxes).
 	StageDir string
 
-	mu       sync.RWMutex
-	snapshot []*syncer.Service
-	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
-	granted  map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
-	drop     dropGuard                  // what the drop boxes' limits know about their guests
-	wall     wallCache                  // the pictures a wall fetched last
-	hlRun    map[string]bool            // boxes whose best-of is being made now
-	remotes  map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
-	retries  map[string]*time.Timer     // when each unreachable receiver on another server is tried again
+	mu          sync.RWMutex
+	snapshot    []*syncer.Service
+	accounts    map[string]*syncer.Account // by link id, so pointers stay stable between reloads
+	granted     map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
+	drop        dropGuard                  // what the drop boxes' limits know about their guests
+	wall        wallCache                  // the pictures a wall fetched last
+	hlRun       map[string]bool            // boxes whose best-of is being made now
+	remotes     map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
+	retries     map[string]*time.Timer     // when each unreachable receiver on another server is tried again
+	bridgeTries bridgeGuard                // what the invitation pages know about who tried
 }
 
 // SelfService reports whether people can join and leave from the web page.

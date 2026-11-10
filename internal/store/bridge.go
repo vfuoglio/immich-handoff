@@ -120,3 +120,58 @@ func (s *Store) RemoveBridge(ctx context.Context, service string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM bridges WHERE service = ?`, service)
 	return err
 }
+
+// BridgeInvite is the link an owner sends to someone on another server.
+type BridgeInvite struct {
+	Token     string
+	Service   string
+	CreatedAt time.Time
+}
+
+// SetBridgeInvite makes token the service's one open invitation; an older one stops working.
+func (s *Store) SetBridgeInvite(ctx context.Context, service, token string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bridge_invites WHERE service = ?`, service); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO bridge_invites (token, service, created_at) VALUES (?,?,?)`,
+		token, service, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// BridgeInviteByToken finds an invitation, or ErrNotFound.
+func (s *Store) BridgeInviteByToken(ctx context.Context, token string) (BridgeInvite, error) {
+	var i BridgeInvite
+	var created string
+	err := s.db.QueryRowContext(ctx, `SELECT token, service, created_at FROM bridge_invites WHERE token = ?`, token).Scan(&i.Token, &i.Service, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BridgeInvite{}, ErrNotFound
+	}
+	i.CreatedAt = timeOrZero(created)
+	return i, err
+}
+
+// BridgeInviteOf is the service's open invitation, or ErrNotFound.
+func (s *Store) BridgeInviteOf(ctx context.Context, service string) (BridgeInvite, error) {
+	var token string
+	err := s.db.QueryRowContext(ctx, `SELECT token FROM bridge_invites WHERE service = ?`, service).Scan(&token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BridgeInvite{}, ErrNotFound
+	}
+	if err != nil {
+		return BridgeInvite{}, err
+	}
+	return s.BridgeInviteByToken(ctx, token)
+}
+
+// DeleteBridgeInvite withdraws an invitation (used up, or replaced). It is not an error if there is none.
+func (s *Store) DeleteBridgeInvite(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM bridge_invites WHERE token = ?`, token)
+	return err
+}

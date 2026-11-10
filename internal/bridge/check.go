@@ -26,9 +26,29 @@ var (
 	ErrVersion     = errors.New("that Immich version is not one this app was tested with")
 	ErrKeyTooBroad = errors.New("this key can read your library; make a smaller one")
 	ErrKeyTooSmall = errors.New("this key cannot do everything a hand-over needs")
-	ErrRevoked     = errors.New("the other server does not accept this key")
+	ErrRevoked     = errors.New("the server does not accept this key")
 	ErrUnreachable = errors.New("cannot reach that server")
 )
+
+// Failure is a reason from the list above with the technical detail that goes with it (permission names, versions,
+// an address). The reason alone is a sentence a page can translate; the detail is names and numbers, never prose.
+type Failure struct {
+	Kind   error
+	Detail string
+	Help   string // what to do, for the doctor and the log (English)
+}
+
+func (f *Failure) Error() string {
+	s := f.Kind.Error()
+	if f.Detail != "" {
+		s += " (" + f.Detail + ")"
+	}
+	if f.Help != "" {
+		s += ". " + f.Help
+	}
+	return s
+}
+func (f *Failure) Unwrap() error { return f.Kind }
 
 // Info is what a successful check learned.
 type Info struct {
@@ -55,7 +75,7 @@ func Check(ctx context.Context, hc *http.Client, addr, key string) (Info, error)
 	}
 	info := Info{Version: fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch), Major: v.Major}
 	if !slices.Contains(SupportedMajors, v.Major) {
-		return info, fmt.Errorf("%w: it runs %s and the app was tested with version %s", ErrVersion, info.Version, majorsText())
+		return info, &Failure{Kind: ErrVersion, Detail: info.Version + ", tested with " + majorsText()}
 	}
 	var k struct {
 		Permissions []string `json:"permissions"`
@@ -90,9 +110,9 @@ func judgeKey(have []string) error {
 	sort.Strings(extra)
 	switch {
 	case len(extra) > 0:
-		return fmt.Errorf("%w (it also allows: %s). %s", ErrKeyTooBroad, strings.Join(extra, ", "), PermissionsHelp())
+		return &Failure{Kind: ErrKeyTooBroad, Detail: strings.Join(extra, ", "), Help: PermissionsHelp()}
 	case len(missing) > 0:
-		return fmt.Errorf("%w (it lacks: %s). %s", ErrKeyTooSmall, strings.Join(missing, ", "), PermissionsHelp())
+		return &Failure{Kind: ErrKeyTooSmall, Detail: strings.Join(missing, ", "), Help: PermissionsHelp()}
 	}
 	return nil
 }
@@ -122,7 +142,7 @@ func getJSON(ctx context.Context, hc *http.Client, target, key string, into any)
 		if where == "" {
 			where = "somewhere else"
 		}
-		return fmt.Errorf("%w: it points to %s; use that address", ErrRedirect, where)
+		return &Failure{Kind: ErrRedirect, Detail: where}
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		if key == "" {
 			return fmt.Errorf("%w: it refused a question that needs no key", ErrNotImmich)

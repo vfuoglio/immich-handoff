@@ -363,6 +363,12 @@ var migrations = []string{
 	   retry_at     TEXT NOT NULL DEFAULT '',
 	   created_at   TEXT NOT NULL
 	 );`,
+	// the link an owner sends to someone on another server; one open at a time per service
+	`CREATE TABLE bridge_invites (
+	   token      TEXT PRIMARY KEY,
+	   service    TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -771,6 +777,7 @@ func (s *Store) RemoveService(ctx context.Context, name string) error {
 		`UPDATE links SET state = 'orphaned', paused = 0 WHERE service = ?`,
 		`DELETE FROM requests WHERE service = ?`,
 		`DELETE FROM bridges WHERE service = ?`,
+		`DELETE FROM bridge_invites WHERE service = ?`,
 		`DELETE FROM services WHERE name = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, name); err != nil {

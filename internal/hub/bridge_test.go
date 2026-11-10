@@ -252,3 +252,128 @@ func TestTheBackoffGrowsAndIsCapped(t *testing.T) {
 		t.Fatalf("capped at an hour, got %v", last)
 	}
 }
+
+func inviteSetup(t *testing.T, o *otherServer, p bridge.Policy) (*env, string) {
+	t.Helper()
+	e, ctx := setup(t, false), context.Background()
+	e.h.Bridge = bridge.Settings{Enabled: true, Policy: p}
+	if err := e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "holiday", Tag: "hol", Policy: "approval"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := e.h.NewBridgeInvite(ctx, ann, "holiday")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e, token
+}
+
+func TestOnlyTheOwnerMakesAnInvitationAndANewOneReplacesTheOld(t *testing.T) {
+	e, first := inviteSetup(t, newOtherServer(t), bridge.Policy{AllowPrivate: true})
+	ctx := context.Background()
+	if _, err := e.h.NewBridgeInvite(ctx, bob, "holiday"); !errors.Is(err, hub.ErrNotOwner) {
+		t.Errorf("someone else: %v", err)
+	}
+	second, err := e.h.NewBridgeInvite(ctx, ann, "holiday")
+	if err != nil || second == first {
+		t.Fatal(err)
+	}
+	if _, err := e.h.BridgeInvite(ctx, first); !errors.Is(err, hub.ErrBridgeInvite) {
+		t.Errorf("the old link must stop working: %v", err)
+	}
+	info, err := e.h.BridgeInvite(ctx, second)
+	if err != nil || info.Service != "holiday" || info.Owner == "" {
+		t.Fatalf("%+v %v", info, err)
+	}
+	if e.h.BridgeInviteOf(ctx, "holiday") != second {
+		t.Error("the owner's page shows the open link")
+	}
+	e.h.Bridge = bridge.Settings{}
+	if _, err := e.h.NewBridgeInvite(ctx, ann, "holiday"); !errors.Is(err, hub.ErrBridgesOff) {
+		t.Errorf("off: %v", err)
+	}
+	if _, err := e.h.BridgeInvite(ctx, second); !errors.Is(err, hub.ErrBridgeInvite) || e.h.BridgeInviteOf(ctx, "holiday") != "" {
+		t.Errorf("with bridges off nothing is offered: %v", err)
+	}
+	if _, err := e.h.BridgeInvite(ctx, "no-such-token"); !errors.Is(err, hub.ErrBridgeInvite) {
+		t.Errorf("unknown: %v", err)
+	}
+}
+
+func TestAcceptingAnInvitationConnectsTheServiceAndUsesTheLinkUp(t *testing.T) {
+	o := newOtherServer(t)
+	e, token := inviteSetup(t, o, bridge.Policy{AllowPrivate: true})
+	ctx := context.Background()
+	if err := e.h.AcceptBridge(ctx, token, o.URL, "REMOTE", "  Aunt Lia "); err != nil {
+		t.Fatal(err)
+	}
+	b, err := e.st.Bridge(ctx, "holiday")
+	if err != nil || b.Key != "REMOTE" || b.DisplayName != "Aunt Lia" || b.Version != "v3.2.0" || b.State != store.BridgeOK || b.Address != o.URL {
+		t.Fatalf("%+v %v", b, err)
+	}
+	if svc := service(e, "holiday"); svc.Remote == nil || svc.Remote.Label() != "Aunt Lia" {
+		t.Fatal("the running service does not have its receiver")
+	}
+	if err := e.h.AcceptBridge(ctx, token, o.URL, "REMOTE", "Again"); !errors.Is(err, hub.ErrBridgeInvite) {
+		t.Errorf("a link works once: %v", err)
+	}
+}
+
+func TestNothingIsStoredUntilTheChecksPassAndTheLinkSurvivesAMistake(t *testing.T) {
+	o := newOtherServer(t)
+	e, token := inviteSetup(t, o, bridge.Policy{AllowPrivate: true})
+	ctx := context.Background()
+	for name, c := range map[string]struct {
+		address, key, who string
+		want              error
+	}{
+		"wrong key":        {o.URL, "WRONG", "Lia", bridge.ErrRevoked},
+		"empty key":        {o.URL, " ", "Lia", bridge.ErrRevoked},
+		"no name":          {o.URL, "REMOTE", "  ", hub.ErrBadBridgeName},
+		"a very long name": {o.URL, "REMOTE", strings.Repeat("x", 41), hub.ErrBadBridgeName},
+		"not an address":   {"", "REMOTE", "Lia", bridge.ErrBadAddress},
+		"ftp":              {"ftp://x.example.org", "REMOTE", "Lia", bridge.ErrBadAddress},
+	} {
+		if err := e.h.AcceptBridge(ctx, token, c.address, c.key, c.who); !errors.Is(err, c.want) || !hub.IsUserError(err) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := e.st.Bridge(ctx, "holiday"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatal("a failed attempt stored a bridge")
+	}
+	if _, err := e.h.BridgeInvite(ctx, token); err != nil {
+		t.Fatalf("a mistake must not use the link up: %v", err)
+	}
+}
+
+func TestAPrivateAddressIsNotContactedWithoutTheOptIn(t *testing.T) {
+	o := newOtherServer(t)
+	e, token := inviteSetup(t, o, bridge.Policy{})
+	err := e.h.AcceptBridge(context.Background(), token, o.URL, "REMOTE", "Lia")
+	if !errors.Is(err, bridge.ErrBadAddress) {
+		t.Fatalf("%v", err)
+	}
+	if o.count() != 0 {
+		t.Fatal("the server was contacted")
+	}
+}
+
+func TestAttemptsAreRationedPerAddressAndPerInvitation(t *testing.T) {
+	h := &hub.Hub{}
+	for i := 0; i < 10; i++ {
+		if !h.AllowBridgeAttempt("1.2.3.4", "tok"+string(rune('a'+i))) {
+			t.Fatalf("attempt %d refused too early", i)
+		}
+	}
+	if h.AllowBridgeAttempt("1.2.3.4", "other") {
+		t.Error("an eleventh attempt from one address within the hour")
+	}
+	if !h.AllowBridgeAttempt("5.6.7.8", "other") {
+		t.Error("another address is not affected")
+	}
+	for i := 0; i < 20; i++ {
+		h.AllowBridgeAttempt("9.9.9."+string(rune('a'+i)), "busy")
+	}
+	if h.AllowBridgeAttempt("10.10.10.10", "busy") {
+		t.Error("a twenty-first attempt on one invitation")
+	}
+}
