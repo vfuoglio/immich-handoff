@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
@@ -48,16 +50,23 @@ type Hub struct {
 	// when their owner opens the page (RECEIVER_DELETE, on by default).
 	ReceiverDelete bool
 
+	// Bridge: whether services may hand photos to a receiver on another Immich server, and which addresses the app
+	// may then connect to (BRIDGE_ENABLE, BRIDGE_ALLOW_PRIVATE; both off by default).
+	Bridge bridge.Settings
+
 	// StageDir is where files wait for a host's approval in a drop box that asks for it (empty: no such drop boxes).
 	StageDir string
 
-	mu       sync.RWMutex
-	snapshot []*syncer.Service
-	accounts map[string]*syncer.Account // by link id, so pointers stay stable between reloads
-	granted  map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
-	drop     dropGuard                  // what the drop boxes' limits know about their guests
-	wall     wallCache                  // the pictures a wall fetched last
-	hlRun    map[string]bool            // boxes whose best-of is being made now
+	mu          sync.RWMutex
+	snapshot    []*syncer.Service
+	accounts    map[string]*syncer.Account // by link id, so pointers stay stable between reloads
+	granted     map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
+	drop        dropGuard                  // what the drop boxes' limits know about their guests
+	wall        wallCache                  // the pictures a wall fetched last
+	hlRun       map[string]bool            // boxes whose best-of is being made now
+	remotes     map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
+	retries     map[string]*time.Timer     // when each unreachable receiver on another server is tried again
+	bridgeTries bridgeGuard                // what the invitation pages know about who tried
 }
 
 // SelfService reports whether people can join and leave from the web page.
@@ -77,6 +86,7 @@ func (h *Hub) Services() []*syncer.Service {
 func (h *Hub) Reload(ctx context.Context) error {
 	var links []store.Link
 	var owned []store.Service
+	var bridges map[string]store.Bridge
 	if h.Store != nil {
 		var err error
 		if links, err = h.Store.Links(ctx); err != nil {
@@ -84,6 +94,14 @@ func (h *Hub) Reload(ctx context.Context) error {
 		}
 		if owned, err = h.Store.Services(ctx); err != nil {
 			return err
+		}
+		all, err := h.Store.Bridges(ctx)
+		if err != nil {
+			return err
+		}
+		bridges = map[string]store.Bridge{}
+		for _, b := range all {
+			bridges[b.Service] = b
 		}
 	}
 	h.mu.Lock()
@@ -138,6 +156,15 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
 		}
+		if b, ok := bridges[v.Name]; ok {
+			// a service with a receiver on another server never runs without it: the original would be removed
+			// with a copy in only some of the places it was promised
+			if r, why := h.remoteFor(b); r != nil {
+				svc.Remote = r
+			} else {
+				svc.Broken, svc.BrokenFix, svc.Receivers = why, "Set BRIDGE_ENABLE=true again, or remove the receiver on another server on the service's card.", nil
+			}
+		}
 		if v.State == store.StateBroken {
 			svc.Broken, svc.Receivers = v.Note, nil // nothing may run until the owner reconnects
 		}
@@ -146,6 +173,11 @@ func (h *Hub) Reload(ctx context.Context) error {
 	for id := range h.accounts {
 		if !live[id] {
 			delete(h.accounts, id)
+		}
+	}
+	for name := range h.remotes {
+		if _, ok := bridges[name]; !ok {
+			delete(h.remotes, name)
 		}
 	}
 	h.snapshot = merged

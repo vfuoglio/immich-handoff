@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -259,7 +260,11 @@ func services(ctx context.Context, r *Report, in Input) {
 	for _, svc := range in.Services {
 		r.section("Service " + svc.Label())
 		if svc.Broken != "" {
-			r.add(Fail, "the service is paused: "+svc.Broken, "Its owner presses Reconnect on the page.")
+			fix := "Its owner presses Reconnect on the page."
+			if svc.BrokenFix != "" {
+				fix = svc.BrokenFix
+			}
+			r.add(Fail, "the service is paused: "+svc.Broken, fix)
 			continue
 		}
 		for _, rc := range svc.Receivers {
@@ -271,6 +276,9 @@ func services(ctx context.Context, r *Report, in Input) {
 				deletePermission(ctx, r, rc, in.Env == nil || in.Env("RECEIVER_DELETE") != "off")
 			}
 			tags(ctx, r, rc, "receiver")
+		}
+		if rm, ok := svc.Remote.(*bridge.Remote); ok {
+			remote(ctx, r, rm)
 		}
 		if len(svc.Senders) == 0 {
 			r.add(OK, "no senders have joined yet", "")
@@ -473,4 +481,43 @@ func ago(t time.Time) string {
 		return fmt.Sprintf("%d h ago", int(d.Hours()))
 	}
 	return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+}
+
+// remote checks a receiver on another Immich server: the address against the rules, the server's version, the exact
+// permissions of the key, and that it can be reached. It says what is wrong in the same words the page uses.
+func remote(ctx context.Context, r *Report, rm *bridge.Remote) {
+	who := "receiver on another server (" + rm.Name + ")"
+	info, err := rm.Diagnose(ctx)
+	var f *bridge.Failure
+	detail := ""
+	if errors.As(err, &f) {
+		detail = f.Detail
+	}
+	switch {
+	case err == nil:
+		r.add(OK, who+": the address is allowed, the server answers (Immich "+info.Version+") and the key has exactly "+strings.Join(bridge.RequiredPermissions, ", "), "")
+	case errors.Is(err, bridge.ErrBadAddress):
+		r.add(Fail, who+": the address is not one the app may connect to ("+err.Error()+")",
+			"Use the receiver's public https address. Only when both servers are yours, behind a VPN, set BRIDGE_ALLOW_PRIVATE=true.")
+	case errors.Is(err, bridge.ErrRedirect):
+		r.add(Fail, who+": the server answers with a redirect to "+detail+", which the app does not follow",
+			"Ask the receiver for the address it redirects to, and connect again with an invitation.")
+	case errors.Is(err, bridge.ErrNotImmich):
+		r.add(Fail, who+": the address does not answer like an Immich server", "Check the address with the receiver.")
+	case errors.Is(err, bridge.ErrVersion):
+		r.add(Fail, who+": its Immich version ("+detail+") is not one this app was tested with",
+			"Photos wait, still tagged. Ask the receiver to update or downgrade, or update this app.")
+	case errors.Is(err, bridge.ErrKeyTooBroad):
+		r.add(Fail, who+": the key can do more than it should ("+detail+"): it can read the receiver's library",
+			bridge.PermissionsHelp()+"\nAsk the receiver for a new key, and connect again with an invitation.")
+	case errors.Is(err, bridge.ErrKeyTooSmall):
+		r.add(Fail, who+": the key cannot do everything a hand-over needs (it lacks "+detail+")",
+			bridge.PermissionsHelp()+"\nAsk the receiver for a new key, and connect again with an invitation.")
+	case errors.Is(err, bridge.ErrRevoked):
+		r.add(Fail, who+": the other server does not accept the key (it was deleted or revoked)",
+			"Photos wait, still tagged. Ask the receiver for a new key and connect again with an invitation, or remove the receiver on the service's card.")
+	default:
+		r.add(Fail, who+": cannot reach the server ("+err.Error()+")",
+			"Photos wait, still tagged, and the app tries again with growing pauses. Check that the receiver's server is on and reachable from here.")
+	}
 }

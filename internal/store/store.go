@@ -349,6 +349,26 @@ var migrations = []string{
 	   count   INTEGER NOT NULL,
 	   by_name TEXT NOT NULL
 	 );`,
+	// a receiver on another Immich server (a bridge): one per service, its key sealed like every other key
+	`CREATE TABLE bridges (
+	   service      TEXT PRIMARY KEY,
+	   address      TEXT NOT NULL,
+	   key_enc      BLOB NOT NULL,
+	   display_name TEXT NOT NULL,
+	   state        TEXT NOT NULL DEFAULT 'ok' CHECK (state IN ('ok','unreachable','revoked')),
+	   note         TEXT NOT NULL DEFAULT '',
+	   version      TEXT NOT NULL DEFAULT '',
+	   checked_at   TEXT NOT NULL DEFAULT '',
+	   failures     INTEGER NOT NULL DEFAULT 0,
+	   retry_at     TEXT NOT NULL DEFAULT '',
+	   created_at   TEXT NOT NULL
+	 );`,
+	// the link an owner sends to someone on another server; one open at a time per service
+	`CREATE TABLE bridge_invites (
+	   token      TEXT PRIMARY KEY,
+	   service    TEXT NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -756,6 +776,8 @@ func (s *Store) RemoveService(ctx context.Context, name string) error {
 	for _, q := range []string{
 		`UPDATE links SET state = 'orphaned', paused = 0 WHERE service = ?`,
 		`DELETE FROM requests WHERE service = ?`,
+		`DELETE FROM bridges WHERE service = ?`,
+		`DELETE FROM bridge_invites WHERE service = ?`,
 		`DELETE FROM services WHERE name = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, name); err != nil {

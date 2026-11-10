@@ -40,9 +40,10 @@ func guestOf(ctx context.Context) *guestInfo { g, _ := ctx.Value(guestKey{}).(*g
 // isGuest is whether the page is one a guest sees (no account, no tabs, nothing about the library).
 func isGuest(ctx context.Context) bool { return guestOf(ctx) != nil }
 
-// dropRoute is whether the path belongs to a drop box's guest pages, which need no Immich login.
+// dropRoute is whether the path belongs to a guest's pages, which need no Immich login: a drop box, its wall, or the
+// page where someone on another server connects (/bridge/<token>).
 func dropRoute(path string) bool {
-	return strings.HasPrefix(path, "/drop/") || strings.HasPrefix(path, "/d/") || strings.HasPrefix(path, "/wall/")
+	return strings.HasPrefix(path, "/drop/") || strings.HasPrefix(path, "/d/") || strings.HasPrefix(path, "/wall/") || strings.HasPrefix(path, "/bridge/")
 }
 
 // guestSecretCookie is the cookie in which a guest's browser keeps the secret that finds its own uploads again.

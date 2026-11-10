@@ -358,6 +358,19 @@ func (a *API) FindTag(ctx context.Context, name string, create bool) (*openapi_t
 	return &id, nil
 }
 
+// UpsertTag makes the tag if it is not there and returns its id, without listing the account's tags: it needs only
+// tag.create, which is all a key held on someone else's server has. A name with slashes is a tag inside another.
+func (a *API) UpsertTag(ctx context.Context, name string) (openapi_types.UUID, error) {
+	u, err := a.c.UpsertTagsWithResponse(ctx, UpsertTagsJSONRequestBody{Tags: []string{name}})
+	if err != nil {
+		return openapi_types.UUID{}, err
+	}
+	if u.JSON200 == nil || len(*u.JSON200) == 0 {
+		return openapi_types.UUID{}, statusErr("upsertTags", u.StatusCode(), u.Body)
+	}
+	return (*u.JSON200)[0].Id, nil
+}
+
 // TagInfo is a tag of an account: its id, its name and its full value (for a tag inside another, "parent/child").
 type TagInfo struct {
 	ID          openapi_types.UUID

@@ -70,6 +70,16 @@ type OwnedView struct {
 	AcceptMaxMB       int
 	LifetimeDays      int  // copies that arrive are moved to the owner's trash after this many days, 0: they stay
 	DeleteOK          bool // the administrator allows it (RECEIVER_DELETE)
+	BridgeOn          bool   // the administrator allows receivers on other servers (BRIDGE_ENABLE)
+	BridgeInvite      string // the open link for someone on another server, if there is one
+	HasBridge         bool   // the service has a receiver on another server
+	BridgeName        string
+	BridgeState       string // ok | unreachable | revoked
+	BridgeNote        string // why it is not ok
+	BridgeVersion     string // the other server's Immich version at the last check
+	BridgeChecked     string // when it was last checked
+	BridgeRetry       string // when an unreachable server is tried again
+	BridgeStopped     string // why the service does not run for a reason that is not its receiver key (bridges switched off)
 }
 
 // MemberView is a sender of a service the person owns.
@@ -866,6 +876,54 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 						<button hx-post="services/invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current link will stop working. Continue?") } data-confirm-title={ t(ctx, "Make a new link?") } data-confirm-label={ t(ctx, "New link") }>{ t(ctx, "New link") }</button>
 					</div>
 					<div class="qr" id={ "qr-inv-" + id } hidden></div>
+				</div>
+			}
+			if o.BridgeStopped != "" {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Stopped") }</span> { o.BridgeStopped }</p>
+			}
+			if o.HasBridge {
+				<div class="field">
+					<label>{ t(ctx, "Receiving on another server") }</label>
+					<p class="meta">
+						<strong>{ o.BridgeName }</strong>
+						<span class={ "chip", bridgeTone(o.BridgeState) }>{ bridgeStateLabel(o.BridgeState) }</span>
+						if o.BridgeVersion != "" {
+							Immich { o.BridgeVersion }
+						}
+						if o.BridgeChecked != "" {
+							&middot; { t(ctx, "last checked") } { o.BridgeChecked }
+						}
+					</p>
+					if o.BridgeState != "ok" && o.BridgeNote != "" {
+						<p class="meta">{ o.BridgeNote }
+							if o.BridgeState == "unreachable" && o.BridgeRetry != "" {
+								{ t(ctx, "Tried again at") } { o.BridgeRetry }.
+							}
+							{ t(ctx, "Photos wait, still tagged, until it works again.") }
+						</p>
+					}
+					<div class="row">
+						<button class="danger" hx-post="services/bridge/remove" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sending {name} to the receiver on another server? Photos waiting for it then go to you alone. What already arrived there stays there.", "name", o.Name) } data-confirm-title={ t(ctx, "Remove the receiver on another server?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+					</div>
+				</div>
+			}
+			if o.BridgeOn {
+				<div class="field">
+					<label>{ t(ctx, "A receiver on another Immich server") }</label>
+					<small class="meta">{ t(ctx, "Someone with their own Immich can receive what is tagged for this service too. They get a link, make a key that can only upload and tag, and enter their address. Taking back and expiry do not work on their side.") }</small>
+					<div class="row">
+						if o.BridgeInvite != "" {
+							<input id={ "bri-" + id } class="invite" readonly data-link={ "bridge/" + o.BridgeInvite }/>
+							<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						}
+						<button hx-post="services/bridge-invite" hx-vals={ vals("service", o.Name) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+							if o.BridgeInvite != "" {
+								{ t(ctx, "New link") }
+							} else {
+								{ t(ctx, "Invite someone on another server") }
+							}
+						</button>
+					</div>
 				</div>
 			}
 			<p class="row">
@@ -2074,4 +2132,88 @@ templ WallPage(name, token, mode string) {
 			</main>
 		</body>
 	</html>
+}
+
+// BridgePageView is the page where someone on another Immich server connects.
+type BridgePageView struct {
+	Token, Service, Owner string
+	Permissions           []string
+	Error                 string // why the last attempt did not work
+	Address, Name         string // what they typed, so a mistake can be corrected
+	Done                  bool
+}
+
+// BridgePage is where the person invited from another Immich server makes a key and connects. It is a guest page: no
+// account, nothing about any library.
+templ BridgePage(d BridgePageView) {
+	@Layout(d.Service, "") {
+		if d.Done {
+			<section class="invite-hero">
+				<h1>{ t(ctx, "Connected") }</h1>
+				<p class="lead">{ t(ctx, "{service} will now send photos to your Immich. You can close this page.", "service", d.Service) }</p>
+			</section>
+		} else {
+			<section class="invite-hero">
+				<h1>{ t(ctx, "Receive {service} in your own Immich", "service", d.Service) }</h1>
+				<p class="lead">{ t(ctx, "{owner} would like to hand photos over to you, straight into your own Immich. Nothing happens until you make a key and enter it here.", "owner", d.Owner) }</p>
+			</section>
+			if d.Error != "" {
+				<p class="card notice bad" role="alert">{ t(ctx, "That did not work:") } { d.Error }</p>
+			}
+			<div class="card">
+				<h2>{ t(ctx, "1. Make a key in your Immich") }</h2>
+				<p>{ t(ctx, "In your Immich, open Account settings, API keys, New API key. Give it exactly these permissions and no others:") }</p>
+				<ul class="plain">
+					for _, p := range d.Permissions {
+						<li><code>{ p }</code></li>
+					}
+				</ul>
+				<p class="meta">{ t(ctx, "The key can upload photos and put a tag on them. It cannot see, search, download or delete anything in your library.") }</p>
+			</div>
+			<form class="card offer-form" method="post" action={ "bridge/" + d.Token }>
+				<h2>{ t(ctx, "2. Enter it here") }</h2>
+				<div class="field">
+					<label for="br-address">{ t(ctx, "Address of your Immich") }</label>
+					<input id="br-address" name="address" required inputmode="url" autocomplete="off" placeholder="https://photos.example.org" value={ d.Address }/>
+				</div>
+				<div class="field">
+					<label for="br-key">{ t(ctx, "The key") }</label>
+					<input id="br-key" name="key" type="password" required autocomplete="off"/>
+				</div>
+				<div class="field">
+					<label for="br-name">{ t(ctx, "Your name, as {owner} will see it", "owner", d.Owner) }</label>
+					<input id="br-name" name="name" required maxlength="40" autocomplete="name" value={ d.Name }/>
+				</div>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Connect") }</button></p>
+			</form>
+			<div class="card">
+				<h2>{ t(ctx, "Good to know") }</h2>
+				<ul class="plain">
+					<li>{ t(ctx, "Photos arrive in your library with a tag that says who they are from, inside the tag \"from\".") }</li>
+					<li>{ t(ctx, "Taking a hand-over back and letting copies expire do not work across servers, because this key cannot delete. What arrives is yours to keep or remove.") }</li>
+					<li>{ t(ctx, "You can cut the connection at any time by deleting the key in your Immich. Photos not yet sent stay with {owner}; nothing is lost.", "owner", d.Owner) }</li>
+				</ul>
+			</div>
+		}
+	}
+}
+
+func bridgeTone(state string) string {
+	switch state {
+	case "ok":
+		return "ok"
+	case "unreachable":
+		return "warn"
+	}
+	return "bad"
+}
+
+func bridgeStateLabel(state string) string {
+	switch state {
+	case "ok":
+		return "Connected"
+	case "unreachable":
+		return "Cannot be reached"
+	}
+	return "Key revoked"
 }
