@@ -204,7 +204,7 @@ func TestDeliverReportsHowItEnded(t *testing.T) {
 	r.Deliver(context.Background(), source(t), asset("a.jpg"), nil, syncer.RemoteJob{Sender: "Bob"})
 	d.down = 500
 	r.Deliver(context.Background(), source(t), asset("b.jpg"), nil, syncer.RemoteJob{Sender: "Bob"})
-	if len(got) != 2 || got[0] != nil || !errors.Is(got[1], ErrUnreachable) {
+	if len(got) != 1 || !errors.Is(got[0], ErrUnreachable) { // only failures are reported; Ready reports the healthy checks
 		t.Fatalf("%v", got)
 	}
 }
@@ -214,5 +214,72 @@ func TestTagFor(t *testing.T) {
 		if got := TagFor(in); got != want {
 			t.Errorf("TagFor(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A connection that dies while the file is going over is an unreachable server, not a lost photo: nothing is tagged
+// on the other side, and the retry, when the server is back, goes through and is the only copy.
+func TestAHandOverInterruptedHalfwayIsRetriedWithoutLoss(t *testing.T) {
+	d := newDestination(t)
+	cut := true
+	var mu sync.Mutex
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		c := cut
+		mu.Unlock()
+		if c && r.Method == "POST" && r.URL.Path == "/api/assets" {
+			io.CopyN(io.Discard, r.Body, 5) // read a little of the file, then drop the connection
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
+		req, _ := http.NewRequest(r.Method, d.URL+r.URL.Path, r.Body)
+		req.Header = r.Header
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			http.Error(w, err.Error(), 502)
+			return
+		}
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}))
+	defer front.Close()
+	r, err := NewRemote("Aunt Lia", front.URL, "good-key", Policy{AllowPrivate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := source(t)
+	if err := r.Deliver(context.Background(), src, asset("IMG_1.jpg"), nil, syncer.RemoteJob{Sender: "Bob"}); !errors.Is(err, ErrUnreachable) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(d.uploads) != 0 || len(d.tagged) != 0 {
+		t.Fatalf("a half-sent file must leave nothing behind: %v %v", d.uploads, d.tagged)
+	}
+	mu.Lock()
+	cut = false
+	mu.Unlock()
+	if err := r.Deliver(context.Background(), src, asset("IMG_1.jpg"), nil, syncer.RemoteJob{Sender: "Bob"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.uploads) != 1 || len(d.tagged) < 1 {
+		t.Fatalf("the retry must deliver exactly once: %v %v", d.uploads, d.tagged)
+	}
+}
+
+func TestMessagesDoNotCarryTheOtherServersAddress(t *testing.T) {
+	d := newDestination(t)
+	d.down = 502
+	r := remote(t, d, "good-key")
+	err := r.Deliver(context.Background(), source(t), asset("a.jpg"), nil, syncer.RemoteJob{Sender: "Bob"})
+	host := strings.TrimPrefix(d.URL, "http://")
+	if err == nil || strings.Contains(err.Error(), host) {
+		t.Fatalf("%v", err)
+	}
+	d.Close()
+	err = r.Deliver(context.Background(), source(t), asset("a.jpg"), nil, syncer.RemoteJob{Sender: "Bob"})
+	if err == nil || strings.Contains(err.Error(), host) {
+		t.Fatalf("a server that is gone: %v", err)
 	}
 }

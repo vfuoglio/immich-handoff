@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +31,10 @@ type Remote struct {
 	// notifications learn the state. May be nil.
 	Report func(err error, version string)
 
+	// Gate is asked before every pass: a non-nil error holds the photos back without touching the other server (a
+	// revoked key is not tried again, an unreachable server is left alone until its retry time). May be nil.
+	Gate func() error
+
 	api *immich.API
 	key string
 	hc  *http.Client
@@ -52,6 +57,11 @@ func (r *Remote) Label() string { return r.Name }
 
 // Ready implements syncer.Remote: the server must answer as Immich with a key that has exactly the four permissions.
 func (r *Remote) Ready(ctx context.Context) error {
+	if r.Gate != nil {
+		if err := r.Gate(); err != nil {
+			return err
+		}
+	}
 	info, err := Check(ctx, r.hc, r.Address, r.key)
 	if r.Report != nil {
 		r.Report(err, info.Version)
@@ -73,7 +83,7 @@ func TagFor(sender string) string {
 // success, and puts the tag on. It reads nothing from the other server's library.
 func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) (err error) {
 	defer func() {
-		if r.Report != nil {
+		if err != nil && r.Report != nil { // a success needs no word: Ready reported the server healthy at the start of the pass
 			r.Report(err, "")
 		}
 	}()
@@ -109,20 +119,32 @@ func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetRes
 }
 
 // classify turns what Immich answered into the reasons Check uses, so that one place decides revoked or unreachable.
+// The other server's address is taken out of the message: it ends up in notifications and on pages.
 func (r *Remote) classify(err error) error {
 	var he *immich.HTTPError
+	say := func() string { return r.clean(err.Error()) }
 	switch {
 	case err == nil:
 		return nil
 	case errors.Is(err, ErrBadAddress):
 		return err
-	case errors.As(err, &he) && (he.Code == http.StatusUnauthorized):
-		return fmt.Errorf("%w: %v", ErrRevoked, err)
+	case errors.As(err, &he) && he.Code == http.StatusUnauthorized:
+		return fmt.Errorf("%w", ErrRevoked)
 	case errors.As(err, &he) && he.Code >= 500:
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return fmt.Errorf("%w: %s", ErrUnreachable, say())
 	case errors.As(err, &he):
-		return err // a refusal of this photo or this key: not a connection problem
+		return errors.New(say()) // a refusal of this photo or this key: not a connection problem
 	default:
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return fmt.Errorf("%w: %s", ErrUnreachable, say())
 	}
+}
+
+func (r *Remote) clean(msg string) string {
+	if r.Address != "" {
+		msg = strings.ReplaceAll(msg, r.Address, "the other server")
+	}
+	if u, err := url.Parse(r.Address); err == nil && u.Host != "" {
+		msg = strings.ReplaceAll(msg, u.Host, "the other server")
+	}
+	return msg
 }

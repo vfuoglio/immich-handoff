@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -64,6 +65,7 @@ type Hub struct {
 	wall     wallCache                  // the pictures a wall fetched last
 	hlRun    map[string]bool            // boxes whose best-of is being made now
 	remotes  map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
+	retries  map[string]*time.Timer     // when each unreachable receiver on another server is tried again
 }
 
 // SelfService reports whether people can join and leave from the web page.
