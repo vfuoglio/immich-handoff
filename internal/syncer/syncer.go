@@ -340,6 +340,13 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 		log.Debug("service is paused; leaving tagged photos alone")
 		return
 	}
+	if svc.Remote != nil {
+		// photos wait, still tagged, until the other server can be used; nothing is sent and nothing deleted
+		if err := svc.Remote.Ready(ctx); err != nil {
+			log.Warn("the receiver on another server is not ready; tagged photos wait", "receiver", svc.Remote.Label(), "err", err)
+			return
+		}
+	}
 	var rs []receiver
 	for _, r := range svc.Receivers {
 		me, err := r.API.Me(ctx)
@@ -619,6 +626,13 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 		}
 		s.restack(ctx, log, svc, r, copies)
 	}
+	if svc.Remote != nil {
+		for _, m := range members {
+			if err := s.deliverRemote(ctx, log, svc, snd, m, clips[m.Id]); err != nil {
+				return "", nil, err
+			}
+		}
+	}
 	if svc.CopiesFor(snd) {
 		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
 			return "", nil, fmt.Errorf("copies verified but the original could not be marked as handed over: %w", err)
@@ -640,6 +654,21 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 	}
 	log.Info(outcome, "file", a.OriginalFileName, "receivers", len(rs), "photos", len(members))
 	return outcome, members, nil
+}
+
+// deliverRemote hands one photo to the receiver on another server. Like handOne it touches nothing of the original;
+// any error keeps it, and because the other server recognises a duplicate, a retry is safe.
+func (s *Syncer) deliverRemote(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, a immich.AssetResponseDto, clip *immich.AssetResponseDto) error {
+	if e := a.ExifInfo; !s.Cfg.NoDetails && (e == nil || (e.Description == nil && e.Rating == nil && e.Latitude == nil)) {
+		if full, err := snd.API.Asset(ctx, a.Id); err == nil && full != nil {
+			a = *full
+		}
+	}
+	if err := svc.Remote.Deliver(ctx, snd.API, a, clip, RemoteJob{Sender: snd.Name, Details: !s.Cfg.NoDetails}); err != nil {
+		return fmt.Errorf("to %s: %w", svc.Remote.Label(), err)
+	}
+	log.Debug("handed over to another server", "file", a.OriginalFileName, "receiver", svc.Remote.Label())
+	return nil
 }
 
 // handedCopy is one photo's copy in one receiver's account.

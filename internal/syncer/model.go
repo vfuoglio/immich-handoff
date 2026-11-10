@@ -43,7 +43,8 @@ type Service struct {
 	ExpiryDays int    // unfiled copies lose InboxTag after this many days
 	Senders    []*Account
 	Receivers  []*Account
-	AllowJoin  bool // people may add themselves as senders from the web page
+	Remote     Remote // a receiver on another Immich server, in addition to Receivers (nil: none)
+	AllowJoin  bool   // people may add themselves as senders from the web page
 
 	NeedsApproval bool      // people may ask to send; the owner decides, then the sender activates
 	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
@@ -56,6 +57,27 @@ type Service struct {
 	Quiet         Quiet     // when the service hands photos over (empty: any time); the app-wide default applies when this is empty
 	Accept        Accept    // what the service takes in
 	Broken        string    // why the service cannot work right now (for example its receiver key was deleted); empty when healthy
+}
+
+// Remote is a receiver that lives on another Immich server (a bridge). The app holds a key there that can only upload
+// and tag, so none of what a same-server receiver supports (stacks, albums, expiry, taking back, checking the copy by
+// reading it) applies. It is in addition to the service's own receivers: a photo goes to all of them, and the original
+// is touched only after every one holds it.
+type Remote interface {
+	// Label names the receiver in logs.
+	Label() string
+	// Ready says whether photos may be handed to it now; a non-nil error is why not, and the photos wait, still
+	// tagged, as for a paused service. It is called once at the start of every pass.
+	Ready(ctx context.Context) error
+	// Deliver hands over one photo (and its motion clip, for a live photo) streamed from src. It returns nil only when
+	// the other server has the photo and its tag.
+	Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job RemoteJob) error
+}
+
+// RemoteJob carries what Remote.Deliver needs besides the photo.
+type RemoteJob struct {
+	Sender  string // the sender's display name: the tag on the other side says who it is from
+	Details bool   // carry the description, rating, location and archived state
 }
 
 // Label is the name used in logs and on the status page.
