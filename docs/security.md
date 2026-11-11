@@ -50,6 +50,10 @@ A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is t
 
 Messages to `NOTIFY_URL` and `NOTIFY_FILE` name people, services and drop boxes, and say what went wrong. They go to the address you chose. A public ntfy topic is readable by anyone who guesses its name, so use a topic that cannot be guessed or a server you run. Mail goes to the addresses you list, through the server you name: its password is read from the environment, sent only over an encrypted connection and never logged. Addresses and tokens are never written to the log, and tokens in the file are read from the environment. See [Notifications](operations.md#notifications).
 
+### Email to people
+
+When mail to the people taking part is on, the data file holds, for each person who turned it on, their name, the address Immich shows for their account, their language and what they chose (removed when they turn it off; it is in backups meanwhile). Mail carries only what the person already sees in their Activity list, never photos, thumbnails or file names. Turning it on needs the person's own signed-in Immich session and the page's cross-site header; nobody can turn it on for someone else. Every mail has a link signed with a key derived from the store key (a link from another install, or a changed one, is "not valid"); opening the link only asks, and a POST to it stops the mail without a sign-in, as mail programs' one-click unsubscribe does. A person gets at most six mails an hour. Header and address values with line breaks are refused, and the text is escaped in the HTML part.
+
 ## Who decides what
 
 - **The sender** decides what happens to their own originals, when they join. The owner has no say over that.

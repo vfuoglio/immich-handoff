@@ -29,6 +29,7 @@ type fileDest struct {
 	From     string   `yaml:"from"`
 	To       []string `yaml:"to"`
 	Group    string   `yaml:"group"`
+	People   bool     `yaml:"people"` // the server used to write to the people taking part (each one, if they ask)
 }
 
 type file struct {
@@ -117,6 +118,15 @@ func parse(raw []byte, getenv func(string) string, have []Destination) ([]Destin
 			kinds[Kind(k)] = true
 		}
 		out = append(out, Destination{Name: name, Format: format, URL: fd.URL, Auth: fd.Auth, Kinds: kinds, Mail: mailSettings})
+	}
+	people := 0
+	for _, d := range append(append([]Destination{}, have...), out...) {
+		if d.Mail != nil && d.Mail.People {
+			people++
+		}
+	}
+	if people > 1 {
+		problems = append(problems, "only one destination can be the server for the people taking part (people: true)")
 	}
 	if len(problems) > 0 {
 		return nil, errors.New(strings.Join(problems, "; "))

@@ -326,6 +326,15 @@ From then on every photo tagged for the service goes to **you and to them**. It 
 
 `immich-handoff doctor` checks the connection and says what is wrong. See [Security](security.md#bridges-a-receiver-on-another-server).
 
+## Email about what happens to you
+
+If the person who runs the app has set up mail for people (see [Email to the people taking part](operations.md#email-to-the-people-taking-part)), the Overview has an **Email me** card. Turn it on and you get an email about what happens to your services, so you do not have to open the page to find out:
+
+- **Everything that happens to my services** sends the same lines you see under Activity (someone joined, a connection was cut, a limit was reached, a request needs you).
+- **Only what needs me** sends just the things that ask something of you or tell you something stopped: a request to join, a connection that broke, a limit reached, a removal.
+
+The emails go to the address Immich shows for your account (change it in Immich and the app follows at your next visit), in the language of your page. Lines are gathered for a few minutes and sent as **one email**, and you get at most six an hour. A photo arriving is not a line of its own (the Activity list does not have one either). **Send a test email** shows that it works. Every email has a link, **Stop these emails**, that asks once and then turns them off without signing in; **Turn off** on the card does the same.
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.

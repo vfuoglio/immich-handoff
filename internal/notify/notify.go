@@ -117,7 +117,7 @@ func New(dests []Destination, appURL string, log *slog.Logger) *Notifier {
 		done:  make(chan struct{}),
 	}
 	for _, d := range dests {
-		if d.Format == FormatEmail {
+		if d.Format == FormatEmail && !d.Mail.People {
 			if n.mailers == nil {
 				n.mailers = map[string]*mailer{}
 			}
@@ -178,7 +178,7 @@ func (n *Notifier) run() {
 			n.mu.Unlock()
 		}
 		for _, d := range n.dests {
-			if !d.wants(m.Kind) {
+			if !d.wants(m.Kind) || (d.Mail != nil && d.Mail.People) {
 				continue
 			}
 			if ml := n.mailers[d.Name]; ml != nil {

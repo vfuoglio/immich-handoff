@@ -25,3 +25,14 @@ destinations:
     to: [admin@example.com]
     kinds: [problem, bridge]
     # group: 2m                          # how long messages wait for company; 0 = one mail per message
+
+  # Mail to the people taking part: the server the app uses to write to each person who turns on "Email me" on their
+  # page. It needs PUBLIC_APP_URL and HANDOFF_STORE_KEY. Leave out "to" and "kinds"; only one destination can be this.
+  # - name: people
+  #   format: email
+  #   host: smtp.example.com
+  #   user: handoff@example.com
+  #   password: ${SMTP_PASSWORD}
+  #   from: Immich Handoff <handoff@example.com>
+  #   people: true
+  #   group: 5m                          # how long what happens to one person waits for company

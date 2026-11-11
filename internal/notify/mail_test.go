@@ -476,3 +476,126 @@ func TestTheMailSettingsAreChecked(t *testing.T) {
 		}
 	}
 }
+
+func peopleDest(f *fakeSMTP) Destination {
+	d := mailDest(f, TLSNone, 0)
+	d.Name = "people"
+	d.Mail.To = nil
+	d.Mail.People = true
+	return d
+}
+
+func TestAMailToOnePersonGoesOnlyToThemWithTheHeadersTheCallerChose(t *testing.T) {
+	f := newFakeSMTP(t, nil, false, false)
+	var log bytes.Buffer
+	n := newMailNotifier(t, nil, &log, peopleDest(f))
+	if !n.PeopleMailReady() {
+		t.Fatal("not ready")
+	}
+	err := n.SendPersonal(PersonalMail{To: "bob@example.com", Name: "Bob", Subject: "Neuigkeiten für dich", Text: "Hallo Bob,\n", HTML: "<p>Hallo Bob,</p>",
+		Headers: map[string]string{"List-Unsubscribe": "<https://app.example/unsubscribe/x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := f.wait(t, 1)[0]
+	if len(got.rcpt) != 1 || got.rcpt[0] != "bob@example.com" || got.from != "handoff@example.com" {
+		t.Errorf("envelope %+v", got)
+	}
+	p := parseReceived(t, got)
+	subj, _ := new(mime.WordDecoder).DecodeHeader(p.header.Get("Subject"))
+	if subj != "Neuigkeiten für dich" || p.header.Get("List-Unsubscribe-Post") != "List-Unsubscribe=One-Click" ||
+		p.header.Get("List-Unsubscribe") != "<https://app.example/unsubscribe/x>" || !strings.Contains(p.header.Get("To"), "bob@example.com") {
+		t.Errorf("headers %v", p.header)
+	}
+	if !strings.Contains(p.text, "Hallo Bob") || !strings.Contains(p.html, "Hallo Bob") {
+		t.Errorf("parts %q %q", p.text, p.html)
+	}
+
+	// the administrator's messages never go through the server meant for people
+	n.Send(Message{Kind: Problem, Text: "admin only"})
+	n.Close()
+	time.Sleep(100 * time.Millisecond)
+	if f.count() != 1 {
+		t.Errorf("%d mails", f.count())
+	}
+}
+
+func TestAPersonalMailCannotCarryALineBreakInAHeaderOrAnAddress(t *testing.T) {
+	f := newFakeSMTP(t, nil, false, false)
+	var log bytes.Buffer
+	n := newMailNotifier(t, nil, &log, peopleDest(f))
+	defer n.Close()
+	if err := n.SendPersonal(PersonalMail{To: "bob@example.com\r\nBcc: evil@example.com", Subject: "x"}); err == nil {
+		t.Error("an address with a line break was accepted")
+	}
+	if err := n.SendPersonal(PersonalMail{To: "bob@example.com", Subject: "x", Headers: map[string]string{"X-Evil": "a\r\nBcc: evil@example.com"}}); err == nil {
+		t.Error("a header with a line break was accepted")
+	}
+	if err := n.SendPersonal(PersonalMail{To: "not an address", Subject: "x"}); err == nil {
+		t.Error("nonsense accepted")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if f.count() != 0 {
+		t.Errorf("%d mails", f.count())
+	}
+	none := New(nil, "", nil)
+	if none.PeopleMailReady() || none.SendPersonal(PersonalMail{To: "a@example.com"}) == nil {
+		t.Error("no server for people, no mail")
+	}
+}
+
+func TestAServerForPeopleIsChecked(t *testing.T) {
+	ok := writeFile(t, `destinations:
+  - name: people
+    format: email
+    host: smtp.example.com
+    from: Handoff <h@example.com>
+    people: true
+`)
+	d, err := FromEnv(env(map[string]string{"NOTIFY_FILE": ok}))
+	if err != nil || len(d) != 1 || !d[0].Mail.People {
+		t.Fatalf("%+v %v", d, err)
+	}
+	bad := writeFile(t, `destinations:
+  - name: a
+    format: email
+    host: smtp.example.com
+    from: h@example.com
+    people: true
+    to: [x@example.com]
+    kinds: [problem]
+  - name: b
+    format: email
+    host: smtp.example.com
+    from: h@example.com
+    people: true
+  - name: c
+    format: email
+    host: smtp.example.com
+    from: h@example.com
+    people: true
+`)
+	_, err = FromEnv(env(map[string]string{"NOTIFY_FILE": bad}))
+	if err == nil || !strings.Contains(err.Error(), "leave out to and kinds") || !strings.Contains(err.Error(), "only one destination") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestTheWaitForPeopleDefaultsToFiveMinutesAndCannotBeZero(t *testing.T) {
+	p := writeFile(t, "destinations:\n  - {name: p, format: email, host: smtp.example.com, from: h@example.com, people: true}\n")
+	d, err := FromEnv(env(map[string]string{"NOTIFY_FILE": p}))
+	if err != nil || d[0].Mail.Group != DefaultPeopleGroup {
+		t.Fatalf("%+v %v", d, err)
+	}
+	if n := New(d, "", nil); n.PeopleGroup() != 5*time.Minute {
+		t.Error(n.PeopleGroup())
+	}
+	n := New(nil, "", nil)
+	if n.PeopleGroup() != DefaultPeopleGroup {
+		t.Error("without a server the default stands")
+	}
+	z := writeFile(t, "destinations:\n  - {name: p, format: email, host: smtp.example.com, from: h@example.com, people: true, group: 0}\n")
+	if _, err := FromEnv(env(map[string]string{"NOTIFY_FILE": z})); err == nil || !strings.Contains(err.Error(), "at least 1s") {
+		t.Errorf("%v", err)
+	}
+}

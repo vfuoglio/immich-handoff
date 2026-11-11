@@ -23,6 +23,9 @@ func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, t
 	if err := h.Store.AddEvent(context.WithoutCancel(ctx), store.Event{Service: service, UserID: user, Kind: kind, Text: text}); err != nil {
 		h.Log.Warn("could not write the activity log", "err", err)
 	}
+	if h.People != nil {
+		h.People.Tell(ctx, h.activityAudience(ctx, service, user), kind, text)
+	}
 }
 
 // KeyRejected implements syncer.Watcher: Immich no longer accepts the key behind this account, so it

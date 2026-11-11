@@ -44,6 +44,7 @@ type Hub struct {
 	Retry   func()      // sets up missing workflows in the background (Immich may still be loading its plugins)
 	Notify  notify.Func // tells an admin something needs attention (optional)
 	Bus     *live.Bus   // tells the open pages what changed, as it happens (optional)
+	People  *People     // writes to the people who asked for email (optional)
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 

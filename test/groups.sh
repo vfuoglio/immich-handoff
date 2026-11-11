@@ -5,6 +5,6 @@
 E2E_GROUPS="browser core hub bridge"
 E2E_GROUP_browser='^(TestBrowser|TestDropBoxGuests|TestDropBoxGuestPage|TestDropBoxExtras|TestDropBoxWallBestOfAndHandingOn)$'
 E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents|TestDropBox|TestDropBoxTools)$'
-E2E_GROUP_hub='^(TestAlbumWatch|TestSelfService|TestLinkHealth|TestCopyMode|TestBackupAndRestore|TestPauseAndLimits|TestTakeBackAndExpiry|TestReceiverDeleteSwitch)$'
+E2E_GROUP_hub='^(TestAlbumWatch|TestSelfService|TestLinkHealth|TestCopyMode|TestBackupAndRestore|TestPauseAndLimits|TestTakeBackAndExpiry|TestReceiverDeleteSwitch|TestMailToPeople)$'
 # starts a second Immich of its own (the receiver's server) next to the one every group has, so it has a group to itself
 E2E_GROUP_bridge='^(TestBridge)$'

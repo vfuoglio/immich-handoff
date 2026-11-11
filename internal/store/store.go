@@ -372,6 +372,17 @@ var migrations = []string{
 	// A hand-over may also reach a receiver on another Immich server (a bridge): its copy is a row too, marked remote,
 	// so a sender who takes the hand-over back reaches it if the receiver allowed it.
 	`ALTER TABLE handover_items ADD COLUMN remote INTEGER NOT NULL DEFAULT 0;`,
+	// A person who asked to be told by email what happens to their services. The address is the one Immich shows for
+	// their account, taken when they turned it on and at each later sign-in.
+	`CREATE TABLE person_mail (
+	   user_id    TEXT PRIMARY KEY,
+	   name       TEXT NOT NULL,
+	   email      TEXT NOT NULL,
+	   lang       TEXT NOT NULL,
+	   mode       TEXT NOT NULL,
+	   created_at TEXT NOT NULL,
+	   last_sent  TEXT NOT NULL DEFAULT ''
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

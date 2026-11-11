@@ -15,6 +15,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"net/textproto"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,6 +35,9 @@ const (
 // DefaultGroup is how long messages for one mail destination wait for company before they go out together.
 const DefaultGroup = 2 * time.Minute
 
+// DefaultPeopleGroup is how long what happens to one person waits for company before it is mailed to them.
+const DefaultPeopleGroup = 5 * time.Minute
+
 // maxLines is how many lines one grouped mail lists before it says how many more there were.
 const maxLines = 50
 
@@ -47,6 +51,7 @@ type Mail struct {
 	From     string
 	To       []string
 	Group    time.Duration // 0 sends one mail per message
+	People   bool          // this server is the one used to write to the people taking part; it takes no administrator messages
 }
 
 type stamped struct {
@@ -265,31 +270,42 @@ func (n *Notifier) buildMail(d Destination, batch []stamped) ([]byte, error) {
 		return nil, err
 	}
 
+	return assemble(d.Mail.From, d.Mail.To, subject, text.String(), htmlBody.String(), nil)
+}
+
+// assemble writes the whole message: headers, a text part and an HTML part. extra are more headers, in order.
+func assemble(from string, to []string, subject, text, html string, extra [][2]string) ([]byte, error) {
 	id := make([]byte, 12)
 	_, _ = rand.Read(id)
 	boundary := hex.EncodeToString(id) + "handoff"
 	domain := "localhost"
-	if a, err := mail.ParseAddress(d.Mail.From); err == nil {
+	if a, err := mail.ParseAddress(from); err == nil {
 		if i := strings.LastIndex(a.Address, "@"); i >= 0 {
 			domain = a.Address[i+1:]
 		}
 	}
 	var out bytes.Buffer
 	h := func(k, v string) { out.WriteString(k + ": " + v + "\r\n") }
-	h("From", d.Mail.From)
-	h("To", strings.Join(d.Mail.To, ", "))
+	h("From", from)
+	h("To", strings.Join(to, ", "))
 	h("Subject", mime.QEncoding.Encode("utf-8", subject))
 	h("Date", time.Now().Format(time.RFC1123Z))
 	h("Message-ID", "<"+hex.EncodeToString(id)+"@"+domain+">")
 	h("MIME-Version", "1.0")
 	h("Auto-Submitted", "auto-generated")
+	for _, e := range extra {
+		if strings.ContainsAny(e[0]+e[1], "\r\n") {
+			return nil, errors.New("a header cannot hold a line break")
+		}
+		h(e[0], e[1])
+	}
 	h("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 	out.WriteString("\r\n")
 	mw := multipart.NewWriter(&out)
 	if err := mw.SetBoundary(boundary); err != nil {
 		return nil, err
 	}
-	for _, part := range []struct{ typ, body string }{{"text/plain", text.String()}, {"text/html", htmlBody.String()}} {
+	for _, part := range []struct{ typ, body string }{{"text/plain", text}, {"text/html", html}} {
 		pw, err := mw.CreatePart(textproto.MIMEHeader{
 			"Content-Type":              {part.typ + "; charset=utf-8"},
 			"Content-Transfer-Encoding": {"quoted-printable"},
@@ -311,13 +327,82 @@ func (n *Notifier) buildMail(d Destination, batch []stamped) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// PersonalMail is a mail to one person, written by the caller (in the person's language).
+type PersonalMail struct {
+	To, Name      string
+	Subject, Text string
+	HTML          string
+	Headers       map[string]string // more headers, such as List-Unsubscribe
+}
+
+// PeopleMailReady reports whether a mail server is set aside for writing to the people taking part.
+func (n *Notifier) PeopleMailReady() bool { return n.peopleMail() != nil }
+
+// PeopleGroup is how long lines wait for company before they are mailed to one person.
+func (n *Notifier) PeopleGroup() time.Duration {
+	if d := n.peopleMail(); d != nil {
+		return d.Mail.Group
+	}
+	return DefaultPeopleGroup
+}
+
+func (n *Notifier) peopleMail() *Destination {
+	if n == nil {
+		return nil
+	}
+	for i := range n.dests {
+		if n.dests[i].Mail != nil && n.dests[i].Mail.People {
+			return &n.dests[i]
+		}
+	}
+	return nil
+}
+
+// SendPersonal sends one mail to one person now (it waits for the server and tries again as other mail does) and
+// says whether it worked. The caller decides when and how often.
+func (n *Notifier) SendPersonal(p PersonalMail) error {
+	d := n.peopleMail()
+	if d == nil {
+		return errors.New("no mail server is set up for the people taking part")
+	}
+	rcpt := mail.Address{Name: p.Name, Address: p.To}
+	if a, err := mail.ParseAddress(p.To); err != nil || strings.ContainsAny(p.To+p.Name, "\r\n") {
+		return errors.New("that is not an email address")
+	} else {
+		rcpt.Address = a.Address
+	}
+	var extra [][2]string
+	for k, v := range p.Headers {
+		extra = append(extra, [2]string{k, v})
+	}
+	sort.Slice(extra, func(i, j int) bool { return extra[i][0] < extra[j][0] })
+	body, err := assemble(d.Mail.From, []string{rcpt.String()}, p.Subject, p.Text, p.HTML, extra)
+	if err != nil {
+		return err
+	}
+	c := *d.Mail
+	c.To = []string{rcpt.Address}
+	var last error
+	for attempt := 0; ; attempt++ {
+		retry, err := n.smtpSend(&c, body)
+		if err == nil {
+			return nil
+		}
+		last = err
+		if !retry || attempt >= len(n.wait) {
+			return last
+		}
+		time.Sleep(n.wait[attempt])
+	}
+}
+
 // parseMail checks the settings of a mail destination and fills in the defaults.
 func parseMail(name string, fd fileDest) (*Mail, []string) {
 	var problems []string
 	bad := func(format string, a ...any) {
 		problems = append(problems, "destination "+name+": "+fmt.Sprintf(format, a...))
 	}
-	m := &Mail{Host: fd.Host, Port: fd.Port, TLS: fd.TLS, User: fd.User, Password: fd.Password, From: fd.From, To: fd.To}
+	m := &Mail{Host: fd.Host, Port: fd.Port, TLS: fd.TLS, User: fd.User, Password: fd.Password, From: fd.From, To: fd.To, People: fd.People}
 	if fd.URL != "" {
 		bad("a mail destination has no url; use host, port and from")
 	}
@@ -346,8 +431,11 @@ func parseMail(name string, fd fileDest) (*Mail, []string) {
 	if a, err := mail.ParseAddress(m.From); err != nil || strings.ContainsAny(m.From, "\r\n") || a.Address == "" {
 		bad("from is not an email address")
 	}
-	if len(m.To) == 0 {
+	if len(m.To) == 0 && !m.People {
 		bad("to needs at least one address")
+	}
+	if m.People && (len(m.To) > 0 || len(fd.Kinds) > 0) {
+		bad("a server for the people taking part writes to them, not to a list: leave out to and kinds")
 	}
 	for _, t := range m.To {
 		if a, err := mail.ParseAddress(t); err != nil || strings.ContainsAny(t, "\r\n") || a.Address == "" {
@@ -357,10 +445,16 @@ func parseMail(name string, fd fileDest) (*Mail, []string) {
 	switch strings.TrimSpace(fd.Group) {
 	case "":
 		m.Group = DefaultGroup
+		if m.People {
+			m.Group = DefaultPeopleGroup
+		}
 	default:
 		g, err := time.ParseDuration(fd.Group)
 		if err != nil || g < 0 || g > time.Hour {
 			bad("group %q is not a time between 0 and 1h (0 sends one mail per message)", fd.Group)
+		}
+		if m.People && g < time.Second {
+			bad("for the people taking part, group is how long lines wait for company: at least 1s")
 		}
 		m.Group = g
 	}

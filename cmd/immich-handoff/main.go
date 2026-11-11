@@ -90,8 +90,12 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	notifier := notify.New(dests, os.Getenv("PUBLIC_APP_URL"), log)
+	appURL := os.Getenv("PUBLIC_APP_URL")
+	notifier := notify.New(dests, appURL, log)
 	defer notifier.Close()
+	if notifier.PeopleMailReady() && appURL == "" {
+		return errors.New("NOTIFY_FILE: a destination with people: true needs PUBLIC_APP_URL, because every mail to a person links to the page and to the way to stop the emails")
+	}
 	s := &syncer.Syncer{
 		Services: services, Log: log, Bus: bus, Notifier: notifier.Send,
 		Cfg: syncer.Config{
@@ -135,6 +139,9 @@ func run(log *slog.Logger) error {
 	if storeKey, err := readStoreKey(); err != nil {
 		return err
 	} else if storeKey == "" {
+		if notifier.PeopleMailReady() {
+			return errors.New("NOTIFY_FILE: a destination with people: true needs HANDOFF_STORE_KEY, because people turn email on from the web page")
+		}
 		log.Info("HANDOFF_STORE_KEY is not set: people cannot join from the web page (keys from the configuration still work)")
 	} else {
 		v, err := vault.New(storeKey)
@@ -154,6 +161,11 @@ func run(log *slog.Logger) error {
 		}
 		defer st.Close()
 		h.Store = st
+		if notifier.PeopleMailReady() {
+			h.People = &hub.People{Store: st, Sender: notifier, Vault: v, AppURL: appURL, Log: log, Window: notifier.PeopleGroup()}
+			defer h.People.Close() // sends what is waiting for company
+			log.Info("email for the people taking part is on")
+		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
 			t := time.NewTicker(10 * time.Minute)
