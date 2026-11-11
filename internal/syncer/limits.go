@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
 
 // LimitWindow is how far back the daily cap looks. A variable so tests can shorten it.
@@ -79,7 +80,7 @@ func (s *Syncer) hold(ctx context.Context, log *slog.Logger, svc *Service, snd *
 		if r, ok := s.Provider.(LimitReporter); ok {
 			r.LimitReached(svc, snd, waiting, until)
 		}
-		s.notify(fmt.Sprintf("immich-handoff: %s reached the daily limit for %s; %d photo(s) wait until %s", snd.Name, svc.Label(), waiting, until.Local().Format("2 Jan 15:04")))
+		s.notify(notify.Info, fmt.Sprintf("%s reached the daily limit for %s; %d photo(s) wait until %s", snd.Name, svc.Label(), waiting, until.Local().Format("2 Jan 15:04")))
 	}
 }
 

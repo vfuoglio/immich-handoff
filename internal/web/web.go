@@ -147,6 +147,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
+	mux.HandleFunc("POST /me/mail", w.myMail)
+	mux.HandleFunc("GET /unsubscribe/{token}", w.unsubscribePage)
+	mux.HandleFunc("POST /unsubscribe/{token}", w.unsubscribe)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
 	mux.HandleFunc("GET /events", w.events)
 	mux.HandleFunc("POST /sync", w.syncNow)
@@ -480,6 +483,8 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			d.Activity = append(d.Activity, ActivityView{loc(ctx).Stamp(a.At.Local()), unpack(ctx, a.Text), activityTone(a.Kind)})
 		}
 	}
+	mc := w.Hub.MailCard(ctx, me.user, string(loc(ctx).Lang))
+	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
 	w.overview(ctx, me, &d)
 	return d
 }

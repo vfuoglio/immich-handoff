@@ -3,27 +3,20 @@ package syncer
 import (
 	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
 
 func TestOnlyABigAlbumHandOverIsNotified(t *testing.T) {
 	var mu sync.Mutex
 	var got []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		got = append(got, string(b))
-		mu.Unlock()
-	}))
-	defer srv.Close()
-	s := &Syncer{Cfg: Config{NotifyURL: srv.URL}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	s := &Syncer{Notifier: func(m notify.Message) { mu.Lock(); got = append(got, m.Text); mu.Unlock() }, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	svc := &Service{Name: "Holiday"}
 	snd := &Account{Name: "alice", WatchAlbum: uuid.New(), WatchAlbumName: "To send"}
 

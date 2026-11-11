@@ -1,6 +1,9 @@
 package vault
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestRoundTripAndTamper(t *testing.T) {
 	v, err := New("a-long-enough-secret-value")
@@ -37,5 +40,17 @@ func TestRoundTripAndTamper(t *testing.T) {
 	b, _ := v.Seal([]byte("same"), "c")
 	if string(a) == string(b) {
 		t.Error("nonce must differ per seal")
+	}
+}
+
+func TestAMACBelongsToOnePurposeAndOneKey(t *testing.T) {
+	a, _ := New("0123456789abcdef-one")
+	b, _ := New("0123456789abcdef-two")
+	m := a.MAC("unsubscribe", []byte("x"))
+	if len(m) != 32 || !bytes.Equal(m, a.MAC("unsubscribe", []byte("x"))) {
+		t.Fatal("not stable")
+	}
+	if bytes.Equal(m, a.MAC("other use", []byte("x"))) || bytes.Equal(m, b.MAC("unsubscribe", []byte("x"))) || bytes.Equal(m, a.MAC("unsubscribe", []byte("y"))) {
+		t.Error("a signature must differ by purpose, key and message")
 	}
 }

@@ -7,6 +7,14 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
+// MailView is the person's "Email me" card.
+type MailView struct {
+	Available bool // this install can write to people
+	On        bool
+	Mode      string // all or needs
+	Email     string
+}
+
 // ServiceView is one service as the signed-in user takes part in it.
 type ServiceView struct {
 	Name     string
@@ -185,6 +193,7 @@ type DashboardData struct {
 	Scene      []SceneStage // one stage per service that has senders
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
+	Mail       MailView
 	DropBoxes  []DropBoxView
 	Templates  []TemplateView
 }
@@ -473,6 +482,9 @@ templ Dashboard(d DashboardData) {
 				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
 				@Scene(d.Scene)
 			}
+			if d.Mail.Available {
+				@MailCard(d.Mail)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -540,6 +552,53 @@ templ Dashboard(d DashboardData) {
 			}
 		</section>
 		</div>
+	}
+}
+
+// MailCard lets a person ask for email about what happens to their services.
+templ MailCard(m MailView) {
+	<h2>{ t(ctx, "Email me") }</h2>
+	<div class="card mailcard">
+		if m.On {
+			<p>{ t(ctx, "You get an email about what happens to your services, at {email}.", "email", m.Email) }</p>
+		} else {
+			<p>{ t(ctx, "Get an email when something happens to your services, instead of having to open this page.") }</p>
+		}
+		<form class="limits" hx-post="me/mail" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="action" value="on"/>
+			<label><input type="radio" name="mode" value="all" checked?={ m.Mode != "needs" }/> { t(ctx, "Everything that happens to my services") }</label>
+			<label><input type="radio" name="mode" value="needs" checked?={ m.Mode == "needs" }/> { t(ctx, "Only what needs me") }</label>
+			if m.On {
+				<button type="submit">{ t(ctx, "Save") }</button>
+			} else {
+				<button class="primary" type="submit">{ t(ctx, "Turn on email") }</button>
+			}
+		</form>
+		if m.On {
+			<p class="row">
+				<button hx-post="me/mail" hx-vals='{"action":"test"}' hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Send a test email") }</button>
+				<button hx-post="me/mail" hx-vals='{"action":"off"}' hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn off") }</button>
+			</p>
+		}
+		<small class="meta">{ t(ctx, "Emails go to the address Immich shows for your account, in the language of this page, and arrive a few minutes after things happen, in one email. Every email has a link that stops them.") }</small>
+	</div>
+}
+
+// UnsubscribePage is where the link in a mail leads: it asks first, so a program that opens the link does not stop anyone's mail.
+templ UnsubscribePage(token string, done bool) {
+	@Layout(t(ctx, "Stop the emails"), "") {
+		<section class="invite-hero">
+			if done {
+				<h1>{ t(ctx, "No more emails") }</h1>
+				<p class="lead">{ t(ctx, "You will not get any more emails from Immich Handoff. You can turn them on again from your page.") }</p>
+			} else {
+				<h1>{ t(ctx, "Stop the emails?") }</h1>
+				<p class="lead">{ t(ctx, "Immich Handoff will stop writing to you about what happens to your services.") }</p>
+				<form method="post" action={ "unsubscribe/" + token }>
+					<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Stop these emails") }</button></p>
+				</form>
+			}
+		</section>
 	}
 }
 

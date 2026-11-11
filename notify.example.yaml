@@ -1,0 +1,38 @@
+# More than one place to send notifications to. Copy to notify.yaml, set NOTIFY_FILE=/notify.yaml in .env and mount the
+# file (see docker-compose.yml). Secrets are read from environment variables, so none lives in this file.
+# NOTIFY_URL, if set, is a destination of its own that takes every kind.
+#
+# Kinds: problem, backup, bridge, dropbox, info. No "kinds" line means all of them.
+destinations:
+  - name: phone                          # an ntfy topic: title, priority, tag and a link
+    format: ntfy                         # the default
+    url: https://ntfy.example.com/handoff
+    # auth: ${NTFY_TOKEN}                # sent as a bearer token, for a topic that needs a login
+
+  - name: home-assistant                 # a webhook trigger of an automation; the message arrives as JSON
+    format: json
+    url: http://homeassistant.local:8123/api/webhook/${HA_WEBHOOK_ID}
+    kinds: [problem, backup, bridge]
+
+  - name: mail                           # email: one mail for what happens within two minutes
+    format: email
+    host: smtp.example.com
+    # tls: starttls                      # tls (port 465), starttls (587, the default) or none (25, never with a password)
+    # port: 587
+    user: handoff@example.com
+    password: ${SMTP_PASSWORD}
+    from: Immich Handoff <handoff@example.com>
+    to: [admin@example.com]
+    kinds: [problem, bridge]
+    # group: 2m                          # how long messages wait for company; 0 = one mail per message
+
+  # Mail to the people taking part: the server the app uses to write to each person who turns on "Email me" on their
+  # page. It needs PUBLIC_APP_URL and HANDOFF_STORE_KEY. Leave out "to" and "kinds"; only one destination can be this.
+  # - name: people
+  #   format: email
+  #   host: smtp.example.com
+  #   user: handoff@example.com
+  #   password: ${SMTP_PASSWORD}
+  #   from: Immich Handoff <handoff@example.com>
+  #   people: true
+  #   group: 5m                          # how long what happens to one person waits for company

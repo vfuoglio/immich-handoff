@@ -10,6 +10,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -21,6 +22,9 @@ func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, t
 	}
 	if err := h.Store.AddEvent(context.WithoutCancel(ctx), store.Event{Service: service, UserID: user, Kind: kind, Text: text}); err != nil {
 		h.Log.Warn("could not write the activity log", "err", err)
+	}
+	if h.People != nil {
+		h.People.Tell(ctx, h.activityAudience(ctx, service, user), kind, text)
 	}
 }
 
@@ -51,7 +55,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 			if l.ID == id {
 				h.event(ctx, l.Service, l.ImmichUserID, "broken", i18n.Pack("{name}'s connection to {service} was cut: their API key was deleted", "name", l.Name, "service", l.Service))
 				h.show(ctx, live.Lost, l.Service, l.Name, "sender", false, l.ImmichUserID)
-				h.tell(fmt.Sprintf("%s's API key for %q was deleted in Immich; the link is paused. They can clean up and join again.", l.Name, l.Service))
+				h.tell(notify.Problem, fmt.Sprintf("%s's API key for %q was deleted in Immich; the link is paused. They can clean up and join again.", l.Name, l.Service))
 			}
 		}
 	} else if ok, _ := h.Store.SetServiceState(ctx, id, store.StateBroken, note); ok {
@@ -60,7 +64,7 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 			if v.ID == id {
 				h.event(ctx, v.Name, v.OwnerID, "broken", i18n.Pack("{service} cannot receive: its owner's API key was deleted", "service", v.Name))
 				h.show(ctx, live.Lost, v.Name, "", "service", true)
-				h.tell(fmt.Sprintf("The receiver key of %q (owner %s) was deleted in Immich; senders are paused until the owner reconnects.", v.Name, v.OwnerName))
+				h.tell(notify.Problem, fmt.Sprintf("The receiver key of %q (owner %s) was deleted in Immich; senders are paused until the owner reconnects.", v.Name, v.OwnerName))
 			}
 		}
 	} else {
@@ -72,9 +76,9 @@ func (h *Hub) KeyRejected(acct *syncer.Account) {
 	}
 }
 
-func (h *Hub) tell(msg string) {
+func (h *Hub) tell(kind notify.Kind, msg string) {
 	if h.Notify != nil {
-		h.Notify("immich-handoff: " + msg)
+		h.Notify(notify.Message{Kind: kind, Text: msg})
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -792,7 +793,7 @@ func (f *fakeImmich) deleteKeyOf(person string) {
 func TestDeletedSenderKeyPausesTheLinkAndTellsPeople(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatal(err)
@@ -1210,7 +1211,7 @@ func TestAHandOverFromTheAlbumLeavesALineInTheSendersRecentEvents(t *testing.T) 
 func TestAnAdministratorRemovingAMemberStopsHandOversAndTellsThePerson(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatal(err)
@@ -1258,7 +1259,7 @@ func TestAnAdministratorRemovingAMemberStopsHandOversAndTellsThePerson(t *testin
 func TestAnAdministratorRemovingAServiceTellsOwnerAndMembers(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	e.h.CreateService(ctx, e.ann, ann, hub.CreateParams{Name: "party", Tag: "party", Policy: "open", Visibility: ""})
 	if err := e.h.Join(ctx, e.sess, bob, "party", "", ""); err != nil {
 		t.Fatal(err)

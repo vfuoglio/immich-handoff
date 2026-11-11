@@ -12,6 +12,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -140,7 +141,7 @@ func TestARevokedKeyIsRecordedOnceAndNotTriedAgain(t *testing.T) {
 	o := newOtherServer(t)
 	e, r := withBridge(t, o)
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	ctx := context.Background()
 	o.valid = "SOMETHING ELSE"
 
@@ -180,7 +181,7 @@ func TestAnUnreachableServerBacksOffAndRecovers(t *testing.T) {
 	e, r := withBridge(t, o)
 	var told []string
 	var woken []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	var mu sync.Mutex
 	e.h.Wake = func(reason string) { mu.Lock(); woken = append(woken, reason); mu.Unlock() }
 	ctx := context.Background()

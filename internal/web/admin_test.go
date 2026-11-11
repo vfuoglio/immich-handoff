@@ -19,6 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
 	"github.com/vfuoglio/immich-handoff/internal/web"
@@ -187,7 +188,7 @@ func withDownload(st **store.Store, download bool, gap time.Duration, told *[]st
 	return func(srv *web.Server) {
 		srv.BackupDownload, srv.DownloadGap = download, gap
 		srv.Backups = &backup.Manager{Dir: dir, Source: *st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Keep: 7, Every: 24 * time.Hour,
-			Tell: func(s string) { mu.Lock(); *told = append(*told, s); mu.Unlock() },
+			Tell: func(n notify.Message) { mu.Lock(); *told = append(*told, n.Text); mu.Unlock() },
 			Event: func(kind, text string) {
 				(*st).AddEvent(context.Background(), store.Event{Service: "club", Kind: kind, Text: text})
 			}}

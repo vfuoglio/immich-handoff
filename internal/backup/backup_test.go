@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/backup"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
 )
@@ -79,7 +80,7 @@ func manager(t *testing.T, st backup.Source, idle backup.Idler) (m *backup.Manag
 	var mu sync.Mutex
 	m = &backup.Manager{Dir: filepath.Join(t.TempDir(), "backups"), Source: st, Idle: idle, Poll: 5 * time.Millisecond, Wait: 40 * time.Millisecond,
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Tell: func(s string) { mu.Lock(); toldList = append(toldList, s); mu.Unlock() },
+		Tell: func(n notify.Message) { mu.Lock(); toldList = append(toldList, n.Text); mu.Unlock() },
 		Event: func(kind, text string) {
 			mu.Lock()
 			eventList = append(eventList, kind+": "+text)

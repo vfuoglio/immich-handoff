@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
 
 type State string
@@ -61,7 +63,7 @@ type Manager struct {
 	Wait   time.Duration // how long to wait for a quiet moment before forcing (default 4 hours)
 	Poll   time.Duration // how often to look (default 5 seconds)
 	Log    *slog.Logger
-	Tell   func(string)            // reaches whoever runs the app (NOTIFY_URL); optional
+	Tell   notify.Func             // reaches whoever runs the app (NOTIFY_URL, NOTIFY_FILE); optional
 	Event  func(kind, text string) // the activity log; optional
 	Now    func() time.Time
 
@@ -199,7 +201,7 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 
 func (m *Manager) tell(note, kind, event string) {
 	if m.Tell != nil {
-		m.Tell("immich-handoff: " + note)
+		m.Tell(notify.Message{Kind: notify.Backup, Text: note})
 	}
 	if m.Event != nil {
 		m.Event(kind, event)

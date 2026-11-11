@@ -33,7 +33,7 @@ func (s *Syncer) expire(ctx context.Context, rcv *Account, service string, ended
 	if err := rcv.API.DeleteAssets(ctx, ids, false); err != nil {
 		if immich.IsForbidden(err) {
 			s.warnOnce("lifetime/"+rcv.Name, s.Log, "the receiver's key may not delete, so copies that reached the end of their lifetime stay; their owner gets the permission by opening the page, or add asset.delete to a key made by hand",
-				"immich-handoff: "+rcv.Name+"'s key may not move photos to the trash, so copies that reached the end of their lifetime stay. The key needs asset.delete: its owner gets it by opening the page once, or add it to a key made by hand.")
+				rcv.Name+"'s key may not move photos to the trash, so copies that reached the end of their lifetime stay. The key needs asset.delete: its owner gets it by opening the page once, or add it to a key made by hand.")
 		} else {
 			s.Log.Warn("could not move expired copies to the trash", "receiver", rcv.Name, "err", err)
 		}
