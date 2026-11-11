@@ -585,6 +585,11 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 	}
 	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
+	if c.Imported > 0 || c.Refused > 0 {
+		if r, ok := s.Provider.(ArrivalReporter); ok {
+			r.HandedOver(svc, snd, c.Imported, c.Refused)
+		}
+	}
 	return
 }
 

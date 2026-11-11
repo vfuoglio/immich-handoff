@@ -7,6 +7,19 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
+// PushView is the person's "Notifications on this device" card.
+type PushView struct {
+	Available bool
+	Key       string // the public key a browser subscribes with
+	Devices   []PushDeviceView
+}
+
+// PushDeviceView is one of the person's devices.
+type PushDeviceView struct {
+	ID, Label, Mode string
+	Added, LastOK   string // already written for the reader; LastOK is empty until a push got through
+}
+
 // MailView is the person's "Email me" card.
 type MailView struct {
 	Available bool // this install can write to people
@@ -194,6 +207,7 @@ type DashboardData struct {
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 	Mail       MailView
+	Push       PushView
 	DropBoxes  []DropBoxView
 	Templates  []TemplateView
 }
@@ -485,6 +499,9 @@ templ Dashboard(d DashboardData) {
 			if d.Mail.Available {
 				@MailCard(d.Mail)
 			}
+			if d.Push.Available {
+				@PushCard(d.Push)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -581,6 +598,47 @@ templ MailCard(m MailView) {
 			</p>
 		}
 		<small class="meta">{ t(ctx, "Emails go to the address Immich shows for your account, in the language of this page, and arrive a few minutes after things happen, in one email. Every email has a link that stops them.") }</small>
+	</div>
+}
+
+// PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
+// The script (ts/push.ts) shows the controls only where the browser can do it, and says why when it cannot.
+templ PushCard(p PushView) {
+	<h2>{ t(ctx, "Notifications on this device") }</h2>
+	<div class="card pushcard" id="pushcard" data-key={ p.Key }>
+		<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
+		<p class="meta" data-push-note hidden></p>
+		<div data-push-controls hidden>
+			<p class="row">
+				<label><input type="radio" name="pushmode" value="all" checked/> { t(ctx, "Everything that happens to my services") }</label>
+				<label><input type="radio" name="pushmode" value="needs"/> { t(ctx, "Only what needs me") }</label>
+			</p>
+			<p class="row"><button class="primary" type="button" data-push-on>{ t(ctx, "Turn on notifications here") }</button></p>
+		</div>
+		if len(p.Devices) > 0 {
+			<h3>{ t(ctx, "Your devices") }</h3>
+			<ul class="plain devices">
+				for _, dv := range p.Devices {
+					<li data-device={ dv.ID }>
+						<b>{ dv.Label }</b> <span class="chip ok" data-here-mark hidden>{ t(ctx, "This device") }</span>
+						<small class="meta">{ t(ctx, "Added {when}", "when", dv.Added) }
+							if dv.LastOK != "" {
+								· { t(ctx, "Last delivered {when}", "when", dv.LastOK) }
+							}
+						</small>
+						<span class="row">
+							<select data-push-mode aria-label={ t(ctx, "What this device is told") }>
+								<option value="all" selected?={ dv.Mode != "needs" }>{ t(ctx, "Everything that happens to my services") }</option>
+								<option value="needs" selected?={ dv.Mode == "needs" }>{ t(ctx, "Only what needs me") }</option>
+							</select>
+							<button type="button" data-push-test>{ t(ctx, "Send a test notification") }</button>
+							<button type="button" data-push-remove>{ t(ctx, "Remove") }</button>
+						</span>
+					</li>
+				}
+			</ul>
+		}
+		<small class="meta">{ t(ctx, "The notification reaches your device through the push service of your browser (Google, Mozilla, Apple or Microsoft), which can see that a message was sent and when, not what it says. Remove a device here to stop it.") }</small>
 	</div>
 }
 

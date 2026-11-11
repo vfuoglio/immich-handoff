@@ -182,9 +182,24 @@ What it needs from you:
 
 - **HTTPS.** Browsers only install a page served over HTTPS (or from `localhost`). Behind a reverse proxy this is the proxy's certificate, as for Immich itself.
 - **The manifest and the icons must be reachable with the person's sign-in.** The page asks for the manifest with the browser's cookies (`crossorigin="use-credentials"`), because behind a login in front of the app (single sign-on at the proxy, for example) a request without cookies would be sent to the login page and the manifest would be ignored. Nothing special is needed otherwise: everything is under the page's own `static/` folder, so it also works behind a path prefix (the manifest's start address is relative).
-- **There is no service worker, and nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut.
+- **Nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut. The one service worker the app has (`static/sw.js`) exists only to show push notifications when a person turned them on (see [Notifications on devices](#notifications-on-devices)); it has no fetch handler and no cache, and it is registered for the `static/` folder only, so it never sits between the page and the app.
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
+
+## Notifications on devices
+
+A person can allow notifications on the phone or computer they use: the **Notifications on this device** card on the Overview. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.
+
+What it needs:
+
+- **HTTPS.** Browsers only allow notifications on a page served over HTTPS (or from `localhost`). Without it the card says so.
+- **A contact for the push services.** Set `PUBLIC_APP_URL` to the page's https address, or `PUSH_CONTACT` to a `mailto:` or https address. The push services (Google, Mozilla, Apple, Microsoft) can see it. With neither, notifications on devices are off and the log says why. `PUSH=off` switches them off.
+- **People can join from the page** (`HANDOFF_STORE_KEY` set), since the devices are kept in the data file.
+- **The app can reach the push services** (outbound https to `fcm.googleapis.com`, `*.push.services.mozilla.com`, `web.push.apple.com` / `*.push.apple.com`, `*.notify.windows.com`). Nothing else is ever called; an address from a browser that is not one of these is refused.
+
+What is stored for each device: the address of the browser's push service and two keys that encrypt messages for that browser, sealed with the store key like every other secret, the language, the choice, a short name such as "Firefox on Linux", and dates. A device the push service says is gone, or that fails three times in a row, is forgotten. A device gets at most 30 notifications an hour. The key the app signs with (VAPID) is made at the first start and kept sealed in the data file; changing the store key makes devices unreadable, and people turn it on again.
+
+**Browsers.** Chrome, Edge and Firefox on computers and Android should work. On an **iPhone or iPad** pushes work only for the page added to the Home Screen (iOS 16.4 or later), opened from there, and notification buttons are not shown. I have tested the encryption against the RFC's example and the rest with test servers, not with a real push service or a real iPhone: please report what you find.
 
 ## Letting guests reach a drop box
 

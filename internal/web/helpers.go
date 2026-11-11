@@ -616,6 +616,9 @@ var clientMessages = []string{
 	"{who}: {photos} could not be handed over; the originals were kept and it will be retried", "{who}: {photos} refused, the receiver has them in the trash; the originals were kept",
 	"{who}: {photos} wait for the daily limit", "{who}: {photos} wait for the daily limit, until {when}",
 	"Could not be sent", "Received", "Sending", "Sent already", "Waiting for the connection", "Waiting to send",
+	"Could not turn on notifications.", "Notifications are blocked for this site. Allow them in your browser's settings for this page, then try again.",
+	"Notifications need this page to be opened over HTTPS.", "Notifications work on this device.", "On an iPhone or iPad, add this page to the Home Screen first, then open it from there.",
+	"This browser cannot show notifications from this page.",
 	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
 	"The microphone is not available", "Thank you for your message!",
 }

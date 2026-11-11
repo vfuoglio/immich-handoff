@@ -148,6 +148,11 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("POST /me/mail", w.myMail)
+	mux.HandleFunc("GET /me/push/key", w.pushKey)
+	mux.HandleFunc("POST /me/push", w.pushSubscribe)
+	mux.HandleFunc("POST /me/push/remove", w.pushRemove)
+	mux.HandleFunc("POST /me/push/mode", w.pushMode)
+	mux.HandleFunc("POST /me/push/test", w.pushTest)
 	mux.HandleFunc("GET /unsubscribe/{token}", w.unsubscribePage)
 	mux.HandleFunc("POST /unsubscribe/{token}", w.unsubscribe)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
@@ -177,7 +182,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
 		img += " " + u.Scheme + "://" + u.Host
 	}
-	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; img-src " + img +
+	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; img-src " + img +
 		"; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
@@ -485,6 +490,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	mc := w.Hub.MailCard(ctx, me.user, string(loc(ctx).Lang))
 	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
+	d.Push = w.pushView(ctx, me)
 	w.overview(ctx, me, &d)
 	return d
 }

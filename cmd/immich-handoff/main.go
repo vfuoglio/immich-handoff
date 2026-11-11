@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -166,6 +168,31 @@ func run(log *slog.Logger) error {
 			defer h.People.Close() // sends what is waiting for company
 			log.Info("email for the people taking part is on")
 		}
+		if pc, err := pushContact(os.Getenv("PUSH_CONTACT"), appURL); err != nil {
+			return err
+		} else if env("PUSH", "on") == "off" {
+			log.Info("notifications on devices are off (PUSH=off)")
+		} else if pc == "" {
+			log.Info("notifications on devices are off: the push services need a way to reach whoever runs the app; set PUBLIC_APP_URL (an https address) or PUSH_CONTACT")
+		} else {
+			raw, err := st.PushKey(ctx, func() ([]byte, error) {
+				k, err := push.NewKeys()
+				if err != nil {
+					return nil, err
+				}
+				return k.Private()
+			})
+			if err != nil {
+				return err
+			}
+			keys, err := push.KeysFromPrivate(raw)
+			if err != nil {
+				return err
+			}
+			h.Push = &hub.Push{Store: st, Sender: &push.Client{Keys: keys, Subject: pc}, Key: keys.PublicB64(), Log: log}
+			defer h.Push.Close() // sends what is waiting for company
+			log.Info("notifications on devices are on")
+		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
 			t := time.NewTicker(10 * time.Minute)
@@ -283,4 +310,20 @@ func readStoreKey() (string, error) {
 		return strings.TrimSpace(string(b)), nil
 	}
 	return strings.TrimSpace(os.Getenv("HANDOFF_STORE_KEY")), nil
+}
+
+// pushContact is how a push service can reach whoever runs the app (the "sub" of the signed token): PUSH_CONTACT, a
+// mailto: or https: address, or else the app's own https address. Empty means there is none, and pushes stay off.
+func pushContact(configured, appURL string) (string, error) {
+	if configured != "" {
+		u, err := url.Parse(configured)
+		if err != nil || (u.Scheme != "mailto" && u.Scheme != "https") || (u.Scheme == "mailto" && u.Opaque == "") || (u.Scheme == "https" && u.Host == "") {
+			return "", errors.New("PUSH_CONTACT must be a mailto: address or an https: address")
+		}
+		return configured, nil
+	}
+	if u, err := url.Parse(appURL); err == nil && u.Scheme == "https" && u.Host != "" {
+		return strings.TrimRight(appURL, "/"), nil
+	}
+	return "", nil
 }

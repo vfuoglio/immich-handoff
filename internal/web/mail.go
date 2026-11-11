@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -81,4 +83,126 @@ func (w *Server) unsubscribeUnknown(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.WriteHeader(http.StatusNotFound)
 	Notice(t(r.Context(), "This link is not valid"), t(r.Context(), "It may be damaged or not from this app. To stop the emails, turn them off on your page."), true).Render(r.Context(), rw)
+}
+
+// --- notifications on devices ---
+
+func (w *Server) pushView(ctx context.Context, me *member) PushView {
+	if w.Hub == nil {
+		return PushView{}
+	}
+	c := w.Hub.PushCard(ctx, uuid.UUID(me.user.ID))
+	v := PushView{Available: c.Available, Key: c.Key}
+	l := loc(ctx)
+	for _, d := range c.Devices {
+		dv := PushDeviceView{ID: d.ID, Label: d.Label, Mode: d.Mode, Added: l.Stamp(d.Created.Local())}
+		if !d.LastOK.IsZero() {
+			dv.LastOK = l.Stamp(d.LastOK.Local())
+		}
+		v.Devices = append(v.Devices, dv)
+	}
+	return v
+}
+
+// pushKey gives a signed-in browser the public key it subscribes with. It is not a secret (the push services see it
+// too), but only people who can use it are told.
+func (w *Server) pushKey(rw http.ResponseWriter, r *http.Request) {
+	if me, code, msg := w.authenticate(r); me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	key := ""
+	if w.Hub != nil {
+		key = w.Hub.PushKey()
+	}
+	if key == "" {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(rw, key)
+}
+
+// pushError answers a refused change the way the other handlers do: the reason as text, 409 for a refusal.
+func (w *Server) pushError(rw http.ResponseWriter, r *http.Request, what string, err error) {
+	ctx := r.Context()
+	status := http.StatusInternalServerError
+	if hub.IsUserError(err) {
+		status = http.StatusConflict
+	}
+	w.Log.Warn("changing a person's notification devices failed", "action", what, "err", err)
+	rw.Header().Set("HX-Reswap", "innerHTML")
+	rw.WriteHeader(status)
+	reason := err.Error()
+	if !hub.IsUserError(err) {
+		reason = "something went wrong"
+	}
+	fmt.Fprint(rw, t(ctx, "Could not do that: {reason}", "reason", t(ctx, reason)))
+}
+
+// pushSubscribe stores the subscription a browser just made. The body is JSON, as the browser writes it.
+func (w *Server) pushSubscribe(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	var in struct {
+		Endpoint string `json:"endpoint"`
+		Keys     struct {
+			P256dh string `json:"p256dh"`
+			Auth   string `json:"auth"`
+		} `json:"keys"`
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(rw, r.Body, 16<<10)).Decode(&in); err != nil {
+		http.Error(rw, "bad request", http.StatusBadRequest)
+		return
+	}
+	_, err := w.Hub.PushSubscribe(r.Context(), uuid.UUID(me.user.ID), hub.PushDeviceInput{
+		Endpoint: in.Endpoint, P256dh: in.Keys.P256dh, Auth: in.Keys.Auth, Mode: in.Mode,
+		Lang: string(loc(r.Context()).Lang), UserAgent: r.Header.Get("User-Agent")})
+	if err != nil {
+		w.pushError(rw, r, "subscribe", err)
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (w *Server) pushRemove(rw http.ResponseWriter, r *http.Request) {
+	w.pushChange(rw, r, "remove", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.PushRemove(ctx, uuid.UUID(me.user.ID), id)
+	})
+}
+
+func (w *Server) pushMode(rw http.ResponseWriter, r *http.Request) {
+	w.pushChange(rw, r, "mode", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.PushSetMode(ctx, uuid.UUID(me.user.ID), id, r.PostFormValue("mode"))
+	})
+}
+
+func (w *Server) pushTest(rw http.ResponseWriter, r *http.Request) {
+	w.pushChange(rw, r, "test", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.PushTest(ctx, me.user, id)
+	})
+}
+
+func (w *Server) pushChange(rw http.ResponseWriter, r *http.Request, what string, act func(context.Context, *member, string) error) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if err := act(r.Context(), me, r.PostFormValue("id")); err != nil {
+		w.pushError(rw, r, what, err)
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
 }

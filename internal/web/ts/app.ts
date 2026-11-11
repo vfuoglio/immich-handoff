@@ -5,6 +5,7 @@
 import { initCard, initDrop, initGuestBook, initShare } from "./drop.ts";
 import { initWall } from "./wall.ts";
 import { initBackup } from "./backup";
+import { initPush } from "./push";
 import { loadCatalog, t } from "./i18n";
 import { parseLive } from "./live";
 import { initScene } from "./scene";
@@ -82,6 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTabs();
   initRows();
   initBackup();
+  initPush();
   initEffects();
   initDrop();
   initCard();

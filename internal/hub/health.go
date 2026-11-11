@@ -23,8 +23,14 @@ func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, t
 	if err := h.Store.AddEvent(context.WithoutCancel(ctx), store.Event{Service: service, UserID: user, Kind: kind, Text: text}); err != nil {
 		h.Log.Warn("could not write the activity log", "err", err)
 	}
-	if h.People != nil {
-		h.People.Tell(ctx, h.activityAudience(ctx, service, user), kind, text)
+	if h.People != nil || h.Push != nil {
+		audience := h.activityAudience(ctx, service, user)
+		if h.People != nil {
+			h.People.Tell(ctx, audience, kind, text)
+		}
+		if h.Push != nil {
+			h.Push.Tell(ctx, audience, kind, text)
+		}
 	}
 }
 

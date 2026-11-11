@@ -30,6 +30,12 @@ type LimitReporter interface {
 	LimitReached(svc *Service, snd *Account, waiting int, until time.Time)
 }
 
+// ArrivalReporter is implemented by a Provider that wants to hear, once per sender per pass, how many photos were handed
+// over and how many were refused (the receiver has them in the trash).
+type ArrivalReporter interface {
+	HandedOver(svc *Service, snd *Account, imported, refused int)
+}
+
 // AcceptReporter is implemented by a Provider that wants to hear when photos were not handed over because the service
 // does not take them in (its rules), once per sender per pass.
 type AcceptReporter interface {

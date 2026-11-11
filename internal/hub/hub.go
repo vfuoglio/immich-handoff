@@ -45,6 +45,7 @@ type Hub struct {
 	Notify  notify.Func // tells an admin something needs attention (optional)
 	Bus     *live.Bus   // tells the open pages what changed, as it happens (optional)
 	People  *People     // writes to the people who asked for email (optional)
+	Push    *Push       // sends notifications to the devices people allowed (optional)
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 

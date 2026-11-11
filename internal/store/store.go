@@ -383,6 +383,21 @@ var migrations = []string{
 	   created_at TEXT NOT NULL,
 	   last_sent  TEXT NOT NULL DEFAULT ''
 	 );`,
+	// A browser or phone that a person allowed to push notifications to. The address of the push service and the two
+	// keys that encrypt for that browser are sealed together; the id (a hash of the address) lets the page tell which
+	// device is "this one" without ever showing the address.
+	`CREATE TABLE push_subs (
+	   id         TEXT PRIMARY KEY,
+	   user_id    TEXT NOT NULL,
+	   sealed     BLOB NOT NULL,
+	   lang       TEXT NOT NULL,
+	   mode       TEXT NOT NULL,
+	   label      TEXT NOT NULL,
+	   created_at TEXT NOT NULL,
+	   last_ok    TEXT NOT NULL DEFAULT '',
+	   failures   INTEGER NOT NULL DEFAULT 0
+	 );
+	 CREATE INDEX push_subs_user ON push_subs (user_id);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -44,6 +44,8 @@ For the curious, and for anyone changing the code.
 | `internal/web` | The page: templates, handlers, styles, live updates. Its scripts are TypeScript in `internal/web/ts`, bundled into `static/app.js` (see below). |
 | `internal/config` | Environment and routes file. |
 | `internal/hub/people.go` | Mail to the people who asked: the audience of a line of the activity log (same rule as the Activity list), the per-person wait and hourly cap, the mail in the person's language, and the signed unsubscribe link. |
+| `internal/push` | Web Push with the standard library only: message encryption (RFC 8291, tested against the RFC's own example), the signed token that identifies the app to a push service (VAPID, RFC 8292), the list of push services that may be called, and the request. |
+| `internal/hub/push.go` | Notifications on devices: who hears a line (the same rule as the activity list), the ten-second gathering, the devices a person has, arrival summaries. The service worker is `ts/sw.ts`; the card's script is `ts/push.ts`. |
 | `internal/notify` | The one way the app tells whoever runs it: a queue, a background sender, the ntfy, JSON and email formats (SMTP over TLS or STARTTLS, grouped into one mail per window), retries, and the destinations from `NOTIFY_URL` and `NOTIFY_FILE`. The rest of the app holds a `notify.Func` and sends a kind and a text. |
 | `test/` | The end-to-end suite and the throwaway Immich it runs against. |
 | `tools/typecheck` | Type-checks the page's TypeScript. Used by CI only. |
