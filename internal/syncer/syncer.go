@@ -14,13 +14,13 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
 
 // Config holds the options that apply to every service.
 type Config struct {
 	DeleteForce bool // delete originals permanently instead of trashing them
 	DryRun      bool
-	NotifyURL   string
 	Quiet       Quiet // the app-wide quiet hours, for services that set none of their own (QUIET_HOURS)
 	NoDetails   bool  // do not carry the archived state, description, rating and location (CARRY_DETAILS=off)
 
@@ -55,10 +55,11 @@ type RunInfo struct {
 
 type Syncer struct {
 	Cfg      Config
-	Services []*Service // fixed services (used when Provider is nil)
-	Provider Provider   // optional: services that can change while running
-	Usage    Usage      // optional: records what senders hand over, so a service's daily cap can be applied
-	Bus      *live.Bus  // optional: tells the open pages what is happening, as it happens
+	Services []*Service  // fixed services (used when Provider is nil)
+	Provider Provider    // optional: services that can change while running
+	Usage    Usage       // optional: records what senders hand over, so a service's daily cap can be applied
+	Bus      *live.Bus   // optional: tells the open pages what is happening, as it happens
+	Notifier notify.Func // optional: tells whoever runs the app that something needs attention
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -308,10 +309,10 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 			// PUBLIC_WEBHOOK_URL not being reachable from the Immich container (or the workflow being off).
 			msg := "photos were found by the daily sweep instead of by webhook: check that PUBLIC_WEBHOOK_URL is reachable from Immich and the workflow is enabled (see workflow logs in Immich)"
 			s.Log.Warn(msg)
-			s.notify("immich-handoff: " + msg)
+			s.notify(notify.Problem, msg)
 		}
 		if info.Error != "" || info.Counts.Errors > 0 || info.Counts.Refused > 0 {
-			s.notify(fmt.Sprintf("immich-handoff: %+v %s", info.Counts, info.Error))
+			s.notify(notify.Problem, passSummary(info))
 		}
 	}()
 
@@ -792,7 +793,7 @@ func (s *Syncer) stackOf(ctx context.Context, log *slog.Logger, snd *Account, a 
 	if err != nil {
 		if immich.IsForbidden(err) {
 			s.warnOnce("stack.read/"+snd.Name, log, "this sender's key may not read stacks, so only the tagged photo of a stack is handed over; opening the page gives the key that permission",
-				fmt.Sprintf("immich-handoff: %s's key may not read stacks, so only the tagged photo of a stack is handed over. The key needs stack.read: they get it by opening the page once, or add it to a key made by hand.", snd.Name))
+				fmt.Sprintf("%s's key may not read stacks, so only the tagged photo of a stack is handed over. The key needs stack.read: they get it by opening the page once, or add it to a key made by hand.", snd.Name))
 		} else {
 			log.Warn("could not read the photo's stack; only the tagged photo is handed over", "file", a.OriginalFileName, "err", err)
 		}
@@ -841,7 +842,7 @@ func (s *Syncer) restack(ctx context.Context, log *slog.Logger, svc *Service, r 
 	if _, err := r.acct.API.CreateStack(ctx, ids); err != nil {
 		if immich.IsForbidden(err) {
 			s.warnOnce("stack.create/"+svc.Label()+"/"+r.acct.Name, log, "the receiver's key may not create stacks, so the photos of a stack arrive as separate photos; opening the page gives the key that permission",
-				fmt.Sprintf("immich-handoff: %s's key may not create stacks, so photos that were a stack arrive as separate photos. The key needs stack.create: its owner gets it by opening the page once, or add it to a key made by hand.", r.acct.Name))
+				fmt.Sprintf("%s's key may not create stacks, so photos that were a stack arrive as separate photos. The key needs stack.create: its owner gets it by opening the page once, or add it to a key made by hand.", r.acct.Name))
 		} else {
 			log.Warn("could not make the stack again at the receiver; the photos arrived separately", "receiver", r.acct.Name, "err", err)
 		}
@@ -861,7 +862,7 @@ func (s *Syncer) warnOnce(key string, log *slog.Logger, logMsg, notifyMsg string
 	s.albumMu.Unlock()
 	if first {
 		log.Warn(logMsg)
-		s.notify(notifyMsg)
+		s.notify(notify.Problem, notifyMsg)
 	}
 }
 
@@ -931,7 +932,7 @@ func (s *Syncer) fileInAlbum(ctx context.Context, log *slog.Logger, svc *Service
 				s.albumBroken = map[string]bool{}
 			}
 			s.albumBroken[key] = true
-			s.notify(fmt.Sprintf("immich-handoff: could not put photos in the album %q for %s (%v); they are tagged %s instead. The receiver's key needs album.read, album.create and albumAsset.create.", svc.Album, r.acct.Name, err, svc.InboxTag))
+			s.notify(notify.Problem, fmt.Sprintf("could not put photos in the album %q for %s (%v); they are tagged %s instead. The receiver's key needs album.read, album.create and albumAsset.create.", svc.Album, r.acct.Name, err, svc.InboxTag))
 		}
 		return false
 	}

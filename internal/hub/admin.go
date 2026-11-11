@@ -8,6 +8,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -157,7 +158,7 @@ func (h *Hub) AdminRemoveMember(ctx context.Context, admin immich.User, linkID s
 		return err
 	}
 	h.event(ctx, link.Service, link.ImmichUserID, "removed", i18n.Pack("{name} was removed from {service} by an administrator; their key in Immich stays until they clean up", "name", link.Name, "service", link.Service))
-	h.tell(fmt.Sprintf("%s was removed from %q by an administrator (%s).", link.Name, link.Service, admin.Name))
+	h.tell(notify.Info, fmt.Sprintf("%s was removed from %q by an administrator (%s).", link.Name, link.Service, admin.Name))
 	h.Log.Info("member removed by an administrator", "service", link.Service, "member", link.Email, "admin", admin.Email)
 	return h.Reload(ctx)
 }
@@ -203,7 +204,7 @@ func (h *Hub) AdminRemoveService(ctx context.Context, admin immich.User, name st
 		h.event(ctx, name, l.ImmichUserID, "removed", i18n.Pack("The service {service} was removed by an administrator", "service", name))
 	}
 	h.event(ctx, name, svc.OwnerID, "removed", i18n.Pack("Your service {service} was removed by an administrator. The receiver key \"{key}\" is still valid in your Immich account until you delete it (Account Settings, API Keys).", "service", name, "key", keyName(name)+" (receiving)"))
-	h.tell(fmt.Sprintf("The service %q (owner %s) was removed by an administrator (%s).", name, svc.OwnerName, admin.Name))
+	h.tell(notify.Info, fmt.Sprintf("The service %q (owner %s) was removed by an administrator (%s).", name, svc.OwnerName, admin.Name))
 	h.Log.Info("service removed by an administrator", "service", name, "owner", svc.OwnerEmail, "admin", admin.Email)
 	return h.Reload(ctx)
 }

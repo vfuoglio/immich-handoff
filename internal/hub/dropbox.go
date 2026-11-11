@@ -22,6 +22,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -595,9 +596,7 @@ func (h *Hub) checkBurst(ctx context.Context, b store.DropBox) {
 	if changed, err := h.Store.SetDropBoxState(ctx, b.ID, store.DropPaused, note); err == nil && changed {
 		h.dropEvent(ctx, b.ID, store.DropPausedOn, note, "")
 		h.Log.Warn("drop box paused by itself", "name", b.Name, "count", ok)
-		if h.Notify != nil {
-			h.Notify(fmt.Sprintf("The drop box %q of %s was paused by itself because of an unusual number of uploads or refusals. Its owner can look at its log and resume it.", b.Name, b.OwnerName))
-		}
+		h.tell(notify.DropBox, fmt.Sprintf("The drop box %q of %s was paused by itself because of an unusual number of uploads or refusals. Its owner can look at its log and resume it.", b.Name, b.OwnerName))
 	}
 }
 
@@ -1021,14 +1020,10 @@ func (h *Hub) DropMaintenance(ctx context.Context) {
 			}
 			text := h.dropClosingText(ctx, b) + onward
 			h.dropEvent(ctx, b.ID, store.DropExpired, i18n.Pack("The drop box closed. {summary}", "summary", text), "")
-			if h.Notify != nil {
-				h.Notify(fmt.Sprintf("The drop box %q of %s closed. %s", b.Name, b.OwnerName, text))
-			}
+			h.tell(notify.DropBox, fmt.Sprintf("The drop box %q of %s closed. %s", b.Name, b.OwnerName, text))
 		case !b.Expired(now) && b.ExpiresAt.Sub(now) < dropReminder && b.Notified&1 == 0:
 			_ = h.Store.MarkDropNotified(ctx, b.ID, 1)
-			if h.Notify != nil {
-				h.Notify(fmt.Sprintf("The drop box %q of %s closes at %s. Its owner or a co-host can extend it from the page.", b.Name, b.OwnerName, b.ExpiresAt.Local().Format("2006-01-02 15:04")))
-			}
+			h.tell(notify.DropBox, fmt.Sprintf("The drop box %q of %s closes at %s. Its owner or a co-host can extend it from the page.", b.Name, b.OwnerName, b.ExpiresAt.Local().Format("2006-01-02 15:04")))
 		}
 	}
 	if old, err := h.Store.DropPendingBefore(ctx, now.Add(-dropPendingAge)); err == nil {

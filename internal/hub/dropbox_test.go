@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -195,7 +196,7 @@ func TestAGuestWhoAsksTooOftenIsTurnedAwayAndTheBoxPausesInAFlood(t *testing.T) 
 	e, ctx := setup(t, true), context.Background()
 	b := newBox(t, e, hub.DropParams{Name: "Flood"})
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 
 	// one guest: thirty requests in ten minutes, then silence
 	n := 0
@@ -459,7 +460,7 @@ func TestADropBoxOpensAndClosesOnSchedule(t *testing.T) {
 
 	// the reminder and the closing message are each sent once; extending lets them go again
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	b := newBox(t, e, hub.DropParams{Name: "Party", Closes: time.Now().Add(2 * time.Hour)})
 	e.h.DropMaintenance(ctx)
 	e.h.DropMaintenance(ctx)
@@ -1373,7 +1374,7 @@ func TestABoxThatHandsOnByItselfDoesItOnceWhenItClosesAndTheSummaryTellsHow(t *t
 		t.Fatal(err)
 	}
 	var told []string
-	e.h.Notify = func(m string) { told = append(told, m) }
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
 	e.h.DropMaintenance(ctx) // still open: nothing is handed on
 	if log, _ := e.st.DropOnwardLog(ctx, b.ID, 5); len(log) != 0 {
 		t.Fatal("an open box hands nothing on")

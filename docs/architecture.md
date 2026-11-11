@@ -43,6 +43,7 @@ For the curious, and for anyone changing the code.
 | `internal/immich` | The generated client plus a small wrapper. |
 | `internal/web` | The page: templates, handlers, styles, live updates. Its scripts are TypeScript in `internal/web/ts`, bundled into `static/app.js` (see below). |
 | `internal/config` | Environment and routes file. |
+| `internal/notify` | The one way the app tells whoever runs it: a queue, a background sender, the ntfy and JSON formats, retries, and the destinations from `NOTIFY_URL` and `NOTIFY_FILE`. The rest of the app holds a `notify.Func` and sends a kind and a text. |
 | `test/` | The end-to-end suite and the throwaway Immich it runs against. |
 | `tools/typecheck` | Type-checks the page's TypeScript. Used by CI only. |
 | `tools/screenshots` | Makes the pictures in `docs/images` from a real running demo. |

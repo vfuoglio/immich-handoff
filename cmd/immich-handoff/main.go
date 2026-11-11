@@ -19,6 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -85,11 +86,17 @@ func run(log *slog.Logger) error {
 	}
 	receiverDelete := env("RECEIVER_DELETE", "on") != "off" // may a receiver's key move copies to its owner's trash: copies that expire, a hand-over taken back
 	bus := &live.Bus{}                                      // what is happening, told to the pages that are open (nobody else)
+	dests, err := notify.FromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	notifier := notify.New(dests, os.Getenv("PUBLIC_APP_URL"), log)
+	defer notifier.Close()
 	s := &syncer.Syncer{
-		Services: services, Log: log, Bus: bus,
+		Services: services, Log: log, Bus: bus, Notifier: notifier.Send,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
-			NotifyURL: os.Getenv("NOTIFY_URL"), Quiet: quiet, ReceiverDelete: receiverDelete, NoDetails: env("CARRY_DETAILS", "on") == "off",
+			Quiet: quiet, ReceiverDelete: receiverDelete, NoDetails: env("CARRY_DETAILS", "on") == "off",
 		},
 	}
 
@@ -124,7 +131,7 @@ func run(log *slog.Logger) error {
 		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) },
-		Notify:  s.Tell}
+		Notify:  notifier.Send}
 	if storeKey, err := readStoreKey(); err != nil {
 		return err
 	} else if storeKey == "" {
@@ -164,7 +171,7 @@ func run(log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: s.Tell, Every: every, Keep: keep,
+		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
 
 // A sender can link one of their own albums to a service: everything in it is handed over, now and later,
@@ -113,7 +114,7 @@ func (s *Syncer) watchProblem(log *slog.Logger, svc *Service, snd *Account, err 
 	s.albumBroken[key] = true
 	s.albumMu.Unlock()
 	if first {
-		s.notify(fmt.Sprintf("immich-handoff: cannot read the album %q that %s linked to %s (%v); photos tagged for the service are still handed over. If the album was deleted, link another on the page.", snd.WatchAlbumName, snd.Name, svc.Label(), err))
+		s.notify(notify.Problem, fmt.Sprintf("cannot read the album %q that %s linked to %s (%v); photos tagged for the service are still handed over. If the album was deleted, link another on the page.", snd.WatchAlbumName, snd.Name, svc.Label(), err))
 	}
 }
 
@@ -145,13 +146,13 @@ func (s *Syncer) reportAlbum(svc *Service, snd *Account, handed, refused, failed
 		r.AlbumHandedOver(svc, snd, handed, refused, failed)
 	}
 	if handed+refused >= bigBatch {
-		msg := fmt.Sprintf("immich-handoff: %d photos from the album %q were handed over to %s for %s", handed, snd.WatchAlbumName, svc.Label(), snd.Name)
+		msg := fmt.Sprintf("%d photos from the album %q were handed over to %s for %s", handed, snd.WatchAlbumName, svc.Label(), snd.Name)
 		if refused > 0 {
 			msg += fmt.Sprintf(" (%d refused: the receiver has them in the trash)", refused)
 		}
 		if failed > 0 {
 			msg += fmt.Sprintf(", %d failed and will be retried", failed)
 		}
-		s.notify(msg)
+		s.notify(notify.Info, msg)
 	}
 }

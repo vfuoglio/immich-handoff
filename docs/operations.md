@@ -199,9 +199,39 @@ A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is f
 ## Monitoring
 
 - **Log:** `docker compose logs`. Each pass logs what it found and did; errors are marked `ERROR`.
-- **Notifications:** set `NOTIFY_URL` to an ntfy-style address and the app posts a message when a hand-over fails, a photo is refused, or a connection breaks.
+- **Notifications:** the app can tell you when something needs attention, through ntfy, a Home Assistant webhook or any JSON endpoint. See [Notifications](#notifications).
 - **Container health:** the image checks itself every 30 seconds, so `docker ps` and `docker compose ps` show `healthy` or `unhealthy`, and tools that read Docker's health status can show or alert on it. The check asks the app's own `/healthz` (on `LISTEN_ADDR`) and passes only on `ok`. The image has no shell or `curl`, so the check is built into the program: `docker compose exec immich-handoff /immich-handoff --healthcheck` runs it by hand and exits 0 when healthy. A service that should wait for it can use `depends_on: immich-handoff: condition: service_healthy`. It does not test the connection to Immich; the page and the log show that.
 - **Health and metrics:** `GET /healthz` answers `ok`. `GET /metrics` returns counters in Prometheus text format (passes, photos by result, services, version) and needs the `X-Webhook-Secret` header with your secret.
+
+## Notifications
+
+The app tells whoever runs it when something needs attention. Every message has a **kind**, and each destination takes all kinds or only the ones you list:
+
+| Kind | What it is about |
+|---|---|
+| `problem` | A pass that failed or refused photos, photos found only by the daily sweep, an album that cannot be read or filed into, a key that stopped working. |
+| `backup` | A backup that failed, was forced, or was downloaded. |
+| `bridge` | A receiver on another server that cannot be reached, whose key was revoked, or that is back. |
+| `dropbox` | A drop box that paused itself, will close soon, or closed. |
+| `info` | A daily limit reached, a big album hand-over, a person or service removed by an administrator, a new receiver on another server. |
+
+**One destination, the simple way.** Set `NOTIFY_URL` to an ntfy topic (`https://ntfy.example.com/handoff`). Every kind goes there as the message text, with a title, a priority (problems are high), the kind as a tag and, if `PUBLIC_APP_URL` is set, a link that opens the page. Installs that already used `NOTIFY_URL` keep working.
+
+**Several destinations.** Set `NOTIFY_FILE=/notify.yaml`, mount the file like the routes file (see `notify.example.yaml`), and list each place with a `name`, a `format` (`ntfy`, the default, or `json`), a `url`, an optional `auth` (sent as a bearer token) and the `kinds` it takes. Secrets are written as `${VARIABLE}` and read from the environment, so none lives in the file. `NOTIFY_URL` and the file can be used together.
+
+```yaml
+destinations:
+  - name: phone                       # your ntfy app: everything
+    url: https://ntfy.example.com/handoff
+  - name: home-assistant              # automations: problems and backups only
+    format: json
+    url: http://homeassistant.local:8123/api/webhook/${HA_WEBHOOK_ID}
+    kinds: [problem, backup]
+```
+
+**The JSON format** posts `{"source":"immich-handoff","kind":"problem","title":"...","text":"...","link":"...","time":"2026-11-11T22:00:00Z"}`. In Home Assistant, create an automation with a **Webhook** trigger (turn off "Only accessible from the local network" only if the app is outside it), and use `{{ trigger.json.text }}` and `{{ trigger.json.kind }}` in the action, for example a `notify.mobile_app_<phone>` call, a light or a spoken message. The same format fits n8n, Node-RED and anything that accepts a JSON POST.
+
+**How delivery behaves.** Sending never slows a hand-over: messages are queued and sent in the background. A destination that answers with an error from its own side or cannot be reached is tried up to three times; one that refuses the message (a wrong token, a wrong topic) is logged once and not retried; a redirect counts as a failure, so fix the address. The log names the destination and the answer, never the address, because a topic or a webhook id is a secret. Messages name people, services and drop boxes, so send them only to a server you trust. Messages are in English.
 
 ## Checking the setup
 

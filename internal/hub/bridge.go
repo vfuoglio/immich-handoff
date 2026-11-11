@@ -13,6 +13,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -102,7 +103,7 @@ func (h *Hub) bridgeReport(service string, err error, version string) {
 		if changed, _ := h.Store.SetBridgeState(ctx, service, store.BridgeOK, "", version, 0, time.Time{}); changed {
 			h.event(ctx, service, owner.OwnerID, "restored", i18n.Pack("{service} can reach {name} on another server again", "service", service, "name", name))
 			h.show(ctx, live.Restored, service, "", "service", true)
-			h.tell(fmt.Sprintf("%q reaches %s on another server again; waiting photos are going.", service, name))
+			h.tell(notify.Bridge, fmt.Sprintf("%q reaches %s on another server again; waiting photos are going.", service, name))
 			h.Log.Info("the receiver on another server is back", "service", service)
 			if h.Wake != nil {
 				go h.Wake("bridge restored: " + service)
@@ -113,7 +114,7 @@ func (h *Hub) bridgeReport(service string, err error, version string) {
 		if changed {
 			h.event(ctx, service, owner.OwnerID, "broken", i18n.Pack("{name} on another server no longer accepts the key of {service}", "name", name, "service", service))
 			h.show(ctx, live.Lost, service, "", "service", true)
-			h.tell(fmt.Sprintf("The key for %s on another server (%q) was revoked; photos wait, still tagged, until they make a new one.", name, service))
+			h.tell(notify.Bridge, fmt.Sprintf("The key for %s on another server (%q) was revoked; photos wait, still tagged, until they make a new one.", name, service))
 			h.Log.Warn("the other server rejected the bridge key; photos wait", "service", service)
 		}
 	case errors.Is(err, bridge.ErrBadAddress):
@@ -149,7 +150,7 @@ func (h *Hub) bridgeUnreachable(ctx context.Context, b store.Bridge, owner store
 	if changed {
 		h.event(ctx, b.Service, owner.OwnerID, "broken", i18n.Pack("{service} cannot reach {name} on another server: photos wait", "service", b.Service, "name", b.DisplayName))
 		h.show(ctx, live.Lost, b.Service, "", "service", true)
-		h.tell(fmt.Sprintf("%q cannot reach %s on another server (%s); photos wait, still tagged, and it tries again.", b.Service, b.DisplayName, why))
+		h.tell(notify.Bridge, fmt.Sprintf("%q cannot reach %s on another server (%s); photos wait, still tagged, and it tries again.", b.Service, b.DisplayName, why))
 		h.Log.Warn("the receiver on another server cannot be used; photos wait", "service", b.Service, "why", why)
 	}
 	h.bridgeRetryAt(b.Service, retry)
@@ -318,7 +319,7 @@ func (h *Hub) AcceptBridge(ctx context.Context, token, address, key, name string
 	}
 	h.event(ctx, info.Service, owner.OwnerID, "joined", i18n.Pack("{name} on another Immich server will now receive {service}", "name", name, "service", info.Service))
 	h.show(ctx, live.Restored, info.Service, "", "service", true)
-	h.tell(fmt.Sprintf("%s on another Immich server now receives %q.", name, info.Service))
+	h.tell(notify.Info, fmt.Sprintf("%s on another Immich server now receives %q.", name, info.Service))
 	h.Log.Info("a receiver on another server was connected", "service", info.Service, "version", got.Version)
 	if err := h.Reload(ctx); err != nil {
 		return err

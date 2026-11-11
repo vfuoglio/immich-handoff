@@ -6,6 +6,7 @@ services:
     volumes:
       - handoff-data:/data                  # only used when HANDOFF_STORE_KEY is set
       # - ./routes.yaml:/routes.yaml:ro   # only with ROUTES_FILE=/routes.yaml
+      # - ./notify.yaml:/notify.yaml:ro   # only with NOTIFY_FILE=/notify.yaml
     ports:
       - "8080:8080"
     networks:

@@ -1,0 +1,15 @@
+# More than one place to send notifications to. Copy to notify.yaml, set NOTIFY_FILE=/notify.yaml in .env and mount the
+# file (see docker-compose.yml). Secrets are read from environment variables, so none lives in this file.
+# NOTIFY_URL, if set, is a destination of its own that takes every kind.
+#
+# Kinds: problem, backup, bridge, dropbox, info. No "kinds" line means all of them.
+destinations:
+  - name: phone                          # an ntfy topic: title, priority, tag and a link
+    format: ntfy                         # the default
+    url: https://ntfy.example.com/handoff
+    # auth: ${NTFY_TOKEN}                # sent as a bearer token, for a topic that needs a login
+
+  - name: home-assistant                 # a webhook trigger of an automation; the message arrives as JSON
+    format: json
+    url: http://homeassistant.local:8123/api/webhook/${HA_WEBHOOK_ID}
+    kinds: [problem, backup, bridge]

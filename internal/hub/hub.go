@@ -16,6 +16,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -40,9 +41,9 @@ type Hub struct {
 	Connect func(key string) (*immich.API, error)
 	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
 	Wake    func(reason string)
-	Retry   func()               // sets up missing workflows in the background (Immich may still be loading its plugins)
-	Notify  func(message string) // tells an admin something needs attention (optional)
-	Bus     *live.Bus            // tells the open pages what changed, as it happens (optional)
+	Retry   func()      // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Notify  notify.Func // tells an admin something needs attention (optional)
+	Bus     *live.Bus   // tells the open pages what changed, as it happens (optional)
 	Log     *slog.Logger
 	Options Options // defaults for services people create
 

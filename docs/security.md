@@ -46,6 +46,10 @@ A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is t
 - **The look of the page** is data, not code: the colour is checked to be six hex digits before it goes into a style sheet, the cover must be a JPEG, PNG or WebP of at most 900 KB and is served with a policy that lets nothing run, and the page's language is one of those the app has. Shrinking happens in the guest's browser.
 - **What the owner should still think about.** A link that is shared widely can be used by anyone who gets it; give it an end date, a size limit and, for a private event, a password, and revoke it when the event is over. Photos arrive in your library like any upload, so Immich's own checks (and your storage) apply.
 
+## Notifications
+
+Messages to `NOTIFY_URL` and `NOTIFY_FILE` name people, services and drop boxes, and say what went wrong. They go to the address you chose, and a public ntfy topic is readable by anyone who guesses its name, so use a topic that cannot be guessed or a server you run. Addresses and tokens are never written to the log, and tokens in the file are read from the environment. See [Notifications](operations.md#notifications).
+
 ## Who decides what
 
 - **The sender** decides what happens to their own originals, when they join. The owner has no say over that.

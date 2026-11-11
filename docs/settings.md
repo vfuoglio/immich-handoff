@@ -16,7 +16,9 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `BACKUP_DIR` | `/data/backups` | Where backups go. A second mounted folder is safer than one beside the data. |
 | `HANDOFF_ADMIN_BACKUP_DOWNLOAD` | off | `true` adds a **Download backup** button to the administrator's page. Off by default: the file holds every stored key (encrypted) and everyone's name and email. Read [the limits](operations.md#download-a-backup-from-the-administrators-page) first. |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |
-| `NOTIFY_URL` | | ntfy-style URL that receives a message when something needs attention. |
+| `NOTIFY_URL` | | ntfy topic URL that receives every message the app has for you (title, priority, tag and a link). See [Notifications](operations.md#notifications). |
+| `NOTIFY_FILE` | | A YAML file listing more destinations (ntfy or a JSON webhook such as Home Assistant's), each taking only the kinds of message you choose. See [Notifications](operations.md#notifications). |
+| `PUBLIC_APP_URL` | | This app as your browser reaches it (for example `https://handoff.example.com`). When set, each message carries a link to the right page. |
 | `ALBUM_CHECK_MINUTES` | `15` | How often albums that senders linked to a service are looked at for photos to hand over. Immich sends no event when a photo is added to an album, so this is a timer. `0` leaves it to the passes that other events start. See [handing over an album](using.md#handing-over-a-whole-album). |
 | `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs (catch-up, key and workflow checks, inbox tidy-up). |
 | `CLEANUP_INTERVAL_MINUTES` | `15` | How often photos filed in an album or past their expiry lose the inbox tag. `0` leaves that to the daily check. See [why a timer](using.md#when-the-inbox-tag-goes-away). |
