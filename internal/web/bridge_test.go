@@ -91,7 +91,7 @@ func TestTheInvitationPageNeedsNoLoginAndSaysOnlyWhatItMust(t *testing.T) {
 			t.Errorf("the page must list %s", p)
 		}
 	}
-	for _, want := range []string{`<base href="../"`, `action="bridge/` + token + `"`, "do not work across servers", `type="password"`} {
+	for _, want := range []string{`<base href="../"`, `action="bridge/` + token + `"`, "does not work across servers", "add asset.delete if you want", "within 24 hours", `type="password"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

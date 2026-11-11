@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -31,12 +32,12 @@ var (
 
 // Remember implements syncer.Ledger: which copy came from which photo, so the sender can take it back. Only people who
 // joined from the page have a membership to keep it under; others are not recorded.
-func (h *Hub) Remember(ctx context.Context, snd *syncer.Account, batch string, senderAsset, receiverAsset uuid.UUID, clip bool) {
+func (h *Hub) Remember(ctx context.Context, snd *syncer.Account, batch string, senderAsset, receiverAsset uuid.UUID, clip, remote bool) {
 	id, ok := h.linkOf(snd)
 	if !ok || h.Store == nil {
 		return
 	}
-	if err := h.Store.AddHandoverItem(context.WithoutCancel(ctx), id, batch, senderAsset, receiverAsset, clip); err != nil {
+	if err := h.Store.AddHandoverItem(context.WithoutCancel(ctx), id, batch, senderAsset, receiverAsset, clip, remote); err != nil {
 		h.Log.Warn("could not remember a hand-over", "err", err)
 	}
 }
@@ -94,7 +95,7 @@ func (h *Hub) TakeBackOffer(ctx context.Context, user uuid.UUID, service string)
 	}
 	n := 0
 	for _, it := range items {
-		if !it.Clip {
+		if !it.Clip && !it.Remote { // a photo is counted once, however many servers hold a copy
 			n++
 		}
 	}
@@ -105,6 +106,11 @@ func (h *Hub) TakeBackOffer(ctx context.Context, user uuid.UUID, service string)
 type TakeBackResult struct {
 	Taken int // photos whose copy went to the trash (and whose original came back from the sender's trash)
 	Kept  int // photos the receiver had already filed in an album: they stay where they are, copy and original alike
+
+	// The receiver on another Immich server (a bridge), when the service has one: copies moved to their trash, and
+	// copies that stay because their key cannot delete (RemoteCannot, which is said to the sender).
+	RemoteTaken  int
+	RemoteCannot int
 }
 
 // TakeBack undoes the sender's last hand-over to a service, as far as it can be undone: the receiver's copies go to the
@@ -133,6 +139,22 @@ func (h *Hub) TakeBack(ctx context.Context, user immich.User, service string) (T
 	svc := h.service(service)
 	if svc == nil || len(svc.Receivers) == 0 {
 		return res, ErrNotJoined
+	}
+	// the copies on another server are theirs alone: the rest of this function is about the owner's library
+	var local, far []store.HandoverItem
+	for _, it := range items {
+		if it.Remote {
+			far = append(far, it)
+		} else {
+			local = append(local, it)
+		}
+	}
+	items = local
+	if err := h.takeBackFar(ctx, svc, far, &res); err != nil {
+		return res, err
+	}
+	if len(items) == 0 {
+		return res, nil
 	}
 	rcv := svc.Receivers[0].API
 	snd, err := h.Connect(link.Key)
@@ -236,4 +258,48 @@ func (h *Hub) TakeBack(ctx context.Context, user immich.User, service string) (T
 		return res, fmt.Errorf("the copies were moved to the receiver's trash, but your originals could not be restored from yours (restore them in Immich's trash): %w", restoreErr)
 	}
 	return res, nil
+}
+
+// takeBackFar moves the copies a hand-over left on another server to that receiver's trash, when their key allows it.
+// It runs first: if the other server cannot be reached nothing has been changed yet, and the sender can try again.
+// Without the permission the copies stay and are counted, because the receiver chose not to give it; they are not
+// offered again.
+func (h *Hub) takeBackFar(ctx context.Context, svc *syncer.Service, far []store.HandoverItem, res *TakeBackResult) error {
+	if len(far) == 0 {
+		return nil
+	}
+	rm, ok := svc.Remote.(*bridge.Remote)
+	if !ok { // the receiver was removed: what arrived there stays there
+		return h.settleFar(ctx, far)
+	}
+	var ids []uuid.UUID
+	photos := 0
+	for _, it := range far {
+		ids = append(ids, it.ReceiverAsset)
+		if !it.Clip {
+			photos++
+		}
+	}
+	switch err := rm.TakeBack(ctx, ids); {
+	case err == nil:
+		res.RemoteTaken = photos
+		return h.settleFar(ctx, far)
+	case errors.Is(err, bridge.ErrCannotTakeBack):
+		res.RemoteCannot = photos
+		h.Log.Info("copies on another server stay: its key cannot move photos to the trash", "service", svc.Name, "receiver", rm.Label(), "photos", photos)
+		return h.settleFar(ctx, far)
+	default:
+		return fmt.Errorf("could not reach the receiver on another server, so nothing was taken back: %w", err)
+	}
+}
+
+func (h *Hub) settleFar(ctx context.Context, far []store.HandoverItem) error {
+	ids := make([]int64, len(far))
+	for i, it := range far {
+		ids[i] = it.ID
+	}
+	if err := h.Store.MarkTakenBack(ctx, ids); err != nil {
+		h.Log.Warn("could not record what happened to the copies on another server", "err", err)
+	}
+	return nil
 }

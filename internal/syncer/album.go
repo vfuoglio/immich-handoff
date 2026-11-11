@@ -36,9 +36,10 @@ type AcceptReporter interface {
 }
 
 // Ledger is implemented by a Provider that remembers which copy came from which photo (for the hand-overs of people who
-// joined from the page), so a sender can take their last hand-over back. batch is one sender's work in one pass.
+// joined from the page), so a sender can take their last hand-over back. batch is one sender's work in one pass. remote is
+// a copy on another Immich server (a bridge), not in the receiver's own library.
 type Ledger interface {
-	Remember(ctx context.Context, snd *Account, batch string, senderAsset, receiverAsset uuid.UUID, clip bool)
+	Remember(ctx context.Context, snd *Account, batch string, senderAsset, receiverAsset uuid.UUID, clip, remote bool)
 }
 
 // ExpiryReporter is implemented by a Provider that wants to hear when copies that reached the end of their lifetime

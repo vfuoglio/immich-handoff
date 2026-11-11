@@ -21,14 +21,14 @@ type ledgerProvider struct {
 type ledgerRow struct {
 	batch            string
 	sender, receiver uuid.UUID
-	clip             bool
+	clip, remote     bool
 }
 
 func (p *ledgerProvider) Services() []*syncer.Service { return p.svcs }
-func (p *ledgerProvider) Remember(_ context.Context, _ *syncer.Account, batch string, sender, receiver uuid.UUID, clip bool) {
+func (p *ledgerProvider) Remember(_ context.Context, _ *syncer.Account, batch string, sender, receiver uuid.UUID, clip, remote bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.rows = append(p.rows, ledgerRow{batch, sender, receiver, clip})
+	p.rows = append(p.rows, ledgerRow{batch, sender, receiver, clip, remote})
 }
 
 func (f *twoAccounts) handLedger(t *testing.T) *ledgerProvider {

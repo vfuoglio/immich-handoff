@@ -20,13 +20,31 @@ func TestCheckAcceptsExactlyTheFourPermissions(t *testing.T) {
 }
 
 func TestCheckRefusesAKeyThatCanDoMore(t *testing.T) {
-	for _, extra := range []string{"asset.read", "all", "asset.delete", "tag.read"} {
+	for _, extra := range []string{"asset.read", "all", "asset.download", "tag.read"} {
 		f := newFake(t)
 		f.Permissions = append(f.Permissions, extra)
 		_, err := Check(context.Background(), f.client(), f.URL, "good-key")
 		if !errors.Is(err, ErrKeyTooBroad) || !strings.Contains(err.Error(), extra) || !strings.Contains(err.Error(), "make a smaller one") {
 			t.Errorf("with %s: %v", extra, err)
 		}
+	}
+}
+
+func TestCheckAcceptsTheOptionalDeletePermissionAndSaysSo(t *testing.T) {
+	f := newFake(t)
+	info, err := Check(context.Background(), f.client(), f.URL, "good-key")
+	if err != nil || info.CanTakeBack {
+		t.Fatalf("the four permissions: %v, can take back %v", err, info.CanTakeBack)
+	}
+	f.Permissions = append(f.Permissions, "asset.delete")
+	info, err = Check(context.Background(), f.client(), f.URL, "good-key")
+	if err != nil || !info.CanTakeBack {
+		t.Fatalf("with asset.delete: %v, can take back %v", err, info.CanTakeBack)
+	}
+	// still too small without a required one, whatever else it holds
+	f.Permissions = []string{"user.read", "asset.upload", "asset.delete"}
+	if _, err := Check(context.Background(), f.client(), f.URL, "good-key"); !errors.Is(err, ErrKeyTooSmall) {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -105,8 +123,11 @@ func TestCheckDoesNotLeakTheAddressIntoTheMessage(t *testing.T) {
 	}
 }
 
-func TestPermissionsHelpNamesAllFour(t *testing.T) {
+func TestPermissionsHelpNamesAllFourAndTheOptionalOne(t *testing.T) {
 	h := PermissionsHelp()
+	if !strings.Contains(h, "asset.delete") || !strings.Contains(h, "trash") {
+		t.Errorf("the optional permission is not explained: %q", h)
+	}
 	for _, p := range RequiredPermissions {
 		if !strings.Contains(h, p) {
 			t.Errorf("%s missing from %q", p, h)

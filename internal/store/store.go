@@ -369,6 +369,9 @@ var migrations = []string{
 	   service    TEXT NOT NULL,
 	   created_at TEXT NOT NULL
 	 );`,
+	// A hand-over may also reach a receiver on another Immich server (a bridge): its copy is a row too, marked remote,
+	// so a sender who takes the hand-over back reaches it if the receiver allowed it.
+	`ALTER TABLE handover_items ADD COLUMN remote INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -965,15 +968,16 @@ type HandoverItem struct {
 	Batch                      string
 	SenderAsset, ReceiverAsset uuid.UUID
 	Clip                       bool // a live photo's motion clip (not counted as a photo)
+	Remote                     bool // the copy is on another Immich server (a bridge), not in the receiver's own library
 	At                         time.Time
 }
 
 // AddHandoverItem remembers that the receiver's copy came from the sender's photo, in the hand-over named batch (one
 // per sender per pass), so the sender can take it back. Only a few days are kept.
-func (s *Store) AddHandoverItem(ctx context.Context, linkID, batch string, sender, receiver uuid.UUID, clip bool) error {
+func (s *Store) AddHandoverItem(ctx context.Context, linkID, batch string, sender, receiver uuid.UUID, clip, remote bool) error {
 	now := time.Now().UTC()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO handover_items (link_id, batch, sender_asset, receiver_asset, clip, at) VALUES (?,?,?,?,?,?)`,
-		linkID, batch, sender.String(), receiver.String(), b2i(clip), now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO handover_items (link_id, batch, sender_asset, receiver_asset, clip, remote, at) VALUES (?,?,?,?,?,?,?)`,
+		linkID, batch, sender.String(), receiver.String(), b2i(clip), b2i(remote), now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM handover_items WHERE at < ?`, now.Add(-HandoverRetention).Format(time.RFC3339Nano))
@@ -990,7 +994,7 @@ func (s *Store) LastHandover(ctx context.Context, linkID string, since time.Time
 	if !batch.Valid {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, batch, sender_asset, receiver_asset, clip, at FROM handover_items WHERE link_id = ? AND batch = ? AND taken_back = 0 ORDER BY id`, linkID, batch.String)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, batch, sender_asset, receiver_asset, clip, remote, at FROM handover_items WHERE link_id = ? AND batch = ? AND taken_back = 0 ORDER BY id`, linkID, batch.String)
 	if err != nil {
 		return nil, err
 	}
@@ -999,7 +1003,7 @@ func (s *Store) LastHandover(ctx context.Context, linkID string, since time.Time
 	for rows.Next() {
 		var it HandoverItem
 		var snd, rcv, at string
-		if err := rows.Scan(&it.ID, &it.Batch, &snd, &rcv, &it.Clip, &at); err != nil {
+		if err := rows.Scan(&it.ID, &it.Batch, &snd, &rcv, &it.Clip, &it.Remote, &at); err != nil {
 			return nil, err
 		}
 		it.SenderAsset, _ = uuid.Parse(snd)

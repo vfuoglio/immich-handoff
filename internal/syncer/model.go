@@ -71,8 +71,19 @@ type Remote interface {
 	// tagged, as for a paused service. It is called once at the start of every pass.
 	Ready(ctx context.Context) error
 	// Deliver hands over one photo (and its motion clip, for a live photo) streamed from src. It returns nil only when
-	// the other server has the photo and its tag.
-	Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job RemoteJob) error
+	// the other server has the photo and its tag. The copy says which photo it is over there, so a hand-over can be
+	// taken back later.
+	Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job RemoteJob) (RemoteCopy, error)
+}
+
+// RemoteCopy is what the other server holds after a hand-over: the photo's id there, and a live photo's motion clip.
+// Created is false when the server already had the photo (a duplicate): nothing new arrived, so nothing is recorded to
+// take back.
+type RemoteCopy struct {
+	ID          uuid.UUID
+	Created     bool
+	Clip        uuid.UUID // zero: no motion clip
+	ClipCreated bool
 }
 
 // RemoteJob carries what Remote.Deliver needs besides the photo.

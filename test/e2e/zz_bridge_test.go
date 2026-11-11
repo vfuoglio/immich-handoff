@@ -320,13 +320,71 @@ func TestBridge(t *testing.T) {
 		return trashed(third) && len(inbox()) == 3 && len(farAssetsTagged(t, lia, "from/bob")) == 3
 	})
 
+	// --- taking a hand-over back reaches the other server only if its key was given asset.delete ---
+	farIDs := func() map[string]bool {
+		m := map[string]bool{}
+		for _, id := range farAssetsTagged(t, lia, "from/bob") {
+			m[id] = true
+		}
+		return m
+	}
+	before := farIDs()
+	fifth := handOver("bridge-5.jpg", 12005)
+	eventually(t, "the fifth photo reached both libraries", 120*time.Second, func() bool {
+		return trashed(fifth) && len(inbox()) == 4 && len(farIDs()) == len(before)+1
+	})
+	if p := page(t, port, owner); !strings.Contains(p, "does not reach them") {
+		t.Errorf("the owner must be told that taking back does not reach a key without asset.delete: %.200s", p)
+	}
+	code, body := postBody(t, port, "/services/takeback", sender, url.Values{"service": {"far"}})
+	if code != 200 || !strings.Contains(body, "on another server stayed there") {
+		t.Fatalf("taking back with a key that cannot delete: %d %s", code, body)
+	}
+	eventually(t, "the owner's copy went and the original came back", 60*time.Second, func() bool { return len(inbox()) == 3 && !trashed(fifth) })
+	if n := len(farIDs()); n != len(before)+1 {
+		t.Fatalf("the other server lost photos (%d) although its key cannot delete", n)
+	}
+
+	// the receiver adds the optional permission to a new key and connects again
+	lia.bridge = farKey(t, lia, "lia-handoff", []string{"user.read", "tag.create", "tag.asset", "asset.upload", "asset.delete"})
+	if code, body := connect(invite(), farURL(), lia.bridge); code != 200 {
+		t.Fatalf("connecting with asset.delete: %d %.300s", code, body)
+	}
+	if p := page(t, port, owner); !strings.Contains(p, "Taking a hand-over back reaches them") {
+		t.Errorf("the owner must be told that taking back reaches the receiver: %.200s", p)
+	}
+	before = farIDs()
+	sixth := handOver("bridge-6.jpg", 12006)
+	eventually(t, "the sixth photo reached both libraries", 120*time.Second, func() bool {
+		return trashed(sixth) && len(inbox()) == 4 && len(farIDs()) == len(before)+1
+	})
+	var added string
+	for id := range farIDs() {
+		if !before[id] {
+			added = id
+		}
+	}
+	code, body = postBody(t, port, "/services/takeback", sender, url.Values{"service": {"far"}})
+	if code != 204 {
+		t.Fatalf("taking back with asset.delete: %d %s", code, body)
+	}
+	eventually(t, "the copy on the other server went to its trash and the rest came back", 60*time.Second, func() bool {
+		return len(farIDs()) == len(before) && len(inbox()) == 3 && !trashed(sixth)
+	})
+	var gone struct {
+		IsTrashed bool `json:"isTrashed"`
+	}
+	if c := farCall(t, "GET", "/assets/"+added, map[string]string{"x-api-key": lia.key}, nil, &gone); c != 200 || !gone.IsTrashed {
+		t.Errorf("the copy must be in the receiver's trash, not deleted for good (HTTP %d, trashed %v)", c, gone.IsTrashed)
+	}
+
 	// --- the owner removes the connection: later photos go to the owner alone ---
-	code, body := postBody(t, port, "/services/bridge/remove", owner, url.Values{"service": {"far"}})
+	code, body = postBody(t, port, "/services/bridge/remove", owner, url.Values{"service": {"far"}})
 	must(code, 204, "remove: "+body)
 	fourth := handOver("bridge-4.jpg", 12004)
 	eventually(t, "the next photo reached the owner alone", 120*time.Second, func() bool { return trashed(fourth) && len(inbox()) == 4 })
-	if n := len(farAssetsTagged(t, lia, "from/bob")); n != 3 {
-		t.Errorf("the other server got %d photos, want 3: a removed connection must receive nothing", n)
+	if n := len(farIDs()); n != len(before) {
+		t.Errorf("the other server holds %d photos, want %d: a removed connection must receive nothing", n, len(before))
 	}
 }
 

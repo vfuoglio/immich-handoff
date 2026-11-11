@@ -495,7 +495,11 @@ func remote(ctx context.Context, r *Report, rm *bridge.Remote) {
 	}
 	switch {
 	case err == nil:
-		r.add(OK, who+": the address is allowed, the server answers (Immich "+info.Version+") and the key has exactly "+strings.Join(bridge.RequiredPermissions, ", "), "")
+		takeBack := "; taking a hand-over back does not reach it (the key has no asset.delete)"
+		if info.CanTakeBack {
+			takeBack = "; taking a hand-over back reaches it (the key has asset.delete)"
+		}
+		r.add(OK, who+": the address is allowed, the server answers (Immich "+info.Version+") and the key has "+strings.Join(bridge.RequiredPermissions, ", ")+takeBack, "")
 	case errors.Is(err, bridge.ErrBadAddress):
 		r.add(Fail, who+": the address is not one the app may connect to ("+err.Error()+")",
 			"Use the receiver's public https address. Only when both servers are yours, behind a VPN, set BRIDGE_ALLOW_PRIVATE=true.")

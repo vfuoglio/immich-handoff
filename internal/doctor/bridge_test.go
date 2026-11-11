@@ -51,7 +51,8 @@ func TestADoctorChecksTheReceiverOnAnotherServer(t *testing.T) {
 		fails   int
 		needles []string
 	}{
-		"healthy":     {srv: other(t, 3, four), key: "FAR", policy: open, needles: []string{"receiver on another server (Aunt Lia): the address is allowed", "Immich v3.2.0", "exactly user.read, tag.create, tag.asset, asset.upload"}},
+		"healthy":     {srv: other(t, 3, four), key: "FAR", policy: open, needles: []string{"receiver on another server (Aunt Lia): the address is allowed", "Immich v3.2.0", "user.read, tag.create, tag.asset, asset.upload; taking a hand-over back does not reach it"}},
+		"with the optional delete permission": {srv: other(t, 3, `["user.read","tag.create","tag.asset","asset.upload","asset.delete"]`), key: "FAR", policy: open, needles: []string{"taking a hand-over back reaches it"}},
 		"too broad":   {srv: other(t, 3, `["user.read","tag.create","tag.asset","asset.upload","asset.read"]`), key: "FAR", policy: open, fails: 1, needles: []string{"can do more than it should (asset.read)", "can read the receiver's library", "Give the key exactly these permissions"}},
 		"too small":   {srv: other(t, 3, `["user.read","asset.upload"]`), key: "FAR", policy: open, fails: 1, needles: []string{"lacks tag.create, tag.asset", "new key"}},
 		"revoked":     {srv: other(t, 3, four), key: "WRONG", policy: open, fails: 1, needles: []string{"does not accept the key", "Photos wait, still tagged"}},
