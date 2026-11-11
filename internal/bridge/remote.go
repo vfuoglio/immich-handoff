@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,8 @@ type Remote struct {
 	api *immich.API
 	key string
 	hc  *http.Client
+
+	takeBack atomic.Bool // the key held asset.delete at the last check
 }
 
 var _ syncer.Remote = (*Remote)(nil)
@@ -63,10 +66,50 @@ func (r *Remote) Ready(ctx context.Context) error {
 		}
 	}
 	info, err := Check(ctx, r.hc, r.Address, r.key)
+	if err == nil || errors.Is(err, ErrRevoked) || errors.Is(err, ErrKeyTooSmall) {
+		r.takeBack.Store(info.CanTakeBack) // an unreachable server keeps what was last known
+	}
 	if r.Report != nil {
 		r.Report(err, info.Version)
 	}
 	return err
+}
+
+// CanTakeBack says whether the key held asset.delete when the server was last checked: a sender can take a hand-over
+// back from there. It is what the page shows; TakeBack asks the server again before it acts.
+func (r *Remote) CanTakeBack() bool { return r.takeBack.Load() }
+
+// ErrCannotTakeBack: the receiver's key has not got (or no longer has) the optional asset.delete permission.
+var ErrCannotTakeBack = errors.New("the receiver's key on the other server cannot move photos to the trash (it has no asset.delete)")
+
+// TakeBack moves copies the app handed over to the receiver's trash, and nothing else: it knows the ids it was given
+// and reads nothing from the other server. Immich keeps the trash for as long as its own settings say, so nothing is
+// deleted for good. It asks the server about the key first, so a permission the receiver removed is noticed now.
+func (r *Remote) TakeBack(ctx context.Context, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	info, err := Check(ctx, r.hc, r.Address, r.key)
+	if err == nil || errors.Is(err, ErrRevoked) || errors.Is(err, ErrKeyTooSmall) {
+		r.takeBack.Store(info.CanTakeBack)
+	}
+	if err != nil {
+		return err // Check's own reasons (revoked, unreachable, ...), as Ready returns them
+	}
+	if !info.CanTakeBack {
+		return ErrCannotTakeBack
+	}
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	if err := r.api.DeleteAssets(ctx, ids, false); err != nil {
+		var he *immich.HTTPError
+		if errors.As(err, &he) && he.Code == http.StatusForbidden {
+			r.takeBack.Store(false)
+			return ErrCannotTakeBack
+		}
+		return r.classify(err)
+	}
+	return nil
 }
 
 // TagFor is the tag a photo from a sender gets on the other server: "from/<name>", one inside another, so the receiver
@@ -81,7 +124,7 @@ func TagFor(sender string) string {
 
 // Deliver implements syncer.Remote. It streams the original (a live photo's hidden clip first), treats a duplicate as
 // success, and puts the tag on. It reads nothing from the other server's library.
-func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) (err error) {
+func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) (cp syncer.RemoteCopy, err error) {
 	defer func() {
 		if err != nil && r.Report != nil { // a success needs no word: Ready reported the server healthy at the start of the pass
 			r.Report(err, "")
@@ -91,21 +134,23 @@ func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetRes
 	if clip != nil {
 		up, _, err := immich.TransferWith(ctx, src, r.api, *clip, immich.UploadOptions{Hidden: true})
 		if err != nil {
-			return r.classify(fmt.Errorf("motion clip: %w", err))
+			return cp, r.classify(fmt.Errorf("motion clip: %w", err))
 		}
 		id := up.Id
 		motion = &id
+		cp.Clip, cp.ClipCreated = id, up.Status == immich.AssetMediaStatusCreated
 	}
 	up, _, err := immich.TransferWith(ctx, src, r.api, a, immich.UploadOptions{MotionClip: motion, Details: job.Details})
 	if err != nil {
-		return r.classify(err)
+		return cp, r.classify(err)
 	}
+	cp.ID, cp.Created = up.Id, up.Status == immich.AssetMediaStatusCreated
 	tag, err := r.api.UpsertTag(ctx, TagFor(job.Sender))
 	if err != nil {
-		return r.classify(fmt.Errorf("make the tag: %w", err))
+		return cp, r.classify(fmt.Errorf("make the tag: %w", err))
 	}
 	if err := r.api.TagAssets(ctx, tag, up.Id); err != nil {
-		return r.classify(fmt.Errorf("tag the photo: %w", err))
+		return cp, r.classify(fmt.Errorf("tag the photo: %w", err))
 	}
 	if up.Status == immich.AssetMediaStatusCreated {
 		retag := context.WithoutCancel(ctx)
@@ -115,7 +160,7 @@ func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetRes
 			_ = r.api.TagAssets(c, tag, up.Id) // best effort: the photo is already there and tagged as far as can be told
 		})
 	}
-	return nil
+	return cp, nil
 }
 
 // classify turns what Immich answered into the reasons Check uses, so that one place decides revoked or unreachable.

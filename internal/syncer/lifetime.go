@@ -9,9 +9,9 @@ import (
 )
 
 // remember tells a Provider that keeps a ledger which copy came from which photo.
-func (s *Syncer) remember(ctx context.Context, snd *Account, batch string, senderAsset, receiverAsset uuid.UUID, clip bool) {
+func (s *Syncer) remember(ctx context.Context, snd *Account, batch string, senderAsset, receiverAsset uuid.UUID, clip, remote bool) {
 	if l, ok := s.Provider.(Ledger); ok {
-		l.Remember(ctx, snd, batch, senderAsset, receiverAsset, clip)
+		l.Remember(ctx, snd, batch, senderAsset, receiverAsset, clip, remote)
 	}
 }
 

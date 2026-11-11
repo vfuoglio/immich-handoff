@@ -255,7 +255,7 @@ func TestTakingBackWithNothingHandedOverIsRefusedWithAReason(t *testing.T) {
 	}
 	// once something was handed over, the button is there
 	links, _ := st.Links(context.Background())
-	if err := st.AddHandoverItem(context.Background(), links[0].ID, "b1", uuid.New(), uuid.New(), false); err != nil {
+	if err := st.AddHandoverItem(context.Background(), links[0].ID, "b1", uuid.New(), uuid.New(), false, false); err != nil {
 		t.Fatal(err)
 	}
 	sender := get(t, app.URL, "sess=other")

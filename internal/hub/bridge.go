@@ -333,6 +333,8 @@ func (h *Hub) AcceptBridge(ctx context.Context, token, address, key, name string
 type BridgeStatus struct {
 	Name, State, Note, Version string
 	Checked, RetryAt           time.Time
+	// TakeBack: the receiver's key may move photos to their trash, so a sender can take a hand-over back from there.
+	TakeBack bool
 }
 
 // BridgeStatus returns the state of the service's receiver on another server.
@@ -344,7 +346,13 @@ func (h *Hub) BridgeStatus(ctx context.Context, service string) (BridgeStatus, b
 	if err != nil {
 		return BridgeStatus{}, false
 	}
-	return BridgeStatus{Name: b.DisplayName, State: b.State, Note: b.Note, Version: b.Version, Checked: b.CheckedAt, RetryAt: b.RetryAt}, true
+	st := BridgeStatus{Name: b.DisplayName, State: b.State, Note: b.Note, Version: b.Version, Checked: b.CheckedAt, RetryAt: b.RetryAt}
+	if svc := h.service(service); svc != nil {
+		if rm, ok := svc.Remote.(*bridge.Remote); ok {
+			st.TakeBack = rm.CanTakeBack() && b.State == store.BridgeOK
+		}
+	}
+	return st, true
 }
 
 // ErrNoBridge: the service has no receiver on another server.

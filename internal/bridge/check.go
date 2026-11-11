@@ -17,6 +17,10 @@ import (
 // the key to be checked at all), make a tag, put it on a photo and upload. Nothing reads, searches, lists or deletes.
 var RequiredPermissions = []string{"user.read", "tag.create", "tag.asset", "asset.upload"}
 
+// OptionalPermissions may be added by the receiver, on their own key: asset.delete lets the app move copies it handed
+// over to the receiver's trash (a sender taking a hand-over back), never delete for good and never read anything.
+var OptionalPermissions = []string{"asset.delete"}
+
 // SupportedMajors are the Immich major versions the calls the bridge makes were tested with.
 var SupportedMajors = []int{3}
 
@@ -54,11 +58,14 @@ func (f *Failure) Unwrap() error { return f.Kind }
 type Info struct {
 	Version string // "v3.2.0"
 	Major   int
+	// CanTakeBack: the key also holds asset.delete, so a sender can take a hand-over back from this server.
+	CanTakeBack bool
 }
 
 // PermissionsHelp says in words which permissions to give the key, for a page or the doctor.
 func PermissionsHelp() string {
-	return "Give the key exactly these permissions and no others: " + strings.Join(RequiredPermissions, ", ") + "."
+	return "Give the key exactly these permissions and no others: " + strings.Join(RequiredPermissions, ", ") +
+		". You may also add " + strings.Join(OptionalPermissions, ", ") + ", which lets the sender take a hand-over back within 24 hours (the copies go to your trash)."
 }
 
 // Check says whether the app may hand photos over to the server at addr (already accepted by Policy.Address) with
@@ -83,7 +90,11 @@ func Check(ctx context.Context, hc *http.Client, addr, key string) (Info, error)
 	if err := getJSON(ctx, hc, addr+"/api/api-keys/me", key, &k); err != nil {
 		return info, err
 	}
-	return info, judgeKey(k.Permissions)
+	if err := judgeKey(k.Permissions); err != nil {
+		return info, err
+	}
+	info.CanTakeBack = slices.Contains(k.Permissions, "asset.delete")
+	return info, nil
 }
 
 func majorsText() string {
@@ -94,11 +105,12 @@ func majorsText() string {
 	return strings.Join(out, " or ")
 }
 
-// judgeKey accepts a key with exactly RequiredPermissions: more is refused as too broad, less as too small.
+// judgeKey accepts a key with RequiredPermissions and, if the receiver wishes, OptionalPermissions: more is refused as
+// too broad, less as too small.
 func judgeKey(have []string) error {
 	var extra, missing []string
 	for _, p := range have {
-		if !slices.Contains(RequiredPermissions, p) {
+		if !slices.Contains(RequiredPermissions, p) && !slices.Contains(OptionalPermissions, p) {
 			extra = append(extra, p)
 		}
 	}

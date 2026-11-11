@@ -76,6 +76,7 @@ type OwnedView struct {
 	BridgeName        string
 	BridgeState       string // ok | unreachable | revoked
 	BridgeNote        string // why it is not ok
+	BridgeTakeBack    bool   // the receiver's key lets a sender take a hand-over back from there
 	BridgeVersion     string // the other server's Immich version at the last check
 	BridgeChecked     string // when it was last checked
 	BridgeRetry       string // when an unreachable server is tried again
@@ -894,6 +895,15 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 							&middot; { t(ctx, "last checked") } { o.BridgeChecked }
 						}
 					</p>
+					if o.BridgeState == "ok" {
+						<p class="meta">
+							if o.BridgeTakeBack {
+								{ t(ctx, "Taking a hand-over back reaches them: their key may move photos to their trash.") }
+							} else {
+								{ t(ctx, "Taking a hand-over back does not reach them: their key cannot move photos to their trash, so what they received stays with them.") }
+							}
+						</p>
+					}
 					if o.BridgeState != "ok" && o.BridgeNote != "" {
 						<p class="meta">{ o.BridgeNote }
 							if o.BridgeState == "unreachable" && o.BridgeRetry != "" {
@@ -2168,7 +2178,8 @@ templ BridgePage(d BridgePageView) {
 						<li><code>{ p }</code></li>
 					}
 				</ul>
-				<p class="meta">{ t(ctx, "The key can upload photos and put a tag on them. It cannot see, search, download or delete anything in your library.") }</p>
+				<p class="meta">{ t(ctx, "The key can upload photos and put a tag on them. It cannot see, search or download anything in your library, and it cannot delete anything unless you add the optional permission below.") }</p>
+				<p class="meta">{ t(ctx, "Optional: add {permission} if you want {owner} to be able to take a hand-over back within 24 hours. The app then moves the photos it handed over to your trash (it never deletes them for good, and still cannot see or search your library). It cannot tell whether you have already filed one in an album, so that one goes to the trash too.", "permission", "asset.delete", "owner", d.Owner) }</p>
 			</div>
 			<form class="card offer-form" method="post" action={ "bridge/" + d.Token }>
 				<h2>{ t(ctx, "2. Enter it here") }</h2>
@@ -2190,7 +2201,7 @@ templ BridgePage(d BridgePageView) {
 				<h2>{ t(ctx, "Good to know") }</h2>
 				<ul class="plain">
 					<li>{ t(ctx, "Photos arrive in your library with a tag that says who they are from, inside the tag \"from\".") }</li>
-					<li>{ t(ctx, "Taking a hand-over back and letting copies expire do not work across servers, because this key cannot delete. What arrives is yours to keep or remove.") }</li>
+					<li>{ t(ctx, "Letting copies expire does not work across servers. Taking a hand-over back works only if you add the optional permission. What arrives is yours to keep or remove.") }</li>
 					<li>{ t(ctx, "You can cut the connection at any time by deleting the key in your Immich. Photos not yet sent stay with {owner}; nothing is lost.", "owner", d.Owner) }</li>
 				</ul>
 			</div>

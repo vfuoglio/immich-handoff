@@ -412,7 +412,7 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 			ov.Broken, ov.BridgeStopped = "", o.Service.Broken+" "+o.Service.BrokenFix
 		}
 		if st, ok := w.Hub.BridgeStatus(ctx, o.Service.Label()); ok {
-			ov.HasBridge, ov.BridgeName, ov.BridgeState, ov.BridgeNote, ov.BridgeVersion = true, st.Name, st.State, st.Note, st.Version
+			ov.HasBridge, ov.BridgeName, ov.BridgeState, ov.BridgeNote, ov.BridgeVersion, ov.BridgeTakeBack = true, st.Name, st.State, st.Note, st.Version, st.TakeBack
 			if !st.Checked.IsZero() {
 				ov.BridgeChecked = loc(ctx).Stamp(st.Checked.Local())
 			}
@@ -1146,9 +1146,16 @@ func (w *Server) takeBack(rw http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())))
 		return
 	}
-	if res.Kept > 0 {
+	if res.Kept > 0 || res.RemoteCannot > 0 {
 		rw.Header().Set("HX-Reswap", "innerHTML")
-		fmt.Fprint(rw, t(r.Context(), "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.", "n", res.Taken, "kept", res.Kept))
+		msg := t(r.Context(), "{n} taken back.", "n", res.Taken)
+		if res.Kept > 0 {
+			msg += " " + t(r.Context(), "{kept} stayed with the receiver, who had filed them in an album.", "kept", res.Kept)
+		}
+		if res.RemoteCannot > 0 {
+			msg += " " + t(r.Context(), "{n} on another server stayed there: the receiver's key cannot move photos to their trash.", "n", res.RemoteCannot)
+		}
+		fmt.Fprint(rw, msg)
 		return
 	}
 	rw.Header().Set("HX-Refresh", "true")

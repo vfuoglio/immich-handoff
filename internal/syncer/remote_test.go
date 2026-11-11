@@ -3,10 +3,13 @@ package syncer_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -20,6 +23,8 @@ type fakeRemote struct {
 	delivered []string // "sender:filename"
 	ready     int
 	sawClip   bool
+	dup       bool // answer as a server that already had the photo
+	n         int
 }
 
 func (r *fakeRemote) Label() string { return "aunt lia" }
@@ -29,15 +34,20 @@ func (r *fakeRemote) Ready(context.Context) error {
 	r.ready++
 	return r.notReady
 }
-func (r *fakeRemote) Deliver(_ context.Context, _ *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) error {
+func (r *fakeRemote) Deliver(_ context.Context, _ *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) (syncer.RemoteCopy, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.failWith != nil {
-		return r.failWith
+		return syncer.RemoteCopy{}, r.failWith
 	}
 	r.sawClip = r.sawClip || clip != nil
 	r.delivered = append(r.delivered, job.Sender+":"+a.OriginalFileName)
-	return nil
+	r.n++
+	cp := syncer.RemoteCopy{ID: uuid.MustParse(fmt.Sprintf("f0000000-0000-4000-8000-%012d", r.n)), Created: !r.dup}
+	if clip != nil {
+		cp.Clip, cp.ClipCreated = uuid.MustParse(fmt.Sprintf("f1000000-0000-4000-8000-%012d", r.n)), !r.dup
+	}
+	return cp, nil
 }
 
 func withRemote(t *testing.T, f *fakeImmich, r *fakeRemote, tune func(*syncer.Service)) syncer.Counts {
@@ -137,5 +147,36 @@ func TestADryRunDeliversNothingToTheRemote(t *testing.T) {
 	s.Run(context.Background(), "test", false)
 	if len(r.delivered) != 0 || len(f.deleted) != 0 {
 		t.Fatalf("dry run: %v %v", r.delivered, f.deleted)
+	}
+}
+
+func TestWhatTheOtherServerHoldsIsRememberedForTakingBack(t *testing.T) {
+	for _, dup := range []bool{false, true} {
+		f, r := &fakeImmich{uploadStatus: "created"}, &fakeRemote{dup: dup}
+		srv := httptest.NewServer(f.handler())
+		p := &ledgerProvider{svcs: []*syncer.Service{service(
+			[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
+			[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})}}
+		p.svcs[0].Remote = r
+		s := &syncer.Syncer{Provider: p, Log: quiet()}
+		s.Run(context.Background(), "test", false)
+		srv.Close()
+		var local, remote int
+		for _, row := range p.rows {
+			if row.remote {
+				remote++
+				if row.receiver.String()[:1] != "f" {
+					t.Errorf("a remote row must hold the other server's id: %+v", row)
+				}
+			} else {
+				local++
+			}
+		}
+		if local != 1 {
+			t.Errorf("dup=%v: the owner's copy is remembered as before: %+v", dup, p.rows)
+		}
+		if want := map[bool]int{false: 1, true: 0}[dup]; remote != want {
+			t.Errorf("dup=%v: %d remote rows, want %d (a duplicate is not ours to take back): %+v", dup, remote, want, p.rows)
+		}
 	}
 }

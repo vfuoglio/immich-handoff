@@ -625,10 +625,10 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 			}
 			if c.created {
 				outcome = "imported"
-				s.remember(ctx, snd, batch, m.Id, c.id, false)
+				s.remember(ctx, snd, batch, m.Id, c.id, false, false)
 			}
 			if c.clipNew && clips[m.Id] != nil {
-				s.remember(ctx, snd, batch, clips[m.Id].Id, c.clip, true)
+				s.remember(ctx, snd, batch, clips[m.Id].Id, c.clip, true, false)
 			}
 			copies = append(copies, c)
 		}
@@ -636,8 +636,15 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 	}
 	if svc.Remote != nil {
 		for _, m := range members {
-			if err := s.deliverRemote(ctx, log, svc, snd, m, clips[m.Id]); err != nil {
+			cp, err := s.deliverRemote(ctx, log, svc, snd, m, clips[m.Id])
+			if err != nil {
 				return "", nil, err
+			}
+			if cp.Created { // what the other server holds is recorded as well, so a take-back can reach it
+				s.remember(ctx, snd, batch, m.Id, cp.ID, false, true)
+			}
+			if cp.ClipCreated && clips[m.Id] != nil {
+				s.remember(ctx, snd, batch, clips[m.Id].Id, cp.Clip, true, true)
 			}
 		}
 	}
@@ -666,17 +673,18 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 
 // deliverRemote hands one photo to the receiver on another server. Like handOne it touches nothing of the original;
 // any error keeps it, and because the other server recognises a duplicate, a retry is safe.
-func (s *Syncer) deliverRemote(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, a immich.AssetResponseDto, clip *immich.AssetResponseDto) error {
+func (s *Syncer) deliverRemote(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, a immich.AssetResponseDto, clip *immich.AssetResponseDto) (RemoteCopy, error) {
 	if e := a.ExifInfo; !s.Cfg.NoDetails && (e == nil || (e.Description == nil && e.Rating == nil && e.Latitude == nil)) {
 		if full, err := snd.API.Asset(ctx, a.Id); err == nil && full != nil {
 			a = *full
 		}
 	}
-	if err := svc.Remote.Deliver(ctx, snd.API, a, clip, RemoteJob{Sender: snd.Name, Details: !s.Cfg.NoDetails}); err != nil {
-		return fmt.Errorf("to %s: %w", svc.Remote.Label(), err)
+	cp, err := svc.Remote.Deliver(ctx, snd.API, a, clip, RemoteJob{Sender: snd.Name, Details: !s.Cfg.NoDetails})
+	if err != nil {
+		return cp, fmt.Errorf("to %s: %w", svc.Remote.Label(), err)
 	}
 	log.Debug("handed over to another server", "file", a.OriginalFileName, "receiver", svc.Remote.Label())
-	return nil
+	return cp, nil
 }
 
 // handedCopy is one photo's copy in one receiver's account.

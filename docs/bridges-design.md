@@ -34,7 +34,7 @@ What this does not cover: waiting photos after a revoked key (designed below, no
 ### The key
 The bridge key has exactly `user.read`, `tag.create`, `tag.asset`, `asset.upload`. Consequences, all fine:
 - No `tag.read` and no `asset.read`: the app cannot list the receiver's tags or photos, and so cannot show them or copy them elsewhere.
-- No `asset.delete`: **taking back and expiring a copy do not work across servers.** The invitation page says so before the receiver accepts. (They can be added later as an opt-in; this is the biggest trade-off of the design.)
+- No `asset.delete` by default: **taking back and expiring a copy do not work across servers.** The invitation page says so before the receiver accepts. The receiver may add `asset.delete` as an opt-in (#89): take-back then works across servers, from the ids the app stored (no `asset.read` needed), and moves copies to the receiver's trash only. **Expiry is not offered across servers**, with or without it: without `asset.read` the app cannot see whether a copy was filed or kept, so it would trash photos the receiver wanted. Take-back is limited to 24 hours and to one batch, which is why it can accept the same blindness.
 - No stacks, no album: photos arrive as separate photos with the tag. Both are conveniences.
 - The receiver makes the key in their own Immich, so they see exactly what it can do and can delete it.
 
@@ -49,7 +49,7 @@ The bridge key has exactly `user.read`, `tag.create`, `tag.asset`, `asset.upload
 2. It resolves to public addresses. Loopback, link-local, private ranges, the cloud metadata address and unique-local IPv6 are refused, **after** resolution and again on the actual connection (so a name that changes cannot slip through).
 3. Redirects are not followed. A server that redirects is treated as down and the doctor says where it points.
 4. `GET /server/version` answers and the major version is one the client is built for.
-5. `GET /api-keys/me` returns exactly the four permissions, no more. A key with extra permissions is refused with the reason ("this key can read your library; make a smaller one"), because the app should never hold power it does not need.
+5. `GET /api-keys/me` returns the four permissions, no more than the optional `asset.delete`. A key with extra permissions is refused with the reason ("this key can read your library; make a smaller one"), because the app should never hold power it does not need.
 
 ### Unreachable server or revoked key
 - Photos stay tagged in the sender's library, exactly as for a paused service. Nothing is sent, nothing deleted.
@@ -67,7 +67,7 @@ The generated client is pinned to one Immich API. The four calls the bridge uses
 Only what the sender's service puts on the photo: the original filename and metadata that are already in the file, and the tag name `from/<sender>`. No account details are sent.
 
 ## Open for #77
-- Whether to offer the optional `asset.delete` for take-back, and how to word what it allows.
+- ~~Whether to offer the optional `asset.delete` for take-back, and how to word what it allows.~~ Done in #89: offered; the page words it, says a copy filed in an album goes to the trash too, and notices a removed permission by reading `/api-keys/me` at every pass and before a take-back. Expiry stays out.
 - A second app instance on the receiver's side (two-way) versus the sender's app holding the key. The first slice is one-way.
 - The private-address option: an administrator setting (`BRIDGE_ALLOW_PRIVATE`, off by default), for people who run both servers themselves behind a VPN.
 
