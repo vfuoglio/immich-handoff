@@ -568,14 +568,10 @@ func TestDropBoxExtras(t *testing.T) {
 	send("p1", "cake2.jpg", jpegBytes(7403))
 	send("p2", "guest.jpg", jpegBytes(7404))
 	eventually(t, "three photos arrive", 60*time.Second, func() bool { return len(inbox()) == 3 })
-	// each prompt is a tag of its own, under the box's tag, and Immich lists the photos by it
+	// each prompt is a tag of its own, under the box's tag, and Immich lists the photos by it // the wait is the check: Immich search is eventually consistent, so a second search right after can differ
 	eventually(t, "the prompt tags are on", 60*time.Second, func() bool {
 		return len(searchTag(t, alice, "inbox/Hunt/The cake", false)) == 2 && len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)) == 1
 	})
-	cake := searchTag(t, alice, "inbox/Hunt/The cake", false)
-	if len(cake) != 2 || len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)) != 1 {
-		t.Errorf("photos by prompt: %d and %d", len(cake), len(searchTag(t, alice, "inbox/Hunt/The oldest guest", false)))
-	}
 	if p := page(t, port, owner); !strings.Contains(p, "2 photos") || !strings.Contains(p, "The cake") {
 		t.Error("the owner sees how many photos came for each prompt")
 	}
