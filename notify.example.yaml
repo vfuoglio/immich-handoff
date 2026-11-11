@@ -13,3 +13,15 @@ destinations:
     format: json
     url: http://homeassistant.local:8123/api/webhook/${HA_WEBHOOK_ID}
     kinds: [problem, backup, bridge]
+
+  - name: mail                           # email: one mail for what happens within two minutes
+    format: email
+    host: smtp.example.com
+    # tls: starttls                      # tls (port 465), starttls (587, the default) or none (25, never with a password)
+    # port: 587
+    user: handoff@example.com
+    password: ${SMTP_PASSWORD}
+    from: Immich Handoff <handoff@example.com>
+    to: [admin@example.com]
+    kinds: [problem, bridge]
+    # group: 2m                          # how long messages wait for company; 0 = one mail per message

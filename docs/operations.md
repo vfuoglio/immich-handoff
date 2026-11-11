@@ -229,6 +229,21 @@ destinations:
     kinds: [problem, backup]
 ```
 
+**Email.** A destination with `format: email` sends the messages through your mail server:
+
+```yaml
+  - name: mail
+    format: email
+    host: smtp.example.com
+    user: handoff@example.com
+    password: ${SMTP_PASSWORD}
+    from: Immich Handoff <handoff@example.com>
+    to: [admin@example.com]
+    kinds: [problem, bridge]
+```
+
+`tls` is `starttls` by default (port 587, the connection must be upgraded or nothing is sent), `tls` for a server that is encrypted from the first byte (port 465), or `none` (port 25) for a relay on a network you trust; a password is never sent with `none`, and the app refuses to start with that combination. Messages that arrive within `group` (two minutes unless you say otherwise; `0` sends one mail for each message) become **one mail**, with a line for each, and the subject names the most serious kind. Each mail has a plain-text part and a simple HTML part (a button that opens the page when `PUBLIC_APP_URL` is set); it never has pictures from elsewhere or tracking links, and the subject never names anyone.
+
 **The JSON format** posts `{"source":"immich-handoff","kind":"problem","title":"...","text":"...","link":"...","time":"2026-11-11T22:00:00Z"}`. In Home Assistant, create an automation with a **Webhook** trigger (turn off "Only accessible from the local network" only if the app is outside it), and use `{{ trigger.json.text }}` and `{{ trigger.json.kind }}` in the action, for example a `notify.mobile_app_<phone>` call, a light or a spoken message. The same format fits n8n, Node-RED and anything that accepts a JSON POST.
 
 **How delivery behaves.** Sending never slows a hand-over: messages are queued and sent in the background. A destination that answers with an error from its own side or cannot be reached is tried up to three times; one that refuses the message (a wrong token, a wrong topic) is logged once and not retried; a redirect counts as a failure, so fix the address. The log names the destination and the answer, never the address, because a topic or a webhook id is a secret. Messages name people, services and drop boxes, so send them only to a server you trust. Messages are in English.

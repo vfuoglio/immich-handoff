@@ -6,6 +6,7 @@ package notify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,7 @@ type Destination struct {
 	URL    string
 	Auth   string // sent as a bearer token when set
 	Kinds  map[Kind]bool
+	Mail   *Mail // set when Format is "email"
 }
 
 // Formats a destination may use.
@@ -83,14 +85,16 @@ func priority(k Kind) string {
 
 // Notifier delivers messages in the background.
 type Notifier struct {
-	dests  []Destination
-	appURL string
-	log    *slog.Logger
-	client *http.Client
-	queue  chan Message
-	wait   []time.Duration // pauses before each new attempt after a failure that may pass
-	done   chan struct{}
-	once   sync.Once
+	dests   []Destination
+	appURL  string
+	log     *slog.Logger
+	client  *http.Client
+	queue   chan Message
+	mailers map[string]*mailer
+	tlsBase *tls.Config     // tests only: what a mail server's certificate is checked against
+	wait    []time.Duration // pauses before each new attempt after a failure that may pass
+	done    chan struct{}
+	once    sync.Once
 
 	mu      sync.Mutex
 	dropped bool // the queue was full and that was logged; reset when it drains
@@ -111,6 +115,14 @@ func New(dests []Destination, appURL string, log *slog.Logger) *Notifier {
 		queue: make(chan Message, 64),
 		wait:  []time.Duration{2 * time.Second, 10 * time.Second},
 		done:  make(chan struct{}),
+	}
+	for _, d := range dests {
+		if d.Format == FormatEmail {
+			if n.mailers == nil {
+				n.mailers = map[string]*mailer{}
+			}
+			n.mailers[d.Name] = &mailer{n: n, d: d}
+		}
 	}
 	go n.run()
 	return n
@@ -143,8 +155,16 @@ func (n *Notifier) Close() {
 		return
 	}
 	n.once.Do(func() { close(n.queue) })
+	finished := make(chan struct{})
+	go func() {
+		<-n.done
+		for _, m := range n.mailers {
+			m.flushNow() // mail waiting for company goes now
+		}
+		close(finished)
+	}()
 	select {
-	case <-n.done:
+	case <-finished:
 	case <-time.After(5 * time.Second):
 	}
 }
@@ -152,11 +172,18 @@ func (n *Notifier) Close() {
 func (n *Notifier) run() {
 	defer close(n.done)
 	for m := range n.queue {
-		n.mu.Lock()
-		n.dropped = false
-		n.mu.Unlock()
+		if len(n.queue) == 0 { // it has drained: a later pile-up is news again
+			n.mu.Lock()
+			n.dropped = false
+			n.mu.Unlock()
+		}
 		for _, d := range n.dests {
-			if d.wants(m.Kind) {
+			if !d.wants(m.Kind) {
+				continue
+			}
+			if ml := n.mailers[d.Name]; ml != nil {
+				ml.add(m)
+			} else {
 				n.deliver(d, m)
 			}
 		}
@@ -164,14 +191,7 @@ func (n *Notifier) run() {
 }
 
 func (n *Notifier) deliver(d Destination, m Message) {
-	link := ""
-	if n.appURL != "" {
-		path := m.Link
-		if path == "" && (m.Kind == Problem || m.Kind == Backup || m.Kind == Bridge) {
-			path = "admin" // what needs attention is on the administrator's page
-		}
-		link = n.appURL + "/" + strings.TrimLeft(path, "/")
-	}
+	link := n.linkFor(m)
 	var err error
 	for attempt := 0; ; attempt++ {
 		var retry bool

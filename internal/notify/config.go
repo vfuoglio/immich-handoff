@@ -19,6 +19,16 @@ type fileDest struct {
 	URL    string   `yaml:"url"`
 	Auth   string   `yaml:"auth"`
 	Kinds  []string `yaml:"kinds"`
+
+	// mail destinations (format: email)
+	Host     string   `yaml:"host"`
+	Port     int      `yaml:"port"`
+	TLS      string   `yaml:"tls"`
+	User     string   `yaml:"user"`
+	Password string   `yaml:"password"`
+	From     string   `yaml:"from"`
+	To       []string `yaml:"to"`
+	Group    string   `yaml:"group"`
 }
 
 type file struct {
@@ -52,7 +62,7 @@ func FromEnv(getenv func(string) string) ([]Destination, error) {
 
 func parse(raw []byte, getenv func(string) string, have []Destination) ([]Destination, error) {
 	var problems []string
-	expanded := varRef.ReplaceAllStringFunc(string(raw), func(m string) string {
+	expanded := varRef.ReplaceAllStringFunc(withoutCommentLines(string(raw)), func(m string) string {
 		name := m[2 : len(m)-1]
 		v := getenv(name)
 		if v == "" {
@@ -85,11 +95,18 @@ func parse(raw []byte, getenv func(string) string, have []Destination) ([]Destin
 		if format == "" {
 			format = FormatNtfy
 		}
-		if format != FormatNtfy && format != FormatJSON {
-			problems = append(problems, fmt.Sprintf("destination %s: format %q is not %s or %s", name, format, FormatNtfy, FormatJSON))
-		}
-		if err := checkURL(fd.URL); err != nil {
-			problems = append(problems, "destination "+name+": "+err.Error())
+		var mailSettings *Mail
+		switch format {
+		case FormatNtfy, FormatJSON:
+			if err := checkURL(fd.URL); err != nil {
+				problems = append(problems, "destination "+name+": "+err.Error())
+			}
+		case FormatEmail:
+			var p []string
+			mailSettings, p = parseMail(name, fd)
+			problems = append(problems, p...)
+		default:
+			problems = append(problems, fmt.Sprintf("destination %s: format %q is not %s, %s or %s", name, format, FormatNtfy, FormatJSON, FormatEmail))
 		}
 		kinds := map[Kind]bool{}
 		for _, k := range fd.Kinds {
@@ -99,7 +116,7 @@ func parse(raw []byte, getenv func(string) string, have []Destination) ([]Destin
 			}
 			kinds[Kind(k)] = true
 		}
-		out = append(out, Destination{Name: name, Format: format, URL: fd.URL, Auth: fd.Auth, Kinds: kinds})
+		out = append(out, Destination{Name: name, Format: format, URL: fd.URL, Auth: fd.Auth, Kinds: kinds, Mail: mailSettings})
 	}
 	if len(problems) > 0 {
 		return nil, errors.New(strings.Join(problems, "; "))
@@ -130,4 +147,17 @@ func kindList() string {
 		s = append(s, string(k))
 	}
 	return strings.Join(s, ", ")
+}
+
+// withoutCommentLines drops lines that are only a comment, so a variable named in a commented-out example is not
+// asked for.
+func withoutCommentLines(s string) string {
+	lines := strings.Split(s, "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			kept = append(kept, l)
+		}
+	}
+	return strings.Join(kept, "\n")
 }

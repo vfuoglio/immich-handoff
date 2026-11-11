@@ -48,7 +48,7 @@ A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is t
 
 ## Notifications
 
-Messages to `NOTIFY_URL` and `NOTIFY_FILE` name people, services and drop boxes, and say what went wrong. They go to the address you chose, and a public ntfy topic is readable by anyone who guesses its name, so use a topic that cannot be guessed or a server you run. Addresses and tokens are never written to the log, and tokens in the file are read from the environment. See [Notifications](operations.md#notifications).
+Messages to `NOTIFY_URL` and `NOTIFY_FILE` name people, services and drop boxes, and say what went wrong. They go to the address you chose. A public ntfy topic is readable by anyone who guesses its name, so use a topic that cannot be guessed or a server you run. Mail goes to the addresses you list, through the server you name: its password is read from the environment, sent only over an encrypted connection and never logged. Addresses and tokens are never written to the log, and tokens in the file are read from the environment. See [Notifications](operations.md#notifications).
 
 ## Who decides what
 
