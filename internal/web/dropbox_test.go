@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -676,15 +677,15 @@ func TestTheShotListIsOnTheGuestPageAndTagsWhatArrives(t *testing.T) {
 	}
 }
 
-func TestTheGuestBookTakesMessagesAndPlaysThemToTheHostsOnly(t *testing.T) {
+func TestMessagesToTheHostAreTakenAndPlayedToTheHostsOnly(t *testing.T) {
 	var st *store.Store
 	token := strings.Repeat("ef", 16)
 	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Book", InboxTag: "inbox/Book", GuestBook: true}))
 	id := firstBox(t, st)
 	webm := append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 300)...)
 
-	if _, p := do(t, "GET", app.URL+"/drop/"+token, "", nil); !strings.Contains(p, "Leave a message") || !strings.Contains(p, "voice-record") || !strings.Contains(p, `action="drop/`+token+`/message"`) {
-		t.Fatal("the guest page must offer the guest book")
+	if _, p := do(t, "GET", app.URL+"/drop/"+token, "", nil); !strings.Contains(p, "Message to the host") || !strings.Contains(p, "voice-record") || !strings.Contains(p, `action="drop/`+token+`/message"`) {
+		t.Fatal("the guest page must offer a message to the host")
 	}
 	send := func(fields map[string]string, voice []byte, json bool) (int, string) {
 		var buf bytes.Buffer
@@ -713,13 +714,13 @@ func TestTheGuestBookTakesMessagesAndPlaysThemToTheHostsOnly(t *testing.T) {
 	if code, b := send(map[string]string{"name": "Eve", "text": "Congratulations!"}, webm, true); code != 200 || !strings.Contains(b, `"ok":true`) {
 		t.Fatalf("a message with a voice note: %d %s", code, b)
 	}
-	if code, p := send(map[string]string{"text": "No script here"}, nil, false); code != 200 || !strings.Contains(p, "Thank you for your message") {
+	if code, p := send(map[string]string{"name": "Ann", "text": "No script here"}, nil, false); code != 200 || !strings.Contains(p, "Thank you for your message") {
 		t.Errorf("a plain form: %d %.200s", code, p)
 	}
 	for name, c := range map[string]struct {
 		fields map[string]string
 		voice  []byte
-	}{"empty": {nil, nil}, "a page as a voice note": {map[string]string{"text": "x"}, []byte("<!DOCTYPE html><html><script>alert(1)</script></html>")}, "too long": {map[string]string{"text": strings.Repeat("x", 1001)}, nil}} {
+	}{"empty": {nil, nil}, "no name": {map[string]string{"text": "Hello"}, nil}, "a page as a voice note": {map[string]string{"name": "Eve", "text": "x"}, []byte("<!DOCTYPE html><html><script>alert(1)</script></html>")}, "too long": {map[string]string{"name": "Eve", "text": strings.Repeat("x", 1001)}, nil}} {
 		if code, b := send(c.fields, c.voice, true); code != 422 || !strings.Contains(b, `"ok":false`) {
 			t.Errorf("%s: %d %s", name, code, b)
 		}
@@ -737,8 +738,8 @@ func TestTheGuestBookTakesMessagesAndPlaysThemToTheHostsOnly(t *testing.T) {
 
 	// the owner reads and plays; another person cannot; a viewer sees nothing of it
 	owner := get(t, app.URL, "sess=family")
-	if !strings.Contains(owner, "Congratulations!") || !strings.Contains(owner, `src="dropbox/voice/`+voiced.ID+`"`) || !strings.Contains(owner, "Download the guest book") {
-		t.Errorf("the owner's guest book: %.300s", owner)
+	if !strings.Contains(owner, "Congratulations!") || !strings.Contains(owner, `src="dropbox/voice/`+voiced.ID+`"`) || !strings.Contains(owner, "Download the messages") {
+		t.Errorf("the owner's messages: %.300s", owner)
 	}
 	for who, want := range map[string]int{"sess=family": 200, "sess=other": 404, "": 401} {
 		if code, _ := do(t, "GET", app.URL+"/dropbox/voice/"+voiced.ID, who, nil); code != want {
@@ -770,10 +771,10 @@ func TestTheGuestBookTakesMessagesAndPlaysThemToTheHostsOnly(t *testing.T) {
 	if left, _ := st.DropMessages(context.Background(), id, 10); len(left) != 1 {
 		t.Errorf("after removing: %d", len(left))
 	}
-	// a box with no guest book takes nothing
+	// a box that takes no messages takes none
 	st.SetDropGuestBook(context.Background(), id, false)
 	if code, _ := send(map[string]string{"text": "hi"}, nil, true); code != 422 {
-		t.Errorf("a box without a guest book: %d", code)
+		t.Errorf("a box that takes no messages: %d", code)
 	}
 }
 
@@ -1003,5 +1004,130 @@ func TestAnEmailAddressForABoxIsOfferedOnlyWhereAMailboxIsSetUpAndShownOnItsCard
 	}
 	if got, _ := st.DropBox(context.Background(), id); got.MailCode != "" {
 		t.Error("the address is still there")
+	}
+}
+
+// A password on the whole page: a guest who does not have it sees that a password is needed and nothing of the box (not
+// its name, its message, its cover or its colour), can fetch none of its parts and can send nothing. The right password
+// is remembered in the guest's browser.
+func TestAPasswordOnTheWholePageShowsNothingUntilItIsGiven(t *testing.T) {
+	var st *store.Store
+	im := &storing{}
+	token := strings.Repeat("56", 16)
+	pw, _ := hubPassword()
+	app, _ := setup(t, withDrop(t, &st, im, store.DropBox{Token: token, Name: "Secret wedding", Message: "Hush hush", InboxTag: "inbox/Secret",
+		Password: pw, PasswordScope: store.DropScopePage, GuestDelete: true, GuestBook: true, Accent: "#c2185b"}))
+
+	code, body := do(t, "GET", app.URL+"/drop/"+token, "", nil)
+	if code != 401 || !strings.Contains(body, "This page needs a password") || !strings.Contains(body, `action="drop/`+token+`/unlock"`) {
+		t.Fatalf("the locked page: %d %.200s", code, body)
+	}
+	for _, secret := range []string{"Secret wedding", "Hush hush", "drop-files", token + "/theme.css", token + "/manifest.webmanifest", token + "/cover"} {
+		if strings.Contains(body, secret) {
+			t.Errorf("the locked page shows %q", secret)
+		}
+	}
+	for _, part := range []string{"/cover", "/theme.css", "/manifest.webmanifest", "/mine"} {
+		if code, _ := do(t, "GET", app.URL+"/drop/"+token+part, "", nil); code != 404 {
+			t.Errorf("%s while locked: %d, want 404", part, code)
+		}
+	}
+	if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/upload", nil, map[string][]byte{"a.jpg": jpegBytes}); code != 403 || len(im.names) != 0 {
+		t.Errorf("sending while locked: %d %v", code, im.names)
+	}
+	if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/message", map[string]string{"name": "Eve", "text": "hi"}, nil); code != 403 {
+		t.Errorf("a message while locked: %d, want 403", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/drop/"+token, "handoff-unlock-"+st0(t, st)+"=made-up", nil); code != 401 {
+		t.Errorf("a made-up cookie: %d, want 401", code)
+	}
+
+	// the password is checked; a wrong one gives no cookie
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	unlock := func(password string) *http.Response {
+		res, err := noFollow.PostForm(app.URL+"/drop/"+token+"/unlock", url.Values{"password": {password}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	if res := unlock("wrong"); res.StatusCode != 401 || len(res.Cookies()) != 0 {
+		t.Errorf("a wrong password: %d, %d cookies", res.StatusCode, len(res.Cookies()))
+	}
+	res := unlock("swordfish")
+	if res.StatusCode != 303 || res.Header.Get("Location") != "../"+token || len(res.Cookies()) != 1 || !res.Cookies()[0].HttpOnly {
+		t.Fatalf("the right password: %d %q %v", res.StatusCode, res.Header.Get("Location"), res.Cookies())
+	}
+	cookie := res.Cookies()[0].Name + "=" + res.Cookies()[0].Value
+
+	// with the cookie the page is the box's own, with no password field, and it takes photos and messages
+	code, body = do(t, "GET", app.URL+"/drop/"+token, cookie, nil)
+	if code != 200 || !strings.Contains(body, "Secret wedding") || !strings.Contains(body, "drop-files") || strings.Contains(body, `type="password"`) {
+		t.Errorf("the unlocked page: %d %.200s", code, body)
+	}
+	if code, _ := do(t, "GET", app.URL+"/drop/"+token+"/mine", cookie, nil); code != 200 {
+		t.Errorf("a guest's uploads once unlocked: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/drop/"+token+"/cover", cookie, nil); code == 401 || code == 403 {
+		t.Errorf("the cover once unlocked: %d", code)
+	}
+	if code, _, _ := sendFilesAs(t, app.URL+"/drop/"+token+"/upload", map[string]string{"Cookie": cookie}, map[string][]byte{"a.jpg": jpegBytes}); code != 200 || len(im.names) != 1 {
+		t.Errorf("sending once unlocked: %d %v", code, im.names)
+	}
+}
+
+// What a password guards is chosen when the box is made; a box with a password and no choice guards the upload.
+func TestAPasswordGuardsTheUploadByDefaultAndThePageOnlyWhenAsked(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("78", 16)
+	pw, _ := hubPassword()
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Plain lock", InboxTag: "inbox/Plain", Password: pw}))
+	b := all(t, st)[0]
+	if b.PasswordScope != store.DropScopeUpload {
+		t.Errorf("the default scope: %q", b.PasswordScope)
+	}
+	if code, body := do(t, "GET", app.URL+"/drop/"+token, "", nil); code != 200 || !strings.Contains(body, "Plain lock") || !strings.Contains(body, `type="password"`) {
+		t.Errorf("a box that guards the upload still shows its page: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/drop/"+token+"/unlock", "", nil); code != 404 {
+		t.Errorf("unlocking a box that does not guard its page: %d, want 404", code)
+	}
+}
+
+func all(t *testing.T, st *store.Store) []store.DropBox {
+	t.Helper()
+	boxes, err := st.DropBoxes(context.Background())
+	if err != nil || len(boxes) == 0 {
+		t.Fatal("no drop box", err)
+	}
+	return boxes
+}
+
+// st0 is the first eight characters of the box's id, which name its cookies.
+func st0(t *testing.T, st *store.Store) string { return all(t, st)[0].ID[:8] }
+
+// The owner chooses what a password guards from one menu, and the box says which it is; the message form on the guest
+// page asks for a name.
+func TestThePasswordMenuAndTheMessageFormSayWhatTheyDo(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("9a", 16)
+	pw, _ := hubPassword()
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Hidden", InboxTag: "inbox/Hidden", Password: pw, PasswordScope: store.DropScopePage, GuestBook: true}))
+	owner := get(t, app.URL, "sess=family")
+	for _, want := range []string{`id="drop-secure"`, "Secure with a password...", `value="upload"`, `value="page"`, "The whole page", "data-secure-password", "Password on the page"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's page lacks %q", want)
+		}
+	}
+}
+
+func TestTheMessageFormAsksForAName(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("bc", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Book", InboxTag: "inbox/Book", GuestBook: true}))
+	_, p := do(t, "GET", app.URL+"/drop/"+token, "", nil)
+	if !strings.Contains(p, "Message to the host") || !regexp.MustCompile(`<input id="gb-name" name="name" required`).MatchString(p) || strings.Contains(p, "Your name (optional)") {
+		t.Error("the message form must ask for a name")
 	}
 }

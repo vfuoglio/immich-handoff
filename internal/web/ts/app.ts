@@ -2,7 +2,7 @@
 // (esbuild); the bundle is committed, so building the program needs nothing else. `tsc --noEmit` checks
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
-import { initCard, initDrop, initGuestBook, initShare } from "./drop.ts";
+import { initCard, initDrop, initGuestBook, initSecure, initShare } from "./drop.ts";
 import { initFrame } from "./frame.ts";
 import { initWall } from "./wall.ts";
 import { initBackup } from "./backup";
@@ -89,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initDrop();
   initCard();
   initGuestBook();
+  initSecure();
   initShare();
   initWall();
   initFrame();

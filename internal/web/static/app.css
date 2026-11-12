@@ -509,12 +509,85 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; 
 
 /* the guest page of a drop box */
 .drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
-.drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 4px; }
-.drop-list li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .6rem; align-items: center; }
-.drop-list li progress { grid-column: 1 / -1; width: 100%; height: .4rem; accent-color: var(--accent); }
-.drop-list li.failed .meta { color: var(--bad); }
+.drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius); }
+
+/* the place to drop photos: a big target that wakes up when a file is over the page */
+.dz { position: relative; display: grid; justify-items: center; gap: .35rem; text-align: center; padding: 2rem 1rem; border-radius: var(--radius);
+  border: 2px dashed color-mix(in oklab, var(--accent) 45%, var(--border)); background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+  transition: transform .2s ease, background-color .2s ease, border-color .2s ease; }
+.dz-icon { width: 3.4rem; height: 3.4rem; color: var(--accent); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.dz-title { font: 600 1.1rem var(--font-display); }
+.drop-form.enhanced .dz { cursor: pointer; }
+.drop-form.enhanced .dz-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.drop-form:not(.enhanced) .dz { justify-items: start; text-align: left; border-style: solid; padding: 1rem; }
+.drop-form:not(.enhanced) .dz-icon { display: none; }
+.dz:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 22%, transparent); }
+.dz:hover { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); }
+.drop-form.dragging .dz { border-style: solid; border-color: var(--accent); background: color-mix(in oklab, var(--accent) 16%, var(--surface)); transform: scale(1.02); }
+.drop-form.dragging .dz-icon { transform: translateY(-.35rem) scale(1.15); animation: dz-bob .9s ease-in-out infinite alternate; }
+@keyframes dz-bob { to { transform: translateY(-.7rem) scale(1.15); } }
+.dz.nudge { animation: dz-nudge .45s ease; border-color: var(--bad); }
+@keyframes dz-nudge { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+
+/* what was chosen: a grid of tiles, each with a picture, a way out, and its own progress */
+.drop-summary { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-weight: 600; }
+.drop-summary[hidden] { display: none; }
+.bad-note { color: var(--bad); font-weight: 600; }
+button.link { border: 0; background: transparent; padding: .2rem .4rem; color: var(--accent); font-weight: 600; box-shadow: none; }
+button.link:hover { text-decoration: underline; transform: none; background: transparent; }
+.drop-list { grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: .8rem; }
+.drop-item { position: relative; display: grid; gap: .25rem; align-content: start; min-width: 0;
+  animation: tile-in .35s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--i, 0) * 35ms); }
+.drop-item.leaving { animation: tile-out .22s ease forwards; pointer-events: none; }
+@keyframes tile-in { from { opacity: 0; transform: scale(.8) translateY(.6rem); } }
+@keyframes tile-out { to { opacity: 0; transform: scale(.7); } }
+.drop-item .thumb { position: relative; aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2);
+  border: 1px solid var(--border); display: grid; place-items: center; }
+.drop-item .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade-in .3s ease; }
+@keyframes fade-in { from { opacity: 0; } }
+.drop-item .thumb:not(.shown)::before { content: "\1F5BC"; font-size: 1.6rem; opacity: .45; }
+.drop-item .thumb.video:not(.shown)::before { content: "\25B6"; }
+.drop-item .thumb progress { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: .35rem; border: 0; border-radius: 0; accent-color: var(--accent);
+  opacity: 0; transition: opacity .2s ease; z-index: 1; }
+.drop-item[data-state="sending"] .thumb progress { opacity: 1; }
+.drop-item[data-state="sending"] .thumb img { filter: brightness(.8); transition: filter .3s ease; }
+.drop-item .thumb .badge { position: absolute; right: .35rem; bottom: .55rem; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; color: #fff; transform: scale(0); z-index: 1; transition: transform .3s cubic-bezier(.3, 1.8, .5, 1); }
+.drop-item[data-state="done"] .badge { background: var(--ok); transform: scale(1); }
+.drop-item[data-state="done"] .badge::before { content: "\2713"; }
+.drop-item[data-state="failed"] .badge { background: var(--bad); transform: scale(1); }
+.drop-item[data-state="failed"] .badge::before { content: "!"; }
+.drop-item[data-state="done"] .thumb img { filter: none; }
+.drop-item .rm { position: absolute; top: .3rem; right: .3rem; z-index: 2; width: 1.7rem; height: 1.7rem; padding: 0; border-radius: 50%; line-height: 1;
+  border: 0; background: rgb(0 0 0 / .6); color: #fff; font-size: 1.15rem; display: grid; place-items: center; }
+.drop-item .rm:hover { background: var(--bad); transform: none; }
+.drop-item[data-state="sending"] .rm { display: none; }
+.drop-item .nm { font-size: .82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-item .st { font-size: .76rem; }
+.drop-item[data-state="failed"] .st { color: var(--bad); }
+.drop-item[data-state="done"] .st { color: var(--ok); }
+
+/* what came of it all, in place, with no new page */
+.drop-result { display: flex; align-items: center; gap: .7rem; padding: .8rem 1rem; border-radius: var(--radius-sm); font-weight: 600;
+  border: 1px solid var(--border); animation: tile-in .35s cubic-bezier(.3, 1.4, .5, 1) both; }
+.drop-result[hidden] { display: none; }
+.drop-result.ok { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 45%, transparent); background: color-mix(in oklab, var(--ok) 9%, transparent); }
+.drop-result.bad { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 45%, transparent); background: color-mix(in oklab, var(--bad) 9%, transparent); }
+.drop-check { width: 2.2rem; height: 2.2rem; flex: none; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.drop-check circle { stroke-dasharray: 145; stroke-dashoffset: 145; animation: draw .6s ease forwards; }
+.drop-check path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: draw .35s .45s ease forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.drop-form.sending .dz { opacity: .55; pointer-events: none; }
+.drop-send { min-width: 11rem; transition: background-color .2s ease, opacity .2s ease; }
+.drop-form.sending .drop-send { background-size: 200% 100%; animation: send-shimmer 1.2s linear infinite; }
+@keyframes send-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .dz, .dz-icon, .drop-item, .drop-item .rm, .drop-result, .drop-check circle, .drop-check path, .drop-send { animation: none !important; transition: none !important; }
+  .drop-check circle, .drop-check path { stroke-dashoffset: 0; }
+  .drop-form.dragging .dz { transform: none; }
+}
 .camera-only { display: none; }
-@media (pointer: coarse) { .camera-only { display: grid; } .drop-hint { display: none; } }
+@media (pointer: coarse) { .camera-only { display: grid; } .dz-hint { display: none; } }
 form.inline { display: inline; }
 ul.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: .7rem; }
 ul.thumbs li { display: grid; gap: .3rem; justify-items: start; }

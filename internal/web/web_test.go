@@ -362,7 +362,7 @@ func TestSecurityHeaders(t *testing.T) {
 		}
 		res.Body.Close()
 		csp := res.Header.Get("Content-Security-Policy")
-		for _, want := range []string{"frame-ancestors 'none'", "script-src 'self'", "img-src 'self' data: https://photos.example.com"} {
+		for _, want := range []string{"frame-ancestors 'none'", "script-src 'self'", "img-src 'self' data: blob: https://photos.example.com"} {
 			if !strings.Contains(csp, want) {
 				t.Errorf("%s: CSP %q lacks %q", path, csp, want)
 			}

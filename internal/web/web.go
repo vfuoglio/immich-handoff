@@ -107,6 +107,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
 	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
+	mux.HandleFunc("POST /drop/{token}/unlock", w.dropUnlock)
+	mux.HandleFunc("POST /d/{token}/unlock", w.dropUnlock)
 	mux.HandleFunc("GET /d/{token}", w.dropPage)
 	mux.HandleFunc("POST /d/{token}/upload", w.dropUpload)
 	mux.HandleFunc("GET /drop/{token}/theme.css", w.dropTheme)
@@ -194,12 +196,12 @@ func (w *Server) routes() http.Handler {
 // secure adds the headers that keep the page from being framed, sniffed or fed scripts from elsewhere,
 // and bounds the size of what the page itself may post.
 func (w *Server) secure(next http.Handler) http.Handler {
-	img := "'self' data:"
+	img := "'self' data: blob:" // blob: is for the previews a guest's own browser makes of the files they chose
 	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
 		img += " " + u.Scheme + "://" + u.Host
 	}
 	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; img-src " + img +
-		"; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+		"; media-src 'self' blob:; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
 		h.Set("Content-Security-Policy", csp)

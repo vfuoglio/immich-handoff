@@ -458,6 +458,8 @@ var migrations = []string{
 	// the owner ends it).
 	`ALTER TABLE services ADD COLUMN pool INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE services ADD COLUMN ends_at TEXT NOT NULL DEFAULT '';`,
+	// What a drop box's password guards: the upload (the page can be seen) or the whole page. Boxes that had a password keep guarding the upload.
+	`ALTER TABLE dropboxes ADD COLUMN password_scope TEXT NOT NULL DEFAULT 'upload';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

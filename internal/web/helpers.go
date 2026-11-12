@@ -652,6 +652,8 @@ var clientMessages = []string{
 	"This browser cannot show notifications from this page.",
 	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
 	"The microphone is not available", "Thank you for your message!",
+	"Choose photos first", "Everything here was sent already", "Remove {name}", "Sending {done} of {total}", "Try again", "{n} file", "{n} file could not be sent",
+	"{n} file sent. Thank you!", "Only photos are taken here: {name} was left out",
 }
 
 // clientCatalog is what the page hands its scripts: the language and the translated messages they use.

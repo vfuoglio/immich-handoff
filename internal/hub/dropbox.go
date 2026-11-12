@@ -29,38 +29,40 @@ import (
 // Errors about drop boxes. The first group is shown to the owner as it is; the second is what a guest's upload can
 // run into (the page words them for the guest).
 var (
-	ErrBadDropName    = errors.New("a drop box needs a name of 2 to 60 characters, without slashes or commas")
-	ErrBadDropLimit   = errors.New("the limits of a drop box are whole numbers, and the days at most 365")
-	ErrBadDropText    = errors.New("the message to guests is at most 300 characters")
-	ErrBadDropSecret  = errors.New("a password is at most 64 characters")
-	ErrNoDropBox      = errors.New("there is no such drop box")
-	ErrDropFinished   = errors.New("this drop box has been revoked")
-	ErrDropRole       = errors.New("your part in this drop box does not allow that")
-	ErrBadDropAlbum   = errors.New("the album and the tag are at most 100 characters, with no line breaks, slashes or commas")
-	ErrBadDropWhen    = errors.New("a drop box closes after it opens, and within a year from now")
-	ErrNoStaging      = errors.New("approving before files arrive needs a place to keep them while they wait, and this install has none (it has no data folder)")
-	ErrNoSuchPerson   = errors.New("nobody on this Immich server has that email address")
-	ErrHostSelf       = errors.New("you already own this drop box")
-	ErrBadHostRole    = errors.New("a co-host manages the box or only views it")
-	ErrTooManyHosts   = errors.New("a drop box has at most ten co-hosts")
-	ErrNoEnd          = errors.New("this drop box has no end to extend")
-	ErrBadDropLook    = errors.New("the colour is six hex digits such as #4250af, the language one of those the pages come in, and the size between 800 and 8000 pixels")
-	ErrBadCover       = errors.New("the cover photo is a JPEG, PNG or WebP of at most 900 KB")
-	ErrBadTemplate    = errors.New("a template needs a name of 2 to 60 characters, and a person has at most 20")
-	ErrNoTemplate     = errors.New("there is no such template")
-	ErrDropDeleteOff  = errors.New("guests cannot delete what they sent from this drop box")
-	ErrDropKept       = errors.New("this photo is already filed in the owner's library: ask them to remove it")
-	ErrBadPrompts     = errors.New("a shot list has at most 20 prompts, each 1 to 60 characters without slashes or commas, and no two alike")
-	ErrDropPrompt     = errors.New("choose what the photo is for")
-	ErrBadMessage     = errors.New("a message is at most 1000 characters, a name at most 60, and it needs words or a voice note")
-	ErrBadVoice       = errors.New("the voice note is not a recording this page makes, or it is too large")
-	ErrGuestBookOff   = errors.New("this drop box has no guest book")
-	ErrGuestBookFull  = errors.New("the guest book is full")
-	ErrNoShare        = errors.New("this drop box has nothing shared")
-	ErrBadShare       = errors.New("a shared link stays open for 1 to 365 days, its password is at most 64 characters and its message at most 300")
-	ErrNothingToShare = errors.New("there are no photos in this drop box's inbox to share yet")
-	ErrNothingChosen  = errors.New("choose the files first")
-	ErrSomeNotStored  = errors.New("some files could not be stored right now and stay waiting; try again")
+	ErrBadDropName       = errors.New("a drop box needs a name of 2 to 60 characters, without slashes or commas")
+	ErrBadDropLimit      = errors.New("the limits of a drop box are whole numbers, and the days at most 365")
+	ErrBadDropText       = errors.New("the message to guests is at most 300 characters")
+	ErrBadDropSecret     = errors.New("a password is at most 64 characters")
+	ErrDropNeedsPassword = errors.New("choose a password for the box, or choose No")
+	ErrMessageNeedsName  = errors.New("please give your name")
+	ErrNoDropBox         = errors.New("there is no such drop box")
+	ErrDropFinished      = errors.New("this drop box has been revoked")
+	ErrDropRole          = errors.New("your part in this drop box does not allow that")
+	ErrBadDropAlbum      = errors.New("the album and the tag are at most 100 characters, with no line breaks, slashes or commas")
+	ErrBadDropWhen       = errors.New("a drop box closes after it opens, and within a year from now")
+	ErrNoStaging         = errors.New("approving before files arrive needs a place to keep them while they wait, and this install has none (it has no data folder)")
+	ErrNoSuchPerson      = errors.New("nobody on this Immich server has that email address")
+	ErrHostSelf          = errors.New("you already own this drop box")
+	ErrBadHostRole       = errors.New("a co-host manages the box or only views it")
+	ErrTooManyHosts      = errors.New("a drop box has at most ten co-hosts")
+	ErrNoEnd             = errors.New("this drop box has no end to extend")
+	ErrBadDropLook       = errors.New("the colour is six hex digits such as #4250af, the language one of those the pages come in, and the size between 800 and 8000 pixels")
+	ErrBadCover          = errors.New("the cover photo is a JPEG, PNG or WebP of at most 900 KB")
+	ErrBadTemplate       = errors.New("a template needs a name of 2 to 60 characters, and a person has at most 20")
+	ErrNoTemplate        = errors.New("there is no such template")
+	ErrDropDeleteOff     = errors.New("guests cannot delete what they sent from this drop box")
+	ErrDropKept          = errors.New("this photo is already filed in the owner's library: ask them to remove it")
+	ErrBadPrompts        = errors.New("a shot list has at most 20 prompts, each 1 to 60 characters without slashes or commas, and no two alike")
+	ErrDropPrompt        = errors.New("choose what the photo is for")
+	ErrBadMessage        = errors.New("a message is at most 1000 characters, a name at most 60, and it needs words or a voice note")
+	ErrBadVoice          = errors.New("the voice note is not a recording this page makes, or it is too large")
+	ErrGuestBookOff      = errors.New("this drop box takes no messages")
+	ErrGuestBookFull     = errors.New("this drop box cannot take more messages")
+	ErrNoShare           = errors.New("this drop box has nothing shared")
+	ErrBadShare          = errors.New("a shared link stays open for 1 to 365 days, its password is at most 64 characters and its message at most 300")
+	ErrNothingToShare    = errors.New("there are no photos in this drop box's inbox to share yet")
+	ErrNothingChosen     = errors.New("choose the files first")
+	ErrSomeNotStored     = errors.New("some files could not be stored right now and stay waiting; try again")
 
 	ErrDropType     = errors.New("this kind of file is not accepted")
 	ErrDropTooBig   = errors.New("the file is larger than this drop box takes")
@@ -93,6 +95,7 @@ const (
 // DropParams describe a new drop box. Zero values mean no limit, no expiry and no password.
 type DropParams struct {
 	Name, Message, Password string
+	PasswordScope           string    // what the password guards: "upload" (sending) or "page" (everything a guest can reach); "" means "upload" when there is a password
 	Days                    int       // the link works for this many days from now (or from Opens)
 	Opens, Closes           time.Time // a start, and an end that replaces Days; zero: now, and Days
 	MaxFiles, MaxMB         int       // the most the box takes in all
@@ -105,7 +108,7 @@ type DropParams struct {
 	GuestDelete             bool     // guests may delete what they sent while it is in the inbox
 	Prompts                 []string // the shot list: what guests are asked to photograph
 	PromptRequired          bool     // every photo must say which prompt it is for
-	GuestBook               bool     // guests may leave a message and a voice note
+	GuestBook               bool     // guests may leave a message (with their name) and a voice note
 }
 
 func checkDropParams(p DropParams) error {
@@ -117,6 +120,12 @@ func checkDropParams(p DropParams) error {
 		return ErrBadDropText
 	}
 	if utf8.RuneCountInString(p.Password) > 64 {
+		return ErrBadDropSecret
+	}
+	if p.PasswordScope != "" && p.Password == "" {
+		return ErrDropNeedsPassword
+	}
+	if p.PasswordScope != "" && p.PasswordScope != store.DropScopeUpload && p.PasswordScope != store.DropScopePage {
 		return ErrBadDropSecret
 	}
 	for _, v := range []int{p.MaxFiles, p.MaxMB, p.MaxFileMB} {
@@ -208,6 +217,10 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		if b.Password, err = HashDropPassword(p.Password); err != nil {
 			undo()
 			return store.DropBox{}, err
+		}
+		b.PasswordScope = store.DropScopeUpload
+		if p.PasswordScope == store.DropScopePage {
+			b.PasswordScope = store.DropScopePage
 		}
 	}
 	if b.Prompts, err = newPrompts(p.Prompts); err != nil {
@@ -567,6 +580,23 @@ func (h *Hub) CheckDropPassword(ctx context.Context, b store.DropBox, who, given
 	h.dropEvent(ctx, b.ID, store.DropBlocked, i18n.Pack("A guest gave a wrong password"), who)
 	h.checkBurst(ctx, b)
 	return false
+}
+
+// DropUnlockToken is what a guest's browser holds after giving the right password to a box whose password guards the
+// whole page. It is made from the stored hash of the password, which no guest can see, so it cannot be made up, and it
+// stops working when the password changes.
+func DropUnlockToken(b store.DropBox) string {
+	sum := sha256.Sum256([]byte("drop-unlock|" + b.ID + "|" + b.Password))
+	return hex.EncodeToString(sum[:])
+}
+
+// DropPageLocked reports whether a guest who holds this token (empty: none) is kept out of the box's page: the
+// password guards the whole page and the token is not the right one.
+func DropPageLocked(b store.DropBox, token string) bool {
+	if b.Password == "" || b.PasswordScope != store.DropScopePage {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(DropUnlockToken(b))) != 1
 }
 
 // RejectDrop writes down a file that was turned away.
