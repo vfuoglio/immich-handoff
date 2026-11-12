@@ -3,6 +3,7 @@
 // the types in CI (tools/typecheck). The Content-Security-Policy allows scripts from the app itself only.
 
 import { initCard, initDrop, initGuestBook, initShare } from "./drop.ts";
+import { initFrame } from "./frame.ts";
 import { initWall } from "./wall.ts";
 import { initBackup } from "./backup";
 import { initPush } from "./push";
@@ -90,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initGuestBook();
   initShare();
   initWall();
+  initFrame();
   initPalette();
   initSound();
   enhance(document); // numbers that are already on the page roll up to their value

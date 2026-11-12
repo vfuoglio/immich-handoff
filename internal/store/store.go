@@ -432,6 +432,24 @@ var migrations = []string{
 	   left_json  TEXT NOT NULL DEFAULT '',
 	   note       TEXT NOT NULL DEFAULT ''
 	 );`,
+	// A frame: a link that shows an album full screen on a device with no account. Its key can only look at pictures
+	// and read albums, and is sealed like every other.
+	`CREATE TABLE frames (
+	   id         TEXT PRIMARY KEY,
+	   token      TEXT NOT NULL UNIQUE,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   album_id   TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   hold       INTEGER NOT NULL DEFAULT 15,
+	   ends_at    TEXT NOT NULL DEFAULT '',
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE INDEX frames_owner ON frames (owner_id);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

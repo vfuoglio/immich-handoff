@@ -6,6 +6,10 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// FramePermissions is what a frame's key gets: looking at pictures and listing which photos are in an album (Immich
+// lists them with a search, which needs asset.read), nothing more: no downloading originals, no changes.
+var FramePermissions = perms("asset.view", "asset.read")
+
 // DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
 // filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
 // own session.

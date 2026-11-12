@@ -36,20 +36,21 @@ type Options struct {
 }
 
 type Hub struct {
-	Static  []*syncer.Service // from the environment or the routes file
-	Store   *store.Store      // nil: self-service is switched off
-	Connect func(key string) (*immich.API, error)
-	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
-	Wake    func(reason string)
-	Retry   func()           // sets up missing workflows in the background (Immich may still be loading its plugins)
-	Notify  notify.Func      // tells an admin something needs attention (optional)
-	Bus     *live.Bus        // tells the open pages what changed, as it happens (optional)
-	People  *People          // writes to the people who asked for email (optional)
-	Push    *Push            // sends notifications to the devices people allowed (optional)
-	AppURL  string           // how people reach the page; the links in messages are built from it (optional: without it a message carries no action links)
-	Now     func() time.Time // the clock; nil: time.Now (tests set it)
-	Log     *slog.Logger
-	Options Options // defaults for services people create
+	Static       []*syncer.Service // from the environment or the routes file
+	Store        *store.Store      // nil: self-service is switched off
+	Connect      func(key string) (*immich.API, error)
+	Hook         syncer.Webhook // used to create the sender's workflow when someone joins
+	Wake         func(reason string)
+	Retry        func()           // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Notify       notify.Func      // tells an admin something needs attention (optional)
+	Bus          *live.Bus        // tells the open pages what changed, as it happens (optional)
+	People       *People          // writes to the people who asked for email (optional)
+	Push         *Push            // sends notifications to the devices people allowed (optional)
+	AppURL       string           // how people reach the page; the links in messages are built from it (optional: without it a message carries no action links)
+	Now          func() time.Time // the clock; nil: time.Now (tests set it)
+	FrameRefresh time.Duration    // how often frames read their album again (FRAME_REFRESH; zero: two minutes)
+	Log          *slog.Logger
+	Options      Options // defaults for services people create
 
 	// ReceiverDelete: new receiver keys may move copies to their owner's trash, and existing ones get or lose the permission
 	// when their owner opens the page (RECEIVER_DELETE, on by default).
@@ -70,6 +71,7 @@ type Hub struct {
 	wall        wallCache                  // the pictures a wall fetched last
 	hlRun       map[string]bool            // boxes whose best-of is being made now
 	digestRun   map[string]bool            // services whose digest is being made now
+	frames      frameCache                 // the albums frames last read
 	remotes     map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
 	retries     map[string]*time.Timer     // when each unreachable receiver on another server is tried again
 	bridgeTries bridgeGuard                // what the invitation pages know about who tried

@@ -123,6 +123,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
 	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
+	mux.HandleFunc("GET /frame/{token}", w.framePage)
+	mux.HandleFunc("GET /frame/{token}/feed", w.frameFeed)
+	mux.HandleFunc("GET /frame/{token}/photo/{id}", w.framePhoto)
+	mux.HandleFunc("GET /fragments/frame-albums", w.frameAlbums)
+	mux.HandleFunc("POST /frames", w.createFrame)
+	mux.HandleFunc("POST /frames/end", w.endFrame)
 	mux.HandleFunc("GET /wall/{token}", w.wallPage)
 	mux.HandleFunc("GET /wall/{token}/feed", w.wallFeed)
 	mux.HandleFunc("GET /wall/{token}/photo/{id}", w.wallPhoto)
@@ -485,6 +491,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	d.Owned = w.ownedViews(ctx, me)
 	d.DropBoxes = w.dropBoxViews(ctx, me)
+	d.Frames = w.frameViews(ctx, me)
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {

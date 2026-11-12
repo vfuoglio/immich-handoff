@@ -794,3 +794,11 @@ func onwardOptionLabel(ctx context.Context, o OnwardOptionView) string {
 	}
 	return o.Service + " \u00b7 " + t(ctx, "your originals go to your trash")
 }
+
+// frameChips are the chips of a frame's row: whether it is showing and when it ends.
+func frameChips(ctx context.Context, f FrameView) []Chip {
+	if f.Ended {
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	}
+	return []Chip{{Text: t(ctx, "Showing"), Tone: "ok"}}
+}

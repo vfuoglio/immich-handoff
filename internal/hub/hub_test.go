@@ -65,6 +65,8 @@ type fakeImmich struct {
 	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
 	members       map[string]map[string]bool // album id -> asset ids in it
 	removedLinks  []string
+	videos        map[string]bool // asset ids that are videos (the rest are photos)
+	archived      map[string]bool // asset ids the owner archived
 }
 
 type fakeUpload struct {
@@ -397,7 +399,11 @@ func (f *fakeImmich) handler() http.Handler {
 			if name == "" {
 				name = "x.jpg"
 			}
-			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+			kind := "IMAGE"
+			if f.videos[id] {
+				kind = "VIDEO"
+			}
+			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created, "type": kind, "isTrashed": f.trashed[id], "isArchived": f.archived[id]})
 		}
 		if len(body.AlbumIds) > 0 {
 			for _, aid := range body.AlbumIds {

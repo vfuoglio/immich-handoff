@@ -197,6 +197,13 @@ func run(log *slog.Logger) error {
 			defer h.Push.Close() // sends what is waiting for company
 			log.Info("notifications on devices are on")
 		}
+		if v := env("FRAME_REFRESH", ""); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 5*time.Second || d > time.Hour {
+				return errors.New("FRAME_REFRESH must be a time between 5s and 1h, such as 2m")
+			}
+			h.FrameRefresh = d
+		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
 			t := time.NewTicker(10 * time.Minute)
@@ -204,6 +211,7 @@ func run(log *slog.Logger) error {
 			for {
 				h.DropMaintenance(ctx)
 				h.DigestMaintenance(ctx)
+				h.FrameMaintenance(ctx)
 				select {
 				case <-ctx.Done():
 					return

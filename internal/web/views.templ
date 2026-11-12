@@ -20,6 +20,14 @@ type PushDeviceView struct {
 	Added, LastOK   string // already written for the reader; LastOK is empty until a push got through
 }
 
+// FrameView is one of the person's frames.
+type FrameView struct {
+	ID, Name, Album, Token string
+	Seconds                int
+	Ends                   string // when the link stops, "" for never
+	Ended                  bool
+}
+
 // MailView is the person's "Email me" card.
 type MailView struct {
 	Available bool // this install can write to people
@@ -223,6 +231,7 @@ type DashboardData struct {
 	Mail       MailView
 	Push       PushView
 	DropBoxes  []DropBoxView
+	Frames     []FrameView
 	Templates  []TemplateView
 }
 
@@ -555,6 +564,7 @@ templ Dashboard(d DashboardData) {
 					@OfferForm(d.DeleteOK)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
+				@FrameSection(d.Frames)
 			}
 		</section>
 		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
@@ -2419,6 +2429,123 @@ templ WallPage(name, token, mode string) {
 					<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
 					<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
 				</nav>
+			</main>
+		</body>
+	</html>
+}
+
+// FrameSection is where a person makes frames: links that show one of their albums on a screen with no account.
+templ FrameSection(frames []FrameView) {
+	<h2>{ t(ctx, "Frames") }</h2>
+	<p class="meta">{ t(ctx, "A frame is a link that shows one of your albums full screen, on a photo frame, an old tablet or a TV, with no account on it. New photos in the album appear within a couple of minutes, and photos you take out disappear. The link is as private as its length: anyone who has it can see the album's photos, so end it when you no longer want that.") }</p>
+	for i, f := range frames {
+		@FrameRow(f, fmt.Sprintf("frame-%d", i), len(frames) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Make a frame") }</summary>
+		<form class="card offer-form" hx-post="frames" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="fr-name">{ t(ctx, "Name") }</label>
+				<input id="fr-name" name="name" required maxlength="60" placeholder={ t(ctx, "Living room") }/>
+			</div>
+			<div class="field" hx-get="fragments/frame-albums" hx-trigger="revealed" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			<div class="field">
+				<label for="fr-hold">{ t(ctx, "Show each photo for") }</label>
+				<select id="fr-hold" name="hold">
+					<option value="8">{ t(ctx, "{n} seconds", "n", 8) }</option>
+					<option value="15" selected>{ t(ctx, "{n} seconds", "n", 15) }</option>
+					<option value="30">{ t(ctx, "{n} seconds", "n", 30) }</option>
+					<option value="60">{ t(ctx, "{n} seconds", "n", 60) }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="fr-ends">{ t(ctx, "The link works") }</label>
+				<select id="fr-ends" name="ends">
+					<option value="0" selected>{ t(ctx, "until I end it") }</option>
+					<option value="30">{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="365">{ t(ctx, "for a year") }</option>
+				</select>
+			</div>
+			<p class="meta">{ t(ctx, "This makes a key in your Immich account that can only look at pictures and list an album's photos. It is deleted when you end the frame.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make frame") }</button></p>
+		</form>
+	</details>
+}
+
+// FrameAlbumSelect is the list of albums in the form that makes a frame.
+templ FrameAlbumSelect(albums []AlbumOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "You have no albums of your own yet. Make one in Immich, then come back.") }</p>
+	} else {
+		<label for="fr-album">{ t(ctx, "Album to show") }</label>
+		<select id="fr-album" name="album">
+			for _, a := range albums {
+				<option value={ a.ID }>{ a.Label }</option>
+			}
+		</select>
+	}
+}
+
+// FrameRow is one frame: its link, when it ends, and a button to end it.
+templ FrameRow(f FrameView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(f.Name, t(ctx, "frame of {album}", "album", f.Album), frameChips(ctx, f), "sum-"+id)
+		<div class="body">
+			if f.Ended {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "This frame's link stopped on {when}. Remove it to delete its key from your Immich account.", "when", f.Ends) }</p>
+			} else {
+				<div class="field">
+					<label for={ "fr-link-" + id }>{ t(ctx, "Link to open on the screen") }</label>
+					<div class="row">
+						<input id={ "fr-link-" + id } class="invite" readonly data-link={ "frame/" + f.Token }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="show-qr" data-for={ "fr-link-" + id } data-alt={ t(ctx, "QR code of the frame's link") }>{ t(ctx, "QR code") }</button>
+					</div>
+					<div class="qr" id={ "qr-fr-link-" + id } hidden></div>
+				</div>
+				<p class="meta">{ t(ctx, "Shows each photo for {n} seconds.", "n", f.Seconds) }
+					if f.Ends != "" {
+						{ t(ctx, "The link works until {when}.", "when", f.Ends) }
+					} else {
+						{ t(ctx, "The link works until you end it.") }
+					}
+				</p>
+			}
+			<p class="row"><button hx-post="frames/end" hx-vals={ vals("frame", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The link will stop working at once and the frame's key will be deleted. Continue?") } data-confirm-title={ t(ctx, "End the frame?") } data-confirm-label={ t(ctx, "End frame") } data-danger="true">
+				if f.Ended {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End frame") }
+				}
+			</button></p>
+		</div>
+	</details>
+}
+
+// FramePage is the page a frame opens: full screen, no sign-in, no controls.
+templ FramePage(name, token string, seconds int) {
+	<!DOCTYPE html>
+	<html lang={ loc(ctx).Code() }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="robots" content="noindex"/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ name }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/app.js" defer></script>
+		</head>
+		<body class="wall">
+			<main id="frame" data-feed={ "frame/" + token + "/feed" } data-photo={ "frame/" + token + "/photo/" } data-seconds={ fmt.Sprint(seconds) }>
+				<div class="wall-stage single" aria-live="off"></div>
+				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 			</main>
 		</body>
 	</html>
