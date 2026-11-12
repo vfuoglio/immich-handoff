@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -128,6 +129,7 @@ func TestDevicesGetTheLinesTheirPageShowsInTheirOwnLanguageAndMode(t *testing.T)
 func TestADeviceTheServiceSaysIsGoneIsForgottenAndOneThatKeepsFailingIsGivenUp(t *testing.T) {
 	e, ctx := setup(t, false), context.Background()
 	p, svc := withPush(t, e, 20*time.Millisecond)
+	p.Now = func() time.Time { return time.Now().Add(3 * time.Minute) } // the devices are old enough to be forgotten
 	subscribe(t, e, annID, annPhone, "en", store.MailAll)
 	subscribe(t, e, annID, annLap, "en", store.MailAll)
 	svc.fail[annPhone] = push.ErrGone
@@ -265,4 +267,25 @@ func TestAFailedTestPushSaysSoAndTheTenthDeviceIsTheLast(t *testing.T) {
 	if _, err := e.h.PushSubscribe(ctx, annID, device(t, "https://fcm.googleapis.com/fcm/send/eleventh", "en", store.MailAll)); err != hub.ErrTooManyDevices {
 		t.Errorf("%v", err)
 	}
+}
+
+func TestADeviceMadeAMomentAgoIsKeptEvenIfItsPushServiceDoesNotKnowItYet(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	p, svc := withPush(t, e, 10*time.Millisecond)
+	var later atomic.Int64 // how far the clock has moved on, in nanoseconds
+	p.Now = func() time.Time { return time.Now().Add(time.Duration(later.Load())) }
+	subscribe(t, e, annID, annPhone, "en", store.MailAll)
+	svc.mu.Lock()
+	svc.fail[annPhone] = push.ErrGone
+	svc.mu.Unlock()
+	count := func() int { l, _ := e.st.PushSubs(ctx, annID); return len(l) }
+
+	p.Tell(ctx, []uuid.UUID{annID}, "joined", "x")
+	time.Sleep(150 * time.Millisecond)
+	if count() != 1 {
+		t.Fatal("a device that is seconds old was forgotten on its first 'gone'")
+	}
+	later.Store(int64(3 * time.Minute)) // later, the same answer means it really is gone
+	p.Tell(ctx, []uuid.UUID{annID}, "joined", "x")
+	waitFor(t, "the old device to be forgotten", func() bool { return count() == 0 })
 }

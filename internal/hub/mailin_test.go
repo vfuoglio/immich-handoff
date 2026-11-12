@@ -311,3 +311,30 @@ func TestAWrongMailboxPasswordIsAnErrorThatDoesNotSayIt(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+func TestTheMailboxIsLookedAtOnTheClockAndTheLastLookIsReportedUntilTheAppStops(t *testing.T) {
+	e := setup(t, true)
+	m, srv := withMailbox(t, e, mailin.AfterDelete)
+	m.Settings.Every = 40 * time.Millisecond
+	_, addr := boxWithMail(t, e, hub.DropParams{Name: "Gala"})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.Run(ctx); close(done) }()
+	srv.Deliver(mailTo(addr, "a@example.net", attach{"1.jpg", photoBytes(3)}))
+	waitFor(t, "the mail to be handled by itself", func() bool { return len(srv.Messages()) == 0 })
+	waitFor(t, "a clean look to be reported", func() bool { st := m.Status(); return !st.At.IsZero() && st.Err == "" })
+	if len(e.f.uploads) != 1 {
+		t.Errorf("%d uploads", len(e.f.uploads))
+	}
+	srv.SetPassword("changed-so-the-login-fails")
+	waitFor(t, "a failed look to be reported without the password", func() bool {
+		st := m.Status()
+		return st.Err != "" && !strings.Contains(st.Err, "mailbox-secret") && !strings.Contains(st.Err, "changed-so-the-login-fails")
+	})
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the loop did not stop with the app")
+	}
+}

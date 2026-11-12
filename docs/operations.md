@@ -239,7 +239,7 @@ The app tells whoever runs it when something needs attention. Every message has 
 
 | Kind | What it is about |
 |---|---|
-| `problem` | A pass that failed or refused photos, photos found only by the daily sweep, an album that cannot be read or filed into, a key that stopped working. |
+| `problem` | A pass that failed (photos the receiver refused are not a problem for you and are not sent), photos found only by the daily sweep, an album that cannot be read or filed into, a key that stopped working. |
 | `backup` | A backup that failed, was forced, or was downloaded. |
 | `bridge` | A receiver on another server that cannot be reached, whose key was revoked, or that is back. |
 | `dropbox` | A drop box that paused itself, will close soon, or closed. |

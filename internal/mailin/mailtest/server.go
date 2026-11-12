@@ -119,6 +119,13 @@ func (s *Server) Messages() []Msg {
 	return out
 }
 
+// SetPassword changes the password the server accepts, so a client that has the old one is refused from now on.
+func (s *Server) SetPassword(p string) {
+	s.mu.Lock()
+	s.opts.Password = p
+	s.mu.Unlock()
+}
+
 // Logins counts the successful and the refused logins.
 func (s *Server) Logins() (ok, refused int) {
 	s.mu.Lock()

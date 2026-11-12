@@ -183,6 +183,9 @@ func TestASenderWhoPausesGetsALinkToResumeTheirOwnSendingAndNobodyElseDoes(t *te
 	if len(tokens(anns.Text)) != 0 {
 		t.Errorf("the owner must not be offered a way to resume someone else's sending:\n%s", anns.Text)
 	}
+	if info, ok := e.h.ActionPage(ctx, toks[0]); !ok || info.Kind != hub.ActionResumeSender || info.Service != "club" {
+		t.Fatalf("the page for the resume link: %+v %v", info, ok)
+	}
 	if _, err := e.h.RunAction(ctx, toks[0]); err != nil {
 		t.Fatal(err)
 	}

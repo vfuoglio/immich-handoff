@@ -90,6 +90,8 @@ A link in a mail or notification (approve or decline a request, resume a service
 - With self-service, one SQLite file in the `handoff-data` volume lists who joined what. Every API key in it is encrypted with AES-256-GCM using `HANDOFF_STORE_KEY`. The app refuses to start if that key does not match the database.
 - **Whoever runs the container and holds the store key can read those keys**, in the same way the person running Immich can already read the photos. This is the trust you place in the person who hosts it.
 - The activity log keeps the last 500 events (who joined, left, asked, was approved, lost a connection), in the same file.
+- For each person who turns them on: **email** (their name, the address Immich shows for their account, their language and their choice), each **device** they allow notifications on (the address of the browser's push service and its two keys, sealed with the store key), and the **one-tap links** made for them (a random value, for a day, once). Turning email off, removing a device or using a link forgets it. The app's push **signing key** is sealed in the same file.
+- **Frames** (the link, the album, the frame's own sealed key), the state of each service's **weekly digest** (the last album and shared link, and which permissions it added to the key), an **event pool**'s end date, and a drop box's **mail code** are stored there too. The sender of a mailed photo is never stored.
 - Drop boxes are stored there too: the name, message and limits, the link, the key (encrypted, like every key) and a log of up to 200 entries per box, its co-hosts, and counts for its summary (files per hour and which guests, by their mark). A revoked box and its log are forgotten after a month.
 
 ## What other people can see

@@ -484,10 +484,11 @@ func TestTheDigestCardIsTheOwnersAndTurnsOnAndOffWithTheirSession(t *testing.T) 
 	made := time.Now()
 	st.SetDigest(ctx, store.Digest{Service: "mine", Enabled: true, Week: "2026-11-09", MadeAt: made, Album: "mine week of 2026-11-02",
 		LinkID: uuid.NewString(), LinkKey: "abc123key", LinkEnds: made.Add(30 * 24 * time.Hour), Photos: 12, People: 3, LeftOut: 2,
-		LeftJSON: `[{"n":"dark.jpg","r":"dark","d":"brightness 12 of 255"},{"n":"two.jpg","r":"duplicate","d":"same moment as one.jpg"}]`})
+		LeftJSON: `[{"n":"dark.jpg","r":"dark","d":"brightness 12 of 255"},{"n":"two.jpg","r":"duplicate","d":"same moment as one.jpg"},{"n":"glare.jpg","r":"bright"},{"n":"soft.jpg","r":"blurry"},{"n":"extra.jpg","r":"more","d":"more than the 40 that fit"}]`})
 	_, body = do(t, "GET", app.URL+"/", owner, nil)
 	for _, want := range []string{`value="https://photos.example/share/abc123key"`, "12 photos of the week from 3 people in the album mine week of 2026-11-02", "2 left out",
-		"dark.jpg", "too dark (brightness 12 of 255)", "two.jpg", "the same moment as a better shot (same moment as one.jpg)", "What was left out, and why"} {
+		"dark.jpg", "too dark (brightness 12 of 255)", "two.jpg", "the same moment as a better shot (same moment as one.jpg)", "What was left out, and why",
+		"glare.jpg", "too bright", "soft.jpg", "blurred", "extra.jpg", "the week had more good ones than fit"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
 		}
@@ -612,5 +613,44 @@ func TestTheOfferFormCanMakeAPool(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("the form lacks %q", want)
 		}
+	}
+}
+
+func TestAnActionLinkThatCannotBeDoneAnyMoreSaysWhyAndPointsToThePage(t *testing.T) {
+	var st *store.Store
+	var p *hub.People
+	app, _ := setup(t, withPeopleMail(t, &st, &p, &mailSink{}))
+	ctx := context.Background()
+	services, _ := st.Services(ctx)
+	club := services[0]
+	req, _ := st.AddRequest(ctx, store.Request{Service: "club", UserID: uuid.New(), Name: "Dora", Email: "dora@x.test"})
+	tok, _ := st.ActionMake(ctx, store.ActionLink{UserID: club.OwnerID, UserName: club.OwnerName, Kind: "approve", Service: "club", Target: req.ID, Group: req.ID})
+	if err := st.SetRequestStatus(ctx, req.ID, store.StatusDeclined); err != nil { // the owner decided on the page first
+		t.Fatal(err)
+	}
+	if code, _ := do(t, "GET", app.URL+"/a/"+tok, "", nil); code != 404 {
+		t.Errorf("the page for a request already decided: %d", code)
+	}
+	tok2, _ := st.ActionMake(ctx, store.ActionLink{UserID: club.OwnerID, UserName: club.OwnerName, Kind: "approve", Service: "club", Target: req.ID, Group: req.ID})
+	code, body := do(t, "POST", app.URL+"/a/"+tok2, "", nil)
+	if code != 409 || !strings.Contains(body, "already decided") || !strings.Contains(body, "Open Immich Handoff") {
+		t.Errorf("pressing it anyway: %d %.300s", code, body)
+	}
+	if r, _ := st.Requests(ctx); r[0].Status != store.StatusDeclined {
+		t.Errorf("a late link overturned a decision: %+v", r)
+	}
+}
+
+func TestTheAlbumListOfTheFrameFormIsThePersonsOwnAlbums(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st))
+	code, body := do(t, "GET", app.URL+"/fragments/frame-albums", "sess=alice", nil)
+	for _, want := range []string{`name="album"`, "To send (3 photos)", "Trip (1 photo)"} {
+		if code != 200 || !strings.Contains(body, want) {
+			t.Errorf("%d: missing %q in %s", code, want, body)
+		}
+	}
+	if code, body := do(t, "GET", app.URL+"/fragments/frame-albums", "sess=other", nil); code != 200 || !strings.Contains(body, "no albums of your own") {
+		t.Errorf("a person with no albums: %d %s", code, body)
 	}
 }

@@ -16,6 +16,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `BACKUP_DIR` | `/data/backups` | Where backups go. A second mounted folder is safer than one beside the data. |
 | `HANDOFF_ADMIN_BACKUP_DOWNLOAD` | off | `true` adds a **Download backup** button to the administrator's page. Off by default: the file holds every stored key (encrypted) and everyone's name and email. Read [the limits](operations.md#download-a-backup-from-the-administrators-page) first. |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |
+| `WEBHOOK_HEADER` | `X-Webhook-Secret` | The name of the header in which Immich's workflow sends `WEBHOOK_SECRET`. Change it only if a proxy in front of the app needs another name. |
 | `NOTIFY_URL` | | ntfy topic URL that receives every message the app has for you (title, priority, tag and a link). See [Notifications](operations.md#notifications). |
 | `FRAME_REFRESH` | `2m` | How often a frame ([Frames](using.md#frames-an-album-on-a-screen)) looks at its album again, from `5s` to `1h`. It is also how long the app keeps what it read, so it is how soon a photo added to or taken out of the album shows on the screen. |
 | `MAIL_IN_HOST` | | A mail server (IMAP) the app reads, so a drop box can have an address that guests mail photos to. Off unless set. See [Photos by email](operations.md#photos-by-email). Needs `HANDOFF_STORE_KEY`. |

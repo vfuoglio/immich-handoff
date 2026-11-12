@@ -71,6 +71,10 @@ type pushQueue struct {
 	timer *time.Timer
 }
 
+// newDeviceGrace is how long a new device is kept even if its push service says it is gone: a subscription made a moment
+// ago is sometimes not known to the service for a few seconds.
+const newDeviceGrace = 2 * time.Minute
+
 // perDeviceHour is the most pushes one device gets in an hour, whatever happens.
 const perDeviceHour = 30
 
@@ -212,6 +216,9 @@ func (p *Push) deliver(ctx context.Context, s store.PushSub, payload []byte) err
 	switch {
 	case err == nil:
 		_ = p.Store.PushMarkOK(ctx, s.ID, p.now())
+	case errors.Is(err, push.ErrGone) && p.now().Sub(s.CreatedAt) < newDeviceGrace:
+		// a subscription made a moment ago may not be known to the push service yet: do not forget the device for that
+		p.log().Debug("a new device was not known to its push service yet")
 	case errors.Is(err, push.ErrGone):
 		_ = p.Store.PushRemoveID(ctx, s.ID)
 	default:

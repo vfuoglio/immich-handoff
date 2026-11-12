@@ -36,3 +36,14 @@ Checked against a real Immich 3.2.0 (`test/e2e`):
 - `GET /albums?assetId=` needs `album.read`, which a receiver's key does not have. To learn whether a photo is in an album the app searches for it among the photos in no album (`isNotInAlbum`, with the `id` filter), which needs only `asset.read`.
 - `createdBefore` in a search is the date the asset was uploaded (the `createdAt` column), not the date the photo was taken; that is what a copy's lifetime is counted from. The end-to-end test ages a copy by changing that column in the throwaway Immich's database.
 - A key cannot change its own permissions or make a key with permissions it lacks, which is why a receiver key gets or loses `asset.delete` when its owner opens the page (their own login changes it), not at boot.
+
+## Notes from sharing, showing and notifying
+
+Checked against a real Immich 3.2.0 (`test/e2e`) and, for push, a real Chrome and Google's push service:
+
+- `AlbumResponseDto` (`GET /albums/{id}`) has no `assets` list in 3.2.0. The photos in an album are found with a search (`POST /search/metadata` with `albumIds`), which needs `asset.read`; so a key that only lists an album's photos and shows pictures is `asset.read` + `asset.view` (this is what a frame's key has).
+- `GET /assets/{id}/thumbnail?size=preview` needs `asset.view` and works for the owner's own photos with such a key; a drop box's wall and a frame use it.
+- A shared link is made with `sharedLink.create`, read with `sharedLink.read` and removed with `sharedLink.delete`; Immich allows downloads from a link only when metadata is shown.
+- A key can add or take away permissions of another key only with the owner's own session (`PUT /api-keys/{id}`), which is why the digest and the frame ask the owner when they are turned on and off.
+- A new push subscription can take a few seconds to be known to Google's push service: a push sent at once may be answered `410 Gone`. The app treats `404` and `410` as "forget this device", except for a device made in the last two minutes, which is kept so the test button can be pressed again.
+- Photos taken at the same moment look alike to the best-of rules; they are compared by a small hash of the preview, so the preview must exist first (Immich makes it in the background, seconds after an upload).
