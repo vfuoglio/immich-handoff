@@ -57,15 +57,16 @@ type Idler interface {
 
 // Manager takes the backups asked of the running app, one at a time.
 type Manager struct {
-	Dir    string // where the files go
-	Source Source
-	Idle   Idler
-	Wait   time.Duration // how long to wait for a quiet moment before forcing (default 4 hours)
-	Poll   time.Duration // how often to look (default 5 seconds)
-	Log    *slog.Logger
-	Tell   notify.Func             // reaches whoever runs the app (NOTIFY_URL, NOTIFY_FILE); optional
-	Event  func(kind, text string) // the activity log; optional
-	Now    func() time.Time
+	Dir      string // where the files go
+	Source   Source
+	Idle     Idler
+	Wait     time.Duration // how long to wait for a quiet moment before forcing (default 4 hours)
+	Poll     time.Duration // how often to look (default 5 seconds)
+	Log      *slog.Logger
+	Tell     notify.Func             // reaches whoever runs the app (NOTIFY_URL, NOTIFY_FILE); optional
+	Problems *notify.Tracker         // optional: a backup that keeps failing is told once, reminded after a day, and told when it works again
+	Event    func(kind, text string) // the activity log; optional
+	Now      func() time.Time
 
 	// Automatic backups (see Schedule). Every <= 0 means none.
 	Every time.Duration // how often one is made
@@ -167,12 +168,14 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 	switch {
 	case err != nil:
 		m.Log.Error("backup failed", "err", err)
-		m.tell("backup failed: "+err.Error(), "backup", "A backup failed: "+err.Error())
+		m.tellProblem("backup", "backup failed: "+err.Error(), "backup", "A backup failed: "+err.Error())
 	case forced:
 		msg := fmt.Sprintf("A backup was made without waiting for a quiet moment, because hand-overs kept running for %s. It is a consistent copy but may hold a hand-over caught halfway: %s", wait.Round(time.Minute), dest)
 		m.Log.Warn("backup ready, but forced: "+msg, "file", dest, "bytes", size)
 		m.tell("backup made anyway (forced): "+dest, "backup", msg)
+		m.fixed()
 	default:
+		m.fixed()
 		m.Log.Info("backup ready", "file", dest, "bytes", size)
 		if m.Event != nil {
 			what := "A backup was made: "
@@ -197,6 +200,26 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 			close(j.done)
 		}
 	})
+}
+
+// tellProblem is tell for something that may keep failing (the hourly retry of a full disk): the notification goes
+// once, with a reminder after a day (notify.Tracker), while the activity log still gets every failure.
+func (m *Manager) tellProblem(key, note, kind, event string) {
+	if m.Problems != nil {
+		m.Problems.Report(key, notify.Message{Kind: notify.Backup, Text: note})
+	} else if m.Tell != nil {
+		m.Tell(notify.Message{Kind: notify.Backup, Text: note})
+	}
+	if m.Event != nil {
+		m.Event(kind, event)
+	}
+}
+
+// fixed tells that backups work again, if a failure was told.
+func (m *Manager) fixed() {
+	if m.Problems != nil {
+		m.Problems.Clear("backup", notify.Message{Kind: notify.Backup, Text: "Backups work again."})
+	}
 }
 
 func (m *Manager) tell(note, kind, event string) {

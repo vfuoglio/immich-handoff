@@ -55,11 +55,12 @@ type RunInfo struct {
 
 type Syncer struct {
 	Cfg      Config
-	Services []*Service  // fixed services (used when Provider is nil)
-	Provider Provider    // optional: services that can change while running
-	Usage    Usage       // optional: records what senders hand over, so a service's daily cap can be applied
-	Bus      *live.Bus   // optional: tells the open pages what is happening, as it happens
-	Notifier notify.Func // optional: tells whoever runs the app that something needs attention
+	Services []*Service      // fixed services (used when Provider is nil)
+	Provider Provider        // optional: services that can change while running
+	Usage    Usage           // optional: records what senders hand over, so a service's daily cap can be applied
+	Bus      *live.Bus       // optional: tells the open pages what is happening, as it happens
+	Notifier notify.Func     // optional: tells whoever runs the app that something needs attention
+	Problems *notify.Tracker // optional: a problem that lasts is told once, reminded after a day, and told when it is over
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -295,6 +296,7 @@ func (s *Syncer) Tidy(ctx context.Context) {
 
 func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]time.Time) {
 	info := &RunInfo{Started: time.Now(), Reason: reason, PerService: map[string]Counts{}}
+	var ran []*Service // the services this pass looked at, to tell which problems are over
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
@@ -311,13 +313,12 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 			s.Log.Warn(msg)
 			s.notify(notify.Problem, msg)
 		}
-		if info.Error != "" || info.Counts.Errors > 0 || info.Counts.Refused > 0 {
-			s.notify(notify.Problem, passSummary(info))
-		}
+		s.reportPass(info, ran)
 	}()
 
 	resolved := map[uuid.UUID]bool{}
 	for _, svc := range s.Current() {
+		ran = append(ran, svc)
 		c := s.runService(ctx, svc, hints, resolved)
 		info.Counts.add(c)
 		info.PerService[svc.Label()] = c
@@ -342,6 +343,11 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 	log := s.Log.With("service", svc.Label())
 	// Never run without a healthy receiver: with none, an original would be deleted with no copy anywhere.
 	if svc.Broken != "" || len(svc.Receivers) == 0 {
+		return
+	}
+	// A pool that has ended hands nothing over: what was handed over stays, and tagged photos stay tagged.
+	if svc.Ended(time.Now()) {
+		log.Debug("the pool has ended; leaving tagged photos alone")
 		return
 	}
 	// A paused service hands nothing over and touches nothing: tagged photos stay tagged until it resumes.
@@ -404,11 +410,26 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		c.Errors++
 		return
 	}
-	for _, r := range rs {
-		if r.userID == me.ID {
-			log.Error("sender and receiver are the same Immich account; refusing", "receiver", r.acct.Name)
-			c.Errors++
+	if svc.Pool {
+		// in a pool every member is also a receiver: a photo goes to everyone but its own sender
+		others := make([]receiver, 0, len(rs))
+		for _, r := range rs {
+			if r.userID != me.ID {
+				others = append(others, r)
+			}
+		}
+		if len(others) == 0 {
+			log.Debug("nobody else is in the pool yet; leaving tagged photos alone")
 			return
+		}
+		rs = others
+	} else {
+		for _, r := range rs {
+			if r.userID == me.ID {
+				log.Error("sender and receiver are the same Immich account; refusing", "receiver", r.acct.Name)
+				c.Errors++
+				return
+			}
 		}
 	}
 	tag, err := snd.API.FindTag(ctx, svc.Tag, false)
@@ -585,6 +606,11 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		}
 	}
 	s.reportAlbum(svc, snd, fromAlbumDone, fromAlbumRefused, fromAlbumFailed)
+	if c.Imported > 0 || c.Refused > 0 {
+		if r, ok := s.Provider.(ArrivalReporter); ok {
+			r.HandedOver(svc, snd, c.Imported, c.Refused)
+		}
+	}
 	return
 }
 
@@ -769,6 +795,11 @@ func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, sn
 		if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
 			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
 				return handedCopy{}, fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			}
+		}
+		if svc.Pool { // who took it, whatever the pool does with the copy
+			if err := s.addTagVerified(ctx, r.acct.API, immich.FromTag(snd.Name), up.Id); err != nil {
+				return handedCopy{}, fmt.Errorf("tag %s's copy %s with who it is from: %w", r.acct.Name, up.Id, err)
 			}
 		}
 		c.created = true

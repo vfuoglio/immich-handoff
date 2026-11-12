@@ -7,6 +7,27 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
+// PushView is the person's "Notifications on this device" card.
+type PushView struct {
+	Available bool
+	Key       string // the public key a browser subscribes with
+	Devices   []PushDeviceView
+}
+
+// PushDeviceView is one of the person's devices.
+type PushDeviceView struct {
+	ID, Label, Mode string
+	Added, LastOK   string // already written for the reader; LastOK is empty until a push got through
+}
+
+// FrameView is one of the person's frames.
+type FrameView struct {
+	ID, Name, Album, Token string
+	Seconds                int
+	Ends                   string // when the link stops, "" for never
+	Ended                  bool
+}
+
 // MailView is the person's "Email me" card.
 type MailView struct {
 	Available bool // this install can write to people
@@ -51,6 +72,8 @@ type OfferView struct {
 	Owner  string // empty for services from the configuration
 	State  string // join | request | pending | approved | declined
 	Invite string // the invitation token the person arrived with, if any
+	Pool   bool   // an event pool: everyone sends and receives
+	Ends   string // a pool's end, already written for the reader ("" for none)
 }
 
 // RequestView is someone waiting for the owner's decision.
@@ -89,7 +112,24 @@ type OwnedView struct {
 	BridgeChecked     string // when it was last checked
 	BridgeRetry       string // when an unreachable server is tried again
 	BridgeStopped     string // why the service does not run for a reason that is not its receiver key (bridges switched off)
+	Digest            DigestView
+	Pool              bool   // an event pool
+	PoolEnds          string // when it ends, "" for when the owner ends it
+	PoolEnded         bool
 }
+
+// DigestView is a service's weekly digest as its owner sees it.
+type DigestView struct {
+	On, Running           bool
+	Made, Ends, Next      string // already written for the reader
+	Album, URL, Key       string // the album's name; the shared link's address when the app knows Immich's, else its key
+	Photos, People, Left  int
+	LeftList              []DigestLeftView
+	Note                  string
+}
+
+// DigestLeftView is a photo a digest left out and why, in words.
+type DigestLeftView struct{ Name, Why string }
 
 // MemberView is a sender of a service the person owns.
 type MemberView struct {
@@ -194,7 +234,9 @@ type DashboardData struct {
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 	Mail       MailView
+	Push       PushView
 	DropBoxes  []DropBoxView
+	Frames     []FrameView
 	Templates  []TemplateView
 }
 
@@ -237,6 +279,9 @@ type DropBoxView struct {
 	HasBest        bool
 
 	Short       string // the short code, if the box has a short link
+	MailOn      bool   // a mailbox is set up, so the box can have an address
+	MailAddress string // the box's mail address, if it has one
+	MailLocked  bool   // the box has a password, which a mail cannot give
 	Accent      string
 	Lang        string
 	MaxDim      int
@@ -485,6 +530,9 @@ templ Dashboard(d DashboardData) {
 			if d.Mail.Available {
 				@MailCard(d.Mail)
 			}
+			if d.Push.Available {
+				@PushCard(d.Push)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -524,6 +572,7 @@ templ Dashboard(d DashboardData) {
 					@OfferForm(d.DeleteOK)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
+				@FrameSection(d.Frames)
 			}
 		</section>
 		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
@@ -584,6 +633,76 @@ templ MailCard(m MailView) {
 	</div>
 }
 
+// PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
+// The script (ts/push.ts) shows the controls only where the browser can do it, and says why when it cannot.
+templ PushCard(p PushView) {
+	<h2>{ t(ctx, "Notifications on this device") }</h2>
+	<div class="card pushcard" id="pushcard" data-key={ p.Key }>
+		<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
+		<p class="meta" data-push-note hidden></p>
+		<div data-push-controls hidden>
+			<p class="row">
+				<label><input type="radio" name="pushmode" value="all" checked/> { t(ctx, "Everything that happens to my services") }</label>
+				<label><input type="radio" name="pushmode" value="needs"/> { t(ctx, "Only what needs me") }</label>
+			</p>
+			<p class="row"><button class="primary" type="button" data-push-on>{ t(ctx, "Turn on notifications here") }</button></p>
+		</div>
+		if len(p.Devices) > 0 {
+			<h3>{ t(ctx, "Your devices") }</h3>
+			<ul class="plain devices">
+				for _, dv := range p.Devices {
+					<li data-device={ dv.ID }>
+						<b>{ dv.Label }</b> <span class="chip ok" data-here-mark hidden>{ t(ctx, "This device") }</span>
+						<small class="meta">{ t(ctx, "Added {when}", "when", dv.Added) }
+							if dv.LastOK != "" {
+								· { t(ctx, "Last delivered {when}", "when", dv.LastOK) }
+							}
+						</small>
+						<span class="row">
+							<select data-push-mode aria-label={ t(ctx, "What this device is told") }>
+								<option value="all" selected?={ dv.Mode != "needs" }>{ t(ctx, "Everything that happens to my services") }</option>
+								<option value="needs" selected?={ dv.Mode == "needs" }>{ t(ctx, "Only what needs me") }</option>
+							</select>
+							<button type="button" data-push-test>{ t(ctx, "Send a test notification") }</button>
+							<button type="button" data-push-remove>{ t(ctx, "Remove") }</button>
+						</span>
+					</li>
+				}
+			</ul>
+		}
+		<small class="meta">{ t(ctx, "The notification reaches your device through the push service of your browser (Google, Mozilla, Apple or Microsoft), which can see that a message was sent and when, not what it says. Remove a device here to stop it.") }</small>
+	</div>
+}
+
+// ActionPageView is the page a one-tap link leads to: the question and the button, or how it ended.
+type ActionPageView struct {
+	Token, Question, Button string
+	Done                    bool
+	Failed                  string
+}
+
+// ActionPage asks before it acts, and says how it ended.
+templ ActionPage(v ActionPageView) {
+	@Layout("Immich Handoff", "") {
+		<section class="invite-hero">
+			switch {
+				case v.Done:
+					<h1>{ t(ctx, "Done.") }</h1>
+					<p class="lead"><a href="./">{ t(ctx, "Open Immich Handoff") }</a></p>
+				case v.Failed != "":
+					<h1>{ t(ctx, "Not done") }</h1>
+					<p class="lead">{ v.Failed }</p>
+					<p class="lead"><a href="./">{ t(ctx, "Open Immich Handoff") }</a></p>
+				default:
+					<h1>{ v.Question }</h1>
+					<form method="post" action={ "a/" + v.Token }>
+						<p class="row form-actions"><button class="primary" type="submit">{ v.Button }</button></p>
+					</form>
+			}
+		</section>
+	}
+}
+
 // UnsubscribePage is where the link in a mail leads: it asks first, so a program that opens the link does not stop anyone's mail.
 templ UnsubscribePage(token string, done bool) {
 	@Layout(t(ctx, "Stop the emails"), "") {
@@ -600,6 +719,91 @@ templ UnsubscribePage(token string, done bool) {
 			}
 		</section>
 	}
+}
+
+// PoolCard is what an owner sees of an event pool: what it is, when it ends, and how to end or extend it.
+templ PoolCard(o OwnedView) {
+	<div class="field pool">
+		<label>{ t(ctx, "Event pool") }</label>
+		<p class="meta">{ t(ctx, "Everyone in it, you too, sends and receives: a photo anyone tags goes to everyone else in the pool, tagged with who took it, and nobody's originals are touched. A person who joins later gets what is shared from then on; one who leaves keeps what they received.") }</p>
+		<p class="meta">
+			if o.PoolEnded {
+				<span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "The pool ended {when}. Nothing more is handed over; what was handed over stays.", "when", o.PoolEnds) }
+			} else if o.PoolEnds != "" {
+				<span class="chip ok">{ t(ctx, "Open") }</span> { t(ctx, "It ends {when}.", "when", o.PoolEnds) }
+			} else {
+				<span class="chip ok">{ t(ctx, "Open") }</span> { t(ctx, "It goes on until you end it.") }
+			}
+		</p>
+		<form class="limits" hx-post="services/pool" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="service" value={ o.Name }/>
+			<label>{ t(ctx, "Let it end after (days from now, empty: never)") } <input name="days" type="number" min="1" max="366" class="narrow"/></label>
+			<button type="submit" name="do" value="set">{ t(ctx, "Save the end") }</button>
+			if !o.PoolEnded {
+				<button type="submit" name="do" value="end" class="danger">{ t(ctx, "End the pool now") }</button>
+			}
+		</form>
+	</div>
+}
+
+// DigestCard is the weekly digest of a service: on or off, the last one and why photos were left out of it.
+templ DigestCard(service string, d DigestView, id string) {
+	<div class="field digest">
+		<label>{ t(ctx, "Weekly digest") }</label>
+		<p class="meta">{ t(ctx, "Every Monday morning the best photos that arrived in the last week are put in an album of yours and a link to it is made that ends after a month. The photos that are too dark, too bright, blurred or the same moment as a better one are left out, and you can see which and why. Nothing is deleted or changed.") }</p>
+		if d.On {
+			<p class="meta"><span class="chip ok">{ t(ctx, "On") }</span>
+				if d.Next != "" {
+					{ t(ctx, "Next digest: {when}", "when", d.Next) }
+				}
+				if d.Running {
+					<span class="chip">{ t(ctx, "Being made now") }</span>
+				}
+			</p>
+			if d.Made != "" {
+				<p class="meta">{ t(ctx, "Last one made {when}.", "when", d.Made) }
+					if d.Note != "" {
+						{ unpack(ctx, d.Note) }
+					}
+				</p>
+			}
+			if d.Photos > 0 {
+				<p class="meta">{ n(ctx, "{n} photo of the week from {people} in the album {album}", "{n} photos of the week from {people} in the album {album}", d.Photos, "people", n(ctx, "{n} person", "{n} people", d.People), "album", d.Album) }
+					if d.Left > 0 {
+						· { n(ctx, "{n} left out", "{n} left out", d.Left) }
+					}
+				</p>
+			}
+			if d.Key != "" {
+				<div class="row">
+					if d.URL != "" {
+						<input id={ "dg-" + id } class="invite" readonly value={ d.URL }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+					} else {
+						<span class="meta">{ t(ctx, "Link: your Immich address followed by /share/{key}", "key", d.Key) }</span>
+					}
+					<span class="meta">{ t(ctx, "ends {when}", "when", d.Ends) }</span>
+				</div>
+			}
+			if len(d.LeftList) > 0 {
+				<details>
+					<summary>{ t(ctx, "What was left out, and why") }</summary>
+					<ul class="plain">
+						for _, l := range d.LeftList {
+							<li>{ l.Name } <span class="meta">{ l.Why }</span></li>
+						}
+					</ul>
+				</details>
+			}
+			<p class="row">
+				<button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "now") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make this week's digest now") }</button>
+				<button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "off") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn off") }</button>
+			</p>
+		} else {
+			<p class="row"><button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "on") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn on the weekly digest") }</button></p>
+			<small class="meta">{ t(ctx, "Turning it on lets this service's key look at pictures and make an album and a shared link in your Immich account. Turning it off takes that away again.") }</small>
+		}
+	</div>
 }
 
 // WatchBox is where a sender links one of their albums to a service, so everything in it is handed over.
@@ -821,10 +1025,22 @@ templ OfferCard(o OfferView) {
 				{ " Offered by " + o.Owner + "." }
 			}
 		</p>
+		if o.Pool {
+			<p class="meta"><span class="chip warn">{ t(ctx, "Event pool") }</span> { t(ctx, "Everyone in it sends and receives: every photo you tag goes to everyone else in the pool, and theirs come to you, tagged with who took them. Your originals stay.") }
+				if o.Ends != "" {
+					{ t(ctx, "It ends {when}.", "when", o.Ends) }
+				}
+			</p>
+		}
 		if o.State == "join" || o.State == "approved" || o.State == "request" {
 			<p class="row">
 				switch o.State {
 					case "join", "approved":
+						if o.Pool {
+							<button class="primary" hx-post="join" hx-vals={ valsJoinPool(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ poolConfirm(ctx, o.Name, o.Tag, o.Ends) } data-confirm-title={ t(ctx, "Join the pool {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join the pool") }>
+								{ t(ctx, "Join the pool") }
+							</button>
+						} else {
 						<span class="meta q">{ t(ctx, "What should happen to your originals?") }</span>
 						<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, true) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
 							{ joinLabel(ctx, o.State, true) }
@@ -832,6 +1048,7 @@ templ OfferCard(o OfferView) {
 						<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, false) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
 							{ joinLabel(ctx, o.State, false) }
 						</button>
+						}
 					case "request":
 						<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask to join") }</button>
 				}
@@ -938,6 +1155,10 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					<div class="qr" id={ "qr-inv-" + id } hidden></div>
 				</div>
 			}
+			if o.Pool {
+				@PoolCard(o)
+			}
+			@DigestCard(o.Name, o.Digest, id)
 			if o.BridgeStopped != "" {
 				<p class="meta"><span class="chip bad">{ t(ctx, "Stopped") }</span> { o.BridgeStopped }</p>
 			}
@@ -1042,6 +1263,11 @@ templ OfferForm(deleteOK bool) {
 				</select>
 			</div>
 		</div>
+		<div class="field pool-field">
+			<label><input name="pool" type="checkbox" value="1"/> { t(ctx, "Event pool: everyone who joins, you too, sends and receives") }</label>
+			<small class="meta">{ t(ctx, "For a trip or a party. A photo anyone tags goes to everyone else in the pool, tagged with who took it, and everyone's originals stay where they are. People who join are told so before they do.") }</small>
+			<label for="svc-poolends">{ t(ctx, "The pool ends after (days, empty: when I end it)") } <input id="svc-poolends" name="poolends" type="number" min="1" max="366" class="narrow"/></label>
+		</div>
 		<details class="more">
 			<summary>{ t(ctx, "More options") }</summary>
 			<div class="form-grid">
@@ -1080,9 +1306,22 @@ type AdminData struct {
 	Leftover []AdminMemberView
 	Activity []AdminActivityView
 	Backup   AdminBackup
+	Notify   []NotifyView
 	SelfOn   bool // people can join from the page, so there is a store to remove from
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+}
+
+// NotifyView is a place messages for whoever runs the app go, as the administrator's page lists it (never its address).
+type NotifyView struct {
+	Name, Format, Kinds string
+	People              bool
+}
+
+// NotifyResultView is how a destination answered a test.
+type NotifyResultView struct {
+	Name, Format, Err string
+	People            bool
 }
 
 // AdminBackup is what the administrator's page says about backups.
@@ -1153,6 +1392,7 @@ templ AdminPage(d AdminData) {
 			</p>
 			<pre id="checkresult" class="checkresult" aria-live="polite"></pre>
 		</section>
+		@AdminNotify(d.Notify)
 		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
@@ -1185,6 +1425,51 @@ templ AdminPage(d AdminData) {
 			</section>
 		}
 	}
+}
+
+// AdminNotify lists where the app sends its messages for whoever runs it, with a test.
+templ AdminNotify(items []NotifyView) {
+	<h2>{ t(ctx, "Notifications") }</h2>
+	<section class="card">
+		if len(items) == 0 {
+			<p class="meta">{ t(ctx, "No destination is set, so problems appear in the log and on the pages only. See NOTIFY_URL and NOTIFY_FILE.") }</p>
+		} else {
+			<ul class="plain">
+				for _, it := range items {
+					<li><b>{ it.Name }</b> <span class="meta">
+						if it.People {
+							{ it.Format } · { t(ctx, "mail to the people taking part") }
+						} else {
+							{ it.Format } · { t(ctx, "takes {kinds}", "kinds", it.Kinds) }
+						}
+					</span></li>
+				}
+			</ul>
+			<p class="row">
+				<button class="primary" hx-post="admin/notify/test" hx-target="#notifyresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#notifyresult">{ t(ctx, "Send a test notification") }</button>
+				<span class="meta">{ t(ctx, "One message to each destination, whatever it takes. Nothing else is changed.") }</span>
+			</p>
+			<div id="notifyresult" aria-live="polite"></div>
+		}
+	</section>
+}
+
+// NotifyResults is how each destination answered a test.
+templ NotifyResults(results []NotifyResultView) {
+	<ul class="plain">
+		for _, r := range results {
+			<li>
+				<b>{ r.Name }</b>
+				if r.People {
+					<span class="chip">{ t(ctx, "not tested here") }</span> <span class="meta">{ t(ctx, "each person tests their own mail from their page") }</span>
+				} else if r.Err == "" {
+					<span class="chip ok">{ t(ctx, "delivered") }</span>
+				} else {
+					<span class="chip bad">{ t(ctx, "failed") }</span> <span class="meta">{ r.Err }</span>
+				}
+			</li>
+		}
+	</ul>
 }
 
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
@@ -1612,6 +1897,23 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 							}
 						</p>
 					</div>
+					if b.MailOn {
+						<div class="field">
+							<label>{ t(ctx, "Photos by email") }</label>
+							if b.MailAddress != "" {
+								<div class="row">
+									<input id={ "dropmail-" + id } class="invite" readonly value={ b.MailAddress }/>
+									<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+									<button hx-post="dropbox/mail" hx-vals={ mailVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The address stops working. Photos already received are kept.") } data-confirm-title={ t(ctx, "Remove the email address?") } data-confirm-label={ t(ctx, "Remove") }>{ t(ctx, "Remove email address") }</button>
+								</div>
+								<p class="meta">{ t(ctx, "Anyone who knows this address can send photos to the box, like the link. Only photos and videos are taken, under the box's limits and approval; the rest of a mail is dropped and nobody gets a reply.") }</p>
+							} else if b.MailLocked {
+								<p class="meta">{ t(ctx, "A box with a password cannot take photos by email: nobody can type the password into a mail.") }</p>
+							} else {
+								<p class="row"><button hx-post="dropbox/mail" hx-vals={ mailVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Give this box an email address") }</button></p>
+							}
+						</div>
+					}
 					<details class="more">
 						<summary>{ t(ctx, "The look of the guest page") }</summary>
 						<form class="limits" hx-post="dropbox/look" hx-encoding="multipart/form-data" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -2156,7 +2458,7 @@ templ DropMine(name, token string, files []GuestFileView, msg string) {
 }
 
 // DropCard is a page to print for a table or a poster: the box's name, its message and a QR code of its link.
-templ DropCard(user, name, message, link string) {
+templ DropCard(user, name, message, link, mailAddress string) {
 	@Layout(name, user) {
 		<section class="card-sheet" data-card-link={ link }>
 			<h1>{ name }</h1>
@@ -2165,6 +2467,9 @@ templ DropCard(user, name, message, link string) {
 			}
 			<div class="card-qr" id="card-qr"></div>
 			<p class="card-url" id="card-url"></p>
+			if mailAddress != "" {
+				<p class="card-url">{ t(ctx, "Or send photos by email to {address}", "address", mailAddress) }</p>
+			}
 			<p class="no-print"><button type="button" id="card-print" class="primary">{ t(ctx, "Print") }</button></p>
 		</section>
 	}
@@ -2198,6 +2503,123 @@ templ WallPage(name, token, mode string) {
 					<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
 					<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
 				</nav>
+			</main>
+		</body>
+	</html>
+}
+
+// FrameSection is where a person makes frames: links that show one of their albums on a screen with no account.
+templ FrameSection(frames []FrameView) {
+	<h2>{ t(ctx, "Frames") }</h2>
+	<p class="meta">{ t(ctx, "A frame is a link that shows one of your albums full screen, on a photo frame, an old tablet or a TV, with no account on it. New photos in the album appear within a couple of minutes, and photos you take out disappear. The link is as private as its length: anyone who has it can see the album's photos, so end it when you no longer want that.") }</p>
+	for i, f := range frames {
+		@FrameRow(f, fmt.Sprintf("frame-%d", i), len(frames) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Make a frame") }</summary>
+		<form class="card offer-form" hx-post="frames" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="fr-name">{ t(ctx, "Name") }</label>
+				<input id="fr-name" name="name" required maxlength="60" placeholder={ t(ctx, "Living room") }/>
+			</div>
+			<div class="field" hx-get="fragments/frame-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			<div class="field">
+				<label for="fr-hold">{ t(ctx, "Show each photo for") }</label>
+				<select id="fr-hold" name="hold">
+					<option value="8">{ t(ctx, "{n} seconds", "n", 8) }</option>
+					<option value="15" selected>{ t(ctx, "{n} seconds", "n", 15) }</option>
+					<option value="30">{ t(ctx, "{n} seconds", "n", 30) }</option>
+					<option value="60">{ t(ctx, "{n} seconds", "n", 60) }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="fr-ends">{ t(ctx, "The link works") }</label>
+				<select id="fr-ends" name="ends">
+					<option value="0" selected>{ t(ctx, "until I end it") }</option>
+					<option value="30">{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="365">{ t(ctx, "for a year") }</option>
+				</select>
+			</div>
+			<p class="meta">{ t(ctx, "This makes a key in your Immich account that can only look at pictures and list an album's photos. It is deleted when you end the frame.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make frame") }</button></p>
+		</form>
+	</details>
+}
+
+// FrameAlbumSelect is the list of albums in the form that makes a frame.
+templ FrameAlbumSelect(albums []AlbumOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "You have no albums of your own yet. Make one in Immich, then come back.") }</p>
+	} else {
+		<label for="fr-album">{ t(ctx, "Album to show") }</label>
+		<select id="fr-album" name="album">
+			for _, a := range albums {
+				<option value={ a.ID }>{ a.Label }</option>
+			}
+		</select>
+	}
+}
+
+// FrameRow is one frame: its link, when it ends, and a button to end it.
+templ FrameRow(f FrameView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(f.Name, t(ctx, "frame of {album}", "album", f.Album), frameChips(ctx, f), "sum-"+id)
+		<div class="body">
+			if f.Ended {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "This frame's link stopped on {when}. Remove it to delete its key from your Immich account.", "when", f.Ends) }</p>
+			} else {
+				<div class="field">
+					<label for={ "fr-link-" + id }>{ t(ctx, "Link to open on the screen") }</label>
+					<div class="row">
+						<input id={ "fr-link-" + id } class="invite" readonly data-link={ "frame/" + f.Token }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="show-qr" data-for={ "fr-link-" + id } data-alt={ t(ctx, "QR code of the frame's link") }>{ t(ctx, "QR code") }</button>
+					</div>
+					<div class="qr" id={ "qr-fr-link-" + id } hidden></div>
+				</div>
+				<p class="meta">{ t(ctx, "Shows each photo for {n} seconds.", "n", f.Seconds) }
+					if f.Ends != "" {
+						{ t(ctx, "The link works until {when}.", "when", f.Ends) }
+					} else {
+						{ t(ctx, "The link works until you end it.") }
+					}
+				</p>
+			}
+			<p class="row"><button hx-post="frames/end" hx-vals={ vals("frame", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The link will stop working at once and the frame's key will be deleted. Continue?") } data-confirm-title={ t(ctx, "End the frame?") } data-confirm-label={ t(ctx, "End frame") } data-danger="true">
+				if f.Ended {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End frame") }
+				}
+			</button></p>
+		</div>
+	</details>
+}
+
+// FramePage is the page a frame opens: full screen, no sign-in, no controls.
+templ FramePage(name, token string, seconds int) {
+	<!DOCTYPE html>
+	<html lang={ loc(ctx).Code() }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="robots" content="noindex"/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ name }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/app.js" defer></script>
+		</head>
+		<body class="wall">
+			<main id="frame" data-feed={ "frame/" + token + "/feed" } data-photo={ "frame/" + token + "/photo/" } data-seconds={ fmt.Sprint(seconds) }>
+				<div class="wall-stage single" aria-live="off"></div>
+				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 			</main>
 		</body>
 	</html>

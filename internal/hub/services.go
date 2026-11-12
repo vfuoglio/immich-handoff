@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -30,6 +31,10 @@ var (
 	ErrNoInvite  = errors.New("this invitation is not valid any more")
 	ErrBadExpiry = errors.New("the number of days must be between 1 and 3650")
 	ErrBadAlbum  = errors.New("the album name must be at most 100 characters and have no line breaks")
+	// ErrBadPoolEnd: a pool ends after 1 to 366 days, or when its owner ends it.
+	ErrBadPoolEnd = errors.New("a pool ends after 1 to 366 days, or when its owner ends it")
+	// ErrNotPool: the service is not an event pool.
+	ErrNotPool = errors.New("this service is not an event pool")
 )
 
 var (
@@ -62,6 +67,10 @@ type CreateParams struct {
 	Album      string // optional: an album, in the owner's account, that handed-over photos are put in
 	// optional daily caps per sender: photos and megabytes, 0 for none
 	LimitPhotos, LimitMB int
+	// Pool makes it an event pool: everyone who joins, the owner too, sends and receives, and a photo goes to everyone but
+	// its sender. EndsInDays (1 to 366; 0: until the owner ends it) is when it stops.
+	Pool       bool
+	EndsInDays int
 }
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
@@ -111,8 +120,15 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 			return ErrNameTaken
 		}
 	}
-	// The key only gets the right to touch albums when the service uses one.
+	if p.EndsInDays < 0 || p.EndsInDays > 366 || (p.EndsInDays > 0 && !p.Pool) {
+		return ErrBadPoolEnd
+	}
+	// The key only gets the right to touch albums when the service uses one. In a pool the owner also sends, so the key
+	// gets what a sender needs as well.
 	keyPerms := immich.ReceiverPermissionsFor(album != "", h.ReceiverDelete)
+	if p.Pool {
+		keyPerms = immich.PoolPermissionsFor(album != "", h.ReceiverDelete)
+	}
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", keyPerms)
 	if err != nil {
 		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
@@ -133,6 +149,7 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
 		Visibility: visibility, Invite: invite, Album: album, LimitPhotos: p.LimitPhotos, LimitMB: p.LimitMB,
+		Pool: p.Pool, EndsAt: poolEnd(h.now(), p.EndsInDays), Mode: poolMode(p.Pool),
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -144,8 +161,34 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 		return err
 	}
 	h.event(ctx, name, owner.ID, "created", i18n.Pack("{name} started offering {service}", "name", owner.Name, "service", name))
-	h.Log.Info("service created", "service", name, "owner", owner.Email, "policy", policy)
+	h.Log.Info("service created", "service", name, "owner", owner.Email, "policy", policy, "pool", p.Pool)
+	if p.Pool && h.Hook.URL != "" { // the owner sends too, so their account needs the workflow a member gets
+		if svc := h.service(name); svc != nil {
+			if api, err := h.Connect(secret); err == nil {
+				if err := h.provision(ctx, svc, api); err != nil {
+					h.Log.Warn("pool made, but the owner's workflow is not ready yet; retrying in the background", "err", err)
+					if h.Retry != nil {
+						go h.Retry()
+					}
+				}
+			}
+		}
+	}
 	return nil
+}
+
+func poolEnd(now time.Time, days int) time.Time {
+	if days <= 0 {
+		return time.Time{}
+	}
+	return now.Add(time.Duration(days) * 24 * time.Hour)
+}
+
+func poolMode(pool bool) string {
+	if pool {
+		return syncer.ModeCopy
+	}
+	return ""
 }
 
 // DeleteService removes a service its owner created: the receiver key is deleted from Immich and the
@@ -161,6 +204,10 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 	}
 	for _, v := range stored {
 		if v.Name == name {
+			if d, on, _ := h.Store.DigestFor(ctx, name); on { // its shared link ends with it
+				h.endDigestLink(ctx, &v, d)
+				_ = h.Store.DeleteDigest(ctx, name)
+			}
 			if err := sess.DeleteAPIKey(ctx, v.KeyID); err != nil {
 				h.Log.Warn("delete service: could not delete the receiver key (it may already be gone)", "err", err)
 			}
@@ -203,13 +250,20 @@ func (h *Hub) Ask(ctx context.Context, user immich.User, service, invite string)
 	if err := h.tagFree(user.ID, svc); err != nil {
 		return err
 	}
-	if _, err := h.Store.AddRequest(ctx, store.Request{Service: service, UserID: user.ID, Name: user.Name, Email: user.Email}); err != nil {
+	req, err := h.Store.AddRequest(ctx, store.Request{Service: service, UserID: user.ID, Name: user.Name, Email: user.Email})
+	if err != nil {
 		if errors.Is(err, store.ErrExists) {
 			return nil // asking again changes nothing
 		}
 		return err
 	}
-	h.event(ctx, service, user.ID, "asked", i18n.Pack("{name} asked to send to {service}", "name", user.Name, "service", service))
+	var acts []ActionSpec // the owner can answer from the message
+	if svc.OwnerID != uuid.Nil {
+		for _, kind := range []string{ActionApprove, ActionDecline} {
+			acts = append(acts, ActionSpec{Recipient: svc.OwnerID, RecipientName: h.ownerName(ctx, service), Kind: kind, Service: service, Target: req.ID, Group: req.ID})
+		}
+	}
+	h.eventWith(ctx, service, user.ID, "asked", i18n.Pack("{name} asked to send to {service}", "name", user.Name, "service", service), acts)
 	h.Log.Info("join requested", "service", service, "user", user.Email)
 	return nil
 }
@@ -326,7 +380,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided, ErrDigestOff, ErrDigestRunning, ErrBadFrameName, ErrBadFrameEnd, ErrTooManyFrames, ErrNoFrame, ErrMailInOff, ErrDropMailLocked, ErrPoolConfirm, ErrPoolEnded, ErrBadPoolEnd, ErrNotPool} {
 		if errors.Is(err, e) {
 			return true
 		}

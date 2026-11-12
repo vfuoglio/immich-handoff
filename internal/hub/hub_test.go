@@ -65,6 +65,8 @@ type fakeImmich struct {
 	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
 	members       map[string]map[string]bool // album id -> asset ids in it
 	removedLinks  []string
+	videos        map[string]bool // asset ids that are videos (the rest are photos)
+	archived      map[string]bool // asset ids the owner archived
 }
 
 type fakeUpload struct {
@@ -343,7 +345,15 @@ func (f *fakeImmich) handler() http.Handler {
 		for _, n := range names {
 			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
 		}
-		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+		name := f.assetName[r.PathValue("id")]
+		if name == "" {
+			name = "x.jpg"
+		}
+		created := ts
+		if c := f.created[r.PathValue("id")]; c != "" {
+			created = c
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
 	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -389,7 +399,11 @@ func (f *fakeImmich) handler() http.Handler {
 			if name == "" {
 				name = "x.jpg"
 			}
-			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+			kind := "IMAGE"
+			if f.videos[id] {
+				kind = "VIDEO"
+			}
+			items = append(items, map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created, "type": kind, "isTrashed": f.trashed[id], "isArchived": f.archived[id]})
 		}
 		if len(body.AlbumIds) > 0 {
 			for _, aid := range body.AlbumIds {

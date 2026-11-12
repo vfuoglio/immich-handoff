@@ -19,7 +19,9 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -51,8 +53,12 @@ func main() {
 		os.Exit(runBackupCommand(context.Background(), os.Args[1], os.Args[2:], os.Stdout, os.Stderr))
 	}
 	// A check of the setup: `immich-handoff doctor` (run it inside the container; it reads the same settings).
-	if len(os.Args) == 2 && os.Args[1] == "doctor" {
-		os.Exit(runDoctor(context.Background(), os.Stdout))
+	if len(os.Args) >= 2 && os.Args[1] == "doctor" {
+		if len(os.Args) > 3 || (len(os.Args) == 3 && os.Args[2] != "--send-test") {
+			fmt.Fprintln(os.Stderr, "usage: immich-handoff doctor [--send-test]")
+			os.Exit(2)
+		}
+		os.Exit(runDoctor(context.Background(), os.Stdout, len(os.Args) == 3))
 	}
 	level := slog.LevelInfo
 	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
@@ -96,8 +102,9 @@ func run(log *slog.Logger) error {
 	if notifier.PeopleMailReady() && appURL == "" {
 		return errors.New("NOTIFY_FILE: a destination with people: true needs PUBLIC_APP_URL, because every mail to a person links to the page and to the way to stop the emails")
 	}
+	problems := notify.NewTracker(notifier.Send) // a problem that lasts is told once, not on every pass
 	s := &syncer.Syncer{
-		Services: services, Log: log, Bus: bus, Notifier: notifier.Send,
+		Services: services, Log: log, Bus: bus, Notifier: notifier.Send, Problems: problems,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
 			Quiet: quiet, ReceiverDelete: receiverDelete, NoDetails: env("CARRY_DETAILS", "on") == "off",
@@ -131,7 +138,7 @@ func run(log *slog.Logger) error {
 
 	// Self-service joining needs a place to keep keys, protected by a key of its own.
 	defaults := config.DefaultsFrom(os.Getenv)
-	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus, ReceiverDelete: receiverDelete, Bridge: bridge.SettingsFrom(os.Getenv),
+	h := &hub.Hub{Static: services, Connect: connect, Hook: hook, Log: log, Bus: bus, AppURL: appURL, ReceiverDelete: receiverDelete, Bridge: bridge.SettingsFrom(os.Getenv),
 		Options: hub.Options{InboxTag: defaults.InboxTag, RefusedTag: defaults.RefusedTag, SentTag: defaults.SentTag, ExpiryDays: defaults.ExpiryDays},
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) },
@@ -141,6 +148,9 @@ func run(log *slog.Logger) error {
 	} else if storeKey == "" {
 		if notifier.PeopleMailReady() {
 			return errors.New("NOTIFY_FILE: a destination with people: true needs HANDOFF_STORE_KEY, because people turn email on from the web page")
+		}
+		if _, on, _ := mailin.SettingsFrom(os.Getenv); on {
+			return errors.New("MAIL_IN_HOST needs HANDOFF_STORE_KEY, because photos by email go to drop boxes, which people make from the web page")
 		}
 		log.Info("HANDOFF_STORE_KEY is not set: people cannot join from the web page (keys from the configuration still work)")
 	} else {
@@ -166,12 +176,53 @@ func run(log *slog.Logger) error {
 			defer h.People.Close() // sends what is waiting for company
 			log.Info("email for the people taking part is on")
 		}
+		if pc, err := push.Contact(os.Getenv("PUSH_CONTACT"), appURL); err != nil {
+			return err
+		} else if env("PUSH", "on") == "off" {
+			log.Info("notifications on devices are off (PUSH=off)")
+		} else if pc == "" {
+			log.Info("notifications on devices are off: the push services need a way to reach whoever runs the app; set PUBLIC_APP_URL (an https address) or PUSH_CONTACT")
+		} else {
+			raw, err := st.PushKey(ctx, func() ([]byte, error) {
+				k, err := push.NewKeys()
+				if err != nil {
+					return nil, err
+				}
+				return k.Private()
+			})
+			if err != nil {
+				return err
+			}
+			keys, err := push.KeysFromPrivate(raw)
+			if err != nil {
+				return err
+			}
+			h.Push = &hub.Push{Store: st, Sender: &push.Client{Keys: keys, Subject: pc}, Key: keys.PublicB64(), Log: log}
+			defer h.Push.Close() // sends what is waiting for company
+			log.Info("notifications on devices are on")
+		}
+		if v := env("FRAME_REFRESH", ""); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 5*time.Second || d > time.Hour {
+				return errors.New("FRAME_REFRESH must be a time between 5s and 1h, such as 2m")
+			}
+			h.FrameRefresh = d
+		}
+		if ms, on, err := mailin.SettingsFrom(os.Getenv); err != nil {
+			return err
+		} else if on {
+			h.MailIn = &hub.MailIn{Hub: h, Settings: ms, Log: log}
+			go h.MailIn.Run(ctx)
+			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
+		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
 			t := time.NewTicker(10 * time.Minute)
 			defer t.Stop()
 			for {
 				h.DropMaintenance(ctx)
+				h.DigestMaintenance(ctx)
+				h.FrameMaintenance(ctx)
 				select {
 				case <-ctx.Done():
 					return
@@ -183,7 +234,7 @@ func run(log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Every: every, Keep: keep,
+		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Problems: problems, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)
@@ -202,7 +253,7 @@ func run(log *slog.Logger) error {
 	s.Provider = h
 	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
-	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
+	w := &web.Server{S: s, Hub: h, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
 

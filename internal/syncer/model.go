@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -43,8 +44,10 @@ type Service struct {
 	ExpiryDays int    // unfiled copies lose InboxTag after this many days
 	Senders    []*Account
 	Receivers  []*Account
-	Remote     Remote // a receiver on another Immich server, in addition to Receivers (nil: none)
-	AllowJoin  bool   // people may add themselves as senders from the web page
+	Remote     Remote    // a receiver on another Immich server, in addition to Receivers (nil: none)
+	AllowJoin  bool      // people may add themselves as senders from the web page
+	Pool       bool      // an event pool: every member is a sender and a receiver, and a photo goes to everyone but its sender
+	EndsAt     time.Time // a pool stops handing over at this time (zero: until the owner ends it)
 
 	NeedsApproval bool      // people may ask to send; the owner decides, then the sender activates
 	OwnerID       uuid.UUID // the Immich user who created and owns a service made on the web page (zero when configured)
@@ -159,4 +162,9 @@ func ResolveUsers(ctx context.Context, services []*Service) (failed []*Account) 
 		}
 	}
 	return failed
+}
+
+// Ended reports whether a pool has reached its end: nothing is handed over any more, and what was handed over stays.
+func (s *Service) Ended(now time.Time) bool {
+	return s.Pool && !s.EndsAt.IsZero() && !s.EndsAt.After(now)
 }

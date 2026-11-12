@@ -29,6 +29,7 @@ const (
 	refusedTag = "66666666-6666-6666-6666-666666666666"
 	albumID    = "99999999-9999-4999-8999-999999999999"
 	sentTagID  = "77777777-7777-7777-7777-777777777777"
+	fromTagID  = "88888888-8888-4888-8888-888888888888"
 	payload    = "pretend these are JPEG bytes"
 	ts         = "2025-01-02T03:04:05.000Z"
 )
@@ -61,6 +62,9 @@ type fakeImmich struct {
 	watchSearchFails bool     // the album cannot be read
 	sentTagged       []string // photos that already carry the sender's "handed over" tag
 	noTagged         bool     // nothing carries the service tag
+
+	fromTagged []string // names of the "from/<name>" tags that were put on a copy
+	lastFrom   string   // the last "from/<name>" tag that was made
 }
 
 func (f *fakeImmich) handler() http.Handler {
@@ -180,6 +184,10 @@ func (f *fakeImmich) handler() http.Handler {
 		if len(f.tagged) > 0 { // once tagged, the copy carries the inbox tag
 			a["tags"] = []any{tag(inboxTag, "inbox")}
 		}
+		if n := len(f.fromTagged); n > 0 { // and the "from" tag, once that is put on
+			tags, _ := a["tags"].([]any)
+			a["tags"] = append(tags, tag(fromTagID, f.fromTagged[n-1]))
+		}
 		f.mu.Unlock()
 		j(w, 200, a)
 	})
@@ -194,7 +202,22 @@ func (f *fakeImmich) handler() http.Handler {
 		j(w, 200, []any{map[string]any{"id": dstAsset, "success": true}})
 	})
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Tags []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Tags) == 1 && strings.HasPrefix(body.Tags[0], "from/") {
+			f.mu.Lock()
+			f.lastFrom = body.Tags[0]
+			f.mu.Unlock()
+			j(w, 200, []any{tag(fromTagID, body.Tags[0])}) // a "from" tag is its own tag, named as asked
+			return
+		}
 		j(w, 200, []any{tag(refusedTag, "share-duplicate")})
+	})
+	mux.HandleFunc("PUT /api/tags/"+fromTagID+"/assets", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.fromTagged = append(f.fromTagged, f.lastFrom)
+		f.mu.Unlock()
+		j(w, 200, []any{map[string]any{"id": dstAsset, "success": true}})
 	})
 	album := func(name string) map[string]any {
 		return map[string]any{"id": albumID, "albumName": name, "assetCount": 3}

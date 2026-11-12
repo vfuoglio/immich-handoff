@@ -29,6 +29,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -55,8 +56,11 @@ type Server struct {
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 	ClientIPHeader  string          // DROPBOX_CLIENT_IP_HEADER: the header in which a reverse proxy puts a guest's real address (empty: the connection's)
 
-	limiter limiter
-	gate    downloadGate
+	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
+
+	limiter  limiter
+	gate     downloadGate
+	testGate downloadGate // one test of the notification destinations at a time, and not too often
 }
 
 func init() {
@@ -85,6 +89,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/notify/test", w.adminNotifyTest)
 	mux.HandleFunc("POST /admin/backup/download", w.adminBackupDownload)
 	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
 	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)
@@ -92,6 +97,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("POST /services/rules", w.setRules)
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
+	mux.HandleFunc("POST /services/digest", w.setDigest)
+	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
@@ -117,6 +124,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
 	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
+	mux.HandleFunc("GET /frame/{token}", w.framePage)
+	mux.HandleFunc("GET /frame/{token}/feed", w.frameFeed)
+	mux.HandleFunc("GET /frame/{token}/photo/{id}", w.framePhoto)
+	mux.HandleFunc("GET /fragments/frame-albums", w.frameAlbums)
+	mux.HandleFunc("POST /frames", w.createFrame)
+	mux.HandleFunc("POST /frames/end", w.endFrame)
 	mux.HandleFunc("GET /wall/{token}", w.wallPage)
 	mux.HandleFunc("GET /wall/{token}/feed", w.wallFeed)
 	mux.HandleFunc("GET /wall/{token}/photo/{id}", w.wallPhoto)
@@ -127,6 +140,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/onward", w.setOnward)
 	mux.HandleFunc("POST /dropbox/handon", w.handOn)
 	mux.HandleFunc("POST /dropbox/short", w.shortDropBox)
+	mux.HandleFunc("POST /dropbox/mail", w.mailDropBox)
 	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
 	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
 	mux.HandleFunc("POST /dropbox/template", w.saveDropTemplate)
@@ -148,6 +162,13 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("POST /me/mail", w.myMail)
+	mux.HandleFunc("GET /me/push/key", w.pushKey)
+	mux.HandleFunc("POST /me/push", w.pushSubscribe)
+	mux.HandleFunc("POST /me/push/remove", w.pushRemove)
+	mux.HandleFunc("POST /me/push/mode", w.pushMode)
+	mux.HandleFunc("POST /me/push/test", w.pushTest)
+	mux.HandleFunc("GET /a/{token}", w.actionPage)
+	mux.HandleFunc("POST /a/{token}", w.actionRun)
 	mux.HandleFunc("GET /unsubscribe/{token}", w.unsubscribePage)
 	mux.HandleFunc("POST /unsubscribe/{token}", w.unsubscribe)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)
@@ -177,7 +198,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 	if u, err := url.Parse(w.PublicImmichURL); err == nil && u.Scheme != "" && u.Host != "" {
 		img += " " + u.Scheme + "://" + u.Host
 	}
-	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; img-src " + img +
+	csp := "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; img-src " + img +
 		"; media-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		h := rw.Header()
@@ -423,6 +444,13 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 				ov.BridgeRetry = st.RetryAt.Local().Format("15:04")
 			}
 		}
+		ov.Digest = w.digestView(ctx, o.Service.Label())
+		if o.Service.Pool {
+			ov.Pool, ov.PoolEnded = true, o.Service.Ended(time.Now())
+			if !o.Service.EndsAt.IsZero() {
+				ov.PoolEnds = loc(ctx).Stamp(o.Service.EndsAt.Local())
+			}
+		}
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
 		}
@@ -466,11 +494,16 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			if o.Service.OwnerID != uuid.Nil {
 				owner = ownerName(o.Service)
 			}
-			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State})
+			ov := OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State, Pool: o.Service.Pool}
+			if o.Service.Pool && !o.Service.EndsAt.IsZero() {
+				ov.Ends = loc(ctx).Stamp(o.Service.EndsAt.Local())
+			}
+			d.Offers = append(d.Offers, ov)
 		}
 	}
 	d.Owned = w.ownedViews(ctx, me)
 	d.DropBoxes = w.dropBoxViews(ctx, me)
+	d.Frames = w.frameViews(ctx, me)
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
@@ -485,6 +518,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	mc := w.Hub.MailCard(ctx, me.user, string(loc(ctx).Lang))
 	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
+	d.Push = w.pushView(ctx, me)
 	w.overview(ctx, me, &d)
 	return d
 }
@@ -667,7 +701,10 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
-	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token}
+	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token, Pool: offer.Service.Pool}
+	if offer.Service.Pool && !offer.Service.EndsAt.IsZero() {
+		d.Invited.Ends = loc(r.Context()).Stamp(offer.Service.EndsAt.Local())
+	}
 	rw.Header().Set("Cache-Control", "no-store")
 	InvitePage(d).Render(r.Context(), rw)
 }
@@ -1003,7 +1040,7 @@ func (w *Server) enableTags(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) join(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "joined", func(ctx context.Context, me *member, service string) error {
-		return w.Hub.Join(ctx, me.sess, me.user, service, r.PostFormValue("invite"), r.PostFormValue("mode"))
+		return w.Hub.JoinWith(ctx, me.sess, me.user, service, r.PostFormValue("invite"), r.PostFormValue("mode"), r.PostFormValue("pool") == "1")
 	})
 }
 
@@ -1046,10 +1083,11 @@ func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		poolDays, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("poolends")))
 		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
 			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
 			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days, Album: r.PostFormValue("album"),
-			LimitPhotos: photos, LimitMB: mb,
+			LimitPhotos: photos, LimitMB: mb, Pool: r.PostFormValue("pool") == "1", EndsInDays: poolDays,
 		})
 	})
 }

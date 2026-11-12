@@ -237,9 +237,27 @@ func TestThePageCanBeInstalledOnAPhone(t *testing.T) {
 			t.Errorf("the page head lacks %s", want)
 		}
 	}
-	// nothing is cached by the page: there is no service worker
+	// nothing is cached by the page: the only service worker is the one that shows push notifications. It has no fetch
+	// handler and no cache, and it is registered for the static folder only, so it never sits between the page and the app.
 	_, _, js := get("/static/app.js")
-	if strings.Contains(string(js), "serviceWorker") || strings.Contains(string(raw), "serviceworker") {
-		t.Error("the page must not install a service worker: nothing signed-in may be cached")
+	if n := strings.Count(string(js), "serviceWorker.register"); n != 1 || !strings.Contains(string(js), `"static/sw.js"`) || !strings.Contains(string(js), `scope:"static/"`) {
+		t.Errorf("the script must register the push worker, and only it, for the static folder (%d registrations)", n)
+	}
+	if strings.Contains(string(raw), "serviceworker") && !strings.Contains(string(raw), "manifest") {
+		t.Error("the manifest must not name a service worker")
+	}
+	_, typ, sw := get("/static/sw.js")
+	if res, err := http.Get(app.URL + "/static/sw.js"); err != nil || !strings.Contains(typ, "javascript") || !strings.Contains(res.Header.Get("Content-Security-Policy"), "worker-src 'self'") {
+		t.Errorf("the worker is served as a script under the page's policy: %q %v", typ, err)
+	}
+	for _, forbidden := range []string{`"fetch"`, "caches", "CacheStorage", "importScripts"} {
+		if strings.Contains(string(sw), forbidden) {
+			t.Errorf("the worker must not touch the network or a cache: it contains %s", forbidden)
+		}
+	}
+	for _, want := range []string{"push", "notificationclick", "showNotification"} {
+		if !strings.Contains(string(sw), want) {
+			t.Errorf("the worker lacks %q", want)
+		}
 	}
 }

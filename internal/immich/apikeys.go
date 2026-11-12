@@ -2,9 +2,31 @@ package immich
 
 import (
 	"context"
+	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// FramePermissions is what a frame's key gets: looking at pictures and listing which photos are in an album (Immich
+// lists them with a search, which needs asset.read), nothing more: no downloading originals, no changes.
+var FramePermissions = perms("asset.view", "asset.read")
+
+// DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
+// filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
+// own session.
+var DigestPermissions = perms("asset.view", "album.read", "album.create", "albumAsset.create", "sharedLink.create", "sharedLink.read", "sharedLink.delete")
+
+// KeyPermissions lists what an API key may do. It acts with the person's own session.
+func (a *API) KeyPermissions(ctx context.Context, key openapi_types.UUID) ([]Permission, error) {
+	r, err := a.c.GetApiKeyWithResponse(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getApiKey", r.StatusCode(), r.Body)
+	}
+	return r.JSON200.Permissions, nil
+}
 
 // SenderPermissions is everything a sender's key needs. workflow.logs (reading its own workflow's run log) is
 // only used by `immich-handoff doctor`, which works without it, so a key made before it was added is still fine.
@@ -125,4 +147,30 @@ func (a *API) DeleteWorkflow(ctx context.Context, id openapi_types.UUID) error {
 		return statusErr("deleteWorkflow", c, r.Body)
 	}
 	return nil
+}
+
+// FromTag is the tag a photo from a sender gets where it arrives, when the sender should be told apart: "from/<name>", one
+// inside another, so everything from one person is found together. Bridges and event pools both use it.
+func FromTag(sender string) string {
+	name := strings.TrimSpace(strings.ReplaceAll(sender, "/", "-"))
+	if name == "" {
+		name = "someone"
+	}
+	return "from/" + name
+}
+
+// PoolPermissionsFor is what a member's key (and the owner's) needs in an event pool, where the same key sends and
+// receives: everything a sender that keeps its originals needs, and everything a receiver needs.
+func PoolPermissionsFor(album, canDelete bool) []Permission {
+	have := map[Permission]bool{}
+	var out []Permission
+	for _, group := range [][]Permission{SenderPermissionsCopy, ReceiverPermissionsFor(album, canDelete)} {
+		for _, p := range group {
+			if !have[p] {
+				have[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }

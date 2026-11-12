@@ -28,6 +28,9 @@ const (
 	Info    Kind = "info"    // worth knowing, nothing to do
 )
 
+// Test is the kind of the message sent by a test; it is not a kind a destination can choose, and it goes to all of them.
+const Test Kind = "test"
+
 // Kinds lists every kind, in the order the documentation names them.
 var Kinds = []Kind{Problem, DropBox, Backup, Bridge, Info}
 
@@ -69,6 +72,8 @@ func title(k Kind) string {
 		return "immich-handoff: backup"
 	case Bridge:
 		return "immich-handoff: another server"
+	case Test:
+		return "immich-handoff: test"
 	}
 	return "immich-handoff"
 }

@@ -16,6 +16,9 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/mailin"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -74,6 +77,8 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 		in.RunsToCheck = 10
 	}
 	settings(r, in)
+	notifications(r, in)
+	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
 		return summary(r)
@@ -143,6 +148,94 @@ func settings(r *Report, in Input) {
 			"Set it to Immich's address as your browser sees it (optional).")
 	}
 	backups(r, in)
+}
+
+// notifications reports where messages go and whether the settings are ones the app starts with. It sends nothing;
+// `doctor --send-test` and the administrator's page do that.
+func notifications(r *Report, in Input) {
+	r.section("Notifications")
+	dests, err := notify.FromEnv(in.Env)
+	if err != nil {
+		r.add(Fail, "the notification settings are not valid, and the app will not start with them: "+err.Error(),
+			"Fix NOTIFY_URL, or the file that NOTIFY_FILE names (see notify.example.yaml).")
+		return
+	}
+	people := false
+	if len(dests) == 0 {
+		r.add(OK, "no destination is set (NOTIFY_URL, NOTIFY_FILE): problems appear in the log and on the page only", "")
+	}
+	for _, d := range dests {
+		kinds := "every kind"
+		if len(d.Kinds) > 0 {
+			var names []string
+			for _, k := range notify.Kinds {
+				if d.Kinds[k] {
+					names = append(names, string(k))
+				}
+			}
+			kinds = strings.Join(names, ", ")
+		}
+		switch {
+		case d.Mail != nil && d.Mail.People:
+			people = true
+			r.add(OK, fmt.Sprintf("%s: mail to the people taking part (%s)", d.Name, d.Format), "")
+		default:
+			r.add(OK, fmt.Sprintf("%s: %s, takes %s", d.Name, d.Format, kinds), "")
+		}
+	}
+	appURL := firstOf(in.Env, "PUBLIC_APP_URL")
+	hasStore := firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") != ""
+	if people && appURL == "" {
+		r.add(Fail, "a destination with people: true needs PUBLIC_APP_URL, and the app will not start without it",
+			"Set PUBLIC_APP_URL to the address of this page as people open it: every mail links to the page and to the way to stop the emails.")
+	}
+	if people && !hasStore {
+		r.add(Fail, "a destination with people: true needs HANDOFF_STORE_KEY, and the app will not start without it", "People turn email on from the page, which needs the data file.")
+	}
+	switch contact, err := push.Contact(in.Env("PUSH_CONTACT"), appURL); {
+	case err != nil:
+		r.add(Fail, err.Error(), "Use mailto:you@example.com or an https address.")
+	case firstOf(in.Env, "PUSH") == "off":
+		r.add(OK, "notifications on devices are switched off (PUSH=off)", "")
+	case !hasStore:
+		r.add(OK, "notifications on devices are off: people cannot join from the page (no HANDOFF_STORE_KEY)", "")
+	case contact == "":
+		r.add(OK, "notifications on devices are off: the push services need a way to reach whoever runs the app (set PUBLIC_APP_URL to an https address, or PUSH_CONTACT, to turn them on)", "")
+	default:
+		r.add(OK, "notifications on devices are on (the page needs HTTPS in people's browsers)", "")
+	}
+}
+
+// mailIn reports on the mailbox photos are mailed to, if one is set: the settings are the ones the app starts with, and the
+// login works. It reads no message.
+func mailIn(ctx context.Context, r *Report, in Input) {
+	s, on, err := mailin.SettingsFrom(in.Env)
+	if !on {
+		return
+	}
+	r.section("Photos by email")
+	if err != nil {
+		r.add(Fail, "the mailbox settings are not valid, and the app will not start with them: "+err.Error(), "Fix the MAIL_IN_* settings (see docs/settings.md).")
+		return
+	}
+	if firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") == "" {
+		r.add(Fail, "MAIL_IN_HOST is set but there is no HANDOFF_STORE_KEY, and the app will not start", "Drop boxes need the data file; set HANDOFF_STORE_KEY.")
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	c, err := mailin.Dial(cctx, s, nil)
+	if err == nil {
+		defer c.Close()
+		if err = c.Login(s.User, s.Password); err == nil {
+			err = c.Select(s.Folder)
+		}
+	}
+	if err != nil {
+		r.add(Fail, "the mailbox cannot be read: "+err.Error(), "Check MAIL_IN_HOST, MAIL_IN_PORT, MAIL_IN_TLS, the user, the password and the folder.")
+		return
+	}
+	r.add(OK, fmt.Sprintf("the mailbox %s can be read (folder %s, looked at every %s, %s after handling); a box's address is %s", s.Address, s.Folder, s.Every, s.After, s.AddressFor("<code>")), "")
 }
 
 // backups reports what is set about backups. Without a store key nothing is stored, so there is nothing to say.

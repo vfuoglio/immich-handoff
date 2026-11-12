@@ -2,7 +2,7 @@ package syncer
 
 import (
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
@@ -15,25 +15,59 @@ func (s *Syncer) notify(kind notify.Kind, text string) {
 	}
 }
 
-// passSummary says in words how a pass that went wrong ended.
-func passSummary(info *RunInfo) string {
-	var parts []string
-	c := info.Counts
-	if c.Errors > 0 {
-		parts = append(parts, fmt.Sprintf("%d failed", c.Errors))
+// problem tells whoever runs the app about something that is wrong and may stay wrong: once, with a reminder after a
+// day, and "fixed" when it ends (see notify.Tracker). Without a tracker every report is a message.
+func (s *Syncer) problem(key string, m notify.Message) {
+	switch {
+	case s.Problems != nil:
+		s.Problems.Report(key, m)
+	default:
+		s.notify(m.Kind, m.Text)
 	}
-	if c.Refused > 0 {
-		parts = append(parts, fmt.Sprintf("%d refused", c.Refused))
+}
+
+// fixed says that a problem told with problem is over.
+func (s *Syncer) fixed(key string, m notify.Message) {
+	if s.Problems != nil {
+		s.Problems.Clear(key, m)
 	}
-	if c.Imported > 0 {
-		parts = append(parts, fmt.Sprintf("%d handed over", c.Imported))
+}
+
+// reportPass tells what a pass found wrong, service by service. A service whose pass had failures is a problem; the
+// next pass without any ends it. A service that did not run (paused, no receiver, broken) says nothing either way, so
+// pausing a service is not mistaken for fixing it. Refused photos alone are not a problem: the receiver chose that,
+// and the page and the sender's own notifications show it.
+func (s *Syncer) reportPass(info *RunInfo, ran []*Service) {
+	inServices := 0
+	for _, svc := range ran {
+		c := info.PerService[svc.Label()]
+		inServices += c.Errors
+		key := "pass/" + svc.Label()
+		switch {
+		case c.Errors > 0:
+			s.problem(key, notify.Message{Kind: notify.Problem, Text: fmt.Sprintf("A hand-over pass for %s had problems: %s", svc.Label(), failed(c.Errors))})
+		case !svc.Paused && svc.Broken == "" && len(svc.Receivers) > 0 && !svc.Ended(time.Now()):
+			s.fixed(key, notify.Message{Kind: notify.Problem, Text: fmt.Sprintf("Hand-overs for %s work again.", svc.Label())})
+		}
 	}
-	text := "A hand-over pass ended with problems"
-	if len(parts) > 0 {
-		text += ": " + strings.Join(parts, ", ")
+	// what went wrong outside any one service (the tidy-up of tags, the pass itself)
+	if elsewhere := info.Counts.Errors - inServices; info.Error != "" || elsewhere > 0 {
+		text := "A hand-over pass had problems outside any one service"
+		if elsewhere > 0 {
+			text += ": " + failed(elsewhere)
+		}
+		if info.Error != "" {
+			text += ". " + info.Error
+		}
+		s.problem("pass/housekeeping", notify.Message{Kind: notify.Problem, Text: text})
+	} else {
+		s.fixed("pass/housekeeping", notify.Message{Kind: notify.Problem, Text: "The tidy-up after hand-overs works again."})
 	}
-	if info.Error != "" {
-		text += ". " + info.Error
+}
+
+func failed(n int) string {
+	if n == 1 {
+		return "1 failed."
 	}
-	return text
+	return fmt.Sprintf("%d failed.", n)
 }

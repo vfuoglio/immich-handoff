@@ -176,6 +176,55 @@ func TestMailToPeople(t *testing.T) {
 		t.Fatalf("no way to stop the mail: %q", text)
 	}
 
+	// the owner can answer from the mail: the link asks first, then approves once
+	approve := regexp.MustCompile(`Approve: http://handoff\.test(/a/[A-Za-z0-9_-]{22})`).FindStringSubmatch(text)
+	decline := regexp.MustCompile(`Decline: http://handoff\.test(/a/[A-Za-z0-9_-]{22})`).FindStringSubmatch(text)
+	if approve == nil || decline == nil {
+		t.Fatalf("the owner's mail has no way to answer the request: %q", text)
+	}
+	if strings.Contains(sink.to("bob@e2e.test")[0], "/a/") {
+		t.Error("the person who asked was given the owner's links")
+	}
+	if !strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Fatal("the request is not waiting on the owner's page")
+	}
+	getPage := func(path string) (int, string) {
+		res, err := http.Get("http://localhost:" + port + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, body := getPage(approve[1]); code != 200 || !strings.Contains(body, "to send photos to mailed?") {
+		t.Fatalf("the link should ask first: %d %.300s", code, body)
+	}
+	if !strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Fatal("opening the link decided the request")
+	}
+	postAction := func(path string) (int, string) {
+		res, err := http.Post("http://localhost:"+port+path, "application/x-www-form-urlencoded", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, body := postAction(approve[1]); code != 200 || !strings.Contains(body, "Done.") {
+		t.Fatalf("approving: %d %.300s", code, body)
+	}
+	if strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Error("the request is still waiting after it was approved from the link")
+	}
+	if code, _ := postAction(approve[1]); code != 404 {
+		t.Errorf("a second tap: %d", code)
+	}
+	if code, _ := postAction(decline[1]); code != 404 {
+		t.Errorf("the other answer after the first: %d", code)
+	}
+
 	// a test mail arrives on demand
 	before := len(sink.to("bob@e2e.test"))
 	must(post(t, port, "/me/mail", sender, url.Values{"action": {"test"}}), 200, "test mail")
@@ -207,5 +256,63 @@ func TestMailToPeople(t *testing.T) {
 	}
 	if body := page(t, port, owner); strings.Contains(body, "Send a test email") || !strings.Contains(body, "Turn on email") {
 		t.Errorf("the mail was not stopped: %.300s", body)
+	}
+}
+
+// TestPushDevices: the routes behind "Notifications on this device". A real push service cannot be reached from the
+// test (and nothing may be sent to one), so a device is added and removed before anything can happen to it; what is
+// sent to a push service is tested with a test server in internal/push and internal/hub.
+func TestPushDevices(t *testing.T) {
+	bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 61)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "PUBLIC_APP_URL=https://handoff.test")
+	cookie := loginCookie(t, "alice@e2e.test")
+
+	body := page(t, port, cookie)
+	if !strings.Contains(body, "Notifications on this device") || !strings.Contains(body, `id="pushcard"`) {
+		t.Fatalf("the card is missing: %.300s", body)
+	}
+	req, _ := http.NewRequest("GET", "http://localhost:"+port+"/me/push/key", nil)
+	req.Header.Set("Cookie", cookie)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || len(key) != 87 { // an uncompressed P-256 point in base64url
+		t.Fatalf("key: %d %q", res.StatusCode, key)
+	}
+
+	send := func(endpoint string) int {
+		payload := fmt.Sprintf(`{"endpoint":%q,"mode":"all","keys":{"p256dh":"BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4","auth":"BTBZMqHH6r4Tts7J_aSIgg"}}`, endpoint)
+		r, _ := http.NewRequest("POST", "http://localhost:"+port+"/me/push", strings.NewReader(payload))
+		r.Header.Set("Cookie", cookie)
+		r.Header.Set("X-Requested-With", "immich-handoff")
+		r.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := send("https://evil.test/push/abc"); code != 409 {
+		t.Errorf("an address that is not a push service: %d", code)
+	}
+	if code := send("https://fcm.googleapis.com/fcm/send/e2e-device"); code != 204 {
+		t.Fatalf("adding a device: %d", code)
+	}
+	body = page(t, port, cookie)
+	m := regexp.MustCompile(`data-device="([0-9a-f]{64})"`).FindStringSubmatch(body)
+	if m == nil || !strings.Contains(body, "Your devices") {
+		t.Fatalf("the device is not listed: %.400s", body)
+	}
+	if res := post(t, port, "/me/push/remove", cookie, url.Values{"id": {m[1]}}); res.StatusCode != 204 {
+		t.Fatalf("removing: %d", res.StatusCode)
+	}
+	if strings.Contains(page(t, port, cookie), "Your devices") {
+		t.Error("the device is still listed")
 	}
 }

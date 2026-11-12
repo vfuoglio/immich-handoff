@@ -353,3 +353,44 @@ func TestTheFirstRunGuideIsRememberedPerPerson(t *testing.T) {
 		t.Error("it is remembered per person")
 	}
 }
+
+func TestAPoolAndItsEndRoundTripAndTheEndCanBeChanged(t *testing.T) {
+	s, err := open(t, t.TempDir(), "pool-secret-key-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	end := time.Now().Add(48 * time.Hour).Truncate(time.Second)
+	if _, err := s.AddService(ctx, Service{Name: "trip", Tag: "trip", InboxTag: "inbox/trip", OwnerID: uuid.New(), KeyID: uuid.New(), Key: "k", Policy: PolicyOpen, Pool: true, EndsAt: end, Mode: "copy"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddService(ctx, Service{Name: "plain", Tag: "plain", InboxTag: "inbox/plain", OwnerID: uuid.New(), KeyID: uuid.New(), Key: "k", Policy: PolicyOpen}); err != nil {
+		t.Fatal(err)
+	}
+	find := func(name string) Service {
+		all, _ := s.Services(ctx)
+		for _, v := range all {
+			if v.Name == name {
+				return v
+			}
+		}
+		t.Fatal("no service " + name)
+		return Service{}
+	}
+	if v := find("trip"); !v.Pool || !v.EndsAt.Equal(end) || v.Mode != "copy" {
+		t.Errorf("%+v", v)
+	}
+	if v := find("plain"); v.Pool || !v.EndsAt.IsZero() {
+		t.Errorf("%+v", v)
+	}
+	if err := s.SetServiceEnd(ctx, "trip", time.Time{}); err != nil || !find("trip").EndsAt.IsZero() {
+		t.Errorf("no end: %v", err)
+	}
+	if err := s.SetServiceEnd(ctx, "trip", end.Add(time.Hour)); err != nil || !find("trip").EndsAt.Equal(end.Add(time.Hour)) {
+		t.Errorf("a new end: %v", err)
+	}
+	if err := s.SetServiceEnd(ctx, "nothing", end); err != ErrNotFound {
+		t.Errorf("%v", err)
+	}
+}

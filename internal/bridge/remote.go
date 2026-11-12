@@ -114,13 +114,7 @@ func (r *Remote) TakeBack(ctx context.Context, ids []uuid.UUID) error {
 
 // TagFor is the tag a photo from a sender gets on the other server: "from/<name>", one inside another, so the receiver
 // finds everything from one person together.
-func TagFor(sender string) string {
-	name := strings.TrimSpace(strings.ReplaceAll(sender, "/", "-"))
-	if name == "" {
-		name = "someone"
-	}
-	return "from/" + name
-}
+func TagFor(sender string) string { return immich.FromTag(sender) }
 
 // Deliver implements syncer.Remote. It streams the original (a live photo's hidden clip first), treats a duplicate as
 // success, and puts the tag on. It reads nothing from the other server's library.

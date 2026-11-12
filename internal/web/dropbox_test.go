@@ -19,6 +19,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
 	"github.com/vfuoglio/immich-handoff/internal/web"
@@ -952,5 +953,55 @@ func TestTheOwnerSeesTheWallTheBestOfAndWhereTheSetWentAndOthersCannotChangeIt(t
 	}
 	if code, _ := postForm(t, app.URL+"/dropbox/handon", "sess=family", "service="+id+"&scope=weird"); code != 409 {
 		t.Errorf("an unknown scope: %d, want 409", code)
+	}
+}
+
+func TestAnEmailAddressForABoxIsOfferedOnlyWhereAMailboxIsSetUpAndShownOnItsCard(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("ee", 16)
+	var theHub *hub.Hub
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Gala", InboxTag: "inbox/Gala"}), func(s *web.Server) { theHub = s.Hub })
+	id := firstBox(t, st)
+	owner := "sess=family"
+
+	if _, p := do(t, "GET", app.URL+"/", owner, nil); strings.Contains(p, "Photos by email") || strings.Contains(p, "email address") {
+		t.Error("the box offers an address without a mailbox set up")
+	}
+	theHub.MailIn = &hub.MailIn{Hub: theHub, Settings: mailin.Settings{Address: "drop@example.org"}}
+	_, p := do(t, "GET", app.URL+"/", owner, nil)
+	if !strings.Contains(p, "Photos by email") || !strings.Contains(p, "Give this box an email address") {
+		t.Fatal("with a mailbox the box should offer an address")
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/mail", "", "service="+id+"&on=1"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/dropbox/mail", owner, nil); code != 400 {
+		t.Errorf("without the CSRF header: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/mail", "sess=alice", "service="+id+"&on=1"); code != 409 {
+		t.Errorf("someone with no part in the box: %d", code)
+	}
+	if got, _ := st.DropBox(context.Background(), id); got.MailCode != "" {
+		t.Fatal("a refused request gave the box an address")
+	}
+	if code, msg := postForm(t, app.URL+"/dropbox/mail", owner, "service="+id+"&on=1"); code != 204 {
+		t.Fatalf("giving it an address: %d %q", code, msg)
+	}
+	got, _ := st.DropBox(context.Background(), id)
+	want := "drop+" + got.MailCode + "@example.org"
+	_, p = do(t, "GET", app.URL+"/", owner, nil)
+	for _, w := range []string{`value="` + want + `"`, "Remove email address", "nobody gets a reply"} {
+		if !strings.Contains(p, w) {
+			t.Errorf("the box's row lacks %q", w)
+		}
+	}
+	if _, card := do(t, "GET", app.URL+"/dropbox/card/"+id, owner, nil); !strings.Contains(card, "Or send photos by email to "+want) {
+		t.Errorf("the printable card should carry the address: %.300s", card)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/mail", owner, "service="+id+"&on=0"); code != 204 {
+		t.Fatalf("removing it: %d", code)
+	}
+	if got, _ := st.DropBox(context.Background(), id); got.MailCode != "" {
+		t.Error("the address is still there")
 	}
 }

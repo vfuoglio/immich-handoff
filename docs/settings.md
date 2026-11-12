@@ -16,8 +16,21 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `BACKUP_DIR` | `/data/backups` | Where backups go. A second mounted folder is safer than one beside the data. |
 | `HANDOFF_ADMIN_BACKUP_DOWNLOAD` | off | `true` adds a **Download backup** button to the administrator's page. Off by default: the file holds every stored key (encrypted) and everyone's name and email. Read [the limits](operations.md#download-a-backup-from-the-administrators-page) first. |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |
+| `WEBHOOK_HEADER` | `X-Webhook-Secret` | The name of the header in which Immich's workflow sends `WEBHOOK_SECRET`. Change it only if a proxy in front of the app needs another name. |
 | `NOTIFY_URL` | | ntfy topic URL that receives every message the app has for you (title, priority, tag and a link). See [Notifications](operations.md#notifications). |
+| `FRAME_REFRESH` | `2m` | How often a frame ([Frames](using.md#frames-an-album-on-a-screen)) looks at its album again, from `5s` to `1h`. It is also how long the app keeps what it read, so it is how soon a photo added to or taken out of the album shows on the screen. |
+| `MAIL_IN_HOST` | | A mail server (IMAP) the app reads, so a drop box can have an address that guests mail photos to. Off unless set. See [Photos by email](operations.md#photos-by-email). Needs `HANDOFF_STORE_KEY`. |
+| `MAIL_IN_PORT` | `993` (`143` for starttls) | The mail server's port. |
+| `MAIL_IN_TLS` | `tls` | `tls` (encrypted from the first byte), `starttls` (the upgrade must succeed or nothing is sent) or `none` (only for a mail server on this machine). |
+| `MAIL_IN_USER`, `MAIL_IN_PASSWORD` | | The mailbox's login. The password may instead be in a file named by `MAIL_IN_PASSWORD_FILE` (a Docker secret). |
+| `MAIL_IN_ADDRESS` | | The mailbox's own address, such as `drop@example.org`, without a plus sign. A box's address is `drop+<code>@example.org`, so the mailbox must accept plus-addressing. |
+| `MAIL_IN_FOLDER` | `INBOX` | The folder that is read. |
+| `MAIL_IN_AFTER` | `delete` | What happens to a mail once it is handled: `delete` removes it, `seen` keeps it, marked read. |
+| `MAIL_IN_EVERY` | `1m` | How often the mailbox is looked at, from `5s` to `1h`. |
+| `MAIL_IN_MAX_MB` | `25` | The largest mail that is read; a bigger one is left unread and dropped. |
 | `NOTIFY_FILE` | | A YAML file listing more destinations (ntfy or a JSON webhook such as Home Assistant's), each taking only the kinds of message you choose. See [Notifications](operations.md#notifications). |
+| `PUSH` | `on` | `off` switches off notifications on people's own devices. They are otherwise on whenever people can join from the page and there is a contact for the push services (below). See [Notifications on devices](operations.md#notifications-on-devices). |
+| `PUSH_CONTACT` | | A `mailto:` address or an `https:` address the push services (Google, Mozilla, Apple, Microsoft) can reach whoever runs the app at. If empty, `PUBLIC_APP_URL` is used when it is an https address; with neither, notifications on devices stay off. The push services can see it, so do not use a personal address unless you want to. |
 | `PUBLIC_APP_URL` | | This app as your browser reaches it (for example `https://handoff.example.com`). When set, each message carries a link to the right page. Required when `NOTIFY_FILE` has a destination with `people: true` (mail to the people taking part). |
 | `ALBUM_CHECK_MINUTES` | `15` | How often albums that senders linked to a service are looked at for photos to hand over. Immich sends no event when a photo is added to an album, so this is a timer. `0` leaves it to the passes that other events start. See [handing over an album](using.md#handing-over-a-whole-album). |
 | `SWEEP_INTERVAL_HOURS` | `24` | How often the safety-net check runs (catch-up, key and workflow checks, inbox tidy-up). |

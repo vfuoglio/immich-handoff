@@ -182,9 +182,39 @@ What it needs from you:
 
 - **HTTPS.** Browsers only install a page served over HTTPS (or from `localhost`). Behind a reverse proxy this is the proxy's certificate, as for Immich itself.
 - **The manifest and the icons must be reachable with the person's sign-in.** The page asks for the manifest with the browser's cookies (`crossorigin="use-credentials"`), because behind a login in front of the app (single sign-on at the proxy, for example) a request without cookies would be sent to the login page and the manifest would be ignored. Nothing special is needed otherwise: everything is under the page's own `static/` folder, so it also works behind a path prefix (the manifest's start address is relative).
-- **There is no service worker, and nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut.
+- **Nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut. The one service worker the app has (`static/sw.js`) exists only to show push notifications when a person turned them on (see [Notifications on devices](#notifications-on-devices)); it has no fetch handler and no cache, and it is registered for the `static/` folder only, so it never sits between the page and the app.
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
+
+## Weekly digest
+
+The weekly digest of a service ([Using it](using.md#weekly-digest)) is made by the app itself, on Monday at about 08:00 in the app's time zone (`TZ`; set it, or it is UTC in the container). It needs `HANDOFF_STORE_KEY` (the key it uses is the service's, kept in the data file) and Immich reachable; it makes no mail or notification of its own beyond one line to the owner. It looks at the app's record of hand-overs, which is kept for 8 days, so a digest that could not run for more than a day after Monday (the app was off) has fewer than seven days to look at. With `PUBLIC_IMMICH_URL` set the card shows the link as an address; without it, the key to put after your Immich address and `/share/`.
+
+## Photos by email
+
+A drop box can have an email address: guests mail photos to it, and they arrive like uploads ([Using it](using.md#more-ways-in)). The app does this by **reading a mailbox you give it** over IMAP; it runs no mail server and opens no port. It is off unless you set `MAIL_IN_HOST`.
+
+1. **Make a mailbox** that accepts plus-addressing, which Gmail, Fastmail, Proton and most hosted and self-hosted mail systems do (`drop+anything@example.org` lands in `drop@example.org`). Use a mailbox that is only for this: **the app deletes the mail it handles** (or, with `MAIL_IN_AFTER=seen`, only marks it read).
+2. **Set** `MAIL_IN_HOST`, `MAIL_IN_USER`, `MAIL_IN_PASSWORD` (or `MAIL_IN_PASSWORD_FILE`) and `MAIL_IN_ADDRESS=drop@example.org`; see [Settings](settings.md). For Gmail and some others you need an app password. `MAIL_IN_TLS=none` is allowed only for a mail server on the same machine.
+3. **Check it:** `docker compose exec immich-handoff /immich-handoff doctor` logs in and opens the folder (it reads no mail) and tells you what a box's address will look like.
+4. **Owners** then see **Give this box an email address** on each box (not on boxes with a password).
+
+What it does with a mail: it reads one that was sent to an address of ours, takes the photos and videos attached (what an attachment really is is decided from its first bytes, not its name or type), and hands each to the box exactly as an upload: the box's limits, approval, filing and log apply. The text, other attachments, mail to an unknown address and mail from a sender who sends too much are dropped without a reply (a reply would go to forged addresses and make the app a source of junk). A mail bigger than `MAIL_IN_MAX_MB` is left unread. Mail that could not be stored because Immich was unreachable is tried at the next three looks, then let go. Mail is slow: a photo arrives within `MAIL_IN_EVERY` (a minute by default) plus the mail system's own delay.
+
+## Notifications on devices
+
+A person can allow notifications on the phone or computer they use: the **Notifications on this device** card on the Overview. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.
+
+What it needs:
+
+- **HTTPS.** Browsers only allow notifications on a page served over HTTPS (or from `localhost`). Without it the card says so.
+- **A contact for the push services.** Set `PUBLIC_APP_URL` to the page's https address, or `PUSH_CONTACT` to a `mailto:` or https address. The push services (Google, Mozilla, Apple, Microsoft) can see it. With neither, notifications on devices are off and the log says why. `PUSH=off` switches them off.
+- **People can join from the page** (`HANDOFF_STORE_KEY` set), since the devices are kept in the data file.
+- **The app can reach the push services** (outbound https to `fcm.googleapis.com`, `*.push.services.mozilla.com`, `web.push.apple.com` / `*.push.apple.com`, `*.notify.windows.com`). Nothing else is ever called; an address from a browser that is not one of these is refused.
+
+What is stored for each device: the address of the browser's push service and two keys that encrypt messages for that browser, sealed with the store key like every other secret, the language, the choice, a short name such as "Firefox on Linux", and dates. A device the push service says is gone, or that fails three times in a row, is forgotten. A device gets at most 30 notifications an hour. The key the app signs with (VAPID) is made at the first start and kept sealed in the data file; changing the store key makes devices unreadable, and people turn it on again.
+
+**Browsers.** Chrome, Edge and Firefox on computers and Android should work. On an **iPhone or iPad** pushes work only for the page added to the Home Screen (iOS 16.4 or later), opened from there, and notification buttons are not shown. I have tested the encryption against the RFC's example and the rest with test servers, not with a real push service or a real iPhone: please report what you find.
 
 ## Letting guests reach a drop box
 
@@ -209,7 +239,7 @@ The app tells whoever runs it when something needs attention. Every message has 
 
 | Kind | What it is about |
 |---|---|
-| `problem` | A pass that failed or refused photos, photos found only by the daily sweep, an album that cannot be read or filed into, a key that stopped working. |
+| `problem` | A pass that failed (photos the receiver refused are not a problem for you and are not sent), photos found only by the daily sweep, an album that cannot be read or filed into, a key that stopped working. |
 | `backup` | A backup that failed, was forced, or was downloaded. |
 | `bridge` | A receiver on another server that cannot be reached, whose key was revoked, or that is back. |
 | `dropbox` | A drop box that paused itself, will close soon, or closed. |
@@ -260,6 +290,12 @@ destinations:
 Mark it with `people: true` and leave out `to` and `kinds`: it writes to nobody until a person turns it on, and it never carries your administrator messages. It needs **`PUBLIC_APP_URL`** (every mail links to the page and to the way to stop the emails) and `HANDOFF_STORE_KEY` (people turn it on from the page); the app refuses to start without them. A person gets the lines their page shows under Activity, in their language, in one mail per `group` and at most six mails an hour; they can stop it from any mail with one click. The address is the one Immich shows for their account and is kept in the data file (and so in backups) while mail is on, and forgotten when it is turned off. Only one destination can have `people: true`.
 
 **The JSON format** posts `{"source":"immich-handoff","kind":"problem","title":"...","text":"...","link":"...","time":"2026-11-11T22:00:00Z"}`. In Home Assistant, create an automation with a **Webhook** trigger (turn off "Only accessible from the local network" only if the app is outside it), and use `{{ trigger.json.text }}` and `{{ trigger.json.kind }}` in the action, for example a `notify.mobile_app_<phone>` call, a light or a spoken message. The same format fits n8n, Node-RED and anything that accepts a JSON POST.
+
+**Links in messages.** Mail and notifications to the people taking part carry one-tap buttons for the few things a person can answer (approving a request, resuming). They are built from `PUBLIC_APP_URL`; without it messages carry no buttons. See [Answering from a message](using.md#answering-from-a-message) and [Action links](security.md#action-links).
+
+**Testing it.** Nothing tells you a destination works until something goes wrong, so test it: on the administrator's page, **Notifications** lists each destination (its name, format and the kinds it takes, never its address) and **Send a test notification** sends one message to each, whatever kinds it takes, and shows how each answered (delivered, or why not: "answered 401", "could not reach it"). A test makes one attempt and mail goes out at once. From the command line, `immich-handoff doctor` lists the destinations and checks the settings (it sends nothing), and `immich-handoff doctor --send-test` also sends the test. The server set aside for mail to the people taking part is not tested here; each person has a test button for their own mail.
+
+**How often you are told.** A problem that lasts is told **once**, not on every pass: a hand-over service that keeps failing, or a backup that fails every hour, sends one message, a reminder ("Still not fixed after 1 day: ...") if it still lasts a day later, and a message when it ends ("Hand-overs for Holiday work again", "Backups work again"). The app remembers this in memory only, so after a restart a problem that still lasts is told once more. Photos that were refused because the receiver has them in the trash are not a problem for you and no longer send a message (the page shows them and the sender is told); a service that is paused is not announced as fixed. Messages that mark an event, such as a key that stopped working or a daily limit reached, were already sent once per event and still are.
 
 **How delivery behaves.** Sending never slows a hand-over: messages are queued and sent in the background. A destination that answers with an error from its own side or cannot be reached is tried up to three times; one that refuses the message (a wrong token, a wrong topic) is logged once and not retried; a redirect counts as a failure, so fix the address. The log names the destination and the answer, never the address, because a topic or a webhook id is a secret. Messages name people, services and drop boxes, so send them only to a server you trust. Messages are in English.
 

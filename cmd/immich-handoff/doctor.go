@@ -12,6 +12,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/doctor"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
@@ -20,7 +21,7 @@ import (
 // runDoctor is `immich-handoff doctor`: it reads the same settings the app starts with, checks them against
 // Immich, and prints what is wrong and how to fix it. It changes nothing and returns the exit status:
 // 0 when nothing failed (warnings do not count), 1 otherwise.
-func runDoctor(ctx context.Context, out io.Writer) int {
+func runDoctor(ctx context.Context, out io.Writer, sendTest bool) int {
 	base := strings.TrimRight(env("IMMICH_BASE_URL", "http://immich-server:2283"), "/")
 	connect := func(key string) (*immich.API, error) { return immich.New(base, immich.Auth{APIKey: key}, nil) }
 	probe, err := connect("")
@@ -34,10 +35,43 @@ func runDoctor(ctx context.Context, out io.Writer) int {
 	}
 	in.Services, in.StoreNote, in.LoadErr = loadForDoctor(ctx, connect)
 	fails, _ := doctor.Run(ctx, in, out)
+	if sendTest {
+		fails += sendTestNotifications(ctx, out)
+	}
 	if fails > 0 {
 		return 1
 	}
 	return 0
+}
+
+// sendTestNotifications sends one test message to every destination and prints how each answered. It returns how many
+// failed.
+func sendTestNotifications(ctx context.Context, out io.Writer) int {
+	fmt.Fprintln(out, "\nSending a test notification to each destination")
+	dests, err := notify.FromEnv(os.Getenv)
+	if err != nil {
+		fmt.Fprintln(out, "FAIL ", err)
+		return 1
+	}
+	if len(dests) == 0 {
+		fmt.Fprintln(out, "ok    nothing to send to: no destination is set")
+		return 0
+	}
+	n := notify.New(dests, os.Getenv("PUBLIC_APP_URL"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer n.Close()
+	fails := 0
+	for _, r := range n.Test(ctx) {
+		switch {
+		case r.People:
+			fmt.Fprintf(out, "ok    %s: mail to the people taking part; each person has a test button on their page\n", r.Name)
+		case r.Err != "":
+			fmt.Fprintf(out, "FAIL  %s (%s): %s\n", r.Name, r.Format, r.Err)
+			fails++
+		default:
+			fmt.Fprintf(out, "ok    %s (%s): delivered\n", r.Name, r.Format)
+		}
+	}
+	return fails
 }
 
 // loadForDoctor builds the services the way the app does: from the configuration, plus the people and

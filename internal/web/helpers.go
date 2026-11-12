@@ -126,6 +126,19 @@ func vals(k, v string) string {
 	return string(b)
 }
 
+func mailVals(box string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return vals2("service", box, "on", v)
+}
+
+func vals2(k1, v1, k2, v2 string) string {
+	b, _ := json.Marshal(map[string]string{k1: v1, k2: v2})
+	return string(b)
+}
+
 func decideVals(service, request, decision string) string {
 	b, _ := json.Marshal(map[string]string{"service": service, "request": request, "decision": decision})
 	return string(b)
@@ -188,6 +201,24 @@ func memberSuffix(ctx context.Context, state string, copyMode bool) string {
 		return " (" + t(ctx, "keeps originals") + ")"
 	}
 	return " (" + t(ctx, "moves originals") + ")"
+}
+
+func valsJoinPool(service, invite string) string {
+	m := map[string]string{"service": service, "mode": "copy", "pool": "1"}
+	if invite != "" {
+		m["invite"] = invite
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+// poolConfirm is the question a person answers before joining an event pool. It says plainly what joining means.
+func poolConfirm(ctx context.Context, name, tag, ends string) string {
+	text := t(ctx, "This creates an API key named \"handoff: {name}\" in your Immich account that can read and download the photos you tag \"{tag}\" and also receive photos. Every photo you tag \"{tag}\" will be handed over to everyone else in this pool, and the photos they tag will come to you, each tagged with who took it. Your originals stay where they are. People you do not know may be in the pool if its owner lets anyone join. You can stop at any time with Leave: you keep what you received, and nothing more is shared with you.", "name", name, "tag", tag)
+	if ends != "" {
+		text += " " + t(ctx, "It ends {when}.", "when", ends)
+	}
+	return text
 }
 
 func valsJoin(service, invite, mode string) string {
@@ -616,6 +647,9 @@ var clientMessages = []string{
 	"{who}: {photos} could not be handed over; the originals were kept and it will be retried", "{who}: {photos} refused, the receiver has them in the trash; the originals were kept",
 	"{who}: {photos} wait for the daily limit", "{who}: {photos} wait for the daily limit, until {when}",
 	"Could not be sent", "Received", "Sending", "Sent already", "Waiting for the connection", "Waiting to send",
+	"Could not turn on notifications.", "Notifications are blocked for this site. Allow them in your browser's settings for this page, then try again.",
+	"Notifications need this page to be opened over HTTPS.", "Notifications work on this device.", "On an iPhone or iPad, add this page to the Home Screen first, then open it from there.",
+	"This browser cannot show notifications from this page.",
 	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
 	"The microphone is not available", "Thank you for your message!",
 }
@@ -785,4 +819,12 @@ func onwardOptionLabel(ctx context.Context, o OnwardOptionView) string {
 		return o.Service + " \u00b7 " + t(ctx, "you keep your originals")
 	}
 	return o.Service + " \u00b7 " + t(ctx, "your originals go to your trash")
+}
+
+// frameChips are the chips of a frame's row: whether it is showing and when it ends.
+func frameChips(ctx context.Context, f FrameView) []Chip {
+	if f.Ended {
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	}
+	return []Chip{{Text: t(ctx, "Showing"), Tone: "ok"}}
 }

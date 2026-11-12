@@ -383,6 +383,81 @@ var migrations = []string{
 	   created_at TEXT NOT NULL,
 	   last_sent  TEXT NOT NULL DEFAULT ''
 	 );`,
+	// A browser or phone that a person allowed to push notifications to. The address of the push service and the two
+	// keys that encrypt for that browser are sealed together; the id (a hash of the address) lets the page tell which
+	// device is "this one" without ever showing the address.
+	`CREATE TABLE push_subs (
+	   id         TEXT PRIMARY KEY,
+	   user_id    TEXT NOT NULL,
+	   sealed     BLOB NOT NULL,
+	   lang       TEXT NOT NULL,
+	   mode       TEXT NOT NULL,
+	   label      TEXT NOT NULL,
+	   created_at TEXT NOT NULL,
+	   last_ok    TEXT NOT NULL DEFAULT '',
+	   failures   INTEGER NOT NULL DEFAULT 0
+	 );
+	 CREATE INDEX push_subs_user ON push_subs (user_id);`,
+	// One-tap actions offered in a mail or a notification (approve a request, resume a service). The token is the
+	// whole credential: random, valid for a day, usable once; links made for one decision share a group, so using one
+	// ends the others.
+	`CREATE TABLE action_links (
+	   token      TEXT PRIMARY KEY,
+	   user_id    TEXT NOT NULL,
+	   user_name  TEXT NOT NULL,
+	   kind       TEXT NOT NULL,
+	   service    TEXT NOT NULL,
+	   target     TEXT NOT NULL DEFAULT '',
+	   grp        TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   used_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX action_links_grp ON action_links (grp);`,
+	// A weekly digest of what arrived in a service: the last one made, and the permissions the digest added to the
+	// service's receiver key (taken off again when it is turned off).
+	`CREATE TABLE digests (
+	   service    TEXT PRIMARY KEY,
+	   enabled    INTEGER NOT NULL DEFAULT 0,
+	   added      TEXT NOT NULL DEFAULT '',
+	   week       TEXT NOT NULL DEFAULT '',
+	   made_at    TEXT NOT NULL DEFAULT '',
+	   album      TEXT NOT NULL DEFAULT '',
+	   link_id    TEXT NOT NULL DEFAULT '',
+	   link_key   TEXT NOT NULL DEFAULT '',
+	   link_ends  TEXT NOT NULL DEFAULT '',
+	   photos     INTEGER NOT NULL DEFAULT 0,
+	   people     INTEGER NOT NULL DEFAULT 0,
+	   left_out   INTEGER NOT NULL DEFAULT 0,
+	   left_json  TEXT NOT NULL DEFAULT '',
+	   note       TEXT NOT NULL DEFAULT ''
+	 );`,
+	// A frame: a link that shows an album full screen on a device with no account. Its key can only look at pictures
+	// and read albums, and is sealed like every other.
+	`CREATE TABLE frames (
+	   id         TEXT PRIMARY KEY,
+	   token      TEXT NOT NULL UNIQUE,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   album_id   TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   hold       INTEGER NOT NULL DEFAULT 15,
+	   ends_at    TEXT NOT NULL DEFAULT '',
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE INDEX frames_owner ON frames (owner_id);`,
+	// A drop box can have a mail address: photos mailed to it arrive like uploads. The code is the part of the address
+	// after the plus sign.
+	`ALTER TABLE dropboxes ADD COLUMN mail_code TEXT NOT NULL DEFAULT '';
+	 CREATE UNIQUE INDEX dropboxes_mail_code ON dropboxes (mail_code) WHERE mail_code <> '';`,
+	// An event pool is a service where every member sends and receives, for a time. ends_at is when it stops (empty: until
+	// the owner ends it).
+	`ALTER TABLE services ADD COLUMN pool INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE services ADD COLUMN ends_at TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -704,19 +779,21 @@ type Service struct {
 	KeyID                  uuid.UUID // the receiver key's id in Immich
 	Key                    string    // decrypted
 	Policy                 string
-	State, Note            string // healthy ("active") or why not
-	Visibility, Invite     string // who can see it; the invitation token (empty until one is made)
-	Mode, SentTag          string // "move" or "copy"; the tag put on originals that were copied
-	Album                  string // name of the album handed-over photos are put in, in the owner's account; empty: none
-	Paused                 bool   // the owner paused the service: nothing is handed over until they resume
-	LimitPhotos, LimitMB   int    // most a sender may hand over in a day (photos, megabytes); 0: no limit
-	QuietFrom, QuietTo     int    // quiet hours, in minutes after midnight; equal: none
-	QuietLargeMB           int    // with quiet hours: only files larger than this wait for them (0: every file)
-	AcceptRating           int    // the least rating a photo needs (0: any)
-	AcceptPhotos           bool   // no videos
-	AcceptOrient           string // "", "landscape" or "portrait"
-	AcceptMaxMB            int    // the largest file (0: no limit)
-	LifetimeDays           int    // copies that arrive are moved to the owner's trash after this many days unless filed (0: they stay)
+	State, Note            string    // healthy ("active") or why not
+	Visibility, Invite     string    // who can see it; the invitation token (empty until one is made)
+	Mode, SentTag          string    // "move" or "copy"; the tag put on originals that were copied
+	Album                  string    // name of the album handed-over photos are put in, in the owner's account; empty: none
+	Paused                 bool      // the owner paused the service: nothing is handed over until they resume
+	LimitPhotos, LimitMB   int       // most a sender may hand over in a day (photos, megabytes); 0: no limit
+	QuietFrom, QuietTo     int       // quiet hours, in minutes after midnight; equal: none
+	QuietLargeMB           int       // with quiet hours: only files larger than this wait for them (0: every file)
+	AcceptRating           int       // the least rating a photo needs (0: any)
+	AcceptPhotos           bool      // no videos
+	AcceptOrient           string    // "", "landscape" or "portrait"
+	AcceptMaxMB            int       // the largest file (0: no limit)
+	LifetimeDays           int       // copies that arrive are moved to the owner's trash after this many days unless filed (0: they stay)
+	Pool                   bool      // an event pool: every member sends and receives
+	EndsAt                 time.Time // a pool stops handing over at this time (zero: until the owner ends it)
 	CreatedAt              time.Time
 }
 
@@ -740,9 +817,9 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 		return v, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, visibility, invite, mode, sent_tag, album, limit_photos, limit_mb, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.Visibility, v.Invite, v.Mode, v.SentTag, v.Album, v.LimitPhotos, v.LimitMB, v.CreatedAt.Format(time.RFC3339Nano))
+		`INSERT INTO services (id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, visibility, invite, mode, sent_tag, album, limit_photos, limit_mb, pool, ends_at, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		v.ID, v.Name, v.Tag, v.InboxTag, v.Refused, v.ExpiryDays, v.OwnerID.String(), v.OwnerName, v.OwnerEmail, v.KeyID.String(), enc, v.Policy, v.Visibility, v.Invite, v.Mode, v.SentTag, v.Album, v.LimitPhotos, v.LimitMB, b2i(v.Pool), tstr(v.EndsAt), v.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		if isUnique(err) {
 			return v, ErrExists
@@ -754,7 +831,7 @@ func (s *Store) AddService(ctx context.Context, v Service) (Service, error) {
 
 func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, paused, limit_photos, limit_mb, quiet_from, quiet_to, quiet_large_mb, accept_rating, accept_photos, accept_orient, accept_max_mb, lifetime_days, created_at FROM services ORDER BY created_at, id`)
+		`SELECT id, name, tag, inbox_tag, refused_tag, expiry_days, owner_id, owner_name, owner_email, key_id, key_enc, policy, state, note, visibility, invite, mode, sent_tag, album, paused, limit_photos, limit_mb, quiet_from, quiet_to, quiet_large_mb, accept_rating, accept_photos, accept_orient, accept_max_mb, lifetime_days, pool, ends_at, created_at FROM services ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -762,14 +839,15 @@ func (s *Store) Services(ctx context.Context) ([]Service, error) {
 	var out []Service
 	for rows.Next() {
 		var v Service
-		var owner, keyID, created string
+		var owner, keyID, created, ends string
 		var enc []byte
-		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &v.Paused, &v.LimitPhotos, &v.LimitMB, &v.QuietFrom, &v.QuietTo, &v.QuietLargeMB, &v.AcceptRating, &v.AcceptPhotos, &v.AcceptOrient, &v.AcceptMaxMB, &v.LifetimeDays, &created); err != nil {
+		if err := rows.Scan(&v.ID, &v.Name, &v.Tag, &v.InboxTag, &v.Refused, &v.ExpiryDays, &owner, &v.OwnerName, &v.OwnerEmail, &keyID, &enc, &v.Policy, &v.State, &v.Note, &v.Visibility, &v.Invite, &v.Mode, &v.SentTag, &v.Album, &v.Paused, &v.LimitPhotos, &v.LimitMB, &v.QuietFrom, &v.QuietTo, &v.QuietLargeMB, &v.AcceptRating, &v.AcceptPhotos, &v.AcceptOrient, &v.AcceptMaxMB, &v.LifetimeDays, &v.Pool, &ends, &created); err != nil {
 			return nil, err
 		}
 		v.OwnerID, _ = uuid.Parse(owner)
 		v.KeyID, _ = uuid.Parse(keyID)
 		v.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		v.EndsAt, _ = time.Parse(time.RFC3339Nano, ends)
 		plain, err := s.vault.Open(enc, v.ID)
 		if err != nil {
 			return nil, fmt.Errorf("service %s: %w", v.ID, err)
@@ -1031,6 +1109,18 @@ func (s *Store) MarkTakenBack(ctx context.Context, ids []int64) error {
 		if _, err := s.db.ExecContext(ctx, `UPDATE handover_items SET taken_back = 1 WHERE id = ?`, id); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// SetServiceEnd sets when a pool stops handing over (zero: until the owner ends it).
+func (s *Store) SetServiceEnd(ctx context.Context, name string, at time.Time) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE services SET ends_at = ? WHERE name = ?`, tstr(at), name)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

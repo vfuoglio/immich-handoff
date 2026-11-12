@@ -544,7 +544,8 @@ footer .version { opacity: .75; white-space: nowrap; }
 /* the wall */
 body.wall { background: #000; color: #fff; margin: 0; overflow: hidden; }
 body.wall #glow { display: none; }
-#wall { position: fixed; inset: 0; background: #000; }
+#wall, #frame { position: fixed; inset: 0; background: #000; }
+#frame { cursor: none; }
 .wall-stage { position: absolute; inset: 0; }
 .wall-stage figure { margin: 0; }
 .wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; display: grid; place-items: center; }

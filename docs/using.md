@@ -254,7 +254,7 @@ A box has a long link, which cannot be guessed, and can have more:
 
 - **A short link** (**Make a short link**): ten letters and digits, `.../d/xxxxxxxxxx`, easy to type or read out. It opens the same box. It is easier to guess than the long link, so for a box that must stay private give it a password too. **Remove short link** ends it and leaves the long link and anything printed with it working; **New long link** (the owner only) ends the long link, and every card printed with it, and leaves the short one working. The long link, the short one and the printed cards are ended one at a time.
 - **A printable card** (**Printable card with a QR code**): a page with the box's name, your message and a QR code of the link, to print for table cards or a poster (the print dialog leaves out everything else). There is one for the short link too.
-- **By email**, so a guest can send photos by mail, is **not** offered. It needs the app to read a mailbox, which is a different kind of access (and different settings) from everything else here; it is better decided on its own than slipped in.
+- **By email** (**Give this box an email address**), if the person who runs the app set up a mailbox (see [Photos by email](operations.md#photos-by-email)): the box gets an address such as `drop+k3m9x2tqaw@example.org`, shown with a copy button and on the printable card. Photos and videos attached to a mail sent to it arrive like uploads, under the box's limits, approval, filing and log; the text of the mail and anything that is not a photo or video is dropped, and **nobody gets a reply**. Anyone who knows the address can send, like the link, so a box with a **password cannot have an address** (nobody can type a password into a mail). The log says "A mail brought 2 files" with the same short mark as for any guest; the sender's address is never kept. Attachments smaller than 8 KB (the icons in a signature) are not taken. **Remove email address** ends it; photos already received stay.
 
 ### Templates and copies
 
@@ -328,12 +328,51 @@ From then on every photo tagged for the service goes to **you and to them**. It 
 
 ## Email about what happens to you
 
-If the person who runs the app has set up mail for people (see [Email to the people taking part](operations.md#email-to-the-people-taking-part)), the Overview has an **Email me** card. Turn it on and you get an email about what happens to your services, so you do not have to open the page to find out:
+If the person who runs the app has set up mail for people (see [Email to the people taking part](operations.md#notifications)), the Overview has an **Email me** card. Turn it on and you get an email about what happens to your services, so you do not have to open the page to find out:
 
 - **Everything that happens to my services** sends the same lines you see under Activity (someone joined, a connection was cut, a limit was reached, a request needs you).
 - **Only what needs me** sends just the things that ask something of you or tell you something stopped: a request to join, a connection that broke, a limit reached, a removal.
 
 The emails go to the address Immich shows for your account (change it in Immich and the app follows at your next visit), in the language of your page. Lines are gathered for a few minutes and sent as **one email**, and you get at most six an hour. A photo arriving is not a line of its own (the Activity list does not have one either). **Send a test email** shows that it works. Every email has a link, **Stop these emails**, that asks once and then turns them off without signing in; **Turn off** on the card does the same.
+
+## Notifications on your phone or computer
+
+If the person who runs the app has turned it on (see [Notifications on devices](operations.md#notifications-on-devices)), the Overview has a **Notifications on this device** card. Press **Turn on notifications here**; your browser asks once. From then on this device gets a notification when something happens to your services, even with the page closed, in the language the page was in:
+
+- **Everything that happens to my services** gives the lines of your Activity list and also tells you when photos arrive ("12 photos arrived from Bob in Holiday") or when photos you sent were not handed over because the receiver has them in the trash.
+- **Only what needs me** gives only what asks something of you or tells you something stopped: a request to join, a broken connection, a limit reached, photos that were not handed over.
+
+The card lists your devices. Each can have its own choice, **Send a test notification** shows that it works, and **Remove** stops it (it also stops when you clear the browser's data for the site). Things that happen within about ten seconds come as one notification. On an iPhone or iPad, add the page to the Home Screen first and turn it on from there.
+
+## Answering from a message
+
+A mail or notification about something you can answer carries buttons, so you do not have to open the page:
+
+- when someone **asks to send to a service of yours**, you get **Approve** and **Decline**;
+- when you **pause a service of yours**, you get **Resume service**; when you **pause your own sending**, **Resume sending**.
+
+Opening a link only shows what it will do ("Approve Bob to send photos to Holiday?") and a button; nothing happens until you press it, and you do not need to be signed in to Immich. A link works **once** and stops working after **24 hours**; the two answers to one request cancel each other, so pressing Approve ends the Decline link, and a request you already decided on the page cannot be changed by an old link. If it no longer works, do it from your page. On a phone, the notification shows the buttons where the system allows (Android, Chrome, Edge); on an iPhone, tapping it opens the page. Links are only in mail and notifications to the person who can do the action, never in the administrator's messages. They need the page's address to be set (`PUBLIC_APP_URL`).
+
+## Event pool: everybody gets everybody's photos
+
+For a trip or a party, make the service an **Event pool** (a checkbox when you offer a service, with an optional end after 1 to 366 days). In a pool **everyone who joins, you too, both sends and receives**: a photo any member tags goes to **everyone else** in the pool, and each copy is tagged `from/<name of the person who took it>` as well as the service's inbox tag (or put in its album), so in Immich you can browse by photographer. Everyone's **originals stay where they are**; a photo is never sent back to its own sender, and a copy that arrives is not passed on again (it carries the inbox tag, not the tag people send with). People join through the service's link or QR code as with any service, and the join question says plainly what it means: **every photo you tag goes to everyone in the pool, and everyone's photos come to you.** They must say yes to join; a pool cannot be joined without it.
+
+- **Ending.** The owner can end the pool now, give it an end (days from now), or let it go on until they end it, from the pool's row. When it has ended nothing more is handed over, tagged photos stay tagged, and nobody can join; everything already handed over stays. An ended pool can be opened again by giving it a new end.
+- **Joining late.** A person gets what is shared **from the moment they join**, not what was shared before. **Leaving** stops what comes to them and what they send; they keep what they received, and what they sent stays with those who got it.
+- **Limits.** The service's daily limits per sender apply to each member. Photos a member's key cannot read, or that a receiver already has in their trash, are handled as in any service.
+- **Privacy.** Joining a pool lets everyone in it have your tagged photos, and anyone the owner lets in (the whole server, if the pool is open) is in it. Offer a pool by invitation or with approval if you want to choose who is in. See [Security](security.md#event-pools).
+
+## Frames: an album on a screen
+
+A **frame** shows one of your albums full screen on a photo frame, an old tablet or phone, or a TV, with no account on it. Under **Frames** on the Services tab, **Make a frame**: give it a name, choose one of your own albums, how long each photo stays (8, 15, 30 or 60 seconds) and whether the link works until you end it or for 30 days, 90 days or a year. You get a link (and a QR code) to open on the screen; double-click the page for full screen (it is a web page, so on a TV open it in the TV's browser, or cast a tab).
+
+The page shows each photo once in a random order before any comes round again, never the same one twice in a row, and starts with what was added most recently. It looks at the album again every couple of minutes (`FRAME_REFRESH`): **photos you add appear** and **photos you take out of the album disappear** within about that time, and nothing but the album's photos (not videos, not archived or trashed ones) is ever shown. If the network drops it keeps showing what it has and asks again, less often the longer it fails. **End frame** stops the link at once and deletes its key. A frame whose end date has come stops by itself and stays in your list, marked *Ended*, until you remove it (that deletes its key; only you can, from your account).
+
+## Weekly digest
+
+On a service you own, **Weekly digest** turns on a page of the week's best photos. Every Monday at about 8 in the morning (the app's time zone, `TZ`) the app looks at what arrived in the service during the last seven days, leaves out what is too dark, too bright, blurred or the same moment as a better shot (the same rules as a drop box's best-of), keeps the best forty, puts them in a new album in your Immich account called "<service> week of <date>", and makes a **shared link** to it that ends after a month, so you can send it to people with no account. The card shows the link, how many photos came from how many people, and **what was left out and why**. You are told when it is ready (in your Activity, and by mail or notification if you asked for those); the service's members are not. A week in which nothing arrived makes nothing and says so.
+
+**Make this week's digest now** makes one at once from the last seven days. Turning the digest on takes effect from next Monday. Turning it **off** ends its link and takes back the permissions it needed; the albums it made stay, they are yours. Nothing is ever deleted or changed in your library. To do this without you signed in, turning it on gives the service's own key a few more permissions (looking at pictures, making an album and a shared link), which is why it asks you and tells you; see [Security](security.md#weekly-digest).
 
 ## Leaving, and when a connection breaks
 

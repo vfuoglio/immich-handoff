@@ -56,6 +56,15 @@ func (h *Hub) EnsureKeyPermissions(ctx context.Context, sess *immich.API, user i
 				h.Log.Debug("could not add stack.create to a receiver key", "service", v.Name, "err", err)
 				ok = false
 			}
+			if d, on, _ := h.Store.DigestFor(ctx, v.Name); on && d.Enabled { // a key made again keeps what the digest needs
+				for _, p := range immich.DigestPermissions {
+					if err := sess.AddKeyPermission(ctx, v.KeyID, p); err != nil {
+						h.Log.Debug("could not add a digest permission to a receiver key", "service", v.Name, "permission", p, "err", err)
+						ok = false
+						break
+					}
+				}
+			}
 			if h.ReceiverDelete {
 				if err := sess.AddKeyPermission(ctx, v.KeyID, "asset.delete"); err != nil {
 					h.Log.Debug("could not add asset.delete to a receiver key", "service", v.Name, "err", err)
