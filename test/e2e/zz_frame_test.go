@@ -55,6 +55,17 @@ func TestFrame(t *testing.T) {
 		return res.StatusCode, ids
 	}
 
+	// the form that makes a frame lists the owner's albums when it is opened (it is loaded lazily, inside a closed details)
+	octx := browse(t, port, owner, look{})
+	run(t, octx, chromeNavigate("http://localhost:"+port+"/"))
+	until(t, octx, "the album list loads when the form is opened", `(() => {
+		const d = [...document.querySelectorAll('details.offer')].find(x => x.querySelector('#fr-name'));
+		if (!d) return false;
+		d.open = true;
+		const s = document.querySelector('#fr-album');
+		return !!s && s.options.length > 0;
+	})()`, 20*time.Second)
+
 	// a screen with no account opens the link and shows the photo
 	ctx := browse(t, port, "x=y", look{})
 	run(t, ctx, chromeNavigate(base))

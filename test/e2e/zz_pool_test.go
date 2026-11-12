@@ -75,6 +75,27 @@ func TestEventPool(t *testing.T) {
 			return len(searchTag(t, p.u, "inbox/weekend", false)) == 2
 		})
 	}
+	// the copy appears before its from-tag is put on, and the original is untagged when the pass ends: wait for both
+	for _, p := range people {
+		p := p
+		eventually(t, p.name+"'s copies are tagged with who took them, and the original is released", 60*time.Second, func() bool {
+			for _, other := range people {
+				if other.name != p.name && len(searchTag(t, p.u, "from/"+other.name, false)) != 1 {
+					return false
+				}
+			}
+			own, c := getAsset(t, p.u, originals[p.name])
+			if c != 200 {
+				return false
+			}
+			for _, tg := range own.Tags {
+				if tg.Name == "weekend-tag" {
+					return false
+				}
+			}
+			return true
+		})
+	}
 	for _, p := range people {
 		for _, other := range people {
 			want := 1

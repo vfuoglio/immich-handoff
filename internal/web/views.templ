@@ -2522,7 +2522,7 @@ templ FrameSection(frames []FrameView) {
 				<label for="fr-name">{ t(ctx, "Name") }</label>
 				<input id="fr-name" name="name" required maxlength="60" placeholder={ t(ctx, "Living room") }/>
 			</div>
-			<div class="field" hx-get="fragments/frame-albums" hx-trigger="revealed" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/frame-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			<div class="field">
