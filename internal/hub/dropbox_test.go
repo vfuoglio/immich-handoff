@@ -871,18 +871,18 @@ func TestAPromptSurvivesApprovalAndATakeBack(t *testing.T) {
 	}
 }
 
-func TestTheGuestBookKeepsMessagesAndVoiceNotesForTheHosts(t *testing.T) {
+func TestMessagesToTheHostAreKeptWithAVoiceNoteForTheHostsOnly(t *testing.T) {
 	e, ctx := setup(t, true), context.Background()
 	closed := newBox(t, e, hub.DropParams{Name: "No book"})
 	if err := e.h.LeaveMessage(ctx, closed, "m", "Eve", "Hello", nil); !errors.Is(err, hub.ErrGuestBookOff) {
-		t.Errorf("a box with no guest book: %v", err)
+		t.Errorf("a box that takes no messages: %v", err)
 	}
 	b := newBox(t, e, hub.DropParams{Name: "Book", GuestBook: true})
 	webm := append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 500)...)
 	if err := e.h.LeaveMessage(ctx, b, "m1", " Eve ", " Congratulations! ", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.LeaveMessage(ctx, b, "m2", "", "", webm); err != nil {
+	if err := e.h.LeaveMessage(ctx, b, "m2", "Zoe", "", webm); err != nil {
 		t.Fatalf("a voice note alone: %v", err)
 	}
 	if err := e.h.LeaveMessage(ctx, b, "m3", "Bo", "Words and voice", webm); err != nil {
@@ -893,11 +893,13 @@ func TestTheGuestBookKeepsMessagesAndVoiceNotesForTheHosts(t *testing.T) {
 		voice      []byte
 		want       error
 	}{
-		"nothing":      {"", "", nil, hub.ErrBadMessage},
-		"long text":    {"", strings.Repeat("x", 1001), nil, hub.ErrBadMessage},
+		"nothing":      {"Eve", "", nil, hub.ErrBadMessage},
+		"no name":      {"", "Hello", nil, hub.ErrMessageNeedsName},
+		"blank name":   {"   ", "Hello", nil, hub.ErrMessageNeedsName},
+		"long text":    {"Eve", strings.Repeat("x", 1001), nil, hub.ErrBadMessage},
 		"long name":    {strings.Repeat("n", 61), "hi", nil, hub.ErrBadMessage},
-		"a page":       {"", "", page, hub.ErrBadVoice},
-		"a huge voice": {"", "", append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 3<<20)...), hub.ErrBadVoice},
+		"a page":       {"Eve", "", page, hub.ErrBadVoice},
+		"a huge voice": {"Eve", "", append([]byte{0x1A, 0x45, 0xDF, 0xA3}, make([]byte, 3<<20)...), hub.ErrBadVoice},
 	} {
 		if err := e.h.LeaveMessage(ctx, b, "m", c.name, c.text, c.voice); !errors.Is(err, c.want) {
 			t.Errorf("%s: %v", name, err)
@@ -905,7 +907,7 @@ func TestTheGuestBookKeepsMessagesAndVoiceNotesForTheHosts(t *testing.T) {
 	}
 	msgs, err := e.h.GuestBook(ctx, bobID, b.ID)
 	if err != nil || len(msgs) != 3 {
-		t.Fatalf("the guest book: %d %v", len(msgs), err)
+		t.Fatalf("the messages: %d %v", len(msgs), err)
 	}
 	if msgs[2].Name != "Eve" || msgs[2].Text != "Congratulations!" || msgs[2].HasAudio || !msgs[0].HasAudio {
 		t.Errorf("messages: %+v", msgs)
@@ -962,14 +964,14 @@ func TestTheGuestBookKeepsMessagesAndVoiceNotesForTheHosts(t *testing.T) {
 	}
 	// the book has a size
 	for i := 0; i < 600; i++ {
-		if err := e.h.LeaveMessage(ctx, b, "m", "", "x", nil); err != nil {
+		if err := e.h.LeaveMessage(ctx, b, "m", "Eve", "x", nil); err != nil {
 			if !errors.Is(err, hub.ErrGuestBookFull) || i < 400 {
 				t.Fatalf("message %d: %v", i, err)
 			}
 			return
 		}
 	}
-	t.Error("the guest book must have a limit")
+	t.Error("the messages must have a limit")
 }
 
 func TestSharingTheResultBackWithTheGuests(t *testing.T) {
@@ -1420,5 +1422,50 @@ func TestABoxThatHandsOnByItselfDoesItOnceWhenItClosesAndTheSummaryTellsHow(t *t
 	}
 	if !failed {
 		t.Errorf("a failed hand-on must be in the summary: %v", told)
+	}
+}
+
+// What a password guards is chosen when the box is made. With a password and no choice it guards the upload, as it
+// always did; a choice without a password is refused; and the token that opens a box guarding its whole page stops
+// working when the password changes.
+func TestWhatAPasswordGuardsIsChosenWhenTheBoxIsMade(t *testing.T) {
+	e := setup(t, true)
+	for name, c := range map[string]struct {
+		scope, password, want string
+		err                   error
+	}{
+		"password only":       {"", "swordfish", store.DropScopeUpload, nil},
+		"upload":              {"upload", "swordfish", store.DropScopeUpload, nil},
+		"the whole page":      {"page", "swordfish", store.DropScopePage, nil},
+		"no password":         {"", "", "", nil},
+		"a choice, no word":   {"page", "", "", hub.ErrDropNeedsPassword},
+		"a choice nobody has": {"sideways", "swordfish", "", hub.ErrBadDropSecret},
+	} {
+		b, err := e.h.CreateDropBox(context.Background(), e.sess, bob, hub.DropParams{Name: "Box " + strings.ReplaceAll(name, ",", ""), Password: c.password, PasswordScope: c.scope})
+		if !errors.Is(err, c.err) {
+			t.Errorf("%s: %v, want %v", name, err, c.err)
+			continue
+		}
+		if err == nil && c.password != "" && b.PasswordScope != c.want {
+			t.Errorf("%s: scope %q, want %q", name, b.PasswordScope, c.want)
+		}
+	}
+
+	page := newBox(t, e, hub.DropParams{Name: "Hidden", Password: "swordfish", PasswordScope: "page"})
+	upload := newBox(t, e, hub.DropParams{Name: "Visible", Password: "swordfish", PasswordScope: "upload"})
+	token := hub.DropUnlockToken(page)
+	if !hub.DropPageLocked(page, "") || !hub.DropPageLocked(page, "made-up") || hub.DropPageLocked(page, token) {
+		t.Error("a page-wide password keeps out a guest with no token or a made-up one, and lets in the right one")
+	}
+	if hub.DropPageLocked(upload, "") {
+		t.Error("a password on the upload does not hide the page")
+	}
+	changed := page
+	changed.Password, _ = hub.HashDropPassword("another")
+	if !hub.DropPageLocked(changed, token) {
+		t.Error("the token of the old password must not open the box with a new one")
+	}
+	if tok := hub.DropUnlockToken(upload); tok == token {
+		t.Error("two boxes must not share a token")
 	}
 }

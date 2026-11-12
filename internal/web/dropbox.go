@@ -49,6 +49,69 @@ func dropRoute(path string) bool {
 // guestSecretCookie is the cookie in which a guest's browser keeps the secret that finds its own uploads again.
 func guestSecretCookie(boxID string) string { return "handoff-drop-" + boxID[:8] }
 
+// unlockCookie is the cookie in which a guest's browser keeps that it gave the right password to a box whose password
+// guards the whole page.
+func unlockCookie(b store.DropBox) string { return "handoff-unlock-" + b.ID[:8] }
+
+// pageLocked is whether this guest is kept out of the box's page: its password guards the whole page and the guest has
+// not given it.
+func pageLocked(r *http.Request, b store.DropBox) bool {
+	v := ""
+	if c, err := r.Cookie(unlockCookie(b)); err == nil {
+		v = c.Value
+	}
+	return hub.DropPageLocked(b, v)
+}
+
+// dropLocked asks for the password of a box that guards its whole page. It shows nothing of the box: not its name, its
+// message, its cover or its colour.
+func (w *Server) dropLocked(rw http.ResponseWriter, r *http.Request, b store.DropBox, token string, wrong bool) {
+	ctx := r.Context()
+	if b.Lang != "" {
+		if _, err := r.Cookie(LanguageCookie); err != nil {
+			ctx = i18n.With(ctx, i18n.For(i18n.Lang(b.Lang)))
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+	rw.WriteHeader(http.StatusUnauthorized)
+	DropLocked(token, wrong).Render(ctx, rw)
+}
+
+// dropUnlock takes the password of a box that guards its whole page, and, if it is right, remembers that in the guest's
+// browser. Wrong tries are counted and answered like wrong passwords for an upload.
+func (w *Server) dropUnlock(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if w.Hub == nil {
+		w.dropClosed(rw, r)
+		return
+	}
+	token := r.PathValue("token")
+	b, err := w.Hub.DropBoxForGuest(ctx, token)
+	if err != nil || b.Password == "" || b.PasswordScope != store.DropScopePage {
+		w.dropClosed(rw, r)
+		return
+	}
+	who := hub.DropWho(b.Token, w.clientAddr(r))
+	if err := w.Hub.AllowDrop(ctx, b, who); err != nil {
+		rw.Header().Set("Retry-After", "600")
+		rw.WriteHeader(http.StatusTooManyRequests)
+		Notice(t(ctx, "Please wait a little"), t(ctx, "Too many photos or requests came from your connection. Try again in ten minutes."), true).Render(ctx, rw)
+		return
+	}
+	defer w.Hub.DoneDrop(b)
+	r.ParseForm()
+	if !w.Hub.CheckDropPassword(ctx, b, who, r.PostFormValue("password")) {
+		w.dropLocked(rw, r, b, token, true)
+		return
+	}
+	http.SetCookie(rw, &http.Cookie{Name: unlockCookie(b), Value: hub.DropUnlockToken(b), Path: "/", MaxAge: 7 * 24 * 3600, HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Location", "../"+token) // relative, so it works under a path prefix
+	rw.WriteHeader(http.StatusSeeOther)
+}
+
 // forGuest prepares a request for a box's guest page: the box's language when the guest has not chosen one, and what
 // the layout needs (the box's own manifest and colour).
 func (w *Server) forGuest(r *http.Request, b store.DropBox, token string) *http.Request {
@@ -100,6 +163,10 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 		// a box that has shared its photos back says so, to the people who have its link
 		if gb, gerr := w.Hub.DropBoxForGuest(r.Context(), r.PathValue("token")); gerr == nil {
 			if sh, ok := w.Hub.DropShareFor(r.Context(), gb.ID); ok {
+				if pageLocked(r, gb) {
+					w.dropLocked(rw, r, gb, r.PathValue("token"), false)
+					return
+				}
 				r = w.forGuest(r, gb, r.PathValue("token"))
 				rw.Header().Set("Cache-Control", "no-store")
 				rw.Header().Set("Referrer-Policy", "no-referrer")
@@ -110,10 +177,14 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 		w.dropClosed(rw, r)
 		return
 	}
+	if pageLocked(r, b) {
+		w.dropLocked(rw, r, b, r.PathValue("token"), false)
+		return
+	}
 	r = w.forGuest(r, b, r.PathValue("token"))
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "", PhotosOnly: b.PhotosOnly,
+	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "" && b.PasswordScope != store.DropScopePage, PhotosOnly: b.PhotosOnly,
 		Approve: b.Approve, Limits: dropLimitText(r.Context(), b), MaxDim: b.MaxDim, Cover: w.Hub.Store.HasDropCover(r.Context(), b.ID),
 		CanDelete: b.GuestDelete, Prompts: w.promptViews(r.Context(), b), PromptRequired: b.PromptRequired, GuestBook: b.GuestBook}).Render(r.Context(), rw)
 }
@@ -162,8 +233,8 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "send the form as multipart/form-data", http.StatusBadRequest)
 		return
 	}
-	unlocked := b.Password == ""
-	prompt := "" // the prompt of the shot list the next file is for (a field sent before it)
+	unlocked := b.Password == "" || (b.PasswordScope == store.DropScopePage && !pageLocked(r, b)) // given on the page, or with the files
+	prompt := ""                                                                                  // the prompt of the shot list the next file is for (a field sent before it)
 	var lines []DropResultLine
 	for len(lines) < maxDropFilesPerRequest {
 		part, err := mr.NextPart()
@@ -300,7 +371,7 @@ func dropLimitText(ctx context.Context, b store.DropBox) string {
 	if !b.ExpiresAt.IsZero() {
 		parts = append(parts, t(ctx, "open until {when}", "when", loc(ctx).Stamp(b.ExpiresAt.Local())))
 	}
-	if b.Password != "" {
+	if b.Password != "" && b.PasswordScope != store.DropScopePage { // a guest who sees this has already given the page's password
 		parts = append(parts, t(ctx, "needs a password"))
 	}
 	if b.Approve {
@@ -346,7 +417,9 @@ func dropChips(ctx context.Context, b DropBoxView) []Chip {
 		return []Chip{{"bad", t(ctx, "Revoked")}}
 	}
 	c := []Chip{{"ok", t(ctx, "Open")}}
-	if b.Locked {
+	if b.LockedPage {
+		c = append(c, Chip{"", t(ctx, "Password on the page")})
+	} else if b.Locked {
 		c = append(c, Chip{"", t(ctx, "Password")})
 	}
 	return c
@@ -379,7 +452,7 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 	for _, a := range boxes {
 		b := a.Box
 		v := DropBoxView{ID: b.ID, Name: b.Name, Message: b.Message, State: dropState(b), Note: b.Note, Role: a.Role,
-			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != "",
+			Files: b.Files, Size: megabytes(b.Bytes), Limits: dropLimitText(ctx, b), Locked: b.Password != "", LockedPage: b.Password != "" && b.PasswordScope == store.DropScopePage,
 			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
 			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
 		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
@@ -529,6 +602,12 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		p.Name, p.Message, p.Password = r.PostFormValue("name"), r.PostFormValue("message"), r.PostFormValue("password")
+		switch secure := r.PostFormValue("secure"); secure {
+		case "none":
+			p.Password = "" // a password typed and then "No" chosen is not kept
+		case store.DropScopeUpload, store.DropScopePage:
+			p.PasswordScope = secure
+		}
 		p.PhotosOnly = r.PostFormValue("photos") == "1"
 		p.Approve = r.PostFormValue("approve") == "1"
 		p.GuestDelete = r.PostFormValue("guestdelete") == "1"
@@ -637,7 +716,7 @@ func (w *Server) guestBox(rw http.ResponseWriter, r *http.Request) (store.DropBo
 		return store.DropBox{}, false
 	}
 	b, err := w.Hub.OpenDropBox(r.Context(), r.PathValue("token"))
-	if err != nil {
+	if err != nil || pageLocked(r, b) {
 		http.NotFound(rw, r)
 		return b, false
 	}
@@ -735,7 +814,7 @@ func (w *Server) dropMine(rw http.ResponseWriter, r *http.Request) {
 	}
 	token := r.PathValue("token")
 	b, err := w.Hub.DropBoxForGuest(r.Context(), token)
-	if err != nil || !b.GuestDelete {
+	if err != nil || !b.GuestDelete || pageLocked(r, b) {
 		w.dropClosed(rw, r)
 		return
 	}
@@ -757,7 +836,7 @@ func (w *Server) dropMineDelete(rw http.ResponseWriter, r *http.Request) {
 	}
 	token := r.PathValue("token")
 	b, err := w.Hub.DropBoxForGuest(r.Context(), token)
-	if err != nil {
+	if err != nil || pageLocked(r, b) {
 		w.dropClosed(rw, r)
 		return
 	}
@@ -997,6 +1076,10 @@ func (w *Server) dropMessage(rw http.ResponseWriter, r *http.Request) {
 		}
 		DropMessageDone(b.Name, "drop/"+token).Render(ctx, rw)
 	}
+	if pageLocked(r, b) {
+		answer(http.StatusForbidden, hub.ErrDropPassword)
+		return
+	}
 	if err := w.Hub.AllowDrop(ctx, b, who); err != nil {
 		rw.Header().Set("Retry-After", "600")
 		answer(http.StatusTooManyRequests, err)
@@ -1034,7 +1117,7 @@ func (w *Server) extrasDropBox(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *Server) deleteMessage(rw http.ResponseWriter, r *http.Request) {
-	w.membership(rw, r, "guest book message removed", func(ctx context.Context, me *member, id string) error {
+	w.membership(rw, r, "message to the host removed", func(ctx context.Context, me *member, id string) error {
 		return w.Hub.DeleteGuestMessage(ctx, me.user, id)
 	})
 }

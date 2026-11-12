@@ -532,6 +532,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; 
 /* what was chosen: a grid of tiles, each with a picture, a way out, and its own progress */
 .drop-summary { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-weight: 600; }
 .drop-summary[hidden] { display: none; }
+.bad-note { color: var(--bad); font-weight: 600; }
 button.link { border: 0; background: transparent; padding: .2rem .4rem; color: var(--accent); font-weight: 600; box-shadow: none; }
 button.link:hover { text-decoration: underline; transform: none; background: transparent; }
 .drop-list { grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: .8rem; }

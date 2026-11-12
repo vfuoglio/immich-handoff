@@ -449,7 +449,27 @@ export function initCard(): void {
     });
 }
 
-/** The guest book: a message, and a voice note recorded in the browser when it can. Without a script the form still sends the words. */
+/** The menu that secures a drop box with a password: the password field is there only when a password is wanted. The page
+ *  swaps its parts in and out, so this looks at whatever menu is there, now and after each swap. */
+export function syncSecure(scope: ParentNode = document): void {
+  scope.querySelectorAll<HTMLSelectElement>("select#drop-secure").forEach((select) => {
+    const field = select.form?.querySelector<HTMLElement>("[data-secure-password]");
+    if (!field) return;
+    field.hidden = select.value === "none";
+    const input = field.querySelector<HTMLInputElement>("input");
+    if (input) input.required = !field.hidden;
+  });
+}
+
+export function initSecure(): void {
+  document.addEventListener("change", (e) => {
+    if (e.target instanceof HTMLSelectElement && e.target.id === "drop-secure") syncSecure();
+  });
+  document.addEventListener("htmx:afterSwap", () => syncSecure());
+  syncSecure();
+}
+
+/** The message to the host: a message, and a voice note recorded in the browser when it can. Without a script the form still sends the words. */
 export function initGuestBook(): void {
   const form = document.querySelector<HTMLFormElement>("form.guestbook-form");
   if (!form) return;

@@ -107,6 +107,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
 	mux.HandleFunc("POST /drop/{token}/upload", w.dropUpload)
+	mux.HandleFunc("POST /drop/{token}/unlock", w.dropUnlock)
+	mux.HandleFunc("POST /d/{token}/unlock", w.dropUnlock)
 	mux.HandleFunc("GET /d/{token}", w.dropPage)
 	mux.HandleFunc("POST /d/{token}/upload", w.dropUpload)
 	mux.HandleFunc("GET /drop/{token}/theme.css", w.dropTheme)

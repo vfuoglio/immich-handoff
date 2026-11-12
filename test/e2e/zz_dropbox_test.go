@@ -494,7 +494,7 @@ func TestDropBoxGuestPage(t *testing.T) {
 	run(t, ctx, chromedp.SetUploadFiles(`#drop-files`, []string{big}, chromedp.ByQuery))
 	until(t, ctx, "both files are listed again", `document.querySelectorAll('.drop-list li').length === 2`, 10*time.Second)
 	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
-	until(t, ctx, "the button says what is going on", `document.querySelector('.drop-send').disabled && /Sending \d of 2/.test(document.querySelector('.drop-send').textContent) || document.querySelector('.drop-result.ok')`, 30*time.Second)
+	until(t, ctx, "the button says what is going on", `(document.querySelector('.drop-send').disabled && /Sending \d of 2/.test(document.querySelector('.drop-send').textContent)) || !!document.querySelector('.drop-result.ok')`, 30*time.Second)
 	until(t, ctx, "both files are received", `[...document.querySelectorAll('.drop-list li')].every(li => li.textContent.includes('Received'))`, 60*time.Second)
 
 	inbox := func() []string { return searchTag(t, alice, "inbox/Phone party", false) }
@@ -531,7 +531,7 @@ func TestDropBoxGuestPage(t *testing.T) {
 	_ = bigBytes
 }
 
-// TestDropBoxExtras: a shot list that tags photos by prompt, a guest book with a voice note, and sharing the result back
+// TestDropBoxExtras: a shot list that tags photos by prompt, a message to the host with a voice note, and sharing the result back
 // with guests through a real Immich shared link that anyone can open without an account.
 func TestDropBoxExtras(t *testing.T) {
 	alice, _, _, _ := bootstrap(t)
@@ -547,7 +547,7 @@ func TestDropBoxExtras(t *testing.T) {
 	op := page(t, port, owner)
 	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
 	boxID := regexp.MustCompile(`(?:&#34;|")service(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
-	if g, p := guestGet(t, port, "/drop/"+token); g != 200 || !strings.Contains(p, "The oldest guest") || !strings.Contains(p, "Leave a message") {
+	if g, p := guestGet(t, port, "/drop/"+token); g != 200 || !strings.Contains(p, "The oldest guest") || !strings.Contains(p, "Message to the host") {
 		t.Fatalf("guest page: %d", g)
 	}
 	send := func(prompt string, name string, data []byte) string {
@@ -588,7 +588,7 @@ func TestDropBoxExtras(t *testing.T) {
 		t.Error("the owner sees how many photos came for each prompt")
 	}
 
-	// the guest book: words and a voice note, read and played by the owner only
+	// the message to the host: words and a voice note, read and played by the owner only
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	mw.WriteField("name", "Eve")
@@ -855,4 +855,43 @@ func TestDropBoxWallBestOfAndHandingOn(t *testing.T) {
 	if has(keyPermissions(t, alice, "handoff: Wow (drop box)"), "asset.view") {
 		t.Error("stopping the wall must take the permission off the key")
 	}
+}
+
+// TestDropBoxWholePagePassword: a box whose password guards the whole page shows a guest nothing but a request for it,
+// in a real browser; the right password opens the box's own page, which then takes a photo.
+func TestDropBoxWholePagePassword(t *testing.T) {
+	alice, _, _, _ := bootstrap(t)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 54)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir())
+	owner := loginCookie(t, "alice@e2e.test")
+	if code, b := postBody(t, port, "/dropbox", owner, url.Values{"name": {"Hidden party"}, "message": {"Only for friends"}, "opendays": {"3"}, "secure": {"page"}, "password": {"open sesame"}}); code != 204 {
+		t.Fatalf("make a drop box: %d %s", code, b)
+	}
+	if code, b := postBody(t, port, "/dropbox", owner, url.Values{"name": {"No word"}, "opendays": {"3"}, "secure": {"page"}}); code == 204 {
+		t.Errorf("a password choice with no password was accepted: %s", b)
+	}
+	op := page(t, port, owner)
+	if !strings.Contains(op, "Password on the page") {
+		t.Error("the owner's box must say its password guards the page")
+	}
+	token := regexp.MustCompile(`data-link="drop/([0-9a-f]+)"`).FindStringSubmatch(op)[1]
+	dir := t.TempDir()
+	photo := filepath.Join(dir, "p.jpg")
+	os.WriteFile(photo, jpegBytes(7401), 0o644)
+
+	ctx := browse(t, port, "visitor=1", look{w: 1000, h: 800})
+	run(t, ctx, chromedp.Navigate("http://localhost:"+port+"/drop/"+token), chromedp.WaitVisible(`#unlock-pw`, chromedp.ByQuery))
+	if js[bool](t, ctx, `document.body.textContent.includes('Hidden party') || document.body.textContent.includes('Only for friends') || !!document.querySelector('#drop-files')`) {
+		t.Error("a locked page must show nothing of the box")
+	}
+	run(t, ctx, chromedp.SendKeys(`#unlock-pw`, "wrong", chromedp.ByQuery), chromedp.Submit(`#unlock-pw`, chromedp.ByQuery))
+	until(t, ctx, "a wrong password is refused", `document.body.textContent.includes('The password is not right')`, 10*time.Second)
+	run(t, ctx, chromedp.SendKeys(`#unlock-pw`, "open sesame", chromedp.ByQuery), chromedp.Submit(`#unlock-pw`, chromedp.ByQuery))
+	until(t, ctx, "the right password opens the box's own page", `document.body.textContent.includes('Hidden party') && !!document.querySelector('#drop-files') && !document.querySelector('input[type=password]')`, 10*time.Second)
+	run(t, ctx, chromedp.SetUploadFiles(`#drop-files`, []string{photo}, chromedp.ByQuery))
+	until(t, ctx, "the photo is listed", `document.querySelectorAll('.drop-list li').length === 1`, 10*time.Second)
+	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	until(t, ctx, "the photo is received", `!!document.querySelector('.drop-result.ok')`, 60*time.Second)
+	eventually(t, "the photo reaches the owner's library", 60*time.Second, func() bool { return len(searchTag(t, alice, "inbox/Hidden party", false)) == 1 })
 }

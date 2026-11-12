@@ -165,12 +165,15 @@ func voiceExt(kind string) string {
 
 // LeaveMessage keeps a guest's message and voice note in the box's guest book. They are kept in the app's own data
 // file, not in the owner's Immich (which holds photos and videos), and only the owner and co-hosts can read them.
-// The box must have a guest book; the guest may give a name; the message or the voice note may be missing but not both.
+// The box must take messages; the guest must give a name; the message or the voice note may be missing but not both.
 func (h *Hub) LeaveMessage(ctx context.Context, b store.DropBox, who, name, text string, voice []byte) error {
 	if !b.GuestBook {
 		return ErrGuestBookOff
 	}
 	name, text = strings.TrimSpace(name), strings.TrimSpace(text)
+	if name == "" {
+		return ErrMessageNeedsName
+	}
 	if utf8.RuneCountInString(name) > 60 || utf8.RuneCountInString(text) > maxMessageText || strings.ContainsRune(name+text, 0) || (text == "" && len(voice) == 0) {
 		return ErrBadMessage
 	}

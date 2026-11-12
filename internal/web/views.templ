@@ -251,6 +251,7 @@ type DropBoxView struct {
 	Limits            string // the limits in words
 	Ends              string // when the link stops working, when it will
 	Locked            bool   // guests need a password
+	LockedPage        bool   // and it guards the whole page, not only sending
 	Log               []ActivityView
 
 	Role                string // owner, manage or view
@@ -1962,12 +1963,12 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 				}
 				if b.Manage {
 					<details class="more">
-						<summary>{ t(ctx, "Shot list and guest book") }</summary>
+						<summary>{ t(ctx, "Shot list and message to the host") }</summary>
 						<form class="limits" hx-post="dropbox/extras" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 							<input type="hidden" name="service" value={ b.ID }/>
 							<label>{ t(ctx, "Shot list: what guests are asked to photograph, one per line") }<textarea name="prompts" rows="4">{ b.PromptsText }</textarea></label>
 							<label><input name="required" type="checkbox" value="1" checked?={ b.PromptRequired }/> { t(ctx, "Every photo must say which one it is for") }</label>
-							<label><input name="guestbook" type="checkbox" value="1" checked?={ b.GuestBook }/> { t(ctx, "A guest book: guests may leave a message and a voice note") }</label>
+							<label><input name="guestbook" type="checkbox" value="1" checked?={ b.GuestBook }/> { t(ctx, "Message to the host: guests may leave a message, with their name, and a voice note") }</label>
 							<button type="submit">{ t(ctx, "Save") }</button>
 							<small class="meta">{ t(ctx, "Photos for a prompt are also tagged with it in your library, under the box's inbox tag, so Immich lists them together. Guests see the list with a tick on what already has a photo. Changing the list never changes photos already tagged.") }</small>
 						</form>
@@ -1982,11 +1983,11 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					</ul>
 				}
 				if b.GuestBook && b.Manage {
-					<h3>{ t(ctx, "Guest book") } <span class="count-badge">{ fmt.Sprint(len(b.Messages)) }</span></h3>
+					<h3>{ t(ctx, "Messages to the host") } <span class="count-badge">{ fmt.Sprint(len(b.Messages)) }</span></h3>
 					if len(b.Messages) == 0 {
 						<p class="meta">{ t(ctx, "Nothing here yet. Messages and voice notes guests leave appear here, for you and your co-hosts only. They are kept in this app's own data file, not in Immich.") }</p>
 					} else {
-						<p class="row"><a class="button" href={ templ.SafeURL("dropbox/guestbook/" + b.ID) }>{ t(ctx, "Download the guest book") }</a></p>
+						<p class="row"><a class="button" href={ templ.SafeURL("dropbox/guestbook/" + b.ID) }>{ t(ctx, "Download the messages") }</a></p>
 					}
 					<ul class="plain guestbook">
 						for _, m := range b.Messages {
@@ -2012,7 +2013,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 						}
 					</ul>
 				} else if b.GuestBook {
-					<p class="meta">{ t(ctx, "This box has a guest book. Only the people who manage it can read it.") }</p>
+					<p class="meta">{ t(ctx, "This box takes messages to the host. Only the people who manage it can read them.") }</p>
 				}
 				if b.Manage {
 					<h3>{ t(ctx, "Wall") }</h3>
@@ -2259,9 +2260,18 @@ templ DropBoxForm() {
 				<input id="drop-files" name="files" type="number" min="0" max="1000000" value="2000"/>
 			</div>
 			<div class="field">
-				<label for="drop-pass">{ t(ctx, "Password (optional)") }</label>
+				<label for="drop-secure">{ t(ctx, "Secure with a password...") }</label>
+				<select id="drop-secure" name="secure">
+					<option value="none" selected>{ t(ctx, "No") }</option>
+					<option value="upload">{ t(ctx, "Upload") }</option>
+					<option value="page">{ t(ctx, "The whole page") }</option>
+				</select>
+			</div>
+			<div class="field" data-secure-password>
+				<label for="drop-pass">{ t(ctx, "Password") }</label>
 				<input id="drop-pass" name="password" type="text" maxlength="64" autocomplete="off"/>
 			</div>
+			<small class="meta wide">{ t(ctx, "Upload: anyone with the link can see the page, and needs the password to send. The whole page: nothing is shown, and nothing can be sent, without the password. A wall you start has its own link and is not covered.") }</small>
 			<div class="field">
 				<label for="drop-album">{ t(ctx, "Put what arrives in this album (optional)") }</label>
 				<input id="drop-album" name="album" maxlength="100"/>
@@ -2277,7 +2287,7 @@ templ DropBoxForm() {
 				<textarea id="drop-prompts" name="prompts" rows="3" placeholder={ t(ctx, "The first dance\nThe oldest guest\nThe best hat") }></textarea>
 			</div>
 			<label class="wide"><input name="required" type="checkbox" value="1"/> { t(ctx, "Every photo must say which one it is for") }</label>
-			<label class="wide"><input name="guestbook" type="checkbox" value="1"/> { t(ctx, "A guest book: guests may leave a message and a voice note") }</label>
+			<label class="wide"><input name="guestbook" type="checkbox" value="1"/> { t(ctx, "Message to the host: guests may leave a message, with their name, and a voice note") }</label>
 			<label class="wide"><input name="guestdelete" type="checkbox" value="1"/> { t(ctx, "Guests may take back what they sent, while it is still in the inbox") }</label>
 			<small class="meta wide">{ t(ctx, "For that the box's key also gets permission to read photos and move them to your trash (never to delete them for good). Guests keep a secret in their browser, so only they can take back their own files.") }</small>
 			<small class="meta wide">{ t(ctx, "An album gives the key permission to find, make and add to albums, nothing more. Files that wait for you are kept on this server's disk until you decide, and deleted after two weeks.") }</small>
@@ -2356,10 +2366,10 @@ templ DropPage(d DropPageView) {
 		</form>
 		if d.GuestBook {
 			<form class="card offer-form guestbook-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/message" }>
-				<h2>{ t(ctx, "Leave a message") }</h2>
+				<h2>{ t(ctx, "Message to the host") }</h2>
 				<div class="field">
-					<label for="gb-name">{ t(ctx, "Your name (optional)") }</label>
-					<input id="gb-name" name="name" maxlength="60" autocomplete="name"/>
+					<label for="gb-name">{ t(ctx, "Your name") }</label>
+					<input id="gb-name" name="name" required maxlength="60" autocomplete="name"/>
 				</div>
 				<div class="field">
 					<label for="gb-text">{ t(ctx, "Your message") }</label>
@@ -2374,6 +2384,26 @@ templ DropPage(d DropPageView) {
 				<p class="meta guestbook-status" role="status" aria-live="polite"></p>
 			</form>
 		}
+	}
+}
+
+// DropLocked is all a guest sees of a box whose password guards the whole page, until they give it.
+templ DropLocked(token string, wrong bool) {
+	@Layout(t(ctx, "Password needed"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This page needs a password") }</h1>
+			<p class="lead">{ t(ctx, "Ask the person who sent you the link for the password.") }</p>
+		</section>
+		<form class="card offer-form" method="post" action={ "drop/" + token + "/unlock" }>
+			if wrong {
+				<p class="meta bad-note" role="alert">{ t(ctx, "The password is not right. Try again.") }</p>
+			}
+			<div class="field">
+				<label for="unlock-pw">{ t(ctx, "Password") }</label>
+				<input id="unlock-pw" name="password" type="password" required autofocus autocomplete="off"/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Open") }</button></p>
+		</form>
 	}
 }
 
