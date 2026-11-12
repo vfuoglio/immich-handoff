@@ -414,6 +414,24 @@ var migrations = []string{
 	   used_at    TEXT NOT NULL DEFAULT ''
 	 );
 	 CREATE INDEX action_links_grp ON action_links (grp);`,
+	// A weekly digest of what arrived in a service: the last one made, and the permissions the digest added to the
+	// service's receiver key (taken off again when it is turned off).
+	`CREATE TABLE digests (
+	   service    TEXT PRIMARY KEY,
+	   enabled    INTEGER NOT NULL DEFAULT 0,
+	   added      TEXT NOT NULL DEFAULT '',
+	   week       TEXT NOT NULL DEFAULT '',
+	   made_at    TEXT NOT NULL DEFAULT '',
+	   album      TEXT NOT NULL DEFAULT '',
+	   link_id    TEXT NOT NULL DEFAULT '',
+	   link_key   TEXT NOT NULL DEFAULT '',
+	   link_ends  TEXT NOT NULL DEFAULT '',
+	   photos     INTEGER NOT NULL DEFAULT 0,
+	   people     INTEGER NOT NULL DEFAULT 0,
+	   left_out   INTEGER NOT NULL DEFAULT 0,
+	   left_json  TEXT NOT NULL DEFAULT '',
+	   note       TEXT NOT NULL DEFAULT ''
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

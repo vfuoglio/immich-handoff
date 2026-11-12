@@ -203,6 +203,7 @@ func run(log *slog.Logger) error {
 			defer t.Stop()
 			for {
 				h.DropMaintenance(ctx)
+				h.DigestMaintenance(ctx)
 				select {
 				case <-ctx.Done():
 					return

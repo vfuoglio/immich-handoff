@@ -97,6 +97,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/invite", w.newInvite)
 	mux.HandleFunc("POST /services/rules", w.setRules)
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
+	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
@@ -435,6 +436,7 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 				ov.BridgeRetry = st.RetryAt.Local().Format("15:04")
 			}
 		}
+		ov.Digest = w.digestView(ctx, o.Service.Label())
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
 		}

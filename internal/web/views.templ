@@ -102,7 +102,21 @@ type OwnedView struct {
 	BridgeChecked     string // when it was last checked
 	BridgeRetry       string // when an unreachable server is tried again
 	BridgeStopped     string // why the service does not run for a reason that is not its receiver key (bridges switched off)
+	Digest            DigestView
 }
+
+// DigestView is a service's weekly digest as its owner sees it.
+type DigestView struct {
+	On, Running           bool
+	Made, Ends, Next      string // already written for the reader
+	Album, URL, Key       string // the album's name; the shared link's address when the app knows Immich's, else its key
+	Photos, People, Left  int
+	LeftList              []DigestLeftView
+	Note                  string
+}
+
+// DigestLeftView is a photo a digest left out and why, in words.
+type DigestLeftView struct{ Name, Why string }
 
 // MemberView is a sender of a service the person owns.
 type MemberView struct {
@@ -689,6 +703,66 @@ templ UnsubscribePage(token string, done bool) {
 	}
 }
 
+// DigestCard is the weekly digest of a service: on or off, the last one and why photos were left out of it.
+templ DigestCard(service string, d DigestView, id string) {
+	<div class="field digest">
+		<label>{ t(ctx, "Weekly digest") }</label>
+		<p class="meta">{ t(ctx, "Every Monday morning the best photos that arrived in the last week are put in an album of yours and a link to it is made that ends after a month. The photos that are too dark, too bright, blurred or the same moment as a better one are left out, and you can see which and why. Nothing is deleted or changed.") }</p>
+		if d.On {
+			<p class="meta"><span class="chip ok">{ t(ctx, "On") }</span>
+				if d.Next != "" {
+					{ t(ctx, "Next digest: {when}", "when", d.Next) }
+				}
+				if d.Running {
+					<span class="chip">{ t(ctx, "Being made now") }</span>
+				}
+			</p>
+			if d.Made != "" {
+				<p class="meta">{ t(ctx, "Last one made {when}.", "when", d.Made) }
+					if d.Note != "" {
+						{ unpack(ctx, d.Note) }
+					}
+				</p>
+			}
+			if d.Photos > 0 {
+				<p class="meta">{ n(ctx, "{n} photo of the week from {people} in the album {album}", "{n} photos of the week from {people} in the album {album}", d.Photos, "people", n(ctx, "{n} person", "{n} people", d.People), "album", d.Album) }
+					if d.Left > 0 {
+						· { n(ctx, "{n} left out", "{n} left out", d.Left) }
+					}
+				</p>
+			}
+			if d.Key != "" {
+				<div class="row">
+					if d.URL != "" {
+						<input id={ "dg-" + id } class="invite" readonly value={ d.URL }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+					} else {
+						<span class="meta">{ t(ctx, "Link: your Immich address followed by /share/{key}", "key", d.Key) }</span>
+					}
+					<span class="meta">{ t(ctx, "ends {when}", "when", d.Ends) }</span>
+				</div>
+			}
+			if len(d.LeftList) > 0 {
+				<details>
+					<summary>{ t(ctx, "What was left out, and why") }</summary>
+					<ul class="plain">
+						for _, l := range d.LeftList {
+							<li>{ l.Name } <span class="meta">{ l.Why }</span></li>
+						}
+					</ul>
+				</details>
+			}
+			<p class="row">
+				<button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "now") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make this week's digest now") }</button>
+				<button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "off") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn off") }</button>
+			</p>
+		} else {
+			<p class="row"><button hx-post="services/digest" hx-vals={ vals2("service", service, "do", "on") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn on the weekly digest") }</button></p>
+			<small class="meta">{ t(ctx, "Turning it on lets this service's key look at pictures and make an album and a shared link in your Immich account. Turning it off takes that away again.") }</small>
+		}
+	</div>
+}
+
 // WatchBox is where a sender links one of their albums to a service, so everything in it is handed over.
 templ WatchBox(s ServiceView) {
 	<div class="watch">
@@ -1025,6 +1099,7 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					<div class="qr" id={ "qr-inv-" + id } hidden></div>
 				</div>
 			}
+			@DigestCard(o.Name, o.Digest, id)
 			if o.BridgeStopped != "" {
 				<p class="meta"><span class="chip bad">{ t(ctx, "Stopped") }</span> { o.BridgeStopped }</p>
 			}

@@ -6,6 +6,23 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
+// filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
+// own session.
+var DigestPermissions = perms("asset.view", "album.read", "album.create", "albumAsset.create", "sharedLink.create", "sharedLink.read", "sharedLink.delete")
+
+// KeyPermissions lists what an API key may do. It acts with the person's own session.
+func (a *API) KeyPermissions(ctx context.Context, key openapi_types.UUID) ([]Permission, error) {
+	r, err := a.c.GetApiKeyWithResponse(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getApiKey", r.StatusCode(), r.Body)
+	}
+	return r.JSON200.Permissions, nil
+}
+
 // SenderPermissions is everything a sender's key needs. workflow.logs (reading its own workflow's run log) is
 // only used by `immich-handoff doctor`, which works without it, so a key made before it was added is still fine.
 // stack.read (reading which photos make up a stack) is optional too: without it only the tagged photo of a stack is

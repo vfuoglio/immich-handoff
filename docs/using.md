@@ -353,6 +353,12 @@ A mail or notification about something you can answer carries buttons, so you do
 
 Opening a link only shows what it will do ("Approve Bob to send photos to Holiday?") and a button; nothing happens until you press it, and you do not need to be signed in to Immich. A link works **once** and stops working after **24 hours**; the two answers to one request cancel each other, so pressing Approve ends the Decline link, and a request you already decided on the page cannot be changed by an old link. If it no longer works, do it from your page. On a phone, the notification shows the buttons where the system allows (Android, Chrome, Edge); on an iPhone, tapping it opens the page. Links are only in mail and notifications to the person who can do the action, never in the administrator's messages. They need the page's address to be set (`PUBLIC_APP_URL`).
 
+## Weekly digest
+
+On a service you own, **Weekly digest** turns on a page of the week's best photos. Every Monday at about 8 in the morning (the app's time zone, `TZ`) the app looks at what arrived in the service during the last seven days, leaves out what is too dark, too bright, blurred or the same moment as a better shot (the same rules as a drop box's best-of), keeps the best forty, puts them in a new album in your Immich account called "<service> week of <date>", and makes a **shared link** to it that ends after a month, so you can send it to people with no account. The card shows the link, how many photos came from how many people, and **what was left out and why**. You are told when it is ready (in your Activity, and by mail or notification if you asked for those); the service's members are not. A week in which nothing arrived makes nothing and says so.
+
+**Make this week's digest now** makes one at once from the last seven days. Turning the digest on takes effect from next Monday. Turning it **off** ends its link and takes back the permissions it needed; the albums it made stay, they are yours. Nothing is ever deleted or changed in your library. To do this without you signed in, turning it on gives the service's own key a few more permissions (looking at pictures, making an album and a shared link), which is why it asks you and tells you; see [Security](security.md#weekly-digest).
+
 ## Leaving, and when a connection breaks
 
 - A sender presses **Leave** on a service to stop. The app deletes the key it made in their account and the workflow it set up.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -280,4 +281,66 @@ func (w *Server) actionInvalid(rw http.ResponseWriter, r *http.Request) {
 	w.actionNoStore(rw)
 	rw.WriteHeader(http.StatusNotFound)
 	Notice(t(r.Context(), "This link is no longer valid"), t(r.Context(), "It was already used, has expired, or was not made by this app. Do it from your page instead."), true).Render(r.Context(), rw)
+}
+
+// --- the weekly digest of a service ---
+
+// digestWhy says in words why a photo was left out of a digest.
+func digestWhy(ctx context.Context, l hub.DigestLeft) string {
+	switch l.Reason {
+	case hub.VerdictDark:
+		return t(ctx, "too dark")
+	case hub.VerdictBright:
+		return t(ctx, "too bright")
+	case hub.VerdictBlurry:
+		return t(ctx, "blurred")
+	case hub.VerdictDuplicate:
+		return t(ctx, "the same moment as a better shot")
+	case hub.VerdictMore:
+		return t(ctx, "the week had more good ones than fit")
+	}
+	return l.Reason
+}
+
+// digestView is a service's digest for its owner's card. The link is the address of Immich's shared page when the app
+// knows where Immich is (PUBLIC_IMMICH_URL); otherwise only its key is shown.
+func (w *Server) digestView(ctx context.Context, service string) DigestView {
+	info := w.Hub.DigestFor(ctx, service)
+	l := loc(ctx)
+	v := DigestView{On: info.On, Running: info.Running, Album: info.Album, Key: info.LinkKey, Photos: info.Photos, People: info.People, Left: info.Left, Note: info.Note}
+	if !info.Made.IsZero() {
+		v.Made = l.Stamp(info.Made.Local())
+	}
+	if !info.Ends.IsZero() {
+		v.Ends = l.Stamp(info.Ends.Local())
+	}
+	if !info.Next.IsZero() {
+		v.Next = l.Stamp(info.Next.Local())
+	}
+	if base := strings.TrimRight(w.PublicImmichURL, "/"); base != "" && info.LinkKey != "" {
+		v.URL = base + "/share/" + info.LinkKey
+	}
+	for _, left := range info.LeftList {
+		why := digestWhy(ctx, left)
+		if left.Detail != "" && left.Reason != hub.VerdictMore {
+			why += " (" + left.Detail + ")"
+		}
+		v.LeftList = append(v.LeftList, DigestLeftView{Name: left.Name, Why: why})
+	}
+	return v
+}
+
+// setDigest turns a service's weekly digest on or off, or makes one now. Only the service's owner may.
+func (w *Server) setDigest(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "digest", func(ctx context.Context, me *member, service string) error {
+		switch r.PostFormValue("do") {
+		case "on":
+			return w.Hub.EnableDigest(ctx, me.sess, me.user, service)
+		case "off":
+			return w.Hub.DisableDigest(ctx, me.sess, me.user, service)
+		case "now":
+			return w.Hub.MakeDigestNow(ctx, me.user, service)
+		}
+		return errors.New("unknown action")
+	})
 }

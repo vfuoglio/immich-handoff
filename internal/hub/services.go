@@ -161,6 +161,10 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 	}
 	for _, v := range stored {
 		if v.Name == name {
+			if d, on, _ := h.Store.DigestFor(ctx, name); on { // its shared link ends with it
+				h.endDigestLink(ctx, &v, d)
+				_ = h.Store.DeleteDigest(ctx, name)
+			}
 			if err := sess.DeleteAPIKey(ctx, v.KeyID); err != nil {
 				h.Log.Warn("delete service: could not delete the receiver key (it may already be gone)", "err", err)
 			}
@@ -333,7 +337,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided, ErrDigestOff, ErrDigestRunning} {
 		if errors.Is(err, e) {
 			return true
 		}

@@ -186,6 +186,10 @@ What it needs from you:
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
 
+## Weekly digest
+
+The weekly digest of a service ([Using it](using.md#weekly-digest)) is made by the app itself, on Monday at about 08:00 in the app's time zone (`TZ`; set it, or it is UTC in the container). It needs `HANDOFF_STORE_KEY` (the key it uses is the service's, kept in the data file) and Immich reachable; it makes no mail or notification of its own beyond one line to the owner. It looks at the app's record of hand-overs, which is kept for 8 days, so a digest that could not run for more than a day after Monday (the app was off) has fewer than seven days to look at. With `PUBLIC_IMMICH_URL` set the card shows the link as an address; without it, the key to put after your Immich address and `/share/`.
+
 ## Notifications on devices
 
 A person can allow notifications on the phone or computer they use: the **Notifications on this device** card on the Overview. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.

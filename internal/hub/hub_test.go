@@ -343,7 +343,15 @@ func (f *fakeImmich) handler() http.Handler {
 		for _, n := range names {
 			tags = append(tags, map[string]any{"id": uuid.NewString(), "name": n, "value": n, "createdAt": ts, "updatedAt": ts})
 		}
-		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+		name := f.assetName[r.PathValue("id")]
+		if name == "" {
+			name = "x.jpg"
+		}
+		created := ts
+		if c := f.created[r.PathValue("id")]; c != "" {
+			created = c
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
 	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

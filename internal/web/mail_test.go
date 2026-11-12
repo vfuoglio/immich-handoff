@@ -427,3 +427,78 @@ func TestResumeLinksAskAndResumeWhatTheyNameAndAnAlreadyDoneOneIsInvalid(t *test
 		t.Error("the service is still paused")
 	}
 }
+
+// --- the weekly digest ---
+
+func TestTheDigestCardIsTheOwnersAndTurnsOnAndOffWithTheirSession(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) {
+		srv.PublicImmichURL = "https://photos.example"
+		// a service that family owns, with the key the fake Immich knows as family's
+		if _, err := st.AddService(context.Background(), store.Service{Name: "mine", Tag: "mine-tag", InboxTag: "inbox/mine", Refused: "dup", ExpiryDays: 30,
+			OwnerID: uuid.MustParse(familyID), OwnerName: "Family", OwnerEmail: "family@x.test", KeyID: uuid.New(), Key: "k-family", Policy: store.PolicyOpen, Visibility: store.VisListed}); err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.Hub.Reload(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	})
+	ctx := context.Background()
+	owner, stranger := "sess=family", "sess=alice"
+
+	if code, body := do(t, "GET", app.URL+"/", owner, nil); code != 200 || !strings.Contains(body, "Turn on the weekly digest") {
+		t.Fatalf("the card should offer to turn it on: %d", code)
+	}
+	if _, body := do(t, "GET", app.URL+"/", stranger, nil); strings.Contains(body, "Weekly digest") {
+		t.Error("someone who does not own the service sees its digest card")
+	}
+	if code, _ := do(t, "POST", app.URL+"/services/digest", owner, nil); code != 400 {
+		t.Errorf("without the CSRF header: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/digest", "", "service=mine&do=on"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/digest", stranger, "service=mine&do=on"); code != 409 {
+		t.Errorf("a stranger turning it on: %d", code)
+	}
+	if d, ok, _ := st.DigestFor(ctx, "mine"); ok && d.Enabled {
+		t.Fatal("a stranger turned the digest on")
+	}
+	if code, _ := postForm(t, app.URL+"/services/digest", owner, "service=mine&do=explode"); code == 204 {
+		t.Error("an unknown action was accepted")
+	}
+	if code, msg := postForm(t, app.URL+"/services/digest", owner, "service=mine&do=now"); code != 409 || !strings.Contains(msg, "turn the weekly digest on") {
+		t.Errorf("making one while it is off: %d %q", code, msg)
+	}
+	if code, msg := postForm(t, app.URL+"/services/digest", owner, "service=mine&do=on"); code != 204 {
+		t.Fatalf("turning it on: %d %q", code, msg)
+	}
+	_, body := do(t, "GET", app.URL+"/", owner, nil)
+	for _, want := range []string{"Next digest:", "Make this week", "Turn off"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the card lacks %q", want)
+		}
+	}
+
+	// a digest that was made: the link, the counts, and what was left out in words
+	made := time.Now()
+	st.SetDigest(ctx, store.Digest{Service: "mine", Enabled: true, Week: "2026-11-09", MadeAt: made, Album: "mine week of 2026-11-02",
+		LinkID: uuid.NewString(), LinkKey: "abc123key", LinkEnds: made.Add(30 * 24 * time.Hour), Photos: 12, People: 3, LeftOut: 2,
+		LeftJSON: `[{"n":"dark.jpg","r":"dark","d":"brightness 12 of 255"},{"n":"two.jpg","r":"duplicate","d":"same moment as one.jpg"}]`})
+	_, body = do(t, "GET", app.URL+"/", owner, nil)
+	for _, want := range []string{`value="https://photos.example/share/abc123key"`, "12 photos of the week from 3 people in the album mine week of 2026-11-02", "2 left out",
+		"dark.jpg", "too dark (brightness 12 of 255)", "two.jpg", "the same moment as a better shot (same moment as one.jpg)", "What was left out, and why"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if code, msg := postForm(t, app.URL+"/services/digest", owner, "service=mine&do=off"); code != 204 {
+		t.Fatalf("turning it off: %d %q", code, msg)
+	}
+	if d, _, _ := st.DigestFor(ctx, "mine"); d.Enabled || d.LinkKey != "" {
+		t.Errorf("%+v", d)
+	}
+	if _, body := do(t, "GET", app.URL+"/", owner, nil); !strings.Contains(body, "Turn on the weekly digest") {
+		t.Error("the card should offer to turn it on again")
+	}
+}
