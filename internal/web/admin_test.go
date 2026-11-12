@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -329,5 +330,60 @@ func TestTheQRCodeIsDrawnForAWebAddressAndOnlyForSignedInPeopleWhoAskFromThePage
 		if code, _ := post("sess=admin", bad, change); code != 400 {
 			t.Errorf("%.30q must be refused: %d", bad, code)
 		}
+	}
+}
+
+func withNotifier(t *testing.T, dests ...notify.Destination) func(*web.Server) {
+	return func(srv *web.Server) {
+		n := notify.New(dests, "", srv.Log)
+		t.Cleanup(n.Close)
+		srv.Notifier = n
+	}
+}
+
+func TestTheAdminPageListsDestinationsWithoutAddressesAndTestsThemForAdministratorsOnly(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+	defer ok.Close()
+	denied := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(401) }))
+	defer denied.Close()
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st), withNotifier(t,
+		notify.Destination{Name: "phone", Format: notify.FormatNtfy, URL: ok.URL + "/SECRET-TOPIC"},
+		notify.Destination{Name: "home", Format: notify.FormatJSON, URL: denied.URL + "/SECRET-ID", Kinds: map[notify.Kind]bool{notify.Problem: true}}))
+
+	code, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if code != 200 || !strings.Contains(body, "phone") || !strings.Contains(body, "home") || !strings.Contains(body, "takes problem") || !strings.Contains(body, "Send a test notification") {
+		t.Fatalf("%d: the page does not list the destinations", code)
+	}
+	if strings.Contains(body, "SECRET") {
+		t.Error("an address is on the page")
+	}
+
+	if code, _ := do(t, "POST", app.URL+"/admin/notify/test", "sess=admin", nil); code != 400 {
+		t.Errorf("without the CSRF header: %d", code)
+	}
+	for _, c := range []string{"", "sess=alice"} {
+		if code, _ := do(t, "POST", app.URL+"/admin/notify/test", c, change); code != 401 && code != 404 {
+			t.Errorf("as %q: %d, want it refused", c, code)
+		}
+	}
+	code, out := do(t, "POST", app.URL+"/admin/notify/test", "sess=admin", change)
+	if code != 200 || !strings.Contains(out, "phone") || !strings.Contains(out, "delivered") || !strings.Contains(out, "failed") || !strings.Contains(out, "answered 401") {
+		t.Errorf("%d %s", code, out)
+	}
+	if strings.Contains(out, "SECRET") {
+		t.Errorf("an address is in the result: %s", out)
+	}
+	if code, _ := do(t, "POST", app.URL+"/admin/notify/test", "sess=admin", change); code != 429 {
+		t.Errorf("a second test at once: %d", code)
+	}
+}
+
+func TestWithoutDestinationsTheAdminPageSaysSo(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st))
+	_, body := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if !strings.Contains(body, "No destination is set") || strings.Contains(body, "Send a test notification") {
+		t.Error("the page should say there is nothing to test")
 	}
 }

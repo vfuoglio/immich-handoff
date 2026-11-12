@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +52,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	if me == nil {
 		return
 	}
-	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), Backup: w.backupSummary(r.Context())}
+	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), Backup: w.backupSummary(r.Context()), Notify: w.notifyViews(r.Context())}
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)
@@ -245,4 +246,44 @@ func (w *Server) adminRemoveMember(rw http.ResponseWriter, r *http.Request) {
 	w.adminChange(rw, r, "remove member", func(ctx context.Context, me *member) error {
 		return w.Hub.AdminRemoveMember(ctx, me.user, r.PostFormValue("link"))
 	})
+}
+
+// notifyViews lists where messages for whoever runs the app go: names and kinds, never an address.
+func (w *Server) notifyViews(ctx context.Context) []NotifyView {
+	var out []NotifyView
+	for _, d := range w.Notifier.Describe() {
+		v := NotifyView{Name: d.Name, Format: d.Format, People: d.People, Kinds: t(ctx, "every kind")}
+		if len(d.Kinds) > 0 {
+			names := make([]string, len(d.Kinds))
+			for i, k := range d.Kinds {
+				names[i] = string(k)
+			}
+			v.Kinds = strings.Join(names, ", ")
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// adminNotifyTest sends one test message to every destination and shows how each answered. It is a POST with the
+// cross-site header, for administrators only, and not more than once every ten seconds.
+func (w *Server) adminNotifyTest(rw http.ResponseWriter, r *http.Request) {
+	if w.adminGuarded(rw, r) == nil {
+		return
+	}
+	ctx := r.Context()
+	if wait, _ := w.testGate.take(10 * time.Second); wait > 0 {
+		rw.Header().Set("Retry-After", fmt.Sprint(int(wait.Seconds())+1))
+		http.Error(rw, t(ctx, "A test was just sent. Try again in a few seconds."), http.StatusTooManyRequests)
+		return
+	}
+	tctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	var results []NotifyResultView
+	for _, res := range w.Notifier.Test(tctx) {
+		v := NotifyResultView{Name: res.Name, Format: res.Format, People: res.People, Err: res.Err}
+		results = append(results, v)
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	NotifyResults(results).Render(ctx, rw)
 }

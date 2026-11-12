@@ -1138,9 +1138,22 @@ type AdminData struct {
 	Leftover []AdminMemberView
 	Activity []AdminActivityView
 	Backup   AdminBackup
+	Notify   []NotifyView
 	SelfOn   bool // people can join from the page, so there is a store to remove from
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+}
+
+// NotifyView is a place messages for whoever runs the app go, as the administrator's page lists it (never its address).
+type NotifyView struct {
+	Name, Format, Kinds string
+	People              bool
+}
+
+// NotifyResultView is how a destination answered a test.
+type NotifyResultView struct {
+	Name, Format, Err string
+	People            bool
 }
 
 // AdminBackup is what the administrator's page says about backups.
@@ -1211,6 +1224,7 @@ templ AdminPage(d AdminData) {
 			</p>
 			<pre id="checkresult" class="checkresult" aria-live="polite"></pre>
 		</section>
+		@AdminNotify(d.Notify)
 		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
@@ -1243,6 +1257,51 @@ templ AdminPage(d AdminData) {
 			</section>
 		}
 	}
+}
+
+// AdminNotify lists where the app sends its messages for whoever runs it, with a test.
+templ AdminNotify(items []NotifyView) {
+	<h2>{ t(ctx, "Notifications") }</h2>
+	<section class="card">
+		if len(items) == 0 {
+			<p class="meta">{ t(ctx, "No destination is set, so problems appear in the log and on the pages only. See NOTIFY_URL and NOTIFY_FILE.") }</p>
+		} else {
+			<ul class="plain">
+				for _, it := range items {
+					<li><b>{ it.Name }</b> <span class="meta">
+						if it.People {
+							{ it.Format } · { t(ctx, "mail to the people taking part") }
+						} else {
+							{ it.Format } · { t(ctx, "takes {kinds}", "kinds", it.Kinds) }
+						}
+					</span></li>
+				}
+			</ul>
+			<p class="row">
+				<button class="primary" hx-post="admin/notify/test" hx-target="#notifyresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#notifyresult">{ t(ctx, "Send a test notification") }</button>
+				<span class="meta">{ t(ctx, "One message to each destination, whatever it takes. Nothing else is changed.") }</span>
+			</p>
+			<div id="notifyresult" aria-live="polite"></div>
+		}
+	</section>
+}
+
+// NotifyResults is how each destination answered a test.
+templ NotifyResults(results []NotifyResultView) {
+	<ul class="plain">
+		for _, r := range results {
+			<li>
+				<b>{ r.Name }</b>
+				if r.People {
+					<span class="chip">{ t(ctx, "not tested here") }</span> <span class="meta">{ t(ctx, "each person tests their own mail from their page") }</span>
+				} else if r.Err == "" {
+					<span class="chip ok">{ t(ctx, "delivered") }</span>
+				} else {
+					<span class="chip bad">{ t(ctx, "failed") }</span> <span class="meta">{ r.Err }</span>
+				}
+			</li>
+		}
+	</ul>
 }
 
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.

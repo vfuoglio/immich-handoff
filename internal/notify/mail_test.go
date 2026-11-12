@@ -599,3 +599,7 @@ func TestTheWaitForPeopleDefaultsToFiveMinutesAndCannotBeZero(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+func decodeSubject(p parsedMail) (string, error) {
+	return new(mime.WordDecoder).DecodeHeader(p.header.Get("Subject"))
+}

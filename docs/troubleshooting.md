@@ -13,6 +13,7 @@ It reads the settings the app is running with and checks each one against Immich
 - the secrets: `WEBHOOK_SECRET` and `HANDOFF_STORE_KEY` are long enough;
 - `PUBLIC_WEBHOOK_URL`: set, a real address, not `localhost` (which for Immich's server means Immich itself), and ending in `/webhook/immich`;
 - Immich: reachable at `IMMICH_BASE_URL` and version 3.2.0 or newer;
+- notifications: where messages go (names and kinds only), and whether the settings are ones the app starts with; `doctor --send-test` also sends a test message to each destination and says how each answered;
 - the webhook address: the check calls it the way Immich would and tells you whether it reaches this app and accepts the secret;
 - every key, from the configuration and from people who joined: still accepted, and holding every permission it needs;
 - whether **Tags** is switched on in each person's account;

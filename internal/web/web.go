@@ -29,6 +29,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -55,8 +56,11 @@ type Server struct {
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 	ClientIPHeader  string          // DROPBOX_CLIENT_IP_HEADER: the header in which a reverse proxy puts a guest's real address (empty: the connection's)
 
-	limiter limiter
-	gate    downloadGate
+	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
+
+	limiter  limiter
+	gate     downloadGate
+	testGate downloadGate // one test of the notification destinations at a time, and not too often
 }
 
 func init() {
@@ -85,6 +89,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/notify/test", w.adminNotifyTest)
 	mux.HandleFunc("POST /admin/backup/download", w.adminBackupDownload)
 	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
 	mux.HandleFunc("POST /admin/members/remove", w.adminRemoveMember)

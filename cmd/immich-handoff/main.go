@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -53,8 +52,12 @@ func main() {
 		os.Exit(runBackupCommand(context.Background(), os.Args[1], os.Args[2:], os.Stdout, os.Stderr))
 	}
 	// A check of the setup: `immich-handoff doctor` (run it inside the container; it reads the same settings).
-	if len(os.Args) == 2 && os.Args[1] == "doctor" {
-		os.Exit(runDoctor(context.Background(), os.Stdout))
+	if len(os.Args) >= 2 && os.Args[1] == "doctor" {
+		if len(os.Args) > 3 || (len(os.Args) == 3 && os.Args[2] != "--send-test") {
+			fmt.Fprintln(os.Stderr, "usage: immich-handoff doctor [--send-test]")
+			os.Exit(2)
+		}
+		os.Exit(runDoctor(context.Background(), os.Stdout, len(os.Args) == 3))
 	}
 	level := slog.LevelInfo
 	if strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug") {
@@ -168,7 +171,7 @@ func run(log *slog.Logger) error {
 			defer h.People.Close() // sends what is waiting for company
 			log.Info("email for the people taking part is on")
 		}
-		if pc, err := pushContact(os.Getenv("PUSH_CONTACT"), appURL); err != nil {
+		if pc, err := push.Contact(os.Getenv("PUSH_CONTACT"), appURL); err != nil {
 			return err
 		} else if env("PUSH", "on") == "off" {
 			log.Info("notifications on devices are off (PUSH=off)")
@@ -229,7 +232,7 @@ func run(log *slog.Logger) error {
 	s.Provider = h
 	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
-	w := &web.Server{S: s, Hub: h, BaseURL: base, WebhookHeader: webhookHeader,
+	w := &web.Server{S: s, Hub: h, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
 
@@ -310,20 +313,4 @@ func readStoreKey() (string, error) {
 		return strings.TrimSpace(string(b)), nil
 	}
 	return strings.TrimSpace(os.Getenv("HANDOFF_STORE_KEY")), nil
-}
-
-// pushContact is how a push service can reach whoever runs the app (the "sub" of the signed token): PUSH_CONTACT, a
-// mailto: or https: address, or else the app's own https address. Empty means there is none, and pushes stay off.
-func pushContact(configured, appURL string) (string, error) {
-	if configured != "" {
-		u, err := url.Parse(configured)
-		if err != nil || (u.Scheme != "mailto" && u.Scheme != "https") || (u.Scheme == "mailto" && u.Opaque == "") || (u.Scheme == "https" && u.Host == "") {
-			return "", errors.New("PUSH_CONTACT must be a mailto: address or an https: address")
-		}
-		return configured, nil
-	}
-	if u, err := url.Parse(appURL); err == nil && u.Scheme == "https" && u.Host != "" {
-		return strings.TrimRight(appURL, "/"), nil
-	}
-	return "", nil
 }

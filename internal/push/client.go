@@ -59,6 +59,22 @@ func AllowedEndpoint(raw string) error {
 	return ErrHost
 }
 
+// Contact is how a push service can reach whoever runs the app (the "sub" of the signed token): the configured
+// mailto: or https: address, or else the app's own https address. Empty means there is none, and pushes stay off.
+func Contact(configured, appURL string) (string, error) {
+	if configured != "" {
+		u, err := url.Parse(configured)
+		if err != nil || (u.Scheme != "mailto" && u.Scheme != "https") || (u.Scheme == "mailto" && u.Opaque == "") || (u.Scheme == "https" && u.Host == "") {
+			return "", errors.New("PUSH_CONTACT must be a mailto: address or an https: address")
+		}
+		return configured, nil
+	}
+	if u, err := url.Parse(appURL); err == nil && u.Scheme == "https" && u.Host != "" {
+		return strings.TrimRight(appURL, "/"), nil
+	}
+	return "", nil
+}
+
 // Client sends pushes.
 type Client struct {
 	Keys    *Keys
