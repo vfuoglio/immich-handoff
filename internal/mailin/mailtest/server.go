@@ -58,25 +58,34 @@ type Server struct {
 // Start listens on a free port of the loopback address and stops when the test ends.
 func Start(t testing.TB, o Options) *Server {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	s, err := Listen("127.0.0.1:0", o)
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+
+// Listen starts a server on an address, for tests that need a fixed one and for the demonstration environment.
+func Listen(addr string, o Options) (*Server, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
 	}
 	tmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "127.0.0.1"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
 		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, DNSNames: []string{"localhost"}}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	leaf, _ := x509.ParseCertificate(der)
 	pool := x509.NewCertPool()
 	pool.AddCert(leaf)
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	s := &Server{opts: o, ln: ln, cert: tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, pool: pool, next: 1}
-	t.Cleanup(func() { ln.Close() })
 	go func() {
 		for {
 			c, err := ln.Accept()
@@ -86,8 +95,11 @@ func Start(t testing.TB, o Options) *Server {
 			go s.serve(c)
 		}
 	}()
-	return s
+	return s, nil
 }
+
+// Close stops listening.
+func (s *Server) Close() { s.ln.Close() }
 
 // Addr is where to connect.
 func (s *Server) Addr() (host string, port int) {
