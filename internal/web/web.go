@@ -139,6 +139,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/onward", w.setOnward)
 	mux.HandleFunc("POST /dropbox/handon", w.handOn)
 	mux.HandleFunc("POST /dropbox/short", w.shortDropBox)
+	mux.HandleFunc("POST /dropbox/mail", w.mailDropBox)
 	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
 	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
 	mux.HandleFunc("POST /dropbox/template", w.saveDropTemplate)

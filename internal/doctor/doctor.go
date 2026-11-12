@@ -16,6 +16,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -77,6 +78,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	}
 	settings(r, in)
 	notifications(r, in)
+	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
 		return summary(r)
@@ -202,6 +204,38 @@ func notifications(r *Report, in Input) {
 	default:
 		r.add(OK, "notifications on devices are on (the page needs HTTPS in people's browsers)", "")
 	}
+}
+
+// mailIn reports on the mailbox photos are mailed to, if one is set: the settings are the ones the app starts with, and the
+// login works. It reads no message.
+func mailIn(ctx context.Context, r *Report, in Input) {
+	s, on, err := mailin.SettingsFrom(in.Env)
+	if !on {
+		return
+	}
+	r.section("Photos by email")
+	if err != nil {
+		r.add(Fail, "the mailbox settings are not valid, and the app will not start with them: "+err.Error(), "Fix the MAIL_IN_* settings (see docs/settings.md).")
+		return
+	}
+	if firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") == "" {
+		r.add(Fail, "MAIL_IN_HOST is set but there is no HANDOFF_STORE_KEY, and the app will not start", "Drop boxes need the data file; set HANDOFF_STORE_KEY.")
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	c, err := mailin.Dial(cctx, s, nil)
+	if err == nil {
+		defer c.Close()
+		if err = c.Login(s.User, s.Password); err == nil {
+			err = c.Select(s.Folder)
+		}
+	}
+	if err != nil {
+		r.add(Fail, "the mailbox cannot be read: "+err.Error(), "Check MAIL_IN_HOST, MAIL_IN_PORT, MAIL_IN_TLS, the user, the password and the folder.")
+		return
+	}
+	r.add(OK, fmt.Sprintf("the mailbox %s can be read (folder %s, looked at every %s, %s after handling); a box's address is %s", s.Address, s.Folder, s.Every, s.After, s.AddressFor("<code>")), "")
 }
 
 // backups reports what is set about backups. Without a store key nothing is stored, so there is nothing to say.

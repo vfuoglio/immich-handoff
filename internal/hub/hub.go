@@ -46,6 +46,7 @@ type Hub struct {
 	Bus          *live.Bus        // tells the open pages what changed, as it happens (optional)
 	People       *People          // writes to the people who asked for email (optional)
 	Push         *Push            // sends notifications to the devices people allowed (optional)
+	MailIn       *MailIn          // reads the mailbox that photos are mailed to (optional)
 	AppURL       string           // how people reach the page; the links in messages are built from it (optional: without it a message carries no action links)
 	Now          func() time.Time // the clock; nil: time.Now (tests set it)
 	FrameRefresh time.Duration    // how often frames read their album again (FRAME_REFRESH; zero: two minutes)

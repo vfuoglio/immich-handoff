@@ -450,6 +450,10 @@ var migrations = []string{
 	   created_at TEXT NOT NULL
 	 );
 	 CREATE INDEX frames_owner ON frames (owner_id);`,
+	// A drop box can have a mail address: photos mailed to it arrive like uploads. The code is the part of the address
+	// after the plus sign.
+	`ALTER TABLE dropboxes ADD COLUMN mail_code TEXT NOT NULL DEFAULT '';
+	 CREATE UNIQUE INDEX dropboxes_mail_code ON dropboxes (mail_code) WHERE mail_code <> '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

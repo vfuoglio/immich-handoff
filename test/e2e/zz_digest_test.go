@@ -75,10 +75,19 @@ func TestWeeklyDigest(t *testing.T) {
 	}
 	eventually(t, "both photos arrive", 90*time.Second, func() bool { return len(searchTag(t, alice, "inbox/digestive", false)) == 2 })
 
-	code, body = postBody(t, port, "/services/digest", owner, url.Values{"service": {"digestive"}, "do": {"now"}})
-	must(code, 204, "make the digest now: "+body)
-	eventually(t, "the digest is on the page", 120*time.Second, func() bool {
-		return strings.Contains(page(t, port, owner), "2 photos of the week")
+	// The copies are in the inbox as soon as they are made, but the app's record of the hand-over (which the digest reads)
+	// is written a moment later; a digest made in between sees fewer. So ask again until it has seen both.
+	eventually(t, "the digest has both photos", 150*time.Second, func() bool {
+		if strings.Contains(page(t, port, owner), "2 photos of the week") {
+			return true
+		}
+		if strings.Contains(page(t, port, owner), "Being made now") {
+			return false
+		}
+		code, _ := postBody(t, port, "/services/digest", owner, url.Values{"service": {"digestive"}, "do": {"now"}})
+		must(code, 204, "make the digest now")
+		time.Sleep(3 * time.Second)
+		return false
 	})
 
 	var albums []struct{ AlbumName string }

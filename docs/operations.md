@@ -190,6 +190,17 @@ I have checked the manifest, the icons and the headers with tests, but not insta
 
 The weekly digest of a service ([Using it](using.md#weekly-digest)) is made by the app itself, on Monday at about 08:00 in the app's time zone (`TZ`; set it, or it is UTC in the container). It needs `HANDOFF_STORE_KEY` (the key it uses is the service's, kept in the data file) and Immich reachable; it makes no mail or notification of its own beyond one line to the owner. It looks at the app's record of hand-overs, which is kept for 8 days, so a digest that could not run for more than a day after Monday (the app was off) has fewer than seven days to look at. With `PUBLIC_IMMICH_URL` set the card shows the link as an address; without it, the key to put after your Immich address and `/share/`.
 
+## Photos by email
+
+A drop box can have an email address: guests mail photos to it, and they arrive like uploads ([Using it](using.md#more-ways-in)). The app does this by **reading a mailbox you give it** over IMAP; it runs no mail server and opens no port. It is off unless you set `MAIL_IN_HOST`.
+
+1. **Make a mailbox** that accepts plus-addressing, which Gmail, Fastmail, Proton and most hosted and self-hosted mail systems do (`drop+anything@example.org` lands in `drop@example.org`). Use a mailbox that is only for this: **the app deletes the mail it handles** (or, with `MAIL_IN_AFTER=seen`, only marks it read).
+2. **Set** `MAIL_IN_HOST`, `MAIL_IN_USER`, `MAIL_IN_PASSWORD` (or `MAIL_IN_PASSWORD_FILE`) and `MAIL_IN_ADDRESS=drop@example.org`; see [Settings](settings.md). For Gmail and some others you need an app password. `MAIL_IN_TLS=none` is allowed only for a mail server on the same machine.
+3. **Check it:** `docker compose exec immich-handoff /immich-handoff doctor` logs in and opens the folder (it reads no mail) and tells you what a box's address will look like.
+4. **Owners** then see **Give this box an email address** on each box (not on boxes with a password).
+
+What it does with a mail: it reads one that was sent to an address of ours, takes the photos and videos attached (what an attachment really is is decided from its first bytes, not its name or type), and hands each to the box exactly as an upload: the box's limits, approval, filing and log apply. The text, other attachments, mail to an unknown address and mail from a sender who sends too much are dropped without a reply (a reply would go to forged addresses and make the app a source of junk). A mail bigger than `MAIL_IN_MAX_MB` is left unread. Mail that could not be stored because Immich was unreachable is tried at the next three looks, then let go. Mail is slow: a photo arrives within `MAIL_IN_EVERY` (a minute by default) plus the mail system's own delay.
+
 ## Notifications on devices
 
 A person can allow notifications on the phone or computer they use: the **Notifications on this device** card on the Overview. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.

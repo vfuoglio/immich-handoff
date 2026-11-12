@@ -274,6 +274,9 @@ type DropBoxView struct {
 	HasBest        bool
 
 	Short       string // the short code, if the box has a short link
+	MailOn      bool   // a mailbox is set up, so the box can have an address
+	MailAddress string // the box's mail address, if it has one
+	MailLocked  bool   // the box has a password, which a mail cannot give
 	Accent      string
 	Lang        string
 	MaxDim      int
@@ -1843,6 +1846,23 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 							}
 						</p>
 					</div>
+					if b.MailOn {
+						<div class="field">
+							<label>{ t(ctx, "Photos by email") }</label>
+							if b.MailAddress != "" {
+								<div class="row">
+									<input id={ "dropmail-" + id } class="invite" readonly value={ b.MailAddress }/>
+									<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+									<button hx-post="dropbox/mail" hx-vals={ mailVals(b.ID, false) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The address stops working. Photos already received are kept.") } data-confirm-title={ t(ctx, "Remove the email address?") } data-confirm-label={ t(ctx, "Remove") }>{ t(ctx, "Remove email address") }</button>
+								</div>
+								<p class="meta">{ t(ctx, "Anyone who knows this address can send photos to the box, like the link. Only photos and videos are taken, under the box's limits and approval; the rest of a mail is dropped and nobody gets a reply.") }</p>
+							} else if b.MailLocked {
+								<p class="meta">{ t(ctx, "A box with a password cannot take photos by email: nobody can type the password into a mail.") }</p>
+							} else {
+								<p class="row"><button hx-post="dropbox/mail" hx-vals={ mailVals(b.ID, true) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Give this box an email address") }</button></p>
+							}
+						</div>
+					}
 					<details class="more">
 						<summary>{ t(ctx, "The look of the guest page") }</summary>
 						<form class="limits" hx-post="dropbox/look" hx-encoding="multipart/form-data" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -2387,7 +2407,7 @@ templ DropMine(name, token string, files []GuestFileView, msg string) {
 }
 
 // DropCard is a page to print for a table or a poster: the box's name, its message and a QR code of its link.
-templ DropCard(user, name, message, link string) {
+templ DropCard(user, name, message, link, mailAddress string) {
 	@Layout(name, user) {
 		<section class="card-sheet" data-card-link={ link }>
 			<h1>{ name }</h1>
@@ -2396,6 +2416,9 @@ templ DropCard(user, name, message, link string) {
 			}
 			<div class="card-qr" id="card-qr"></div>
 			<p class="card-url" id="card-url"></p>
+			if mailAddress != "" {
+				<p class="card-url">{ t(ctx, "Or send photos by email to {address}", "address", mailAddress) }</p>
+			}
 			<p class="no-print"><button type="button" id="card-print" class="primary">{ t(ctx, "Print") }</button></p>
 		</section>
 	}

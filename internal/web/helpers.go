@@ -126,6 +126,14 @@ func vals(k, v string) string {
 	return string(b)
 }
 
+func mailVals(box string, on bool) string {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return vals2("service", box, "on", v)
+}
+
 func vals2(k1, v1, k2, v2 string) string {
 	b, _ := json.Marshal(map[string]string{k1: v1, k2: v2})
 	return string(b)

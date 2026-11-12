@@ -19,6 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
+	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -148,6 +149,9 @@ func run(log *slog.Logger) error {
 		if notifier.PeopleMailReady() {
 			return errors.New("NOTIFY_FILE: a destination with people: true needs HANDOFF_STORE_KEY, because people turn email on from the web page")
 		}
+		if _, on, _ := mailin.SettingsFrom(os.Getenv); on {
+			return errors.New("MAIL_IN_HOST needs HANDOFF_STORE_KEY, because photos by email go to drop boxes, which people make from the web page")
+		}
 		log.Info("HANDOFF_STORE_KEY is not set: people cannot join from the web page (keys from the configuration still work)")
 	} else {
 		v, err := vault.New(storeKey)
@@ -203,6 +207,13 @@ func run(log *slog.Logger) error {
 				return errors.New("FRAME_REFRESH must be a time between 5s and 1h, such as 2m")
 			}
 			h.FrameRefresh = d
+		}
+		if ms, on, err := mailin.SettingsFrom(os.Getenv); err != nil {
+			return err
+		} else if on {
+			h.MailIn = &hub.MailIn{Hub: h, Settings: ms, Log: log}
+			go h.MailIn.Run(ctx)
+			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
 		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on

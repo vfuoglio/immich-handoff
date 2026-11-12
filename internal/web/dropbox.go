@@ -385,6 +385,7 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
 		if v.Manage {
 			v.Short = b.Short
+			v.MailOn, v.MailAddress, v.MailLocked = w.Hub.MailIn != nil, w.Hub.MailAddress(b.MailCode), b.Password != ""
 			v.HasCover = w.Hub.Store.HasDropCover(ctx, b.ID)
 			var lines []string
 			for _, ps := range w.Hub.PromptStatuses(ctx, b) {
@@ -794,6 +795,12 @@ func (w *Server) shortDropBox(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (w *Server) mailDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box mail address", func(ctx context.Context, me *member, id string) error {
+		return w.Hub.SetDropMail(ctx, me.user, id, r.PostFormValue("on") == "1")
+	})
+}
+
 func (w *Server) renewDropBox(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "drop box new link", func(ctx context.Context, me *member, id string) error {
 		return w.Hub.RenewDropToken(ctx, me.user, id)
@@ -891,7 +898,7 @@ func (w *Server) dropCard(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropCard(me.user.Name, b.Name, b.Message, link).Render(r.Context(), rw)
+	DropCard(me.user.Name, b.Name, b.Message, link, w.Hub.MailAddress(b.MailCode)).Render(r.Context(), rw)
 }
 
 // templateViews is what the person can start a drop box from.
