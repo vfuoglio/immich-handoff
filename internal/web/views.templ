@@ -2328,16 +2328,22 @@ templ DropPage(d DropPageView) {
 					}
 				</ul>
 			}
-			<div class="field drop-zone">
-				<label for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
-				<input id="drop-files" name="files" type="file" multiple required accept={ dropAccept(d.PhotosOnly) }/>
-				<small class="meta drop-hint">{ t(ctx, "You can also drop files here.") }</small>
+			<div class="dz" data-photos-only?={ d.PhotosOnly }>
+				<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
+				<label class="dz-title" for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
+				<small class="meta dz-hint">{ t(ctx, "You can also drop files here.") }</small>
+				<input id="drop-files" class="dz-input" name="files" type="file" multiple required accept={ dropAccept(d.PhotosOnly) }/>
 			</div>
 			<div class="field camera-only">
 				<label for="drop-camera">{ t(ctx, "Or take a photo now") }</label>
 				<input id="drop-camera" name="camera" type="file" accept="image/*" capture="environment"/>
 			</div>
+			<div class="drop-summary" hidden>
+				<span class="drop-count" aria-live="polite"></span>
+				<button type="button" class="link drop-clear">{ t(ctx, "Remove all") }</button>
+			</div>
 			<ul class="plain drop-list" aria-live="polite" hidden></ul>
+			<div class="drop-result" role="status" aria-live="polite" hidden></div>
 			<p class="meta">{ d.Limits }</p>
 			<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
 			if d.Approve {
@@ -2346,7 +2352,7 @@ templ DropPage(d DropPageView) {
 			if d.CanDelete {
 				<p class="meta">{ t(ctx, "You can take back what you sent from") } <a href={ templ.SafeURL("drop/" + d.Token + "/mine") }>{ t(ctx, "your uploads") }</a>.</p>
 			}
-			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send") }</button></p>
+			<p class="row form-actions"><button class="primary drop-send" type="submit" data-label={ t(ctx, "Send") }>{ t(ctx, "Send") }</button></p>
 		</form>
 		if d.GuestBook {
 			<form class="card offer-form guestbook-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/message" }>

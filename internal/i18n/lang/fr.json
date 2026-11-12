@@ -51,6 +51,7 @@
  "Check now": "Vérifier maintenant",
  "Check the connections": "Vérifier les connexions",
  "Choose one": "Choisissez-en un",
+ "Choose photos first": "Choisissez d’abord des photos",
  "Choose what the photo is for": "Choisissez à quoi sert la photo",
  "Choose your photos": "Choisissez vos photos",
  "Choose your photos and videos": "Choisissez vos photos et vidéos",
@@ -109,6 +110,7 @@
  "Everyone in it sends and receives: every photo you tag goes to everyone else in the pool, and theirs come to you, tagged with who took them. Your originals stay.": "Tous ceux qui y sont envoient et reçoivent : chaque photo que vous marquez va à tous les autres du pool, et les leurs vous parviennent, marquées de celui qui les a prises. Vos originaux restent.",
  "Everyone in it, you too, sends and receives: a photo anyone tags goes to everyone else in the pool, tagged with who took it, and nobody's originals are touched. A person who joins later gets what is shared from then on; one who leaves keeps what they received.": "Tous ceux qui y sont, vous aussi, envoient et reçoivent : une photo que quelqu'un marque va à tous les autres du pool, marquée de celui qui l'a prise, et les originaux de personne ne sont touchés. Qui rejoint plus tard reçoit ce qui est partagé à partir de là ; qui part garde ce qu'il a reçu.",
  "Everyone on this Immich server": "Tout le monde sur ce serveur Immich",
+ "Everything here was sent already": "Tout a déjà été envoyé",
  "Everything in it, and whatever you add later, goes to {service}.": "Tout ce qu’il contient, et tout ce que vous y ajouterez, va à {service}.",
  "Everything in your album <strong>{album}</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.": "Tout ce qui se trouve dans votre album <strong>{album}</strong> est transmis à ce service, maintenant et pour tout ce que vous y ajouterez plus tard. L’application le consulte toutes les quelques minutes, et chaque photo n’est transmise qu’une fois.",
  "Everything is handed over only between {from} and {to}.": "Tout n'est transmis qu'entre {from} et {to}.",
@@ -249,6 +251,10 @@
  "One thing needs you.": "Une chose a besoin de vous.",
  "Only files larger than (MB) wait for those hours": "Seuls les fichiers de plus de (Mo) attendent ces heures",
  "Only people I send a link to": "Seulement les personnes à qui j’envoie un lien",
+ "Only photos are taken here: {name} was left out": {
+  "one": "Seules les photos sont acceptées ici : {name} a été écarté",
+  "other": "Seules les photos sont acceptées ici : {n} fichiers ont été écartés"
+ },
  "Only photos you own are used.": "Seules les photos qui vous appartiennent sont utilisées.",
  "Only the person who made this link and the people who help them can read or hear it.": "Seule la personne qui a créé ce lien et celles qui l'aident peuvent le lire ou l'écouter.",
  "Only the person who made this link can see what you send. You will not see anyone else's photos.": "Seule la personne qui a créé ce lien voit ce que vous envoyez. Vous ne verrez pas les photos des autres.",
@@ -320,6 +326,7 @@
  "Record a voice message": "Enregistrer un message vocal",
  "Record again": "Réenregistrer",
  "Remove": "Retirer",
+ "Remove all": "Tout retirer",
  "Remove email address": "Retirer l'adresse e-mail",
  "Remove service": "Supprimer le service",
  "Remove the email address?": "Retirer l'adresse e-mail ?",
@@ -327,6 +334,7 @@
  "Remove this member?": "Retirer ce membre ?",
  "Remove this service": "Supprimer ce service",
  "Remove this service?": "Supprimer ce service ?",
+ "Remove {name}": "Retirer {name}",
  "Remove {name} from {service}? The app stops handing over their photos. Their API key stays in their Immich account until they delete it; they are told on their page.": "Retirer {name} de {service} ? L’application cesse de transmettre ses photos. Sa clé d’API reste dans son compte Immich jusqu’à ce qu’il la supprime ; il en est informé sur sa page.",
  "Removed by its owner": "Supprimé par son propriétaire",
  "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.": "Supprimer quelque chose ici fait oublier cet élément à l’application, qui cesse de transmettre des photos. Elle ne peut supprimer la clé d’API de personne : Immich ne laisse que le propriétaire d’une clé la supprimer, donc la clé reste dans le compte de cette personne jusqu’à ce qu’elle la supprime, et elle en est informée sur sa page. Les photos ne sont jamais touchées.",
@@ -354,6 +362,7 @@
  "Senders": "Expéditeurs",
  "Senders are paused until you reconnect (the button is under Needs you, above).": "Les expéditeurs sont suspendus jusqu’à ce que vous reconnectiez (le bouton est sous « À traiter », ci-dessus).",
  "Sending": "Envoi en cours",
+ "Sending {done} of {total}": "Envoi de {done} sur {total}",
  "Sending {n}": "{n} en envoi",
  "Sent already": "Déjà envoyé",
  "Service name": "Nom du service",
@@ -464,6 +473,7 @@
  "Too large": "Trop volumineux",
  "Too many changes in a minute; try again shortly.": "Trop de modifications en une minute ; réessayez dans un instant.",
  "Too many photos or requests came from your connection. Try again in ten minutes.": "Trop de photos ou de requêtes sont venues de votre connexion. Réessayez dans dix minutes.",
+ "Try again": "Réessayer",
  "Turn off": "Désactiver",
  "Turn on Tags": "Activer les étiquettes",
  "Turn on Tags in Immich": "Activer les étiquettes dans Immich",
@@ -730,6 +740,18 @@
  "{n} dry-run": "{n} en simulation",
  "{n} errors": "{n} erreurs",
  "{n} failed and will be retried": "{n} échouées, une nouvelle tentative aura lieu",
+ "{n} file": {
+  "one": "{n} fichier",
+  "other": "{n} fichiers"
+ },
+ "{n} file could not be sent": {
+  "one": "{n} fichier n’a pas pu être envoyé",
+  "other": "{n} fichiers n’ont pas pu être envoyés"
+ },
+ "{n} file sent. Thank you!": {
+  "one": "{n} fichier envoyé. Merci !",
+  "other": "{n} fichiers envoyés. Merci !"
+ },
  "{n} handed over": "{n} transmises",
  "{n} left out": {
   "one": "{n} écartée",

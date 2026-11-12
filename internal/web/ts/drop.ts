@@ -2,7 +2,7 @@
 // them one at a time with a progress bar, and carry on after a lost connection. Without this script the form still
 // works as a plain form; everything here is an improvement on it.
 
-import { t } from "./i18n.ts";
+import { n, t } from "./i18n.ts";
 
 /** What identifies a file across page loads: its name, size and last change. Used to skip what was already sent. */
 export function fileKey(f: { name: string; size: number; lastModified: number }): string {
@@ -31,7 +31,22 @@ interface Item {
   li: HTMLLIElement;
   status: HTMLElement;
   bar: HTMLProgressElement;
+  preview: string; // an object URL to give back when the tile goes ("" for none)
   done: boolean;
+  sending: boolean;
+}
+
+/** A size people can read: 840 KB, 12.4 MB. */
+export function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/** Whether a box takes this file. A file the browser cannot name the type of is let through: the server decides. */
+export function takes(file: { type: string }, photosOnly: boolean): boolean {
+  if (file.type === "") return true;
+  return file.type.startsWith("image/") || (!photosOnly && file.type.startsWith("video/"));
 }
 
 function readDone(key: string): Set<string> {
@@ -120,6 +135,43 @@ async function whenOnline(): Promise<void> {
   await new Promise<void>((resolve) => window.addEventListener("online", () => resolve(), { once: true }));
 }
 
+const SVG = "http://www.w3.org/2000/svg";
+
+/** A small picture to show for a file: shrunk by the browser when it can, the file itself when it cannot, nothing for a video. */
+async function thumbnail(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) return "";
+  try {
+    if (typeof createImageBitmap === "function") {
+      const bitmap = await createImageBitmap(file, { resizeWidth: 320, resizeQuality: "low" });
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+      if (blob) return URL.createObjectURL(blob);
+    }
+  } catch {
+    /* fall through to the file itself */
+  }
+  return file.size < 25 * 1024 * 1024 ? URL.createObjectURL(file) : "";
+}
+
+function check(): SVGSVGElement {
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", "0 0 52 52");
+  svg.setAttribute("class", "drop-check");
+  svg.setAttribute("aria-hidden", "true");
+  const circle = document.createElementNS(SVG, "circle");
+  circle.setAttribute("cx", "26");
+  circle.setAttribute("cy", "26");
+  circle.setAttribute("r", "23");
+  const tick = document.createElementNS(SVG, "path");
+  tick.setAttribute("d", "M15 27l8 8 15-17");
+  svg.append(circle, tick);
+  return svg;
+}
+
 export function initDrop(): void {
   const form = document.querySelector<HTMLFormElement>("form.drop-form");
   const list = form?.querySelector<HTMLUListElement>("ul.drop-list");
@@ -128,52 +180,133 @@ export function initDrop(): void {
   const camera = form.querySelector<HTMLInputElement>('input[type="file"][name="camera"]');
   const password = form.querySelector<HTMLInputElement>('input[name="password"]');
   const promptSelect = form.querySelector<HTMLSelectElement>('select[name="prompt"]');
-  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-  if (!input) return;
+  const submit = form.querySelector<HTMLButtonElement>("button.drop-send");
+  const zone = form.querySelector<HTMLElement>(".dz");
+  const summary = form.querySelector<HTMLElement>(".drop-summary");
+  const count = form.querySelector<HTMLElement>(".drop-count");
+  const clear = form.querySelector<HTMLButtonElement>(".drop-clear");
+  const result = form.querySelector<HTMLElement>(".drop-result");
+  if (!input || !submit) return;
   const key = form.dataset.key ?? "";
   const maxDim = Number(form.dataset.maxdim ?? "0") || 0;
+  const photosOnly = zone?.hasAttribute("data-photos-only") ?? false;
+  const label = submit.dataset.label ?? submit.textContent ?? "";
   const done = readDone(key);
   const items: Item[] = [];
   let busy = false;
+  form.classList.add("enhanced"); // the plain file field stays when this script does not run
+  input.required = false; // with this script, Send says what is missing itself
+
+  const say = (text: string, kind: "ok" | "bad" | "" = ""): void => {
+    if (!result) return;
+    result.replaceChildren();
+    result.hidden = text === "";
+    result.className = "drop-result" + (kind ? " " + kind : "");
+    if (text === "") return;
+    if (kind === "ok") result.append(check());
+    const span = document.createElement("span");
+    span.textContent = text;
+    result.append(span);
+  };
+
+  const refresh = (): void => {
+    const total = items.reduce((sum, i) => sum + i.file.size, 0);
+    list.hidden = items.length === 0;
+    if (summary) summary.hidden = items.length === 0;
+    if (count) count.textContent = n("{n} file", "{n} files", items.length) + " · " + formatSize(total);
+    if (clear) clear.hidden = busy;
+  };
+
+  const setState = (item: Item, state: "waiting" | "sending" | "done" | "failed"): void => {
+    item.li.dataset.state = state;
+    item.sending = state === "sending";
+  };
+
+  const remove = (item: Item): void => {
+    if (item.sending) return;
+    items.splice(items.indexOf(item), 1);
+    if (item.preview) URL.revokeObjectURL(item.preview);
+    const gone = (): void => item.li.remove();
+    item.li.classList.add("leaving");
+    item.li.addEventListener("animationend", gone, { once: true });
+    setTimeout(gone, 400); // when animations are off there is no animationend
+    refresh();
+    say("");
+  };
 
   const add = (files: FileList | File[] | null): void => {
     const prompt = promptSelect?.value ?? "";
-    if (promptSelect?.required && prompt === "" && (files?.length ?? 0) > 0) {
+    const given = Array.from(files ?? []).filter((f) => f.size > 0 || f.type !== ""); // a dropped folder is no file
+    if (given.length === 0) return;
+    if (promptSelect?.required && prompt === "") {
       // every photo has to say what it is for: ask before queueing anything
       promptSelect.focus();
-      const li = document.createElement("li");
-      li.className = "failed";
-      li.textContent = t("Choose what the photo is for");
-      list.append(li);
-      list.hidden = false;
-      setTimeout(() => li.remove(), 4000);
+      say(t("Choose what the photo is for"), "bad");
       return;
     }
     const promptText = promptSelect && prompt !== "" ? (promptSelect.selectedOptions[0]?.textContent ?? "") : "";
-    for (const file of Array.from(files ?? [])) {
+    const left: string[] = [];
+    say("");
+    for (const file of given) {
+      if (!takes(file, photosOnly)) {
+        left.push(file.name);
+        continue;
+      }
       if (items.some((i) => fileKey(i.file) === fileKey(file))) continue;
       const li = document.createElement("li");
-      const name = document.createElement("span");
-      name.textContent = promptText ? `${file.name} \u00b7 ${promptText}` : file.name;
-      const status = document.createElement("span");
-      status.className = "meta";
+      li.className = "drop-item";
+      const thumb = document.createElement("div");
+      thumb.className = "thumb" + (file.type.startsWith("video/") ? " video" : "");
       const bar = document.createElement("progress");
       bar.max = 1;
       bar.value = 0;
-      li.append(name, " ", status, " ", bar);
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.setAttribute("aria-hidden", "true");
+      thumb.append(bar, badge);
+      const remover = document.createElement("button");
+      remover.type = "button";
+      remover.className = "rm";
+      remover.textContent = "×";
+      remover.setAttribute("aria-label", t("Remove {name}", { name: file.name }));
+      const name = document.createElement("span");
+      name.className = "nm";
+      name.textContent = promptText ? `${file.name} · ${promptText}` : file.name;
+      const status = document.createElement("span");
+      status.className = "meta st";
+      li.append(thumb, remover, name, status);
+      li.style.setProperty("--i", String(Math.min(items.length, 12)));
       list.append(li);
-      const item: Item = { file, prompt, li, status, bar, done: done.has(fileKey(file)) };
+      const item: Item = { file, prompt, li, status, bar, preview: "", done: done.has(fileKey(file)), sending: false };
+      remover.addEventListener("click", () => remove(item));
       status.textContent = item.done ? t("Sent already") : t("Waiting to send");
+      setState(item, item.done ? "done" : "waiting");
       if (item.done) bar.value = 1;
       items.push(item);
+      void thumbnail(file).then((url) => {
+        if (!url) return;
+        if (!items.includes(item)) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        const img = document.createElement("img");
+        img.alt = "";
+        img.decoding = "async";
+        img.addEventListener("error", () => img.remove());
+        img.src = url;
+        item.preview = url;
+        thumb.prepend(img);
+        thumb.classList.add("shown");
+      });
     }
-    list.hidden = items.length === 0;
-    input.required = false; // the files are kept in the list, not in the input
+    if (left.length > 0) say(n("Only photos are taken here: {name} was left out", "Only photos are taken here: {n} files were left out", left.length, { name: left[0] ?? "" }), "bad");
+    refresh();
   };
 
   const send = async (item: Item): Promise<void> => {
     const url = form.action;
     let failures = 0;
+    setState(item, "sending");
     for (;;) {
       await whenOnline();
       item.status.textContent = failures === 0 ? t("Sending") : t("Waiting for the connection");
@@ -185,8 +318,10 @@ export function initDrop(): void {
         const line = answer.files?.[0];
         item.bar.value = 1;
         item.status.textContent = line?.text ?? t("Received");
-        item.li.classList.toggle("failed", line?.ok === false);
-        if (line?.ok !== false) {
+        if (line?.ok === false) {
+          setState(item, "failed");
+        } else {
+          setState(item, "done");
           item.done = true;
           done.add(fileKey(item.file));
           writeDone(key, done);
@@ -197,7 +332,7 @@ export function initDrop(): void {
         failures++;
         if (!retry || failures >= TRIES) {
           item.status.textContent = t("Could not be sent");
-          item.li.classList.add("failed");
+          setState(item, "failed");
           return;
         }
         item.status.textContent = t("Waiting for the connection");
@@ -208,13 +343,37 @@ export function initDrop(): void {
 
   const run = async (): Promise<void> => {
     if (busy) return;
+    const pending = items.filter((i) => !i.done);
+    if (pending.length === 0) {
+      // nothing to send: say so, and show where to put photos
+      say(items.length === 0 ? t("Choose photos first") : t("Everything here was sent already"), items.length === 0 ? "bad" : "");
+      zone?.classList.add("nudge");
+      zone?.addEventListener("animationend", () => zone.classList.remove("nudge"), { once: true });
+      return;
+    }
     busy = true;
-    if (submit) submit.disabled = true;
-    for (const item of items) {
-      if (!item.done) await send(item);
+    say("");
+    submit.disabled = true;
+    form.classList.add("sending");
+    refresh();
+    let finished = 0;
+    for (const item of pending) {
+      submit.textContent = t("Sending {done} of {total}", { done: finished + 1, total: pending.length });
+      await send(item);
+      finished++;
     }
     busy = false;
-    if (submit) submit.disabled = false;
+    form.classList.remove("sending");
+    submit.disabled = false;
+    refresh();
+    const failed = pending.filter((i) => !i.done).length;
+    const sent = pending.length - failed;
+    submit.textContent = failed > 0 ? t("Try again") : label;
+    if (failed > 0) {
+      say(n("{n} file could not be sent", "{n} files could not be sent", failed), "bad");
+    } else {
+      say(n("{n} file sent. Thank you!", "{n} files sent. Thank you!", sent), "ok");
+    }
   };
 
   input.addEventListener("change", () => {
@@ -225,21 +384,41 @@ export function initDrop(): void {
     add(camera.files);
     camera.value = "";
   });
-  form.addEventListener("dragover", (e) => {
-    e.preventDefault();
+  clear?.addEventListener("click", () => {
+    for (const item of [...items]) remove(item);
+  });
+
+  // files can be dropped anywhere on the page; one dropped beside the form must not make the browser open it
+  const hasFiles = (e: DragEvent): boolean => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  let depth = 0;
+  document.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e)) return;
+    depth++;
     form.classList.add("dragging");
   });
-  form.addEventListener("dragleave", () => form.classList.remove("dragging"));
-  form.addEventListener("drop", (e) => {
+  document.addEventListener("dragleave", (e) => {
+    if (!hasFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) form.classList.remove("dragging");
+  });
+  document.addEventListener("dragover", (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  document.addEventListener("drop", (e) => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
+    depth = 0;
     form.classList.remove("dragging");
     add(e.dataTransfer?.files ?? null);
   });
+  window.addEventListener("beforeunload", (e) => {
+    if (busy) e.preventDefault(); // what is still being sent would be lost
+  });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (items.length === 0) return;
     void run();
   });
+  refresh();
 }
 
 /** The printable card: the browser makes the address (it depends on where the page is served) and asks for its QR code. */

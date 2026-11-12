@@ -486,7 +486,15 @@ func TestDropBoxGuestPage(t *testing.T) {
 	}
 	run(t, ctx, chromedp.SetUploadFiles(`#drop-files`, []string{small, big}, chromedp.ByQuery))
 	until(t, ctx, "both files are listed", `document.querySelectorAll('.drop-list li').length === 2`, 10*time.Second)
+	// each file has a tile with a picture and a way out, and the count says what is about to go
+	until(t, ctx, "the tiles show a picture", `(() => { const m = [...document.querySelectorAll('.drop-item .thumb img')]; return m.length === 2 && m.every(i => i.complete && i.naturalWidth > 0); })()`, 10*time.Second)
+	until(t, ctx, "the count is shown", `document.querySelector('.drop-count')?.textContent.startsWith('2 files')`, 5*time.Second)
+	run(t, ctx, chromedp.Click(`.drop-item:nth-child(2) .rm`, chromedp.ByQuery))
+	until(t, ctx, "a file is taken out before sending", `document.querySelectorAll('.drop-list li').length === 1`, 10*time.Second)
+	run(t, ctx, chromedp.SetUploadFiles(`#drop-files`, []string{big}, chromedp.ByQuery))
+	until(t, ctx, "both files are listed again", `document.querySelectorAll('.drop-list li').length === 2`, 10*time.Second)
 	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	until(t, ctx, "the button says what is going on", `document.querySelector('.drop-send').disabled && /Sending \d of 2/.test(document.querySelector('.drop-send').textContent) || document.querySelector('.drop-result.ok')`, 30*time.Second)
 	until(t, ctx, "both files are received", `[...document.querySelectorAll('.drop-list li')].every(li => li.textContent.includes('Received'))`, 60*time.Second)
 
 	inbox := func() []string { return searchTag(t, alice, "inbox/Phone party", false) }
@@ -512,10 +520,14 @@ func TestDropBoxGuestPage(t *testing.T) {
 		chromedp.SetUploadFiles(`#drop-files`, []string{small}, chromedp.ByQuery))
 	until(t, ctx, "the file is known as sent", `document.querySelector('.drop-list li')?.textContent.includes('Sent already')`, 10*time.Second)
 	run(t, ctx, chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	until(t, ctx, "Send says that nothing is left to send", `document.querySelector('.drop-result')?.textContent.includes('sent already')`, 10*time.Second)
 	time.Sleep(2 * time.Second)
 	if n := len(inbox()); n != 2 {
 		t.Errorf("a file sent before must not be sent again: %d photos", n)
 	}
+	// with nothing chosen at all, Send answers too, instead of doing nothing
+	run(t, ctx, chromedp.Click(`.drop-clear`, chromedp.ByQuery), chromedp.Click(`form.drop-form button[type=submit]`, chromedp.ByQuery))
+	until(t, ctx, "Send asks for photos", `document.querySelector('.drop-result.bad')?.textContent.includes('Choose photos first')`, 10*time.Second)
 	_ = bigBytes
 }
 

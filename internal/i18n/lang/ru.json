@@ -51,6 +51,7 @@
  "Check now": "Проверить сейчас",
  "Check the connections": "Проверить соединения",
  "Choose one": "Выберите",
+ "Choose photos first": "Сначала выберите фото",
  "Choose what the photo is for": "Выберите, для чего фото",
  "Choose your photos": "Выберите фото",
  "Choose your photos and videos": "Выберите фото и видео",
@@ -109,6 +110,7 @@
  "Everyone in it sends and receives: every photo you tag goes to everyone else in the pool, and theirs come to you, tagged with who took them. Your originals stay.": "Все в нём отправляют и получают: каждое фото, которое вы помечаете, уходит всем остальным в пуле, а их фото приходят к вам с пометкой, кто их снял. Ваши оригиналы остаются.",
  "Everyone in it, you too, sends and receives: a photo anyone tags goes to everyone else in the pool, tagged with who took it, and nobody's originals are touched. A person who joins later gets what is shared from then on; one who leaves keeps what they received.": "Все в нём, и вы тоже, отправляют и получают: фото, которое кто-то пометил, уходит всем остальным в пуле с пометкой, кто его снял, и ничьи оригиналы не трогаются. Кто вступит позже, получит то, чем делятся с этого момента; кто уйдёт, сохранит полученное.",
  "Everyone on this Immich server": "Все на этом сервере Immich",
+ "Everything here was sent already": "Всё это уже отправлено",
  "Everything in it, and whatever you add later, goes to {service}.": "Всё, что в нём есть, и всё, что вы добавите позже, попадает в {service}.",
  "Everything in your album <strong>{album}</strong> is handed over to this service, now and whatever you add to it later. The app looks at it every few minutes, and each photo is handed over once.": "Всё, что есть в вашем альбоме <strong>{album}</strong>, передаётся в этот сервис — сейчас и всё, что вы добавите позже. Приложение проверяет его раз в несколько минут, и каждое фото передаётся один раз.",
  "Everything is handed over only between {from} and {to}.": "Всё передаётся только с {from} до {to}.",
@@ -249,6 +251,12 @@
  "One thing needs you.": "Вас ждёт одно дело.",
  "Only files larger than (MB) wait for those hours": "Только файлы больше (МБ) ждут эти часы",
  "Only people I send a link to": "Только люди, которым я отправлю ссылку",
+ "Only photos are taken here: {name} was left out": {
+  "one": "Здесь принимают только фото: {name} пропущен",
+  "few": "Здесь принимают только фото: пропущено {n} файла",
+  "many": "Здесь принимают только фото: пропущено {n} файлов",
+  "other": "Здесь принимают только фото: пропущено {n} файла"
+ },
  "Only photos you own are used.": "Используются только ваши собственные фото.",
  "Only the person who made this link and the people who help them can read or hear it.": "Прочитать или услышать его могут только тот, кто создал эту ссылку, и те, кто ему помогает.",
  "Only the person who made this link can see what you send. You will not see anyone else's photos.": "То, что вы отправляете, видит только тот, кто создал эту ссылку. Чужих фото вы не увидите.",
@@ -322,6 +330,7 @@
  "Record a voice message": "Записать голосовое сообщение",
  "Record again": "Записать заново",
  "Remove": "Удалить",
+ "Remove all": "Убрать всё",
  "Remove email address": "Убрать адрес электронной почты",
  "Remove service": "Удалить сервис",
  "Remove the email address?": "Убрать адрес электронной почты?",
@@ -329,6 +338,7 @@
  "Remove this member?": "Удалить этого участника?",
  "Remove this service": "Удалить этот сервис",
  "Remove this service?": "Удалить этот сервис?",
+ "Remove {name}": "Убрать {name}",
  "Remove {name} from {service}? The app stops handing over their photos. Their API key stays in their Immich account until they delete it; they are told on their page.": "Удалить {name} из {service}? Приложение перестаёт передавать его фото. Его ключ API остаётся в его учётной записи Immich, пока он его не удалит; он получит уведомление на своей странице.",
  "Removed by its owner": "Удалено владельцем",
  "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.": "Удаление здесь заставляет приложение забыть об этом и перестать передавать фото. Оно не может удалить чей-либо ключ API: Immich позволяет удалить ключ только его владельцу, поэтому ключ остаётся в учётной записи этого человека, пока он его не удалит, и он узнает об этом на своей странице. Фото никогда не затрагиваются.",
@@ -356,6 +366,7 @@
  "Senders": "Отправители",
  "Senders are paused until you reconnect (the button is under Needs you, above).": "Отправители приостановлены, пока вы не переподключитесь (кнопка находится в разделе «Ждёт вас» выше).",
  "Sending": "Отправляется",
+ "Sending {done} of {total}": "Отправка {done} из {total}",
  "Sending {n}": "Отправка: {n}",
  "Sent already": "Уже отправлено",
  "Service name": "Название сервиса",
@@ -472,6 +483,7 @@
  "Too large": "Слишком большой",
  "Too many changes in a minute; try again shortly.": "Слишком много изменений за минуту; попробуйте чуть позже.",
  "Too many photos or requests came from your connection. Try again in ten minutes.": "С вашего подключения пришло слишком много фото или запросов. Попробуйте снова через десять минут.",
+ "Try again": "Повторить",
  "Turn off": "Выключить",
  "Turn on Tags": "Включить теги",
  "Turn on Tags in Immich": "Включить теги в Immich",
@@ -756,6 +768,24 @@
  "{n} dry-run": "{n} пробных",
  "{n} errors": "{n} ошибок",
  "{n} failed and will be retried": "{n} не удалось, будет повторено",
+ "{n} file": {
+  "one": "{n} файл",
+  "few": "{n} файла",
+  "many": "{n} файлов",
+  "other": "{n} файла"
+ },
+ "{n} file could not be sent": {
+  "one": "Не удалось отправить {n} файл",
+  "few": "Не удалось отправить {n} файла",
+  "many": "Не удалось отправить {n} файлов",
+  "other": "Не удалось отправить {n} файла"
+ },
+ "{n} file sent. Thank you!": {
+  "one": "Отправлен {n} файл. Спасибо!",
+  "few": "Отправлено {n} файла. Спасибо!",
+  "many": "Отправлено {n} файлов. Спасибо!",
+  "other": "Отправлено {n} файла. Спасибо!"
+ },
  "{n} handed over": "{n} передано",
  "{n} left out": {
   "one": "{n} отброшено",
