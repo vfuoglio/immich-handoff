@@ -55,11 +55,12 @@ type RunInfo struct {
 
 type Syncer struct {
 	Cfg      Config
-	Services []*Service  // fixed services (used when Provider is nil)
-	Provider Provider    // optional: services that can change while running
-	Usage    Usage       // optional: records what senders hand over, so a service's daily cap can be applied
-	Bus      *live.Bus   // optional: tells the open pages what is happening, as it happens
-	Notifier notify.Func // optional: tells whoever runs the app that something needs attention
+	Services []*Service      // fixed services (used when Provider is nil)
+	Provider Provider        // optional: services that can change while running
+	Usage    Usage           // optional: records what senders hand over, so a service's daily cap can be applied
+	Bus      *live.Bus       // optional: tells the open pages what is happening, as it happens
+	Notifier notify.Func     // optional: tells whoever runs the app that something needs attention
+	Problems *notify.Tracker // optional: a problem that lasts is told once, reminded after a day, and told when it is over
 	Log      *slog.Logger
 
 	mu          sync.Mutex
@@ -295,6 +296,7 @@ func (s *Syncer) Tidy(ctx context.Context) {
 
 func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints map[uuid.UUID]time.Time) {
 	info := &RunInfo{Started: time.Now(), Reason: reason, PerService: map[string]Counts{}}
+	var ran []*Service // the services this pass looked at, to tell which problems are over
 	defer func() {
 		info.Finished = time.Now()
 		s.last.Store(info)
@@ -311,13 +313,12 @@ func (s *Syncer) once(ctx context.Context, reason string, cleanup bool, hints ma
 			s.Log.Warn(msg)
 			s.notify(notify.Problem, msg)
 		}
-		if info.Error != "" || info.Counts.Errors > 0 || info.Counts.Refused > 0 {
-			s.notify(notify.Problem, passSummary(info))
-		}
+		s.reportPass(info, ran)
 	}()
 
 	resolved := map[uuid.UUID]bool{}
 	for _, svc := range s.Current() {
+		ran = append(ran, svc)
 		c := s.runService(ctx, svc, hints, resolved)
 		info.Counts.add(c)
 		info.PerService[svc.Label()] = c

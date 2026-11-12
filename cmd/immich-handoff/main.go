@@ -101,8 +101,9 @@ func run(log *slog.Logger) error {
 	if notifier.PeopleMailReady() && appURL == "" {
 		return errors.New("NOTIFY_FILE: a destination with people: true needs PUBLIC_APP_URL, because every mail to a person links to the page and to the way to stop the emails")
 	}
+	problems := notify.NewTracker(notifier.Send) // a problem that lasts is told once, not on every pass
 	s := &syncer.Syncer{
-		Services: services, Log: log, Bus: bus, Notifier: notifier.Send,
+		Services: services, Log: log, Bus: bus, Notifier: notifier.Send, Problems: problems,
 		Cfg: syncer.Config{
 			DeleteForce: env("DELETE_FORCE", "false") == "true", DryRun: env("DRY_RUN", "false") == "true",
 			Quiet: quiet, ReceiverDelete: receiverDelete, NoDetails: env("CARRY_DETAILS", "on") == "off",
@@ -213,7 +214,7 @@ func run(log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Every: every, Keep: keep,
+		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Problems: problems, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)

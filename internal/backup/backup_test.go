@@ -509,3 +509,64 @@ func TestTheScheduleIsReadFromTheEnvironment(t *testing.T) {
 		}
 	}
 }
+
+type flaky struct {
+	mu   sync.Mutex
+	fail bool
+}
+
+func (f *flaky) Backup(_ context.Context, dest string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return errors.New("disk full")
+	}
+	return os.WriteFile(dest, []byte("data"), 0o600)
+}
+
+func (f *flaky) set(fail bool) { f.mu.Lock(); f.fail = fail; f.mu.Unlock() }
+
+func runOne(t *testing.T, m *backup.Manager) backup.Job {
+	t.Helper()
+	job, already := m.Queue(context.Background())
+	if already {
+		t.Fatal("a backup is still running")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if j, ok := m.Latest(); ok && j.ID == job.ID && (j.State == backup.Done || j.State == backup.Failed) {
+			return j
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("the backup did not finish")
+	return backup.Job{}
+}
+
+func TestABackupThatKeepsFailingIsToldOnceAndWhenItWorksAgain(t *testing.T) {
+	src := &flaky{fail: true}
+	m, told, events := manager(t, src, &fakeIdle{})
+	m.Problems = notify.NewTracker(m.Tell)
+	for i := 0; i < 4; i++ { // the hourly retry of a full disk
+		if j := runOne(t, m); j.State != backup.Failed {
+			t.Fatalf("%+v", j)
+		}
+	}
+	if got := told(); len(got) != 1 || !strings.Contains(got[0], "disk full") {
+		t.Errorf("one message for four failures: %v", got)
+	}
+	if len(events()) != 4 {
+		t.Errorf("the activity log keeps every failure: %v", events())
+	}
+	src.set(false)
+	if j := runOne(t, m); j.State != backup.Done {
+		t.Fatalf("%+v", j)
+	}
+	if got := told(); len(got) != 2 || got[1] != "Backups work again." {
+		t.Errorf("%v", got)
+	}
+	runOne(t, m) // and a second success says nothing more
+	if len(told()) != 2 {
+		t.Errorf("%v", told())
+	}
+}
