@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -60,7 +61,10 @@ type Push struct {
 	closed bool
 }
 
-type pushLine struct{ kind, text string }
+type pushLine struct {
+	kind, text string
+	links      []ActionLink
+}
 
 type pushQueue struct {
 	lines []pushLine
@@ -99,6 +103,11 @@ func (p *Push) log() *slog.Logger {
 
 // Tell is called for every line written for a service, with the people who may read it, and for arrival summaries.
 func (p *Push) Tell(ctx context.Context, audience []uuid.UUID, kind, text string) {
+	p.TellLinks(ctx, audience, kind, text, nil)
+}
+
+// TellLinks is Tell with one-tap links: links(user) is asked only for the people who have a device that wants the line.
+func (p *Push) TellLinks(ctx context.Context, audience []uuid.UUID, kind, text string, links func(uuid.UUID) []ActionLink) {
 	if !p.Ready() {
 		return
 	}
@@ -114,7 +123,11 @@ func (p *Push) Tell(ctx context.Context, audience []uuid.UUID, kind, text string
 			}
 		}
 		if wanted {
-			p.queue(id, pushLine{kind, text})
+			line := pushLine{kind: kind, text: text}
+			if links != nil {
+				line.links = links(id)
+			}
+			p.queue(id, line)
 		}
 	}
 }
@@ -249,14 +262,34 @@ func composePush(lang string, lines []pushLine) []byte {
 		}
 		body = strings.Join(parts, "\n")
 	}
-	return pushPayload(body)
+	var links []ActionLink
+	if len(lines) == 1 { // buttons belong to one thing; a gathered notification just opens the page
+		links = lines[0].links
+	}
+	return pushPayload(body, links, l)
 }
 
-func pushPayload(body string) []byte {
+// pushPayload is what the service worker is given. links become buttons (a browser that cannot show buttons, such as
+// Safari, still opens the page when the notification is tapped); l translates their labels.
+func pushPayload(body string, links []ActionLink, l *i18n.Locale) []byte {
 	if r := []rune(body); len(r) > 300 {
 		body = string(r[:299]) + "…"
 	}
-	b, _ := json.Marshal(map[string]string{"title": "Immich Handoff", "body": body, "tag": "handoff", "url": "./"})
+	m := map[string]any{"title": "Immich Handoff", "body": body, "tag": "handoff", "url": "./"}
+	if len(links) > 2 {
+		links = links[:2] // a notification shows at most two buttons
+	}
+	if len(links) > 0 && l != nil {
+		var actions []map[string]string
+		urls := map[string]string{}
+		for i, a := range links {
+			id := fmt.Sprintf("a%d", i)
+			actions = append(actions, map[string]string{"action": id, "title": l.T(a.Label)})
+			urls[id] = a.URL
+		}
+		m["actions"], m["urls"] = actions, urls
+	}
+	b, _ := json.Marshal(m)
 	return b
 }
 
@@ -413,7 +446,7 @@ func (h *Hub) PushTest(ctx context.Context, me immich.User, id string) error {
 			return ErrPushTestSoon
 		}
 		code, _ := i18n.Supported(s.Lang)
-		if err := h.Push.deliver(ctx, s, pushPayload(i18n.For(code).T("Notifications work on this device."))); err != nil {
+		if err := h.Push.deliver(ctx, s, pushPayload(i18n.For(code).T("Notifications work on this device."), nil, nil)); err != nil {
 			return errors.Join(ErrPushSend, err)
 		}
 		return nil

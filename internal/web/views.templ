@@ -642,6 +642,35 @@ templ PushCard(p PushView) {
 	</div>
 }
 
+// ActionPageView is the page a one-tap link leads to: the question and the button, or how it ended.
+type ActionPageView struct {
+	Token, Question, Button string
+	Done                    bool
+	Failed                  string
+}
+
+// ActionPage asks before it acts, and says how it ended.
+templ ActionPage(v ActionPageView) {
+	@Layout("Immich Handoff", "") {
+		<section class="invite-hero">
+			switch {
+				case v.Done:
+					<h1>{ t(ctx, "Done.") }</h1>
+					<p class="lead"><a href="./">{ t(ctx, "Open Immich Handoff") }</a></p>
+				case v.Failed != "":
+					<h1>{ t(ctx, "Not done") }</h1>
+					<p class="lead">{ v.Failed }</p>
+					<p class="lead"><a href="./">{ t(ctx, "Open Immich Handoff") }</a></p>
+				default:
+					<h1>{ v.Question }</h1>
+					<form method="post" action={ "a/" + v.Token }>
+						<p class="row form-actions"><button class="primary" type="submit">{ v.Button }</button></p>
+					</form>
+			}
+		</section>
+	}
+}
+
 // UnsubscribePage is where the link in a mail leads: it asks first, so a program that opens the link does not stop anyone's mail.
 templ UnsubscribePage(token string, done bool) {
 	@Layout(t(ctx, "Stop the emails"), "") {

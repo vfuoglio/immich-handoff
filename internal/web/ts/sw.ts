@@ -15,6 +15,7 @@ interface PushEventLike {
   waitUntil(work: Promise<unknown>): void;
 }
 interface ClickEventLike {
+  action: string;
   notification: { close(): void; data: unknown };
   waitUntil(work: Promise<unknown>): void;
 }
@@ -51,15 +52,18 @@ worker.addEventListener("push", ((event: PushEventLike) => {
       tag: shown.tag,
       renotify: true,
       icon: new URL("icon-192.png", worker.registration.scope).href,
-      data: { url: shown.url },
+      actions: shown.actions,
+      data: { url: shown.url, urls: shown.urls },
     }),
   );
 }) as (event: never) => void);
 
 worker.addEventListener("notificationclick", ((event: ClickEventLike) => {
   event.notification.close();
-  const data = event.notification.data as { url?: unknown } | null;
-  const target = targetUrl(worker.registration.scope, typeof data?.url === "string" ? data.url : "./");
+  const data = event.notification.data as { url?: unknown; urls?: Record<string, unknown> } | null;
+  const button = event.action !== "" ? data?.urls?.[event.action] : undefined; // a button leads to its own page, a tap to the app
+  const wanted = typeof button === "string" ? button : typeof data?.url === "string" ? data.url : "./";
+  const target = targetUrl(worker.registration.scope, wanted);
   const root = appRoot(worker.registration.scope);
   event.waitUntil(
     worker.clients.matchAll({ type: "window", includeUncontrolled: true }).then((open) => {

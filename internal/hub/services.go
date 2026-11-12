@@ -203,13 +203,20 @@ func (h *Hub) Ask(ctx context.Context, user immich.User, service, invite string)
 	if err := h.tagFree(user.ID, svc); err != nil {
 		return err
 	}
-	if _, err := h.Store.AddRequest(ctx, store.Request{Service: service, UserID: user.ID, Name: user.Name, Email: user.Email}); err != nil {
+	req, err := h.Store.AddRequest(ctx, store.Request{Service: service, UserID: user.ID, Name: user.Name, Email: user.Email})
+	if err != nil {
 		if errors.Is(err, store.ErrExists) {
 			return nil // asking again changes nothing
 		}
 		return err
 	}
-	h.event(ctx, service, user.ID, "asked", i18n.Pack("{name} asked to send to {service}", "name", user.Name, "service", service))
+	var acts []ActionSpec // the owner can answer from the message
+	if svc.OwnerID != uuid.Nil {
+		for _, kind := range []string{ActionApprove, ActionDecline} {
+			acts = append(acts, ActionSpec{Recipient: svc.OwnerID, RecipientName: h.ownerName(ctx, service), Kind: kind, Service: service, Target: req.ID, Group: req.ID})
+		}
+	}
+	h.eventWith(ctx, service, user.ID, "asked", i18n.Pack("{name} asked to send to {service}", "name", user.Name, "service", service), acts)
 	h.Log.Info("join requested", "service", service, "user", user.Email)
 	return nil
 }
@@ -326,7 +333,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided} {
 		if errors.Is(err, e) {
 			return true
 		}

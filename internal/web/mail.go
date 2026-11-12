@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -205,4 +206,78 @@ func (w *Server) pushChange(rw http.ResponseWriter, r *http.Request, what string
 		return
 	}
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// --- one-tap action links ---
+
+// actionSentence says what a link will do, in the reader's words.
+func actionSentence(ctx context.Context, info hub.ActionInfo) (question, button string) {
+	switch info.Kind {
+	case hub.ActionApprove:
+		return t(ctx, "Approve {name} to send photos to {service}?", "name", info.Name, "service", info.Service), t(ctx, "Approve")
+	case hub.ActionDecline:
+		return t(ctx, "Decline {name}'s request to send photos to {service}?", "name", info.Name, "service", info.Service), t(ctx, "Decline")
+	case hub.ActionResumeService:
+		return t(ctx, "Resume the service {service}?", "service", info.Service), t(ctx, "Resume service")
+	}
+	return t(ctx, "Resume your sending to {service}?", "service", info.Service), t(ctx, "Resume sending")
+}
+
+func (w *Server) actionNoStore(rw http.ResponseWriter) {
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+}
+
+// actionPage is where a link in a message leads. It does nothing: it says what the link would do and asks. A program
+// that follows links (a mail scanner, a preview) must not be able to act. A link that is unknown, used, expired or about
+// something already done gets one and the same answer.
+func (w *Server) actionPage(rw http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	if w.Hub == nil {
+		w.actionInvalid(rw, r)
+		return
+	}
+	info, ok := w.Hub.ActionPage(r.Context(), token)
+	if !ok {
+		w.actionInvalid(rw, r)
+		return
+	}
+	w.actionNoStore(rw)
+	question, button := actionSentence(r.Context(), info)
+	ActionPage(ActionPageView{Token: token, Question: question, Button: button}).Render(r.Context(), rw)
+}
+
+// actionRun does what the link says, once. The link is the proof, so no sign-in and no cross-site header are asked: a
+// page on another site cannot know the token.
+func (w *Server) actionRun(rw http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	if w.Hub == nil {
+		w.actionInvalid(rw, r)
+		return
+	}
+	info, err := w.Hub.RunAction(r.Context(), token)
+	if errors.Is(err, hub.ErrActionInvalid) {
+		w.actionInvalid(rw, r)
+		return
+	}
+	w.actionNoStore(rw)
+	if err != nil {
+		reason := "something went wrong"
+		status := http.StatusInternalServerError
+		if hub.IsUserError(err) {
+			reason, status = err.Error(), http.StatusConflict
+		} else {
+			w.Log.Warn("an action link failed", "kind", info.Kind, "err", err)
+		}
+		rw.WriteHeader(status)
+		ActionPage(ActionPageView{Failed: t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), reason))}).Render(r.Context(), rw)
+		return
+	}
+	ActionPage(ActionPageView{Done: true}).Render(r.Context(), rw)
+}
+
+func (w *Server) actionInvalid(rw http.ResponseWriter, r *http.Request) {
+	w.actionNoStore(rw)
+	rw.WriteHeader(http.StatusNotFound)
+	Notice(t(r.Context(), "This link is no longer valid"), t(r.Context(), "It was already used, has expired, or was not made by this app. Do it from your page instead."), true).Render(r.Context(), rw)
 }

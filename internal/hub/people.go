@@ -51,6 +51,7 @@ type People struct {
 type personLine struct {
 	at         time.Time
 	kind, text string
+	links      []ActionLink
 }
 
 type personQueue struct {
@@ -90,6 +91,11 @@ func (p *People) now() time.Time {
 // Tell is called for every line written to the activity log, with the people who may read it. Those who asked for mail
 // (and whose choice lets this line through) will get it.
 func (p *People) Tell(ctx context.Context, audience []uuid.UUID, kind, text string) {
+	p.TellLinks(ctx, audience, kind, text, nil)
+}
+
+// TellLinks is Tell with one-tap links: links(user) is asked only for the people who will get the line.
+func (p *People) TellLinks(ctx context.Context, audience []uuid.UUID, kind, text string, links func(uuid.UUID) []ActionLink) {
 	if !p.Ready() {
 		return
 	}
@@ -98,7 +104,11 @@ func (p *People) Tell(ctx context.Context, audience []uuid.UUID, kind, text stri
 		if err != nil || !ok || (pm.Mode == store.MailNeeds && !needsKinds[kind]) {
 			continue
 		}
-		p.queue(id, personLine{p.now(), kind, text})
+		line := personLine{at: p.now(), kind: kind, text: text}
+		if links != nil {
+			line.links = links(id)
+		}
+		p.queue(id, line)
 	}
 }
 
@@ -196,7 +206,7 @@ func (p *People) SendTest(pm store.PersonMail) error {
 	if !p.Ready() {
 		return errors.New("mail to people is not set up")
 	}
-	return p.Sender.SendPersonal(p.compose(pm, []personLine{{p.now(), "test", ""}}))
+	return p.Sender.SendPersonal(p.compose(pm, []personLine{{at: p.now(), kind: "test"}}))
 }
 
 // --- the unsubscribe link ---
@@ -240,13 +250,18 @@ var peopleHTML = template.Must(template.New("people").Parse(`<!doctype html>
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px">
 <p style="margin:0 0 12px">{{.Greeting}}</p>
 <p style="margin:0 0 16px">{{.Intro}}</p>
-{{range .Lines}}<p style="margin:0 0 12px;line-height:1.45"><span style="color:#6b6894;font-size:12px">{{.Time}}</span><br>{{.Text}}</p>
+{{range .Lines}}<p style="margin:0 0 12px;line-height:1.45"><span style="color:#6b6894;font-size:12px">{{.Time}}</span><br>{{.Text}}{{range .Actions}}<br><a href="{{.URL}}" style="display:inline-block;margin:6px 8px 0 0;background:#5b4bdb;color:#ffffff;text-decoration:none;padding:6px 14px;border-radius:8px">{{.Label}}</a>{{end}}</p>
 {{end}}<p style="margin:20px 0 0"><a href="{{.Link}}" style="display:inline-block;background:#5b4bdb;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px">{{.Open}}</a></p>
 <p style="margin:24px 0 0;color:#6b6894;font-size:12px">{{.Why}} <a href="{{.Unsub}}" style="color:#6b6894">{{.Stop}}</a></p>
 </div></body></html>
 `))
 
-type peopleLine struct{ Time, Text string }
+type peopleLine struct {
+	Time, Text string
+	Actions    []peopleAction
+}
+
+type peopleAction struct{ Label, URL string }
 
 // compose writes one person's mail in their language.
 func (p *People) compose(pm store.PersonMail, lines []personLine) notify.PersonalMail {
@@ -261,7 +276,11 @@ func (p *People) compose(pm store.PersonMail, lines []personLine) notify.Persona
 		if ln.kind != "test" {
 			text = l.Unpack(ln.text)
 		}
-		shown = append(shown, peopleLine{l.Stamp(ln.at.Local()), text})
+		pl := peopleLine{Time: l.Stamp(ln.at.Local()), Text: text}
+		for _, a := range ln.links {
+			pl.Actions = append(pl.Actions, peopleAction{Label: l.T(a.Label), URL: a.URL})
+		}
+		shown = append(shown, pl)
 	}
 	d := struct {
 		Lang, Greeting, Intro, Open, Why, Stop, Link, Unsub string
@@ -278,6 +297,9 @@ func (p *People) compose(pm store.PersonMail, lines []personLine) notify.Persona
 	text.WriteString(d.Greeting + "\n\n" + d.Intro + "\n\n")
 	for _, s := range shown {
 		text.WriteString(s.Time + "  " + s.Text + "\n")
+		for _, a := range s.Actions {
+			text.WriteString("    " + a.Label + ": " + a.URL + "\n")
+		}
 	}
 	text.WriteString("\n" + d.Open + ": " + link + "\n\n-- \n" + d.Why + "\n" + d.Stop + ": " + unsub + "\n")
 

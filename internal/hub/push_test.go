@@ -24,6 +24,7 @@ type sentPush struct {
 	endpoint string
 	title    string
 	body     string
+	raw      map[string]any
 }
 
 type fakePushService struct {
@@ -38,9 +39,11 @@ func (f *fakePushService) Send(_ context.Context, sub push.Subscription, payload
 	if err := f.fail[sub.Endpoint]; err != nil {
 		return err
 	}
-	var m map[string]string
+	var m map[string]any
 	json.Unmarshal(payload, &m)
-	f.sent = append(f.sent, sentPush{sub.Endpoint, m["title"], m["body"]})
+	title, _ := m["title"].(string)
+	body, _ := m["body"].(string)
+	f.sent = append(f.sent, sentPush{sub.Endpoint, title, body, m})
 	return nil
 }
 

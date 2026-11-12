@@ -158,6 +158,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /me/push/remove", w.pushRemove)
 	mux.HandleFunc("POST /me/push/mode", w.pushMode)
 	mux.HandleFunc("POST /me/push/test", w.pushTest)
+	mux.HandleFunc("GET /a/{token}", w.actionPage)
+	mux.HandleFunc("POST /a/{token}", w.actionRun)
 	mux.HandleFunc("GET /unsubscribe/{token}", w.unsubscribePage)
 	mux.HandleFunc("POST /unsubscribe/{token}", w.unsubscribe)
 	mux.HandleFunc("GET /fragments/lastrun", w.lastRunFragment)

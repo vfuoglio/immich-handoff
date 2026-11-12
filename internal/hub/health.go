@@ -17,6 +17,12 @@ import (
 
 // event appends to the activity log; problems writing it never stop the action it describes.
 func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, text string) {
+	h.eventWith(ctx, service, user, kind, text, nil)
+}
+
+// eventWith writes a line of the activity log and tells the people who asked to be told, with one-tap links for the
+// ones named in acts.
+func (h *Hub) eventWith(ctx context.Context, service string, user uuid.UUID, kind, text string, acts []ActionSpec) {
 	if h.Store == nil {
 		return
 	}
@@ -25,11 +31,12 @@ func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, t
 	}
 	if h.People != nil || h.Push != nil {
 		audience := h.activityAudience(ctx, service, user)
+		links := h.linker(context.WithoutCancel(ctx), acts)
 		if h.People != nil {
-			h.People.Tell(ctx, audience, kind, text)
+			h.People.TellLinks(ctx, audience, kind, text, links)
 		}
 		if h.Push != nil {
-			h.Push.Tell(ctx, audience, kind, text)
+			h.Push.TellLinks(ctx, audience, kind, text, links)
 		}
 	}
 }

@@ -398,6 +398,22 @@ var migrations = []string{
 	   failures   INTEGER NOT NULL DEFAULT 0
 	 );
 	 CREATE INDEX push_subs_user ON push_subs (user_id);`,
+	// One-tap actions offered in a mail or a notification (approve a request, resume a service). The token is the
+	// whole credential: random, valid for a day, usable once; links made for one decision share a group, so using one
+	// ends the others.
+	`CREATE TABLE action_links (
+	   token      TEXT PRIMARY KEY,
+	   user_id    TEXT NOT NULL,
+	   user_name  TEXT NOT NULL,
+	   kind       TEXT NOT NULL,
+	   service    TEXT NOT NULL,
+	   target     TEXT NOT NULL DEFAULT '',
+	   grp        TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   used_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX action_links_grp ON action_links (grp);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

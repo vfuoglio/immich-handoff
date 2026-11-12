@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -319,5 +320,110 @@ func TestTheServiceWorkerIsServedAndCanOnlyShowAndOpen(t *testing.T) {
 	}
 	if !strings.Contains(res.Header.Get("Content-Security-Policy"), "worker-src 'self'") {
 		t.Error("the policy names the worker source")
+	}
+}
+
+// --- one-tap action links ---
+
+func TestAnActionLinkAsksFirstActsOnceAndNeedsNoSignIn(t *testing.T) {
+	var st *store.Store
+	var p *hub.People
+	app, _ := setup(t, withPeopleMail(t, &st, &p, &mailSink{}))
+	ctx := context.Background()
+	services, _ := st.Services(ctx)
+	club := services[0]
+	req, err := st.AddRequest(ctx, store.Request{Service: "club", UserID: uuid.New(), Name: "Dora", Email: "dora@x.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(kind string) string {
+		tok, err := st.ActionMake(ctx, store.ActionLink{UserID: club.OwnerID, UserName: club.OwnerName, Kind: kind, Service: "club", Target: req.ID, Group: req.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+	approve, decline := mk("approve"), mk("decline")
+	status := func() string { r, _ := st.Requests(ctx); return r[0].Status }
+
+	if code, body := do(t, "GET", app.URL+"/a/nonsense", "", nil); code != 404 || !strings.Contains(body, "no longer valid") {
+		t.Errorf("an unknown link: %d", code)
+	}
+	if code, _ := do(t, "POST", app.URL+"/a/nonsense", "", nil); code != 404 {
+		t.Errorf("posting to an unknown link: %d", code)
+	}
+
+	res, err := http.Get(app.URL + "/a/" + approve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	page := string(b)
+	if res.StatusCode != 200 || !strings.Contains(page, "Approve Dora to send photos to club?") || !strings.Contains(page, `action="a/`+approve+`"`) {
+		t.Fatalf("%d: the page should say what it will do and ask: %.300s", res.StatusCode, page)
+	}
+	if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Referrer-Policy") != "no-referrer" {
+		t.Errorf("headers %v", res.Header)
+	}
+	if status() != store.StatusPending {
+		t.Fatal("opening the link, as a mail scanner does, decided the request")
+	}
+	if code, body := do(t, "GET", app.URL+"/a/"+decline, "", nil); code != 200 || !strings.Contains(body, "Decline Dora") {
+		t.Errorf("the other answer is offered too: %d", code)
+	}
+
+	if code, body := do(t, "POST", app.URL+"/a/"+approve, "", nil); code != 200 || !strings.Contains(body, "Done.") {
+		t.Fatalf("the button: %d %.200s", code, body)
+	}
+	if status() != store.StatusApproved {
+		t.Errorf("the request is %s", status())
+	}
+	if code, _ := do(t, "POST", app.URL+"/a/"+approve, "", nil); code != 404 {
+		t.Errorf("a second tap: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/a/"+decline, "", nil); code != 404 {
+		t.Errorf("the other answer after the first: %d", code)
+	}
+	if status() != store.StatusApproved {
+		t.Error("the request changed again")
+	}
+}
+
+func TestResumeLinksAskAndResumeWhatTheyNameAndAnAlreadyDoneOneIsInvalid(t *testing.T) {
+	var st *store.Store
+	var p *hub.People
+	var theHub *hub.Hub
+	app, _ := setup(t, withPeopleMail(t, &st, &p, &mailSink{}), func(srv *web.Server) { theHub = srv.Hub })
+	ctx := context.Background()
+	services, _ := st.Services(ctx)
+	club := services[0]
+	owner := immich.User{ID: club.OwnerID, Name: club.OwnerName}
+	mk := func() string {
+		tok, err := st.ActionMake(ctx, store.ActionLink{UserID: club.OwnerID, UserName: club.OwnerName, Kind: "resume-service", Service: "club"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+	notPaused := mk()
+	if code, _ := do(t, "GET", app.URL+"/a/"+notPaused, "", nil); code != 404 {
+		t.Errorf("a resume link for a service that is not paused: %d", code)
+	}
+	if err := theHub.SetServicePaused(ctx, owner, "club", true); err != nil {
+		t.Fatal(err)
+	}
+	tok := mk()
+	if code, body := do(t, "GET", app.URL+"/a/"+tok, "", nil); code != 200 || !strings.Contains(body, "Resume the service club?") || !strings.Contains(body, "Resume service") {
+		t.Fatalf("%d", code)
+	}
+	if v, _ := st.Services(ctx); !v[0].Paused {
+		t.Fatal("looking at the page resumed the service")
+	}
+	if code, body := do(t, "POST", app.URL+"/a/"+tok, "", nil); code != 200 || !strings.Contains(body, "Done.") {
+		t.Fatalf("%d", code)
+	}
+	if v, _ := st.Services(ctx); v[0].Paused {
+		t.Error("the service is still paused")
 	}
 }

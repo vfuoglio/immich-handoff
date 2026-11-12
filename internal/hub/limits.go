@@ -120,7 +120,8 @@ func (h *Hub) SetServicePaused(ctx context.Context, owner immich.User, service s
 		word = "paused"
 	}
 	if paused {
-		h.event(ctx, service, owner.ID, word, i18n.Pack("{name} paused the service {service}", "name", owner.Name, "service", service))
+		h.eventWith(ctx, service, owner.ID, word, i18n.Pack("{name} paused the service {service}", "name", owner.Name, "service", service),
+			[]ActionSpec{{Recipient: owner.ID, RecipientName: owner.Name, Kind: ActionResumeService, Service: service}})
 	} else {
 		h.event(ctx, service, owner.ID, word, i18n.Pack("{name} resumed the service {service}", "name", owner.Name, "service", service))
 	}
@@ -151,7 +152,8 @@ func (h *Hub) SetMemberPaused(ctx context.Context, user immich.User, service str
 		word = "paused"
 	}
 	if paused {
-		h.event(ctx, service, user.ID, word, i18n.Pack("{name} paused sending to {service}", "name", user.Name, "service", service))
+		h.eventWith(ctx, service, user.ID, word, i18n.Pack("{name} paused sending to {service}", "name", user.Name, "service", service),
+			[]ActionSpec{{Recipient: user.ID, RecipientName: user.Name, Kind: ActionResumeSender, Service: service}})
 	} else {
 		h.event(ctx, service, user.ID, word, i18n.Pack("{name} resumed sending to {service}", "name", user.Name, "service", service))
 	}

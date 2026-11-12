@@ -30,9 +30,9 @@ test("a device's id is the hash the server makes of its address (the same value 
 });
 
 test("a push is read leniently: whatever arrives is shown", () => {
-  assert.deepEqual(readPush({ title: "T", body: "B", tag: "x", url: "./admin" }), { title: "T", body: "B", tag: "x", url: "./admin" });
-  assert.deepEqual(readPush(null), { title: "Immich Handoff", body: "", tag: "handoff", url: "./" });
-  assert.deepEqual(readPush("text"), { title: "Immich Handoff", body: "", tag: "handoff", url: "./" });
+  assert.deepEqual(readPush({ title: "T", body: "B", tag: "x", url: "./admin" }), { title: "T", body: "B", tag: "x", url: "./admin", actions: [], urls: {} });
+  assert.deepEqual(readPush(null), { title: "Immich Handoff", body: "", tag: "handoff", url: "./", actions: [], urls: {} });
+  assert.deepEqual(readPush("text"), { title: "Immich Handoff", body: "", tag: "handoff", url: "./", actions: [], urls: {} });
   assert.equal(readPush({ title: 5, body: ["x"] }).title, "Immich Handoff");
 });
 
@@ -44,4 +44,21 @@ test("a click opens the app's own front page, whatever folder it lives in, and n
   assert.equal(targetUrl("https://h.example/static/", "https://evil.example/phish"), "https://h.example/");
   assert.equal(targetUrl("https://h.example/static/", "//evil.example/x"), "https://h.example/");
   assert.equal(targetUrl("https://h.example/static/", "http://[bad"), "https://h.example/");
+});
+
+test("buttons come with the address each leads to, at most two, and only if they lead somewhere", () => {
+  const got = readPush({
+    body: "Bob asked to send to Party",
+    actions: [{ action: "a0", title: "Approve" }, { action: "a1", title: "Decline" }, { action: "a2", title: "Third" }, { action: "a3", title: "" }, "nonsense", { action: "x" }],
+    urls: { a0: "https://h.example/a/one", a1: "https://h.example/a/two", a2: "https://h.example/a/three", b: 5 },
+  });
+  assert.deepEqual(got.actions, [{ action: "a0", title: "Approve" }, { action: "a1", title: "Decline" }]);
+  assert.deepEqual(got.urls, { a0: "https://h.example/a/one", a1: "https://h.example/a/two", a2: "https://h.example/a/three" });
+  assert.deepEqual(readPush({ actions: [{ action: "a0", title: "Approve" }], urls: {} }).actions, []); // no address, no button
+  assert.deepEqual(readPush({ actions: "approve", urls: "x" }).actions, []);
+});
+
+test("a button's address is checked like any other: the app's own site only", () => {
+  assert.equal(targetUrl("https://h.example/static/", "https://h.example/a/token"), "https://h.example/a/token");
+  assert.equal(targetUrl("https://h.example/static/", "https://evil.example/a/token"), "https://h.example/");
 });

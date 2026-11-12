@@ -176,6 +176,55 @@ func TestMailToPeople(t *testing.T) {
 		t.Fatalf("no way to stop the mail: %q", text)
 	}
 
+	// the owner can answer from the mail: the link asks first, then approves once
+	approve := regexp.MustCompile(`Approve: http://handoff\.test(/a/[A-Za-z0-9_-]{22})`).FindStringSubmatch(text)
+	decline := regexp.MustCompile(`Decline: http://handoff\.test(/a/[A-Za-z0-9_-]{22})`).FindStringSubmatch(text)
+	if approve == nil || decline == nil {
+		t.Fatalf("the owner's mail has no way to answer the request: %q", text)
+	}
+	if strings.Contains(sink.to("bob@e2e.test")[0], "/a/") {
+		t.Error("the person who asked was given the owner's links")
+	}
+	if !strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Fatal("the request is not waiting on the owner's page")
+	}
+	getPage := func(path string) (int, string) {
+		res, err := http.Get("http://localhost:" + port + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, body := getPage(approve[1]); code != 200 || !strings.Contains(body, "to send photos to mailed?") {
+		t.Fatalf("the link should ask first: %d %.300s", code, body)
+	}
+	if !strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Fatal("opening the link decided the request")
+	}
+	postAction := func(path string) (int, string) {
+		res, err := http.Post("http://localhost:"+port+path, "application/x-www-form-urlencoded", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	if code, body := postAction(approve[1]); code != 200 || !strings.Contains(body, "Done.") {
+		t.Fatalf("approving: %d %.300s", code, body)
+	}
+	if strings.Contains(page(t, port, owner), `hx-post="decide"`) {
+		t.Error("the request is still waiting after it was approved from the link")
+	}
+	if code, _ := postAction(approve[1]); code != 404 {
+		t.Errorf("a second tap: %d", code)
+	}
+	if code, _ := postAction(decline[1]); code != 404 {
+		t.Errorf("the other answer after the first: %d", code)
+	}
+
 	// a test mail arrives on demand
 	before := len(sink.to("bob@e2e.test"))
 	must(post(t, port, "/me/mail", sender, url.Values{"action": {"test"}}), 200, "test mail")
