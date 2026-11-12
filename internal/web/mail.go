@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -340,6 +341,20 @@ func (w *Server) setDigest(rw http.ResponseWriter, r *http.Request) {
 			return w.Hub.DisableDigest(ctx, me.sess, me.user, service)
 		case "now":
 			return w.Hub.MakeDigestNow(ctx, me.user, service)
+		}
+		return errors.New("unknown action")
+	})
+}
+
+// setPool changes when an event pool ends, or ends it now. Only the pool's owner may.
+func (w *Server) setPool(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "pool", func(ctx context.Context, me *member, service string) error {
+		switch r.PostFormValue("do") {
+		case "end":
+			return w.Hub.EndPoolNow(ctx, me.user, service)
+		case "set":
+			days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
+			return w.Hub.SetPoolEnd(ctx, me.user, service, days)
 		}
 		return errors.New("unknown action")
 	})

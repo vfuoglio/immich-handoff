@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 )
@@ -45,7 +46,7 @@ func (s *Syncer) reportPass(info *RunInfo, ran []*Service) {
 		switch {
 		case c.Errors > 0:
 			s.problem(key, notify.Message{Kind: notify.Problem, Text: fmt.Sprintf("A hand-over pass for %s had problems: %s", svc.Label(), failed(c.Errors))})
-		case !svc.Paused && svc.Broken == "" && len(svc.Receivers) > 0:
+		case !svc.Paused && svc.Broken == "" && len(svc.Receivers) > 0 && !svc.Ended(time.Now()):
 			s.fixed(key, notify.Message{Kind: notify.Problem, Text: fmt.Sprintf("Hand-overs for %s work again.", svc.Label())})
 		}
 	}

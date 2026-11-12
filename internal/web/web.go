@@ -98,6 +98,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/rules", w.setRules)
 	mux.HandleFunc("POST /services/lifetime", w.setLifetime)
 	mux.HandleFunc("POST /services/digest", w.setDigest)
+	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
@@ -444,6 +445,12 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 			}
 		}
 		ov.Digest = w.digestView(ctx, o.Service.Label())
+		if o.Service.Pool {
+			ov.Pool, ov.PoolEnded = true, o.Service.Ended(time.Now())
+			if !o.Service.EndsAt.IsZero() {
+				ov.PoolEnds = loc(ctx).Stamp(o.Service.EndsAt.Local())
+			}
+		}
 		if o.Service.Quiet.Set() {
 			ov.QuietFrom, ov.QuietTo = syncer.Clock(o.Service.Quiet.From), syncer.Clock(o.Service.Quiet.To)
 		}
@@ -487,7 +494,11 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 			if o.Service.OwnerID != uuid.Nil {
 				owner = ownerName(o.Service)
 			}
-			d.Offers = append(d.Offers, OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State})
+			ov := OfferView{Name: o.Service.Label(), Tag: o.Service.Tag, Owner: owner, State: o.State, Pool: o.Service.Pool}
+			if o.Service.Pool && !o.Service.EndsAt.IsZero() {
+				ov.Ends = loc(ctx).Stamp(o.Service.EndsAt.Local())
+			}
+			d.Offers = append(d.Offers, ov)
 		}
 	}
 	d.Owned = w.ownedViews(ctx, me)
@@ -690,7 +701,10 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
-	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token}
+	d.Invited = &OfferView{Name: offer.Service.Label(), Tag: offer.Service.Tag, Owner: ownerName(offer.Service), State: offer.State, Invite: token, Pool: offer.Service.Pool}
+	if offer.Service.Pool && !offer.Service.EndsAt.IsZero() {
+		d.Invited.Ends = loc(r.Context()).Stamp(offer.Service.EndsAt.Local())
+	}
 	rw.Header().Set("Cache-Control", "no-store")
 	InvitePage(d).Render(r.Context(), rw)
 }
@@ -1026,7 +1040,7 @@ func (w *Server) enableTags(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) join(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "joined", func(ctx context.Context, me *member, service string) error {
-		return w.Hub.Join(ctx, me.sess, me.user, service, r.PostFormValue("invite"), r.PostFormValue("mode"))
+		return w.Hub.JoinWith(ctx, me.sess, me.user, service, r.PostFormValue("invite"), r.PostFormValue("mode"), r.PostFormValue("pool") == "1")
 	})
 }
 
@@ -1069,10 +1083,11 @@ func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		poolDays, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("poolends")))
 		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
 			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
 			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days, Album: r.PostFormValue("album"),
-			LimitPhotos: photos, LimitMB: mb,
+			LimitPhotos: photos, LimitMB: mb, Pool: r.PostFormValue("pool") == "1", EndsInDays: poolDays,
 		})
 	})
 }

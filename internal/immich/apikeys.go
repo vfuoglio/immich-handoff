@@ -2,6 +2,7 @@ package immich
 
 import (
 	"context"
+	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -146,4 +147,30 @@ func (a *API) DeleteWorkflow(ctx context.Context, id openapi_types.UUID) error {
 		return statusErr("deleteWorkflow", c, r.Body)
 	}
 	return nil
+}
+
+// FromTag is the tag a photo from a sender gets where it arrives, when the sender should be told apart: "from/<name>", one
+// inside another, so everything from one person is found together. Bridges and event pools both use it.
+func FromTag(sender string) string {
+	name := strings.TrimSpace(strings.ReplaceAll(sender, "/", "-"))
+	if name == "" {
+		name = "someone"
+	}
+	return "from/" + name
+}
+
+// PoolPermissionsFor is what a member's key (and the owner's) needs in an event pool, where the same key sends and
+// receives: everything a sender that keeps its originals needs, and everything a receiver needs.
+func PoolPermissionsFor(album, canDelete bool) []Permission {
+	have := map[Permission]bool{}
+	var out []Permission
+	for _, group := range [][]Permission{SenderPermissionsCopy, ReceiverPermissionsFor(album, canDelete)} {
+		for _, p := range group {
+			if !have[p] {
+				have[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }

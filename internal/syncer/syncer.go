@@ -345,6 +345,11 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 	if svc.Broken != "" || len(svc.Receivers) == 0 {
 		return
 	}
+	// A pool that has ended hands nothing over: what was handed over stays, and tagged photos stay tagged.
+	if svc.Ended(time.Now()) {
+		log.Debug("the pool has ended; leaving tagged photos alone")
+		return
+	}
 	// A paused service hands nothing over and touches nothing: tagged photos stay tagged until it resumes.
 	if svc.Paused {
 		log.Debug("service is paused; leaving tagged photos alone")
@@ -405,11 +410,26 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		c.Errors++
 		return
 	}
-	for _, r := range rs {
-		if r.userID == me.ID {
-			log.Error("sender and receiver are the same Immich account; refusing", "receiver", r.acct.Name)
-			c.Errors++
+	if svc.Pool {
+		// in a pool every member is also a receiver: a photo goes to everyone but its own sender
+		others := make([]receiver, 0, len(rs))
+		for _, r := range rs {
+			if r.userID != me.ID {
+				others = append(others, r)
+			}
+		}
+		if len(others) == 0 {
+			log.Debug("nobody else is in the pool yet; leaving tagged photos alone")
 			return
+		}
+		rs = others
+	} else {
+		for _, r := range rs {
+			if r.userID == me.ID {
+				log.Error("sender and receiver are the same Immich account; refusing", "receiver", r.acct.Name)
+				c.Errors++
+				return
+			}
 		}
 	}
 	tag, err := snd.API.FindTag(ctx, svc.Tag, false)
@@ -775,6 +795,11 @@ func (s *Syncer) handOne(ctx context.Context, log *slog.Logger, svc *Service, sn
 		if !s.fileInAlbum(ctx, log, svc, r, up.Id) {
 			if err := s.addTagVerified(ctx, r.acct.API, svc.InboxTag, up.Id); err != nil {
 				return handedCopy{}, fmt.Errorf("tag %s's copy %s: %w", r.acct.Name, up.Id, err)
+			}
+		}
+		if svc.Pool { // who took it, whatever the pool does with the copy
+			if err := s.addTagVerified(ctx, r.acct.API, immich.FromTag(snd.Name), up.Id); err != nil {
+				return handedCopy{}, fmt.Errorf("tag %s's copy %s with who it is from: %w", r.acct.Name, up.Id, err)
 			}
 		}
 		c.created = true

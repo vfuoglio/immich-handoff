@@ -502,3 +502,115 @@ func TestTheDigestCardIsTheOwnersAndTurnsOnAndOffWithTheirSession(t *testing.T) 
 		t.Error("the card should offer to turn it on again")
 	}
 }
+
+// --- event pools ---
+
+func withPool(t *testing.T, st **store.Store, ended bool) func(*web.Server) {
+	return func(srv *web.Server) {
+		withHub(t, st)(srv)
+		ends := time.Now().Add(72 * time.Hour)
+		if ended {
+			ends = time.Now().Add(-time.Hour)
+		}
+		if _, err := (*st).AddService(context.Background(), store.Service{Name: "trip", Tag: "trip-tag", InboxTag: "inbox/trip", Refused: "dup", ExpiryDays: 30,
+			OwnerID: uuid.MustParse(familyID), OwnerName: "Family", OwnerEmail: "family@x.test", KeyID: uuid.New(), Key: "k-family", Policy: store.PolicyOpen,
+			Visibility: store.VisListed, Pool: true, EndsAt: ends, Mode: "copy"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.Hub.Reload(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestAPoolIsOfferedWithAPlainStatementAndJoiningNeedsTheYes(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPool(t, &st, false))
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	for _, want := range []string{"Event pool", "Everyone in it sends and receives", "Join the pool", "goes to everyone else", `&#34;pool&#34;:&#34;1&#34;`, "It ends "} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the offer lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "What should happen to your originals?") && strings.Contains(page, "trip-tag") && !strings.Contains(page, "Join the pool") {
+		t.Error("a pool offers the ordinary choice about originals")
+	}
+	// the join asks for the yes: without it nothing is made
+	code, msg := postForm(t, app.URL+"/join", "sess=alice", "service=trip&mode=copy")
+	if code != 409 || !strings.Contains(msg, "goes to everyone") {
+		t.Errorf("without the yes: %d %q", code, msg)
+	}
+	if links, _ := st.Links(context.Background()); len(links) != 1 { // only the person withHub joined to "family"
+		t.Errorf("a refused join made a membership: %+v", links)
+	}
+}
+
+func TestAnEndedPoolSaysSoToItsOwnerAndTakesNoOne(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPool(t, &st, true))
+	_, owner := do(t, "GET", app.URL+"/", "sess=family", nil)
+	for _, want := range []string{"Ended", "Nothing more is handed over", "Save the end"} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("the owner's pool card lacks %q", want)
+		}
+	}
+	if strings.Contains(owner, "End the pool now") {
+		t.Error("an ended pool offers to end again")
+	}
+	if code, msg := postForm(t, app.URL+"/join", "sess=alice", "service=trip&mode=copy&pool=1"); code != 409 || !strings.Contains(msg, "ended") {
+		t.Errorf("joining an ended pool: %d %q", code, msg)
+	}
+}
+
+func TestTheOwnerOfAPoolEndsAndExtendsItAndNobodyElseCan(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPool(t, &st, false))
+	ctx := context.Background()
+	endsAt := func() time.Time {
+		all, _ := st.Services(ctx)
+		for _, s := range all {
+			if s.Name == "trip" {
+				return s.EndsAt
+			}
+		}
+		return time.Time{}
+	}
+	if code, _ := do(t, "POST", app.URL+"/services/pool", "sess=family", nil); code != 400 {
+		t.Errorf("without the CSRF header: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/pool", "", "service=trip&do=end"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/services/pool", "sess=alice", "service=trip&do=end"); code != 409 {
+		t.Errorf("someone else: %d", code)
+	}
+	if !endsAt().After(time.Now()) {
+		t.Fatal("a refused request ended the pool")
+	}
+	if code, msg := postForm(t, app.URL+"/services/pool", "sess=family", "service=trip&do=set&days=30"); code != 204 {
+		t.Fatalf("extend: %d %q", code, msg)
+	}
+	if d := time.Until(endsAt()); d < 29*24*time.Hour || d > 31*24*time.Hour {
+		t.Errorf("ends in %v", d)
+	}
+	if code, _ := postForm(t, app.URL+"/services/pool", "sess=family", "service=trip&do=set&days=0"); code != 204 || !endsAt().IsZero() {
+		t.Errorf("no end: %d %v", code, endsAt())
+	}
+	if code, _ := postForm(t, app.URL+"/services/pool", "sess=family", "service=trip&do=end"); code != 204 || endsAt().After(time.Now()) {
+		t.Errorf("end now: %d %v", code, endsAt())
+	}
+	if code, _ := postForm(t, app.URL+"/services/pool", "sess=family", "service=trip&do=explode"); code == 204 {
+		t.Error("an unknown action")
+	}
+}
+
+func TestTheOfferFormCanMakeAPool(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withHub(t, &st))
+	_, page := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	for _, want := range []string{`name="pool"`, "Event pool: everyone who joins, you too, sends and receives", `name="poolends"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the form lacks %q", want)
+		}
+	}
+}

@@ -23,7 +23,11 @@ import (
 
 // Errors a person can be shown as they are.
 var (
-	ErrNotJoinable   = errors.New("this service does not accept new senders")
+	ErrNotJoinable = errors.New("this service does not accept new senders")
+	// ErrPoolConfirm: joining an event pool needs a yes to what it means.
+	ErrPoolConfirm = errors.New("joining a pool means every photo you tag goes to everyone in it, and everyone's photos come to you: say that you understand")
+	// ErrPoolEnded: the pool has reached its end.
+	ErrPoolEnded     = errors.New("this pool has ended")
 	ErrAlready       = errors.New("you already take part in this service")
 	ErrNotJoined     = errors.New("you have not joined this service from this page")
 	ErrNeedsApproval = errors.New("the owner of this service has not approved you yet")
@@ -152,7 +156,11 @@ func (h *Hub) Reload(ctx context.Context) error {
 	}
 	for _, v := range owned {
 		live[v.ID] = true
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, "", uuid.Nil, "", false)
+		rcvMode := ""
+		if v.Pool {
+			rcvMode = syncer.ModeCopy // the owner's own photos stay with them too
+		}
+		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, rcvMode, uuid.Nil, "", false)
 		if rcv == nil {
 			continue
 		}
@@ -164,6 +172,13 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Quiet:   syncer.Quiet{From: v.QuietFrom, To: v.QuietTo, LargeMB: v.QuietLargeMB},
 			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
 			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
+			Pool: v.Pool, EndsAt: v.EndsAt,
+		}
+		if v.Pool {
+			// everybody sends and everybody receives: the owner's account and each member's are in both lists
+			svc.Mode = syncer.ModeCopy
+			svc.Senders = append([]*syncer.Account{rcv}, extra[v.Name]...)
+			svc.Receivers = append([]*syncer.Account{rcv}, extra[v.Name]...)
 		}
 		if b, ok := bridges[v.Name]; ok {
 			// a service with a receiver on another server never runs without it: the original would be removed
@@ -253,12 +268,28 @@ func keyName(service string) string { return "handoff: " + service }
 // key or record is left behind. If only the workflow cannot be created yet (Immich is still loading
 // its plugins), the person is a member anyway and the workflow is retried in the background.
 func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, service, invite, mode string) error {
+	return h.JoinWith(ctx, sess, user, service, invite, mode, false)
+}
+
+// JoinWith is Join for a person who has been told what joining an event pool means and said yes: every photo they tag goes
+// to everyone in the pool, and everyone's photos come to them. Without that yes a pool refuses (ErrPoolConfirm); for any
+// other service poolConfirmed makes no difference.
+func (h *Hub) JoinWith(ctx context.Context, sess *immich.API, user immich.User, service, invite, mode string, poolConfirmed bool) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
 	svc := h.service(service)
 	if svc == nil || !(svc.AllowJoin || svc.NeedsApproval) {
 		return ErrNotJoinable
+	}
+	if svc.Pool {
+		if svc.Ended(h.now()) {
+			return ErrPoolEnded
+		}
+		if !poolConfirmed {
+			return ErrPoolConfirm
+		}
+		mode = syncer.ModeCopy // nobody's originals are ever removed in a pool
 	}
 	if Takes(svc, user.ID) {
 		return ErrAlready
@@ -287,6 +318,9 @@ func (h *Hub) Join(ctx context.Context, sess *immich.API, user immich.User, serv
 	perms := immich.SenderPermissions
 	if mode == syncer.ModeCopy {
 		perms = immich.SenderPermissionsCopy
+	}
+	if svc.Pool { // the same key sends and receives
+		perms = immich.PoolPermissionsFor(svc.Album != "", h.ReceiverDelete)
 	}
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(service), perms)
 	if err != nil {

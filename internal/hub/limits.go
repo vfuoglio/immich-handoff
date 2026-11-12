@@ -258,3 +258,46 @@ func (h *Hub) NotAccepted(svc *syncer.Service, snd *syncer.Account, n int) {
 		"name", snd.Name, "service", svc.Label())
 	h.event(context.Background(), svc.Label(), snd.UserID, "notaccepted", text)
 }
+
+// SetPoolEnd sets when an event pool stops handing over: after the given number of days from now, or never (0). Ending it
+// now is EndPoolNow. Only the owner may. What was handed over stays; a pool that has ended can be opened again by giving
+// it a new end.
+func (h *Hub) SetPoolEnd(ctx context.Context, owner immich.User, service string, days int) error {
+	if days < 0 || days > 366 {
+		return ErrBadPoolEnd
+	}
+	return h.setPoolEnd(ctx, owner, service, poolEnd(h.now(), days), days == 0)
+}
+
+// EndPoolNow stops an event pool at once.
+func (h *Hub) EndPoolNow(ctx context.Context, owner immich.User, service string) error {
+	return h.setPoolEnd(ctx, owner, service, h.now().Add(-time.Second), false)
+}
+
+func (h *Hub) setPoolEnd(ctx context.Context, owner immich.User, service string, at time.Time, never bool) error {
+	v, err := h.ownedService(ctx, owner, service)
+	if err != nil {
+		return err
+	}
+	if !v.Pool {
+		return ErrNotPool
+	}
+	if err := h.Store.SetServiceEnd(ctx, v.Name, at); err != nil {
+		return err
+	}
+	switch {
+	case never:
+		h.event(ctx, service, owner.ID, "pool", i18n.Pack("{name} set the pool {service} to go on until they end it", "name", owner.Name, "service", service))
+	case !at.After(h.now()):
+		h.event(ctx, service, owner.ID, "pool", i18n.Pack("{name} ended the pool {service}", "name", owner.Name, "service", service))
+	default:
+		h.event(ctx, service, owner.ID, "pool", i18n.Pack("{name} set the pool {service} to end on {when}", "name", owner.Name, "service", service, "when", at))
+	}
+	if err := h.Reload(ctx); err != nil {
+		return err
+	}
+	if at.After(h.now()) || never {
+		h.wake("pool reopened")
+	}
+	return nil
+}

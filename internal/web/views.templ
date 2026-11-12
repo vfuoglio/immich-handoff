@@ -72,6 +72,8 @@ type OfferView struct {
 	Owner  string // empty for services from the configuration
 	State  string // join | request | pending | approved | declined
 	Invite string // the invitation token the person arrived with, if any
+	Pool   bool   // an event pool: everyone sends and receives
+	Ends   string // a pool's end, already written for the reader ("" for none)
 }
 
 // RequestView is someone waiting for the owner's decision.
@@ -111,6 +113,9 @@ type OwnedView struct {
 	BridgeRetry       string // when an unreachable server is tried again
 	BridgeStopped     string // why the service does not run for a reason that is not its receiver key (bridges switched off)
 	Digest            DigestView
+	Pool              bool   // an event pool
+	PoolEnds          string // when it ends, "" for when the owner ends it
+	PoolEnded         bool
 }
 
 // DigestView is a service's weekly digest as its owner sees it.
@@ -716,6 +721,31 @@ templ UnsubscribePage(token string, done bool) {
 	}
 }
 
+// PoolCard is what an owner sees of an event pool: what it is, when it ends, and how to end or extend it.
+templ PoolCard(o OwnedView) {
+	<div class="field pool">
+		<label>{ t(ctx, "Event pool") }</label>
+		<p class="meta">{ t(ctx, "Everyone in it, you too, sends and receives: a photo anyone tags goes to everyone else in the pool, tagged with who took it, and nobody's originals are touched. A person who joins later gets what is shared from then on; one who leaves keeps what they received.") }</p>
+		<p class="meta">
+			if o.PoolEnded {
+				<span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "The pool ended {when}. Nothing more is handed over; what was handed over stays.", "when", o.PoolEnds) }
+			} else if o.PoolEnds != "" {
+				<span class="chip ok">{ t(ctx, "Open") }</span> { t(ctx, "It ends {when}.", "when", o.PoolEnds) }
+			} else {
+				<span class="chip ok">{ t(ctx, "Open") }</span> { t(ctx, "It goes on until you end it.") }
+			}
+		</p>
+		<form class="limits" hx-post="services/pool" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="service" value={ o.Name }/>
+			<label>{ t(ctx, "Let it end after (days from now, empty: never)") } <input name="days" type="number" min="1" max="366" class="narrow"/></label>
+			<button type="submit" name="do" value="set">{ t(ctx, "Save the end") }</button>
+			if !o.PoolEnded {
+				<button type="submit" name="do" value="end" class="danger">{ t(ctx, "End the pool now") }</button>
+			}
+		</form>
+	</div>
+}
+
 // DigestCard is the weekly digest of a service: on or off, the last one and why photos were left out of it.
 templ DigestCard(service string, d DigestView, id string) {
 	<div class="field digest">
@@ -995,10 +1025,22 @@ templ OfferCard(o OfferView) {
 				{ " Offered by " + o.Owner + "." }
 			}
 		</p>
+		if o.Pool {
+			<p class="meta"><span class="chip warn">{ t(ctx, "Event pool") }</span> { t(ctx, "Everyone in it sends and receives: every photo you tag goes to everyone else in the pool, and theirs come to you, tagged with who took them. Your originals stay.") }
+				if o.Ends != "" {
+					{ t(ctx, "It ends {when}.", "when", o.Ends) }
+				}
+			</p>
+		}
 		if o.State == "join" || o.State == "approved" || o.State == "request" {
 			<p class="row">
 				switch o.State {
 					case "join", "approved":
+						if o.Pool {
+							<button class="primary" hx-post="join" hx-vals={ valsJoinPool(o.Name, o.Invite) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ poolConfirm(ctx, o.Name, o.Tag, o.Ends) } data-confirm-title={ t(ctx, "Join the pool {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join the pool") }>
+								{ t(ctx, "Join the pool") }
+							</button>
+						} else {
 						<span class="meta q">{ t(ctx, "What should happen to your originals?") }</span>
 						<button class="primary" hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "copy") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, true) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
 							{ joinLabel(ctx, o.State, true) }
@@ -1006,6 +1048,7 @@ templ OfferCard(o OfferView) {
 						<button hx-post="join" hx-vals={ valsJoin(o.Name, o.Invite, "move") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ joinConfirm(ctx, o.Name, o.Tag, false) } data-confirm-title={ t(ctx, "Join {name}?", "name", o.Name) } data-confirm-label={ t(ctx, "Join") }>
 							{ joinLabel(ctx, o.State, false) }
 						</button>
+						}
 					case "request":
 						<button class="primary" hx-post="ask" hx-vals={ valsJoin(o.Name, o.Invite, "") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask to join") }</button>
 				}
@@ -1112,6 +1155,9 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					<div class="qr" id={ "qr-inv-" + id } hidden></div>
 				</div>
 			}
+			if o.Pool {
+				@PoolCard(o)
+			}
 			@DigestCard(o.Name, o.Digest, id)
 			if o.BridgeStopped != "" {
 				<p class="meta"><span class="chip bad">{ t(ctx, "Stopped") }</span> { o.BridgeStopped }</p>
@@ -1216,6 +1262,11 @@ templ OfferForm(deleteOK bool) {
 					<option value="invite">{ t(ctx, "Only people I send a link to") }</option>
 				</select>
 			</div>
+		</div>
+		<div class="field pool-field">
+			<label><input name="pool" type="checkbox" value="1"/> { t(ctx, "Event pool: everyone who joins, you too, sends and receives") }</label>
+			<small class="meta">{ t(ctx, "For a trip or a party. A photo anyone tags goes to everyone else in the pool, tagged with who took it, and everyone's originals stay where they are. People who join are told so before they do.") }</small>
+			<label for="svc-poolends">{ t(ctx, "The pool ends after (days, empty: when I end it)") } <input id="svc-poolends" name="poolends" type="number" min="1" max="366" class="narrow"/></label>
 		</div>
 		<details class="more">
 			<summary>{ t(ctx, "More options") }</summary>
