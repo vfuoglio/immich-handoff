@@ -1,6 +1,8 @@
 package web_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -364,5 +366,41 @@ func TestTheWallCaptionsAPhotoWithItsPromptAndItsSender(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("caption %d = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestTheOwnerDownloadsTheBoxAsAZipAndNobodyElse(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("1b", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Trip", InboxTag: "inbox/Trip"}))
+	if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/upload", nil, map[string][]byte{"a.jpg": jpegBytes}); code != 200 {
+		t.Fatal("upload")
+	}
+	id := firstBox(t, st)
+	if page := get(t, app.URL, "sess=family"); !strings.Contains(page, `href="dropbox/zip/`+id+`"`) || !strings.Contains(page, "Download every photo as a ZIP") {
+		t.Error("the owner is offered the ZIP")
+	}
+	req, _ := http.NewRequest("GET", app.URL+"/dropbox/zip/"+id, nil)
+	req.Header.Set("Cookie", "sess=family")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	zr, zerr := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "application/zip" || !strings.Contains(res.Header.Get("Content-Disposition"), "Trip photos.zip") || zerr != nil || len(zr.File) != 1 || zr.File[0].Name != "IMG_0042.jpg" {
+		t.Fatalf("zip: %d %v %v", res.StatusCode, res.Header, zerr)
+	}
+	for who, want := range map[string]int{"sess=other": 404, "": 401} {
+		if code, _ := do(t, "GET", app.URL+"/dropbox/zip/"+id, who, nil); code != want {
+			t.Errorf("%q: %d, want %d", who, code, want)
+		}
+	}
+	if code, _ := do(t, "GET", app.URL+"/dropbox/zip/"+id, "sess=family", map[string]string{"Sec-Fetch-Site": "cross-site"}); code != 403 {
+		t.Errorf("started from another site: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/dropbox/zip/"+id, "sess=family", map[string]string{"Sec-Fetch-Site": "same-origin"}); code != 200 {
+		t.Errorf("from this site: %d", code)
 	}
 }

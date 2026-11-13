@@ -130,6 +130,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/message/delete", w.deleteMessage)
 	mux.HandleFunc("GET /dropbox/voice/{id}", w.voiceNote)
 	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
+	mux.HandleFunc("GET /dropbox/zip/{id}", w.dropZip)
 	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
 	mux.HandleFunc("GET /frame/{token}", w.framePage)

@@ -1,6 +1,7 @@
 package hub_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -411,4 +412,138 @@ func TestTheWallShowsWhoSentAPhotoOnlyWhereTheBoxShowsNames(t *testing.T) {
 			t.Errorf("the prompt stays: %+v", items[0])
 		}
 	}
+}
+
+func TestWhatGuestsLeaveWithTheBoxGoesWhenItsRetentionIsOverAndThePhotosStay(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"": jpeg}
+	var told []string
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
+	b := newBox(t, e, hub.DropParams{Name: "Wedding", Closes: time.Now().Add(time.Hour), KeepDays: 7, Gallery: true, GalleryNames: true})
+	keep0 := newBox(t, e, hub.DropParams{Name: "Forever", Closes: time.Now().Add(time.Hour), Gallery: true, GalleryNames: true})
+	secret := hub.NewGuestSecret()
+	for _, box := range []store.DropBox{b, keep0} {
+		e.h.ReceiveDropFileWith(ctx, box.ID, "a.jpg", bytes.NewReader(jpeg), "g", hub.DropMeta{Name: "Ann"})
+		items, _ := e.st.DropAssetsLatest(ctx, box.ID, 1)
+		e.st.ToggleHeart(ctx, box.ID, items[0].ID, hub.GuestKey(secret))
+	}
+	names := func(box store.DropBox) (string, int) {
+		a, _ := e.st.DropAssetsLatest(ctx, box.ID, 1)
+		return a[0].GuestName, e.st.HeartTotal(ctx, box.ID)
+	}
+
+	// the box ends: the summary counts the hearts; nothing is forgotten yet
+	e.st.SetDropSchedule(ctx, b.ID, time.Time{}, time.Now().Add(-time.Hour))
+	e.st.SetDropSchedule(ctx, keep0.ID, time.Time{}, time.Now().Add(-time.Hour))
+	e.h.DropMaintenance(ctx)
+	if n, h := names(b); n != "Ann" || h != 1 {
+		t.Errorf("inside the retention: %q %d", n, h)
+	}
+	found := false
+	for _, m := range told {
+		found = found || strings.Contains(m, "1 hearts given")
+	}
+	if !found {
+		t.Errorf("the closing message counts the hearts: %v", told)
+	}
+
+	// past it: names and hearts go, once; the photo and its place stay; 0 keeps everything
+	e.st.SetDropSchedule(ctx, b.ID, time.Time{}, time.Now().Add(-8*24*time.Hour))
+	e.st.SetDropSchedule(ctx, keep0.ID, time.Time{}, time.Now().Add(-400*24*time.Hour))
+	e.h.DropMaintenance(ctx)
+	e.h.DropMaintenance(ctx)
+	if n, h := names(b); n != "" || h != 0 {
+		t.Errorf("past the retention: %q %d", n, h)
+	}
+	if ids, _ := e.st.DropAssetIDs(ctx, b.ID); len(ids) != 1 {
+		t.Errorf("the photo stays in the box's list: %v", ids)
+	}
+	if n, h := names(keep0); n != "Ann" || h != 1 {
+		t.Errorf("0 days keeps it until the box is revoked: %q %d", n, h)
+	}
+	ev, _ := e.h.DropEvents(ctx, bobID, b.ID, 30)
+	count := 0
+	for _, x := range ev {
+		if strings.Contains(x.Text, "was deleted; the photos are in the library") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("the log says it once: %d", count)
+	}
+
+	// revoking forgets at once
+	e.h.RevokeDropBox(ctx, e.sess, bob, keep0.ID)
+	if n, h := names(keep0); n != "" || h != 0 {
+		t.Errorf("a revoked box keeps nothing guests left: %q %d", n, h)
+	}
+}
+
+func TestTheOwnerDownloadsEveryPhotoOfTheBoxAsOneZip(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"": jpeg}
+	b := newBox(t, e, hub.DropParams{Name: "Trip"})
+	for _, n := range []string{"IMG_1.jpg", "IMG_1.jpg", "IMG_2.jpg"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "g"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	var buf bytes.Buffer
+	if _, err := e.h.ZipPhotos(ctx, e.ann, ann, b.ID, &buf); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host downloading everything: %v", err)
+	}
+	n, err := e.h.ZipPhotos(ctx, e.sess, bob, b.ID, &buf)
+	if err != nil || n != 3 {
+		t.Fatalf("zip: %d %v", n, err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil || len(zr.File) != 3 {
+		t.Fatalf("the archive: %v %d files", err, len(zr.File))
+	}
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		if len(data) != len(jpeg) || f.Method != zip.Store {
+			t.Errorf("%s: %d bytes, method %d", f.Name, len(data), f.Method)
+		}
+	}
+	if strings.Join(names, ",") != "IMG_1.jpg,IMG_1 (2).jpg,IMG_2.jpg" {
+		t.Errorf("names, with the repeat numbered: %v", names)
+	}
+
+	// one ZIP of a box at a time
+	started, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.h.ZipPhotos(ctx, e.sess, bob, b.ID, blockingWriter{started, release})
+		done <- err
+	}()
+	<-started
+	if _, err := e.h.ZipPhotos(ctx, e.sess, bob, b.ID, io.Discard); !errors.Is(err, hub.ErrZipBusy) {
+		t.Errorf("a second ZIP while one is made: %v", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Errorf("the first one finishes: %v", err)
+	}
+	if _, err := e.h.ZipPhotos(ctx, e.sess, bob, b.ID, io.Discard); err != nil {
+		t.Errorf("when it has finished the next may start: %v", err)
+	}
+}
+
+// blockingWriter holds its first write until released, to keep a ZIP in the making.
+type blockingWriter struct{ started, release chan struct{} }
+
+func (w blockingWriter) Write(p []byte) (int, error) {
+	select {
+	case <-w.started:
+	default:
+		close(w.started)
+		<-w.release
+	}
+	return len(p), nil
 }

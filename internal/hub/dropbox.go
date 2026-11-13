@@ -90,7 +90,8 @@ const (
 	dropPendingAge       = 14 * 24 * time.Hour // a file nobody decided on is deleted after this long
 	dropReminder         = 24 * time.Hour      // how long before its end a box reminds
 	dropMaxHosts         = 10
-	notifiedWaiting      = 8 // Notified bit: the host was told that files wait (cleared when none wait any more)
+	notifiedWaiting      = 8  // Notified bit: the host was told that files wait (cleared when none wait any more)
+	notifiedForgot       = 16 // Notified bit: what guests left with the box (names, hearts) was deleted at the end of its retention
 )
 
 // DropParams describe a new drop box. Zero values mean no limit, no expiry and no password.
@@ -354,6 +355,7 @@ func (h *Hub) RevokeDropBox(ctx context.Context, sess *immich.API, owner immich.
 		return err
 	}
 	h.purgePending(ctx, b.ID, "")
+	_ = h.Store.ForgetGuestData(ctx, b.ID)
 	_ = h.Store.SetDropShort(ctx, b.ID, "")
 	_ = h.Store.SetDropCover(ctx, b.ID, "", nil)
 	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} revoked the drop box", "name", owner.Name), "")
@@ -1061,7 +1063,20 @@ func (h *Hub) DropMaintenance(ctx context.Context) {
 		return
 	}
 	for _, b := range boxes {
-		if b.State == store.DropRevoked || b.ExpiresAt.IsZero() {
+		if b.State == store.DropRevoked {
+			continue
+		}
+		// what guests left with the box goes when its retention is over, once
+		if until := b.KeepUntil(); !until.IsZero() && !now.Before(until) {
+			if first, _ := h.Store.ClaimDropNotified(ctx, b.ID, notifiedForgot); first {
+				if err := h.Store.ForgetGuestData(ctx, b.ID); err != nil {
+					h.Log.Warn("drop box: could not delete what guests left", "box", b.Name, "err", err)
+				} else {
+					h.dropEvent(ctx, b.ID, store.DropExpired, i18n.Pack("What guests left with the box (names and hearts) was deleted; the photos are in the library"), "")
+				}
+			}
+		}
+		if b.ExpiresAt.IsZero() {
 			continue
 		}
 		switch {
@@ -1109,6 +1124,9 @@ func (h *Hub) dropClosingText(ctx context.Context, b store.DropBox) string {
 	}
 	if b.Removed > 0 {
 		text += fmt.Sprintf(", %d taken back by guests", b.Removed)
+	}
+	if hearts := h.Store.HeartTotal(ctx, b.ID); hearts > 0 {
+		text += fmt.Sprintf(", %d hearts given", hearts)
 	}
 	return text + "."
 }

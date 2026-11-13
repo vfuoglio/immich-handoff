@@ -77,6 +77,7 @@ type Hub struct {
 	hearts      heartGuard                 // when each guest gave hearts in the last hour
 	slots       chan struct{}              // places for downloads of originals (see originals)
 	slotsOnce   sync.Once
+	zipping     sync.Map                // the boxes a ZIP is being made of
 	hlRun       map[string]bool         // boxes whose best-of is being made now
 	digestRun   map[string]bool         // services whose digest is being made now
 	frames      frameCache              // the albums frames last read

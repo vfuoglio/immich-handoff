@@ -2167,6 +2167,10 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 						</ul>
 					}
 				}
+				if b.Owner && b.Files > 0 {
+					<p class="row"><a class="button" href={ templ.SafeURL("dropbox/zip/" + b.ID) } download>{ t(ctx, "Download every photo as a ZIP") }</a></p>
+					<small class="meta">{ t(ctx, "A ZIP of the originals of every photo this box kept, made while you download it, with your own sign-in. Large events take a while.") }</small>
+				}
 				if b.Owner {
 					<details class="more">
 						<summary>{ t(ctx, "Share the photos back with the guests") }</summary>

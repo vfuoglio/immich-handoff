@@ -312,6 +312,7 @@ func (s *Store) PruneDropBoxes(ctx context.Context, cutoff time.Time) error {
 		`DELETE FROM dropbox_messages WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_prompt_counts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_shares WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_hearts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_assets WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_highlights WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_verdicts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
@@ -1078,6 +1079,28 @@ func (s *Store) GuestHearts(ctx context.Context, boxID, guest string, lo, hi int
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// ForgetGuestData deletes what guests left with a box besides their photos: the hearts and the names given with
+// photos, kept and waiting. The photos themselves are in the owner's library and are not touched.
+func (s *Store) ForgetGuestData(ctx context.Context, boxID string) error {
+	for _, q := range []string{
+		`DELETE FROM dropbox_hearts WHERE box_id = ?`,
+		`UPDATE dropbox_assets SET guest_name = '' WHERE box_id = ? AND guest_name <> ''`,
+		`UPDATE dropbox_pending SET guest_name = '' WHERE box_id = ? AND guest_name <> ''`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q, boxID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HeartTotal is how many hearts the photos of a box have been given.
+func (s *Store) HeartTotal(ctx context.Context, boxID string) int {
+	var n int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dropbox_hearts WHERE box_id = ?`, boxID).Scan(&n)
+	return n
 }
 
 // SetDropGallery changes what guests may do with the photos a box kept.

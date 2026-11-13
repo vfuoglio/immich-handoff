@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -535,7 +536,7 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 		}
 		if v.State != "revoked" {
 			if sum, err := w.Hub.Store.DropSummaryOf(ctx, b.ID); err == nil {
-				v.Summary = dropSummaryText(ctx, b, sum)
+				v.Summary = dropSummaryText(ctx, b, sum, w.Hub.Store.HeartTotal(ctx, b.ID))
 			}
 		}
 		if v.Manage && v.State != "revoked" {
@@ -562,11 +563,14 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 }
 
 // dropSummaryText is what a box took, in a sentence: files, guests and the busiest hour.
-func dropSummaryText(ctx context.Context, b store.DropBox, sum store.DropSummary) string {
+func dropSummaryText(ctx context.Context, b store.DropBox, sum store.DropSummary, hearts int) string {
 	text := t(ctx, "{files} from {guests}, {size} in all.", "files", n(ctx, "{n} file", "{n} files", b.Files),
 		"guests", n(ctx, "{n} guest", "{n} guests", sum.Guests), "size", megabytes(b.Bytes))
 	if b.Removed > 0 {
 		text += " " + n(ctx, "{n} file taken back by guests.", "{n} files taken back by guests.", b.Removed)
+	}
+	if hearts > 0 {
+		text += " " + n(ctx, "{n} heart given.", "{n} hearts given.", hearts)
 	}
 	if sum.BusiestFiles > 0 {
 		if h, err := time.Parse("2006-01-02T15", sum.BusiestHour); err == nil {
@@ -1200,6 +1204,41 @@ func (w *Server) exportGuestBook(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Content-Disposition", `attachment; filename="guest-book.zip"`)
 	rw.Header().Set("Cache-Control", "private, no-store")
 	rw.Write(buf.Bytes())
+}
+
+// dropZip streams every photo the box kept, as originals, in one ZIP, to the owner. It is made with the owner's own
+// session, so the box's key needs no new permission.
+func (w *Server) dropZip(rw http.ResponseWriter, r *http.Request) {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		http.Error(rw, "not from another site", http.StatusForbidden) // a page of another site cannot start a large download
+		return
+	}
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	b, err := w.Hub.DropBoxAccess(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil || b.OwnerID != me.user.ID {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", "application/zip")
+	rw.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": b.Name + " photos.zip"}))
+	rw.Header().Set("Cache-Control", "private, no-store")
+	n, err := w.Hub.ZipPhotos(r.Context(), me.sess, me.user, b.ID, rw)
+	switch {
+	case errors.Is(err, hub.ErrZipBusy):
+		rw.Header().Del("Content-Disposition")
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(rw, t(r.Context(), err.Error()), http.StatusConflict)
+	case err != nil:
+		w.Log.Warn("drop box zip failed", "box", b.Name, "photos", n, "err", err) // the download is cut short; the browser shows it as failed
+	}
 }
 
 func (w *Server) shareDropBox(rw http.ResponseWriter, r *http.Request) {
