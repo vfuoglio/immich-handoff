@@ -190,8 +190,8 @@ h2 {
 }
 p.lead { color: var(--muted); margin: 0 0 1.2rem; max-width: 56ch; }
 /* each view opens with a centred headline, as a calm hero */
-.view > h1 { text-align: center; margin-top: 2.4rem; font-size: clamp(2.2rem, 6.2vw, 3.8rem); }
-.view > p.lead { text-align: center; margin-inline: auto; }
+.view > h1, main > h1 { text-align: center; margin-top: 2.4rem; font-size: clamp(2.2rem, 6.2vw, 3.8rem); }
+.view > p.lead, main > p.lead { text-align: center; margin-inline: auto; }
 
 /* surfaces */
 .card {
