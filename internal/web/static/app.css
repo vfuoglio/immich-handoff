@@ -428,13 +428,14 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .lane[data-state="capped"] .lane-ring { --ring: var(--warn); }
 .lane[data-state="broken"] .lane-ring { --ring: var(--bad); }
 .lane .avatar { background: linear-gradient(140deg, hsl(var(--h) 85% 68%), hsl(calc(var(--h) + 50) 75% 52%)); }
-.track { position: relative; height: 56px; min-width: 0; }
+.track { position: relative; height: 56px; min-width: 0; container-type: inline-size; }
 .track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 55%, var(--border)) 50%, transparent 0) 0 0 / 16px 2px; }
-/* the dashes crawl in the direction the photos go, while the lane is flowing */
-.lane[data-state="flow"] .track::before { animation: crawl-in 1.1s linear infinite; }
-.stage[data-dir="out"] .lane[data-state="flow"] .track::before { animation-name: crawl-out; }
-@keyframes crawl-in { to { background-position-x: 16px; } }
-@keyframes crawl-out { to { background-position-x: -16px; } }
+/* a glint runs along a flowing lane in the direction the photos go (moved with transform alone, which costs nothing to draw) */
+.lane[data-state="flow"] .track::after { content: ""; position: absolute; left: 0; top: 50%; width: 64px; height: 2px; margin-top: -1px; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: glint-in 2.2s linear infinite; }
+.stage[data-dir="out"] .lane[data-state="flow"] .track::after { animation-name: glint-out; }
+@keyframes glint-in { from { transform: translateX(-64px); } to { transform: translateX(100cqw); } }
+@keyframes glint-out { from { transform: translateX(100cqw); } to { transform: translateX(-64px); } }
 .lane[data-state="broken"] .track::after { content: "\2715"; position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%); color: var(--bad); font-weight: 800; }
 .lane[data-state="capped"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--warn); }
 .lane[data-state="paused"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); }
@@ -571,7 +572,9 @@ details.more[open] > summary::before { content: "\2212"; }
 
 /* the language menu in the bar */
 details.lang { position: relative; margin-left: auto; margin-right: .5rem; }
-details.scheme { position: relative; }
+/* the two menus in the bar open under the bar's right edge, so neither can run off the screen's left edge on a phone */
+header.bar details.lang, header.bar details.scheme { position: static; }
+header.bar .lang-menu, header.bar .scheme-menu { right: .6rem; top: calc(100% + .35rem); margin: 0; }
 details.scheme > summary { list-style: none; cursor: pointer; }
 details.scheme > summary::-webkit-details-marker { display: none; }
 .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: .55rem; vertical-align: -2px; border: 1px solid var(--border); }

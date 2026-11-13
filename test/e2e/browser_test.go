@@ -328,6 +328,9 @@ func TestBrowser(t *testing.T) {
 		ctx := open(t, w.owner, look{})
 		until(t, ctx, "the numbers to be drawn", `document.querySelectorAll('#v-overview .kpi .odo').length > 0`, 10*time.Second)
 		settle(t, ctx, "overview")
+		// the numbers are further down now that the live scene comes first: bring them into the window, where a mouse can reach them
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-overview .kpi').scrollIntoView({block: 'center', behavior: 'instant'})`, nil))
+		time.Sleep(300 * time.Millisecond)
 		box := js[map[string]float64](t, ctx, `(() => { const r = document.querySelector('#v-overview .kpi').getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height}; })()`)
 		leaned := false
 		// a person's mouse arrives from somewhere and moves a little: a few steps toward the card
