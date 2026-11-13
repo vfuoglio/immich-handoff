@@ -575,6 +575,7 @@ details.lang { position: relative; margin-left: auto; margin-right: .5rem; }
 /* the two menus in the bar open under the bar's right edge, so neither can run off the screen's left edge on a phone */
 header.bar details.lang, header.bar details.scheme { position: static; }
 header.bar .lang-menu, header.bar .scheme-menu { right: .6rem; top: calc(100% + .35rem); margin: 0; }
+details:not([open]) > .lang-menu, details:not([open]) > .scheme-menu { display: none; } /* closed means not there at all */
 details.scheme > summary { list-style: none; cursor: pointer; }
 details.scheme > summary::-webkit-details-marker { display: none; }
 .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: .55rem; vertical-align: -2px; border: 1px solid var(--border); }

@@ -294,7 +294,7 @@ func TestBrowser(t *testing.T) {
 		}
 	})
 
-	t.Run("the Overview: needs you, the week, the guide, the live scene at the bottom", func(t *testing.T) {
+	t.Run("the Overview: the live scene, needs you, the week, the guide", func(t *testing.T) {
 		ctx := open(t, w.owner, look{})
 		if got := js[string](t, ctx, `document.querySelector('#v-overview h1').textContent`); got != "Hello, alice. One thing needs you." {
 			t.Errorf("heading: %q", got)
