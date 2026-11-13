@@ -184,6 +184,7 @@ interface Stage {
   lanes: Lane[];
   counter: HTMLElement;
   landed: HTMLElement;
+  out: boolean; // the person sends here: tokens fly from the right edge to the left, away from "You"
 }
 
 /** How many photos arrived at each service's gate while the page was open; kept across refreshes of the scene. */
@@ -215,7 +216,7 @@ function readStages(root: HTMLElement): Stage[] {
       if (state === "capped") flags.capped = true;
       lanes.push({ el: laneEl, sender: laneEl.dataset["sender"] ?? "", flags, label, track, tokens: 0 });
     });
-    stages.push({ el, service, lanes, counter, landed });
+    stages.push({ el, service, lanes, counter, landed, out: el.dataset["dir"] === "out" });
   });
   return stages;
 }
@@ -244,6 +245,12 @@ function land(stage: Stage, n: number, hue: number): void {
   const chip = document.createElement("i");
   chip.className = `t${hue}`;
   stage.landed.prepend(chip);
+  // a ring spreads from the gate where photos land
+  const gate = stage.el.querySelector<HTMLElement>(".gate");
+  if (gate && !reduced() && !document.hidden) {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#98a6ff";
+    gate.animate([{ boxShadow: `0 0 0 0 ${accent}` }, { boxShadow: "0 0 0 22px transparent" }], { duration: 900, easing: "ease-out" });
+  }
   while (stage.landed.children.length > 5) stage.landed.lastElementChild?.remove();
 }
 
@@ -258,18 +265,19 @@ function fly(stage: Stage, lane: Lane, count: number, outcome: "handed" | "refus
       continue;
     }
     const token = document.createElement("span");
-    token.className = `token t${hue}`;
+    token.className = `token t${hue}${stage.out ? " out" : ""}`;
     token.setAttribute("aria-hidden", "true");
     lane.track.appendChild(token);
     lane.tokens++;
     tokensInFlight++;
     const width = Math.max(0, lane.track.clientWidth - 40);
     const stop = outcome === "failed" ? width * 0.55 : outcome === "refused" ? width * 0.8 : width + 14;
+    const dir = stage.out ? -1 : 1; // a token that leaves "You" at the right edge moves toward the left
     const frames: Keyframe[] = [
       { transform: "translateX(0) scale(.6)", opacity: 0 },
-      { transform: `translateX(${width * 0.08}px) scale(1)`, opacity: 1, offset: 0.12 },
-      { transform: `translateX(${stop}px) scale(1)`, opacity: 1, offset: 0.9 },
-      { transform: `translateX(${outcome === "handed" ? stop + 24 : outcome === "refused" ? stop * 0.5 : stop}px) scale(${outcome === "failed" ? 0.2 : 0.5})`, opacity: 0 },
+      { transform: `translateX(${dir * width * 0.08}px) scale(1)`, opacity: 1, offset: 0.12 },
+      { transform: `translateX(${dir * stop}px) scale(1)`, opacity: 1, offset: 0.9 },
+      { transform: `translateX(${dir * (outcome === "handed" ? stop + 24 : outcome === "refused" ? stop * 0.5 : stop)}px) scale(${outcome === "failed" ? 0.2 : 0.5})`, opacity: 0 },
     ];
     const run = token.animate(frames, { duration: 1500 + i * 180, delay: i * 140, easing: "cubic-bezier(.45,.05,.3,1)", fill: "backwards" });
     const done = (): void => {

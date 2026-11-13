@@ -502,6 +502,14 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 // RowCount is how many service rows the page shows; with exactly one it starts open.
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
 
+// sceneDir is which way a stage's photos fly: "in" toward the person (they receive or offer), "out" away from them (they send).
+func sceneDir(s SceneStage) string {
+	if s.Out {
+		return "out"
+	}
+	return "in"
+}
+
 func laneLabel(ctx context.Context, l SceneLane) string {
 	switch l.State {
 	case "broken":
@@ -534,7 +542,7 @@ func sceneOf(ctx context.Context, d *DashboardData, current []*syncer.Service) [
 			lane.State = "capped"
 		}
 		if lane.Name != "" {
-			out = append(out, SceneStage{Service: s.Name, Where: n(ctx, "{n} receiver receiving", "{n} receivers receiving", s.To), Lanes: []SceneLane{lane}})
+			out = append(out, SceneStage{Service: s.Name, Out: true, Where: n(ctx, "{n} receiver receiving", "{n} receivers receiving", s.To), Lanes: []SceneLane{lane}})
 		}
 	}
 	for _, s := range d.Receiving() {

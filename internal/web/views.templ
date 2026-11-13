@@ -166,6 +166,7 @@ type SceneLane struct {
 type SceneStage struct {
 	Service string
 	Where   string // one line about the receiving side
+	Out     bool   // the person sends here: the photos fly away from them, not toward them
 	Lanes   []SceneLane
 }
 
@@ -1712,7 +1713,7 @@ templ Scene(stages []SceneStage) {
 	<section id="scene" class="scene" hx-get="fragments/scene" hx-trigger="scene:refresh from:body" hx-swap="outerHTML" aria-label={ t(ctx, "Live hand-overs") }>
 		<p class="meta scene-offline" data-offline hidden>{ t(ctx, "Live updates are off for now: the connection to the app dropped. They come back by themselves; the numbers above still refresh when you reload the page.") }</p>
 		for _, st := range stages {
-			<article class="card stage" data-stage data-service={ st.Service }>
+			<article class="card stage" data-stage data-service={ st.Service } data-dir={ sceneDir(st) }>
 				<header>
 					<h3>{ st.Service }</h3>
 					<span class="meta">{ st.Where }</span>

@@ -429,12 +429,29 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .lane[data-state="broken"] .lane-ring { --ring: var(--bad); }
 .lane .avatar { background: linear-gradient(140deg, hsl(var(--h) 85% 68%), hsl(calc(var(--h) + 50) 75% 52%)); }
 .track { position: relative; height: 56px; min-width: 0; }
-.track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: repeating-linear-gradient(90deg, var(--border) 0 8px, transparent 8px 16px); }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 55%, var(--border)) 50%, transparent 0) 0 0 / 16px 2px; }
+/* the dashes crawl in the direction the photos go, while the lane is flowing */
+.lane[data-state="flow"] .track::before { animation: crawl-in 1.1s linear infinite; }
+.stage[data-dir="out"] .lane[data-state="flow"] .track::before { animation-name: crawl-out; }
+@keyframes crawl-in { to { background-position-x: 16px; } }
+@keyframes crawl-out { to { background-position-x: -16px; } }
 .lane[data-state="broken"] .track::after { content: "\2715"; position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%); color: var(--bad); font-weight: 800; }
 .lane[data-state="capped"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--warn); }
 .lane[data-state="paused"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); }
 .token, .landed i { background: radial-gradient(circle at 70% 30%, #fff9 0 7%, transparent 8%), linear-gradient(170deg, hsl(var(--ph) 90% 66%), hsl(calc(var(--ph) + 45) 70% 34%)); border: 1px solid #ffffff55; }
-.token { position: absolute; left: 0; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 11px; box-shadow: 0 8px 20px -6px hsl(var(--ph) 80% 50% / .7); }
+.token { position: absolute; left: 0; top: 50%; width: 38px; height: 38px; margin-top: -19px; border-radius: 11px; box-shadow: 0 0 24px -2px hsl(var(--ph) 90% 60% / .8); }
+/* a glowing trail behind each token */
+.token::before { content: ""; position: absolute; right: 100%; top: 50%; width: 76px; height: 12px; margin-top: -6px; border-radius: 99px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, hsl(var(--ph) 90% 66% / .5)); filter: blur(3px); }
+/* what the person sends is an outline with an arrow, flying the other way, so it is never mistaken for what arrives */
+.token.out { left: auto; right: 0; background: var(--bg); border: 2px solid var(--horizon); box-shadow: 0 0 20px -2px var(--horizon); }
+.token.out::before { right: auto; left: 100%; background: linear-gradient(270deg, transparent, color-mix(in oklab, var(--horizon) 55%, transparent)); }
+.token.out::after { content: "\25C0"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--horizon); font-size: .75rem; }
+/* the person's own gate, where photos arrive or from where they leave, on the side the photos come from or go to */
+.stage[data-dir="out"] .stage-body { grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr); }
+.stage[data-dir="out"] .gate { order: -1; }
+.stage[data-dir="out"] .lane { grid-template-columns: minmax(0, 1fr) minmax(7rem, 11rem); }
+.stage[data-dir="out"] .lane-who { order: 2; flex-direction: row-reverse; text-align: right; }
 .t0 { --ph: 24; } .t1 { --ph: 190; } .t2 { --ph: 265; } .t3 { --ph: 330; } .t4 { --ph: 45; } .t5 { --ph: 150; }
 .gate { position: relative; overflow: hidden; border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
 .gate > * { position: relative; z-index: 1; }
