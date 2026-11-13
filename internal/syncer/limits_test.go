@@ -177,7 +177,11 @@ func TestWaitingPhotosGoWhenTheWindowMovesOn(t *testing.T) {
 		t.Fatalf("held first: %d", r.uploads())
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for r.uploads() == 0 && time.Now().Before(deadline) {
+	// the upload comes before the pass clears the wait, so wait for both
+	for time.Now().Before(deadline) {
+		if _, held := r.s.HeldFor(r.alice); r.uploads() != 0 && !held {
+			break
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if r.uploads() != 1 {
