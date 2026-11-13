@@ -472,6 +472,11 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .stage[data-dir="out"] .gate { order: -1; }
 .stage[data-dir="out"] .lane { grid-template-columns: minmax(0, 1fr) minmax(7rem, 11rem); }
 .stage[data-dir="out"] .lane-who { order: 2; flex-direction: row-reverse; text-align: right; }
+@media (max-width: 640px) { /* on a phone the stage is one column, whichever way the photos fly */
+  .stage[data-dir="out"] .stage-body, .stage[data-dir="out"] .lane { grid-template-columns: minmax(0, 1fr); }
+  .stage[data-dir="out"] .gate { order: 0; }
+  .stage[data-dir="out"] .lane-who { order: 0; flex-direction: row; text-align: left; }
+}
 .t0 { --ph: 24; } .t1 { --ph: 190; } .t2 { --ph: 265; } .t3 { --ph: 330; } .t4 { --ph: 45; } .t5 { --ph: 150; }
 .gate { position: relative; overflow: hidden; border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
 .gate > * { position: relative; z-index: 1; }
