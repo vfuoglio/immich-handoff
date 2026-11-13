@@ -247,7 +247,7 @@ input, select {
   border: 1px solid var(--border); border-radius: 16px; padding: .65rem .85rem; width: 100%;
   transition: border-color .25s, box-shadow .25s;
 }
-select { appearance: none; -webkit-appearance: none; padding-right: 2.4rem; cursor: pointer;
+select { appearance: none; -webkit-appearance: none; padding-right: 2.4rem; cursor: pointer; text-overflow: ellipsis;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 1.3rem) 52%, calc(100% - .95rem) 52%; background-size: .4rem .4rem; background-repeat: no-repeat; }
 /* a checkbox is a switch */
@@ -390,7 +390,12 @@ form.rules small { flex-basis: auto; }
 form.rules input[type=time] { width: 8.5rem; }
 form.rules select { max-width: 100%; }
 form.rules label { white-space: nowrap; }
-@media (max-width: 640px) { form.rules label { white-space: normal; } }
+@media (max-width: 640px) {
+  /* on a phone a label may break into lines and its fields drop under the words, so nothing runs past the box */
+  form.rules label { white-space: normal; flex-wrap: wrap; width: 100%; }
+  form.rules input[type=time], form.rules input.narrow { flex: 1 1 7rem; width: auto; min-width: 0; }
+  form.rules select { width: 100%; }
+}
 @media (max-width: 560px) {
   .svc > summary { grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .svc .chips { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }

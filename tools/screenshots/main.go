@@ -322,7 +322,7 @@ func shots(set, outdir string) {
 		take(shot{name: "palette", who: "bob@test.local", url: appURL, width: desktop, height: 900, fold: true, pause: live,
 			js: `document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true})); window.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}))`}, outdir)
 	case "audit": // every page that is not in the README, in both colour schemes and on a phone, to look at (not for the documentation)
-		openAll := `document.querySelectorAll('details').forEach(d => d.open = true)`
+		openAll := `document.querySelectorAll('main details').forEach(d => d.open = true)`
 		scheme := func(name string) string {
 			return fmt.Sprintf(`localStorage.setItem('handoff-palette','%[1]s'); document.documentElement.dataset.palette='%[1]s'`, name)
 		}
