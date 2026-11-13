@@ -15,76 +15,69 @@
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 100 800; src: url(fonts/jetbrains-mono-cyrillic.woff2) format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
 
 :root {
-  /* palette: light */
-  --bg: #f5f2fd;
-  --surface: #ffffff;
-  --surface-2: #ece8fb;
-  --text: #1d1745;
-  --muted: #5f5a86;
-  --border: #1d174526;
-  --accent: #4250af;
-  --horizon: #e5702b;
-  --magenta: #b23bad;
-  --ok: #14804b;
-  --warn: #9a5a00;
-  --bad: #b3261e;
-  --on-accent: #ffffff;
-  --glow-a: #4250af30;
-  --glow-b: #b23bad22;
-  --glow-c: #e5702b30;
-  --shadow: 0 1px 2px rgb(29 23 69 / .06), 0 18px 40px -26px rgb(29 23 69 / .35);
-  /* aliases used by older rules */
-  --primary: var(--accent);
-  --primary-text: var(--on-accent);
+  color-scheme: light dark; /* follow the browser; the two rules below let the page's own switch decide */
   /* type, space, shape */
   --font-display: "Bricolage Grotesque", "Onest", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --font-body: "Figtree", "Onest", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 22px;
   --radius-sm: 12px;
-  color-scheme: light;
+  --ease: cubic-bezier(.2, .9, .3, 1);
+  --spring: cubic-bezier(.3, 1.5, .5, 1);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d0b20;
-    --surface: #1a1640;
-    --surface-2: #26205a;
-    --text: #f3f0ff;
-    --muted: #a9a3cb;
-    --border: #ffffff22;
-    --accent: #98a6ff;
-    --horizon: #ff9b5e;
-    --magenta: #d860d2;
-    --ok: #66e5a6;
-    --warn: #ffc562;
-    --bad: #ff808a;
-    --on-accent: #0d0b20;
-    --glow-a: #98a6ff4d;
-    --glow-b: #d860d238;
-    --glow-c: #ff9b5e4d;
-    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 24px 50px -30px rgb(0 0 0 / .8);
-    color-scheme: dark;
-  }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* The colour schemes. Each sets the same names, light value first and dark second (light-dark() picks by the variant in
+   force), so everything below is written once. Twilight is the default and what the page falls back to; THEME or a
+   person's own choice puts data-palette on <html>. A drop box's own colour (theme.css) is written to beat these. */
+:root, :root[data-palette="twilight"] {
+  --bg: light-dark(#f5f2fd, #0d0b20);
+  --surface: light-dark(#ffffff, #1a1640);
+  --surface-2: light-dark(#ece8fb, #26205a);
+  --text: light-dark(#1d1745, #f3f0ff);
+  --muted: light-dark(#5f5a86, #a9a3cb);
+  --border: light-dark(#1d174526, #ffffff22);
+  --accent: light-dark(#4250af, #98a6ff);
+  --horizon: light-dark(#e5702b, #ff9b5e);
+  --magenta: light-dark(#b23bad, #d860d2);
+  --ok: light-dark(#14804b, #66e5a6);
+  --warn: light-dark(#9a5a00, #ffc562);
+  --bad: light-dark(#b3261e, #ff808a);
+  --on-accent: light-dark(#ffffff, #0d0b20);
+  --glow-a: light-dark(#4250af30, #98a6ff4d);
+  --glow-b: light-dark(#b23bad22, #d860d238);
+  --glow-c: light-dark(#e5702b30, #ff9b5e4d);
+  --shadow: 0 1px 2px light-dark(rgb(29 23 69 / .06), rgb(0 0 0 / .4)), 0 24px 50px -30px light-dark(rgb(29 23 69 / .35), rgb(0 0 0 / .8));
+  --grad: linear-gradient(100deg, var(--accent), var(--magenta) 58%, var(--horizon));
 }
-:root[data-theme="dark"] {
-  --bg: #0d0b20;
-  --surface: #1a1640;
-  --surface-2: #26205a;
-  --text: #f3f0ff;
-  --muted: #a9a3cb;
-  --border: #ffffff22;
-  --accent: #98a6ff;
-  --horizon: #ff9b5e;
-  --magenta: #d860d2;
-  --ok: #66e5a6;
-  --warn: #ffc562;
-  --bad: #ff808a;
-  --on-accent: #0d0b20;
-  --glow-a: #98a6ff4d;
-  --glow-b: #d860d238;
-  --glow-c: #ff9b5e4d;
-  --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 24px 50px -30px rgb(0 0 0 / .8);
-  color-scheme: dark;
+:root[data-palette="immich"] {
+  --bg: light-dark(#f5f7fd, #07080d);
+  --surface: light-dark(#ffffff, #11131c);
+  --surface-2: light-dark(#eaeefb, #1b1e2b);
+  --text: light-dark(#0f1330, #eef0f8);
+  --muted: light-dark(#5d6690, #8e96b3);
+  --border: light-dark(#1a246026, #ffffff1f);
+  --accent: light-dark(#4250af, #adcbfa);
+  --horizon: light-dark(#8c9bf0, #cfe0ff);
+  --magenta: light-dark(#5b6bd6, #7fa6f0);
+  --ok: light-dark(#14804b, #66e5a6);
+  --warn: light-dark(#9a5a00, #ffc562);
+  --bad: light-dark(#b3261e, #ff808a);
+  --on-accent: light-dark(#ffffff, #06142e);
+  --glow-a: light-dark(#4250af26, #adcbfa33);
+  --glow-b: light-dark(#5b6bd622, #7fa6f022);
+  --glow-c: light-dark(#8c9bf026, #cfe0ff22);
+  --shadow: 0 1px 2px light-dark(rgb(15 19 48 / .06), rgb(0 0 0 / .45)), 0 24px 50px -30px light-dark(rgb(15 19 48 / .3), rgb(0 0 0 / .85));
+  --grad: linear-gradient(100deg, var(--accent), var(--magenta));
+}
+/* names built from the above, so they follow whichever scheme and variant is in force (and a box's own accent) */
+:root {
+  --primary: var(--accent);
+  --primary-text: var(--on-accent);
+  --glass: color-mix(in oklab, var(--surface) 72%, transparent);
+  --field: color-mix(in oklab, var(--surface) 70%, transparent);
+  --spot: color-mix(in oklab, var(--accent) 22%, transparent);
 }
 
 * { box-sizing: border-box; }
@@ -115,49 +108,78 @@ body::before {
   background: radial-gradient(60rem 26rem at calc(50% + (var(--px, .5) - .5) * 24%) 114%, var(--glow-c), transparent 62%);
 }
 a { color: var(--accent); }
-.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1rem 3rem; }
+.wrap { max-width: 56rem; margin: 0 auto; padding: 0 1rem 3rem; }
 
-/* shell: a sticky glass bar with the app icon */
+/* shell: a glass bar with the app icon and the controls; the views are a floating pill in its middle on a wide screen
+   and a bar at the bottom of a phone's screen (the bar is not inside the header because the header's blur would make
+   "fixed" mean "fixed to the header") */
 header.bar {
-  position: sticky; top: .5rem; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  margin: .5rem 0 0; padding: .5rem .6rem .5rem .8rem; border: 1px solid var(--border); border-radius: 20px;
-  background: color-mix(in oklab, var(--surface) 66%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  position: sticky; top: .5rem; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  margin: .5rem 0 0; padding: .45rem .6rem .45rem .8rem; min-height: 56px; border: 1px solid transparent; border-radius: 20px;
+  background: color-mix(in oklab, var(--bg) 42%, transparent); box-shadow: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
 }
 .brand { display: flex; align-items: center; gap: .6rem; font: 700 1.1rem/1 var(--font-display); letter-spacing: -.01em; white-space: nowrap; }
 .brand img { width: 32px; height: 32px; display: block; flex: none; }
 @media (max-width: 640px) { .brand .t { display: none; } }
-/* on a phone the tabs take a row of their own under the icon and the controls, instead of pushing the controls off the edge */
-@media (max-width: 640px) {
-  header.bar { flex-wrap: wrap; row-gap: .45rem; }
-  nav.tabs { order: 3; flex: 1 1 100%; }
-  nav.tabs a { flex: 1; text-align: center; }
+
+nav.tabs {
+  position: fixed; z-index: 31; top: 14px; left: 50%; translate: -50% 0; display: flex; gap: 2px; padding: 5px; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5); backdrop-filter: blur(24px) saturate(1.5);
+}
+nav.tabs a {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: .45rem; padding: .5rem 1.05rem; border-radius: 99px;
+  font-weight: 600; font-size: .9rem; color: var(--muted); text-decoration: none; white-space: nowrap; transition: color .25s;
+}
+nav.tabs a svg { display: none; width: 22px; height: 22px; }
+nav.tabs a:hover { color: var(--text); }
+nav.tabs a[aria-current="page"], nav.tabs a[aria-current="page"]:hover { color: var(--on-accent); }
+/* the gradient that slides under whichever view is showing (tabs.ts says where) */
+nav.tabs .blob {
+  position: absolute; z-index: 0; top: 5px; bottom: 5px; left: var(--bx, 5px); width: var(--bw, 0); border-radius: 99px;
+  background: var(--grad); box-shadow: 0 8px 24px -8px var(--accent); transition: left .55s var(--spring), width .55s var(--spring);
+}
+@media (max-width: 900px) {
+  nav.tabs { top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; right: 12px; translate: none; padding: 6px; border-radius: 28px;
+    box-shadow: 0 24px 50px -14px rgb(0 0 0 / .5); }
+  nav.tabs a { flex: 1; flex-direction: column; justify-content: center; gap: 2px; padding: .5rem .25rem; border-radius: 22px; font-size: .68rem; }
+  nav.tabs a svg { display: block; }
+  nav.tabs .blob { top: 6px; bottom: 6px; }
+  body:has(nav.tabs) .wrap { padding-bottom: 7.5rem; }
 }
 
 /* the three views of the dashboard, chosen by the address's #fragment (theme.js marks the page before it paints) */
-nav.tabs { display: flex; gap: .15rem; padding: .2rem; border-radius: 14px; background: color-mix(in oklab, var(--bg) 45%, transparent); }
-nav.tabs a { padding: .38rem .85rem; border-radius: 11px; font-weight: 600; font-size: .9rem; color: var(--muted); text-decoration: none; }
-nav.tabs a:hover { color: var(--text); }
-nav.tabs a[aria-current="page"] { background: var(--surface-2); color: var(--text); box-shadow: 0 1px 0 var(--border) inset; }
 html.js .view { display: none; }
 html.js[data-view="overview"] #v-overview, html.js[data-view="services"] #v-services, html.js[data-view="activity"] #v-activity { display: block; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
+html.js .view > * { animation: reveal .85s var(--ease) backwards; }
+html.js .view > :nth-child(2) { animation-delay: 55ms; }
+html.js .view > :nth-child(3) { animation-delay: 110ms; }
+html.js .view > :nth-child(4) { animation-delay: 165ms; }
+html.js .view > :nth-child(5) { animation-delay: 220ms; }
+html.js .view > :nth-child(6) { animation-delay: 275ms; }
+html.js .view > :nth-child(7) { animation-delay: 330ms; }
+html.js .view > :nth-child(8) { animation-delay: 385ms; }
+html.js .view > :nth-child(9) { animation-delay: 440ms; }
+html.js .view > :nth-child(n+10) { animation-delay: 500ms; }
+@keyframes reveal { from { opacity: 0; transform: translateY(26px) scale(.985); filter: blur(6px); } }
+
 .who { color: var(--muted); font-size: .9rem; display: flex; align-items: center; gap: .55rem; min-width: 0; }
-.who > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 9rem; }
+.who > span:last-child { display: none; } /* the name: the avatar says it, and the bar has no room for both */
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: none;
   background: linear-gradient(140deg, var(--accent), var(--magenta)); color: var(--on-accent);
   display: inline-grid; place-items: center; font: 700 .9rem var(--font-display);
 }
 .icon-btn {
-  width: 34px; height: 34px; padding: 0; border-radius: 11px; display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 99px; display: inline-grid; place-items: center;
   background: transparent; color: var(--muted); border: 1px solid var(--border);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface-2); }
 .icon-btn svg { width: 18px; height: 18px; display: block; }
 .adminlink { color: var(--accent); font-weight: 600; text-decoration: none; }
 .adminlink:hover { text-decoration: underline; }
-@media (max-width: 520px) { .who > span:last-child { display: none; } }
 
 h1, h2, h3 { font-family: var(--font-display); }
 h1 { font-size: clamp(1.9rem, 5vw, 3rem); line-height: 1.05; letter-spacing: -.03em; font-weight: 800; margin: 2.1rem 0 .5rem; text-wrap: balance; }
@@ -167,14 +189,21 @@ h2 {
   margin: 2rem 0 .75rem;
 }
 p.lead { color: var(--muted); margin: 0 0 1.2rem; max-width: 56ch; }
+/* each view opens with a centred headline, as a calm hero; the Overview adds the date above it */
+.view > .eyebrow { text-align: center; margin: 1.8rem 0 0; font: 600 .74rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); min-height: 1em; }
+.view > .eyebrow + h1 { margin-top: .5rem; }
+.view > h1, main > h1 { text-align: center; margin-top: 2.4rem; font-size: clamp(2.2rem, 6.2vw, 3.8rem); }
+.view > p.lead, main > p.lead { text-align: center; margin-inline: auto; }
 
 /* surfaces */
 .card {
   position: relative; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 1rem 1.15rem; margin: 0 0 .8rem; min-width: 0;
-  background: linear-gradient(160deg, color-mix(in oklab, var(--surface) 78%, transparent), color-mix(in oklab, var(--surface-2) 52%, transparent));
-  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  padding: 1rem 1.15rem; margin: 0 0 .8rem; min-width: 0; --spotc: transparent;
+  background: radial-gradient(380px circle at var(--sx, 50%) var(--sy, 0%), var(--spotc), transparent 62%), var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  transition: border-color .3s, transform .5s var(--ease);
 }
+.card:hover { --spotc: var(--spot); border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .card, header.bar { background: var(--surface); } }
 .card header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .35rem; }
 .card h3 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
@@ -199,25 +228,43 @@ code.tag { font-family: var(--font-mono); background: color-mix(in oklab, var(--
 
 /* controls */
 button, .btn {
-  font: inherit; font-weight: 600; font-size: .92rem; cursor: pointer; border-radius: var(--radius-sm); padding: .55rem 1rem;
+  font: inherit; font-weight: 600; font-size: .92rem; cursor: pointer; border-radius: 99px; padding: .6rem 1.15rem;
   border: 1px solid var(--border); color: var(--text);
   background: color-mix(in oklab, var(--surface-2) 70%, transparent);
-  transition: transform .15s, background .2s, border-color .2s;
+  transition: transform .35s var(--spring), background .2s, border-color .2s, box-shadow .3s;
 }
 button:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
-button.primary { background: linear-gradient(135deg, var(--accent), var(--magenta)); color: var(--on-accent); border-color: transparent; }
+button:active { transform: scale(.96); }
+button.primary { background: var(--grad); color: var(--on-accent); border-color: transparent; box-shadow: 0 10px 28px -12px var(--accent); }
+button.primary:hover { box-shadow: 0 14px 36px -10px var(--accent); }
 button:disabled, button.htmx-request { opacity: .6; cursor: progress; transform: none; }
 :focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 65%, transparent); outline-offset: 2px; border-radius: 8px; }
 
 .field { display: grid; gap: .25rem; margin: .75rem 0; }
 .field label { font-weight: 600; font-size: .9rem; }
 input, select {
-  font: inherit; color: var(--text); background: color-mix(in oklab, var(--surface) 70%, transparent);
-  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .55rem .7rem; width: 100%;
+  font: inherit; color: var(--text); background: var(--field);
+  border: 1px solid var(--border); border-radius: 16px; padding: .65rem .85rem; width: 100%;
+  transition: border-color .25s, box-shadow .25s;
 }
+select { appearance: none; -webkit-appearance: none; padding-right: 2.4rem; cursor: pointer; text-overflow: ellipsis;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 1.3rem) 52%, calc(100% - .95rem) 52%; background-size: .4rem .4rem; background-repeat: no-repeat; }
+/* a checkbox is a switch */
+input[type="checkbox"] { appearance: none; -webkit-appearance: none; flex: none; width: 44px; height: 26px; padding: 0; border-radius: 99px; position: relative;
+  cursor: pointer; vertical-align: middle; background: color-mix(in oklab, var(--muted) 30%, transparent); border: 1px solid var(--border);
+  transition: background .3s, border-color .3s; }
+input[type="checkbox"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .35); transition: left .4s var(--spring), width .2s; }
+input[type="checkbox"]:checked { background: var(--grad); border-color: transparent; }
+input[type="checkbox"]:checked::after { left: 20px; }
+input[type="checkbox"]:active::after { width: 26px; }
+input[type="checkbox"]:checked:active::after { left: 14px; }
+input[type="checkbox"]:disabled { opacity: .5; cursor: not-allowed; }
 input.narrow { width: 6.5rem; }
 input[readonly] { font-family: var(--font-mono); font-size: .85rem; }
-input:focus-visible, select:focus-visible { outline-offset: 0; border-color: var(--accent); }
+input:focus-visible, select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 22%, transparent); }
+input[type="checkbox"]:focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 65%, transparent); outline-offset: 2px; box-shadow: none; }
 
 /* states */
 .notice { border-left: 5px solid var(--accent); }
@@ -263,12 +310,24 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 .count-badge { font: 600 .74rem var(--font-mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: .02rem .5rem; margin-left: .4rem; letter-spacing: 0; }
 .needs { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
 .needs .card, .card.need { margin: 0; }
-.card.need { display: grid; gap: .5rem; padding-left: 1.3rem; overflow: hidden; }
+.card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
+.card.need > b { grid-area: t; }
+.card.need > p.meta { grid-area: m; }
+.card.need > p.row { grid-area: a; flex-wrap: nowrap; justify-content: flex-end; }
+.card.need:not(:has(> p.row)) { grid-template-areas: "t" "m"; grid-template-columns: minmax(0, 1fr); }
+/* a button that a key presses wears the key */
+button[data-key]::after { content: attr(data-key); margin-left: .55rem; padding: 0 .4rem; border-radius: 6px; font: 700 .68rem var(--font-mono); background: color-mix(in oklab, currentColor 16%, transparent); border: 1px solid color-mix(in oklab, currentColor 28%, transparent); border-bottom-width: 2px; }
+@media (pointer: coarse) { button[data-key]::after { display: none; } }
+@media (max-width: 560px) {
+  .card.need { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "a"; }
+  .card.need > p.row { justify-content: stretch; margin-top: .4rem; }
+  .card.need > p.row button { flex: 1; }
+}
 .card.need::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--muted); }
 .card.need.bad::before { background: var(--bad); }
 .card.need.warn::before { background: var(--warn); }
 .card.need.allclear::before { background: var(--ok); }
-.card.need b { font: 700 1rem var(--font-display); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.card.need b { font: 700 1.12rem var(--font-display); letter-spacing: -.01em; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .card.need p { margin: 0; }
 .card.need .row { gap: .5rem; }
 
@@ -331,8 +390,12 @@ form.rules small { flex-basis: auto; }
 form.rules input[type=time] { width: 8.5rem; }
 form.rules select { max-width: 100%; }
 form.rules label { white-space: nowrap; }
-form.rules input[type=checkbox] { width: 1.1rem; height: 1.1rem; flex: none; }
-@media (max-width: 640px) { form.rules label { white-space: normal; } }
+@media (max-width: 640px) {
+  /* on a phone a label may break into lines and its fields drop under the words, so nothing runs past the box */
+  form.rules label { white-space: normal; flex-wrap: wrap; width: 100%; }
+  form.rules input[type=time], form.rules input.narrow { flex: 1 1 7rem; width: auto; min-width: 0; }
+  form.rules select { width: 100%; }
+}
 @media (max-width: 560px) {
   .svc > summary { grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .svc .chips { grid-column: 2 / 4; grid-row: 2; justify-content: flex-start; }
@@ -347,6 +410,13 @@ button.danger:hover { background: color-mix(in oklab, var(--bad) 14%, transparen
 /* the page's own question dialog */
 dialog.confirm { border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; width: min(27rem, calc(100vw - 2rem)); color: var(--text); background: var(--surface); box-shadow: 0 50px 100px -30px #000; }
 dialog.confirm::backdrop { background: color-mix(in oklab, var(--bg) 62%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+dialog.confirm[open], dialog.cmd[open] { animation: pop-in .4s var(--ease); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+@media (max-width: 640px) {
+  dialog.confirm { margin: auto 0 0; width: 100%; max-width: none; border-radius: 28px 28px 0 0; padding-bottom: calc(1.4rem + env(safe-area-inset-bottom)); }
+  dialog.confirm[open] { animation: sheet-up .5s var(--ease); }
+}
+@keyframes sheet-up { from { transform: translateY(100%); } }
 dialog.confirm h3 { margin: 0 0 .5rem; font-size: 1.25rem; letter-spacing: -.01em; }
 dialog.confirm p { margin: 0 0 1.1rem; }
 .confirm-actions { justify-content: flex-end; margin: 0; }
@@ -377,13 +447,36 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .lane[data-state="capped"] .lane-ring { --ring: var(--warn); }
 .lane[data-state="broken"] .lane-ring { --ring: var(--bad); }
 .lane .avatar { background: linear-gradient(140deg, hsl(var(--h) 85% 68%), hsl(calc(var(--h) + 50) 75% 52%)); }
-.track { position: relative; height: 56px; min-width: 0; }
-.track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: repeating-linear-gradient(90deg, var(--border) 0 8px, transparent 8px 16px); }
+.track { position: relative; height: 56px; min-width: 0; container-type: inline-size; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 55%, var(--border)) 50%, transparent 0) 0 0 / 16px 2px; }
+/* a glint runs along a flowing lane in the direction the photos go (moved with transform alone, which costs nothing to draw) */
+.lane[data-state="flow"] .track::after { content: ""; position: absolute; left: 0; top: 50%; width: 64px; height: 2px; margin-top: -1px; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: glint-in 2.2s linear infinite; }
+.stage[data-dir="out"] .lane[data-state="flow"] .track::after { animation-name: glint-out; }
+@keyframes glint-in { from { transform: translateX(-64px); } to { transform: translateX(100cqw); } }
+@keyframes glint-out { from { transform: translateX(100cqw); } to { transform: translateX(-64px); } }
 .lane[data-state="broken"] .track::after { content: "\2715"; position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%); color: var(--bad); font-weight: 800; }
 .lane[data-state="capped"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--warn); }
 .lane[data-state="paused"] .track::after { content: "\23F8"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); }
 .token, .landed i { background: radial-gradient(circle at 70% 30%, #fff9 0 7%, transparent 8%), linear-gradient(170deg, hsl(var(--ph) 90% 66%), hsl(calc(var(--ph) + 45) 70% 34%)); border: 1px solid #ffffff55; }
-.token { position: absolute; left: 0; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 11px; box-shadow: 0 8px 20px -6px hsl(var(--ph) 80% 50% / .7); }
+.token { position: absolute; left: 0; top: 50%; width: 38px; height: 38px; margin-top: -19px; border-radius: 11px; box-shadow: 0 0 24px -2px hsl(var(--ph) 90% 60% / .8); }
+/* a glowing trail behind each token */
+.token::before { content: ""; position: absolute; right: 100%; top: 50%; width: 76px; height: 12px; margin-top: -6px; border-radius: 99px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, hsl(var(--ph) 90% 66% / .5)); filter: blur(3px); }
+/* what the person sends is an outline with an arrow, flying the other way, so it is never mistaken for what arrives */
+.token.out { left: auto; right: 0; background: var(--bg); border: 2px solid var(--horizon); box-shadow: 0 0 20px -2px var(--horizon); }
+.token.out::before { right: auto; left: 100%; background: linear-gradient(270deg, transparent, color-mix(in oklab, var(--horizon) 55%, transparent)); }
+.token.out::after { content: "\25C0"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--horizon); font-size: .75rem; }
+/* the person's own gate, where photos arrive or from where they leave, on the side the photos come from or go to */
+.stage[data-dir="out"] .stage-body { grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr); }
+.stage[data-dir="out"] .gate { order: -1; }
+.stage[data-dir="out"] .lane { grid-template-columns: minmax(0, 1fr) minmax(7rem, 11rem); }
+.stage[data-dir="out"] .lane-who { order: 2; flex-direction: row-reverse; text-align: right; }
+@media (max-width: 640px) { /* on a phone the stage is one column, whichever way the photos fly */
+  .stage[data-dir="out"] .stage-body, .stage[data-dir="out"] .lane { grid-template-columns: minmax(0, 1fr); }
+  .stage[data-dir="out"] .gate { order: 0; }
+  .stage[data-dir="out"] .lane-who { order: 0; flex-direction: row; text-align: left; }
+}
 .t0 { --ph: 24; } .t1 { --ph: 190; } .t2 { --ph: 265; } .t3 { --ph: 330; } .t4 { --ph: 45; } .t5 { --ph: 150; }
 .gate { position: relative; overflow: hidden; border-radius: 20px; padding: .9rem; display: flex; flex-direction: column; justify-content: space-between; gap: .8rem; min-height: 8rem; border: 1px solid var(--border); background: linear-gradient(170deg, color-mix(in oklab, var(--accent) 20%, var(--surface)), color-mix(in oklab, var(--magenta) 16%, var(--surface)) 60%, color-mix(in oklab, var(--horizon) 18%, var(--surface))); }
 .gate > * { position: relative; z-index: 1; }
@@ -419,8 +512,11 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 
 /* header: search, sound */
 .icon-btn.wide { width: auto; padding: 0 .6rem; gap: .45rem; display: inline-flex; align-items: center; font-size: .85rem; font-weight: 600; }
-.kbd { font: 500 .7rem var(--font-mono); color: var(--muted); }
-@media (max-width: 720px) { .icon-btn.wide { display: none; } }
+.kbd { font: 600 .7rem var(--font-mono); color: var(--muted); padding: .08rem .45rem; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 7px; background: var(--glass); }
+#palette { width: 34px; padding: 0; justify-content: center; }
+#palette .lbl, #palette .kbd { display: none; }
+#palette svg { width: 18px; height: 18px; }
+@media (max-width: 720px) { #palette { display: none; } }
 .icon-btn[aria-pressed="false"] .on, .icon-btn[aria-pressed="true"] .off { display: none; }
 #sound[aria-pressed="false"] { color: var(--muted); opacity: .75; }
 
@@ -435,6 +531,15 @@ html[data-fx-tilt="on"] .is-tilting::after { content: ""; position: absolute; in
 .odo > i { display: block; font-style: normal; transition: transform .9s cubic-bezier(.2, .9, .2, 1); }
 .odo > i b { display: block; height: 1em; font-weight: inherit; }
 [data-odo][role="img"] { display: inline-flex; }
+
+/* the search bar under the headline: opens the command palette */
+.cmdbar { display: flex; align-items: center; gap: .8rem; width: 100%; margin: .4rem 0 1.1rem; padding: .85rem 1.1rem; border-radius: 16px; text-align: left;
+  background: var(--glass); border: 1px solid var(--border); color: var(--muted); font-weight: 500; font-size: 1rem;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 20px 50px -34px #000; }
+.cmdbar:hover { transform: none; border-color: color-mix(in oklab, var(--accent) 50%, var(--border)); box-shadow: 0 0 40px -12px var(--accent); }
+.cmdbar svg { width: 18px; height: 18px; flex: none; }
+.cmdbar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .cmdbar .kbd { display: none; } }
 
 /* the command palette */
 dialog.cmd { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0; width: min(34rem, calc(100vw - 2rem)); margin-top: 12vh; overflow: hidden; box-shadow: 0 50px 100px -30px #000; }
@@ -462,8 +567,9 @@ dialog.cmd li small { color: var(--muted); font-family: var(--font-mono); font-s
 .card.notice.tags button.primary { padding: .7rem 1.3rem; font-size: 1rem; }
 
 /* the invitation page */
-.invite-hero { padding-top: 1rem; }
-.invite-hero .lead { max-width: 48ch; }
+.invite-hero { padding-top: 1rem; text-align: center; }
+.invite-hero h1 { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+.invite-hero .lead { max-width: 48ch; margin-inline: auto; }
 .invite-card .card { padding: 1.3rem 1.4rem; border-radius: 28px; }
 .invite-card .card h3 { font-size: 1.5rem; }
 .invite-card .card .row button { padding: .7rem 1.2rem; font-size: 1rem; }
@@ -490,16 +596,26 @@ details.more[open] > summary::before { content: "\2212"; }
 
 /* the language menu in the bar */
 details.lang { position: relative; margin-left: auto; margin-right: .5rem; }
+/* the two menus in the bar open under the bar's right edge, so neither can run off the screen's left edge on a phone */
+header.bar details.lang, header.bar details.scheme { position: static; }
+header.bar .lang-menu, header.bar .scheme-menu { right: .6rem; top: calc(100% + .35rem); margin: 0; }
+details:not([open]) > .lang-menu, details:not([open]) > .scheme-menu { display: none; } /* closed means not there at all */
+details.scheme > summary { list-style: none; cursor: pointer; }
+details.scheme > summary::-webkit-details-marker { display: none; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: .55rem; vertical-align: -2px; border: 1px solid var(--border); }
+.swatch.twilight { background: linear-gradient(135deg, #4250af, #b23bad 55%, #e5702b); }
+.swatch.immich { background: linear-gradient(135deg, #4250af, #adcbfa); }
 details.lang > summary { list-style: none; cursor: pointer; }
 details.lang > summary::-webkit-details-marker { display: none; }
 details.lang > summary.icon-btn.wide { display: inline-flex; }
+@media (min-width: 901px) { .lang-code { display: none; } details.lang > summary.icon-btn.wide { width: 34px; padding: 0; justify-content: center; } }
 .lang-code { font: 600 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
-.lang-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
+.lang-menu, .scheme-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
   border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
-.lang-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
-.lang-menu button:hover { background: var(--surface-2); transform: none; }
-.lang-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
-.lang-menu button[aria-checked="true"]::after { content: " \2713"; }
+.lang-menu button, .scheme-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
+.lang-menu button:hover, .scheme-menu button:hover { background: var(--surface-2); transform: none; }
+.lang-menu button[aria-checked="true"], .scheme-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
+.lang-menu button[aria-checked="true"]::after, .scheme-menu button[aria-checked="true"]::after { content: " \2713"; }
 
 .qr { margin-top: .8rem; }
 .qr img { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }
@@ -508,6 +624,8 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
 
 /* the guest page of a drop box */
+main:has(.drop-form) { max-width: 40rem; margin-inline: auto; }
+.drop-send { width: 100%; padding: .9rem 1.4rem; font-size: 1.05rem; }
 .drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
 .drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius); }
 
@@ -614,32 +732,79 @@ textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7r
 
 footer .version { opacity: .75; white-space: nowrap; }
 
-/* the wall */
+/* the wall and the frame: a dark stage with a soft glow behind the photos (or plain black), a choice of how one photo
+   gives way to the next, a ring for a new arrival and a calm waiting screen. Everything moves with transform and opacity
+   alone and slowly, nothing flashes, a kinder mode (data-lite) is for old hardware, and reduced motion stops it all. */
+html:has(body.wall) { color-scheme: dark; }
 body.wall { background: #000; color: #fff; margin: 0; overflow: hidden; }
 body.wall #glow { display: none; }
-#wall, #frame { position: fixed; inset: 0; background: #000; }
+#wall, #frame { position: fixed; inset: 0; background: #000; overflow: hidden; isolation: isolate; }
 #frame { cursor: none; }
-.wall-stage { position: absolute; inset: 0; }
+#frame:has(.wall-controls.on) { cursor: default; }
+/* the glow: two faint lights drifting for ever, slowly, in the colour scheme */
+#wall::before, #wall::after, #frame::before, #frame::after { content: ""; position: absolute; inset: -12%; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 1.2s ease; will-change: transform; }
+:is(#wall, #frame)[data-bg="glow"]::before, :is(#wall, #frame)[data-bg="glow"]::after { opacity: 1; }
+:is(#wall, #frame)::before { background: radial-gradient(46vmax 36vmax at 22% 28%, color-mix(in oklab, var(--accent) 34%, transparent), transparent 70%); animation: wall-glow-a 40s ease-in-out infinite alternate; }
+:is(#wall, #frame)::after {
+  background: radial-gradient(40vmax 32vmax at 80% 72%, color-mix(in oklab, var(--magenta) 26%, transparent), transparent 70%),
+    radial-gradient(44vmax 24vmax at 55% 108%, color-mix(in oklab, var(--horizon) 24%, transparent), transparent 70%);
+  animation: wall-glow-b 52s ease-in-out infinite alternate;
+}
+@keyframes wall-glow-a { to { transform: translate3d(9%, 7%, 0) scale(1.12); } }
+@keyframes wall-glow-b { to { transform: translate3d(-8%, -6%, 0) scale(1.1); } }
+:is(#wall, #frame)[data-lite]::before, :is(#wall, #frame)[data-lite]::after { animation: none; }
+
+.wall-stage { position: absolute; inset: 0; z-index: 1; }
 .wall-stage figure { margin: 0; }
-.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; display: grid; place-items: center; }
-.wall-stage.single figure.single.in { opacity: 1; }
+.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; display: grid; place-items: center; transition: opacity 1.4s ease, transform 1.4s var(--ease); }
 .wall-stage.single img { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* how a photo comes in and goes out: the fade needs nothing more; the others move a little as they fade */
+.wall-stage[data-fx="slide"].single figure.single { transform: translateX(7%); }
+.wall-stage[data-fx="slide"].single figure.single.out { transform: translateX(-7%); }
+.wall-stage[data-fx="rise"].single figure.single { transform: translateY(5%) scale(.97); }
+.wall-stage[data-fx="rise"].single figure.single.out { transform: translateY(-3%) scale(1.02); }
+.wall-stage.single figure.single.in { opacity: 1; transform: none; }
+/* the zoom drifts for as long as the photo stays (stage.ts passes how long), one way and then the other */
+.wall-stage[data-fx="zoom"].single figure.single img { animation: wall-zoom var(--hold, 10s) linear both; }
+.wall-stage[data-fx="zoom"].single figure.single.alt img { animation-name: wall-zoom-alt; }
+@keyframes wall-zoom { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.2%, -.9%); } }
+@keyframes wall-zoom-alt { from { transform: scale(1.09) translate(1.2%, .9%); } to { transform: scale(1); } }
+:is(#wall, #frame)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
+/* a new arrival is given a moment: a ring of the scheme's light settles round the picture and fades */
+.wall-stage figure.single.fresh::after { content: ""; position: absolute; inset: 1.4vmin; border-radius: 2.4vmin; pointer-events: none; animation: wall-fresh 3.2s ease-out both;
+  box-shadow: inset 0 0 0 .45vmin color-mix(in oklab, var(--accent) 80%, transparent), inset 0 0 7vmin color-mix(in oklab, var(--accent) 55%, transparent); }
+@keyframes wall-fresh { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
 .wall-stage figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 2rem; font-size: clamp(1.1rem, 3vw, 2.4rem); text-align: center; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
 .wall-stage.grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 4px; padding: 4px; }
-.wall-stage.grid figure { position: relative; overflow: hidden; }
+.wall-stage.grid figure { position: relative; overflow: hidden; border-radius: 6px; }
 .wall-stage.grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wall-stage.grid figcaption { font-size: 1rem; padding: .5rem; }
 .wall-stage.collage { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 1.2vmin; padding: 3vmin; }
 .wall-stage.collage figure { position: relative; transform: rotate(var(--tilt, 0deg)); box-shadow: 0 6px 24px rgba(0,0,0,.6); border: 1.2vmin solid #fff; border-bottom-width: 3vmin; }
 .wall-stage.collage img { height: 26vmin; width: auto; max-width: 40vmin; object-fit: cover; display: block; }
 .wall-stage.collage figcaption { position: static; color: #111; background: none; padding: .2rem; font-size: 1rem; }
-.wall-stage figure.arrive { animation: wall-arrive 1.2s ease both; }
-@keyframes wall-arrive { from { opacity: 0; transform: scale(.8) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
-.wall-wait { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2rem; opacity: .6; margin: 0; }
+.wall-stage figure.arrive { animation: wall-arrive 1.3s var(--spring) both; }
+@keyframes wall-arrive { from { opacity: 0; transform: scale(.78) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
+/* waiting for the first photo: a slow breathing ring over the glow, nothing sudden */
+.wall-wait { position: absolute; inset: 0; z-index: 2; display: grid; gap: 1.6rem; place-content: center; justify-items: center; font-size: 2rem; text-align: center; margin: 0; color: color-mix(in oklab, #fff 72%, transparent); }
+.wall-wait::before { content: ""; width: 9rem; height: 9rem; border-radius: 50%; border: 2px solid color-mix(in oklab, var(--accent) 62%, transparent);
+  box-shadow: 0 0 5rem color-mix(in oklab, var(--accent) 35%, transparent), inset 0 0 3rem color-mix(in oklab, var(--accent) 22%, transparent); animation: wall-breathe 6s ease-in-out infinite; }
+@keyframes wall-breathe { 0%, 100% { transform: scale(.9); opacity: .35; } 50% { transform: scale(1.08); opacity: .8; } }
 .wall-wait[hidden] { display: none; }
-.wall-note { position: absolute; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.2rem; background: rgba(20,20,40,.82); font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; }
-.wall-controls { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .5rem; opacity: 0; transition: opacity .4s; }
+/* a message to the host rises in, stays and fades out */
+.wall-note { position: absolute; z-index: 2; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.4rem; background: rgba(14, 12, 34, .78); border: 1px solid rgba(255,255,255,.14);
+  font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; opacity: 0; transform: translateY(2.2rem) scale(.98); transition: opacity .9s ease, transform .9s var(--ease); }
+.wall-note.in { opacity: 1; transform: none; }
+.wall-note[hidden] { display: none; }
+.wall-controls { position: absolute; z-index: 3; top: 1rem; right: 1rem; left: 1rem; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem .8rem; opacity: 0; transition: opacity .4s; }
 .wall-controls.on { opacity: 1; }
-.wall-controls button { background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: .6rem; padding: .4rem .8rem; }
-.wall-controls button[aria-pressed="true"] { background: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .wall-stage figure.arrive { animation: none; } .wall-stage.single figure.single { transition: none; } }
+.wall-controls .grp { display: flex; gap: .2rem; padding: .2rem; border-radius: 99px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); }
+.wall-controls button { background: transparent; color: #fff; border: 0; border-radius: 99px; padding: .4rem .85rem; font-size: .85rem; box-shadow: none; }
+.wall-controls button[aria-pressed="true"] { background: var(--grad); color: var(--on-accent); }
+.wall-controls .wall-full { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); }
+@media (prefers-reduced-motion: reduce) {
+  .wall-stage figure.arrive, .wall-stage figure.single.fresh::after, .wall-wait::before, :is(#wall, #frame)::before, :is(#wall, #frame)::after { animation: none !important; }
+  .wall-stage[data-fx] figure.single img { animation: none !important; }
+  .wall-stage.single figure.single { transform: none !important; transition: opacity .6s ease !important; }
+  .wall-note { transform: none !important; transition: opacity .4s ease !important; }
+}

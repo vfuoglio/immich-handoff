@@ -294,7 +294,7 @@ func TestBrowser(t *testing.T) {
 		}
 	})
 
-	t.Run("the Overview: needs you, the week, the guide, the live scene at the bottom", func(t *testing.T) {
+	t.Run("the Overview: the live scene, needs you, the week, the guide", func(t *testing.T) {
 		ctx := open(t, w.owner, look{})
 		if got := js[string](t, ctx, `document.querySelector('#v-overview h1').textContent`); got != "Hello, alice. One thing needs you." {
 			t.Errorf("heading: %q", got)
@@ -308,14 +308,14 @@ func TestBrowser(t *testing.T) {
 		if !strings.Contains(card["blur"], "blur") || card["radius"] == "0px" {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
-		// the order down the page: needs you, this week, get started, live
+		// the order down the page: live (the stream is the first thing under the headline), needs you, this week, get started
 		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(order, "|") != "Needs you|This week|Get started|Live as it happens" {
+		if strings.Join(order, "|") != "Live as it happens|Needs you|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)
-		if scene["sceneTop"] <= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {
-			t.Errorf("the live scene is at the bottom of the Overview with a lane for bob and a gate: %v", scene)
+		if scene["sceneTop"] >= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {
+			t.Errorf("the live scene is at the top of the Overview, above the guide, with a lane for bob and a gate: %v", scene)
 		}
 		// rolling digits: each number is a column of the ten digits
 		until(t, ctx, "the numbers to be drawn", `document.querySelectorAll('#v-overview .num .odo > i > b').length >= 10`, 10*time.Second)
@@ -328,6 +328,9 @@ func TestBrowser(t *testing.T) {
 		ctx := open(t, w.owner, look{})
 		until(t, ctx, "the numbers to be drawn", `document.querySelectorAll('#v-overview .kpi .odo').length > 0`, 10*time.Second)
 		settle(t, ctx, "overview")
+		// the numbers are further down now that the live scene comes first: bring them into the window, where a mouse can reach them
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-overview .kpi').scrollIntoView({block: 'center', behavior: 'instant'})`, nil))
+		time.Sleep(300 * time.Millisecond)
 		box := js[map[string]float64](t, ctx, `(() => { const r = document.querySelector('#v-overview .kpi').getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height}; })()`)
 		leaned := false
 		// a person's mouse arrives from somewhere and moves a little: a few steps toward the card

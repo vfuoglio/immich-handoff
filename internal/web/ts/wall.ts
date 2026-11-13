@@ -1,7 +1,10 @@
 // The wall of a drop box: a screen shows the box's photos, one after another or as a grid or a collage, and picks up new
 // ones a few seconds after they arrive. It asks the app for what is new now and then (it holds no sign-in, so it cannot
 // listen to the stream the other pages use) and fetches each picture through the app. Nothing here needs more than a
-// browser on a TV.
+// browser on a TV. How one photo gives way to the next, and what is behind them, is the engine in stage.ts, which the
+// frame shares.
+
+import { flip, holdFor, initStage, present } from "./stage.ts";
 
 export interface WallItem {
   id: number;
@@ -62,7 +65,7 @@ export function initWall(): void {
   const photo = root.dataset.photo ?? "";
   const wait = root.querySelector<HTMLElement>(".wall-wait");
   const note = root.querySelector<HTMLElement>(".wall-note");
-  const controls = root.querySelector<HTMLElement>(".wall-controls");
+  initStage(root, stage);
   let items: WallItem[] = [];
   let messages: WallMessage[] = [];
   let cursor = 0;
@@ -86,34 +89,38 @@ export function initWall(): void {
     const tiles = latest(items, mode === "grid" ? 12 : 9);
     const have = new Map(Array.from(stage.children).map((c) => [(c as HTMLElement).dataset.id ?? "", c]));
     const wanted = new Set(tiles.map((t) => String(t.id)));
-    for (const [id, el] of have) if (!wanted.has(id)) el.remove();
-    tiles.forEach((tile, i) => {
-      let el = have.get(String(tile.id)) as HTMLElement | undefined;
-      if (!el) {
-        el = document.createElement("figure");
-        el.dataset.id = String(tile.id);
-        el.append(img(tile.id));
-        if (tile.caption) {
-          const c = document.createElement("figcaption");
-          c.textContent = tile.caption;
-          el.append(c);
+    // the tiles that stay glide to their new places while the new one springs in
+    flip(stage, () => {
+      for (const [id, el] of have) if (!wanted.has(id)) el.remove();
+      tiles.forEach((tile, i) => {
+        let el = have.get(String(tile.id)) as HTMLElement | undefined;
+        if (!el) {
+          el = document.createElement("figure");
+          el.dataset.id = String(tile.id);
+          el.append(img(tile.id));
+          if (tile.caption) {
+            const c = document.createElement("figcaption");
+            c.textContent = tile.caption;
+            el.append(c);
+          }
+          el.classList.add("arrive");
+          stage.append(el);
         }
-        el.classList.add("arrive");
-        stage.append(el);
-      }
-      el.style.order = String(i);
-      if (mode === "collage") el.style.setProperty("--tilt", tiltOf(tile.id) + "deg");
+        el.style.order = String(i);
+        if (mode === "collage") el.style.setProperty("--tilt", tiltOf(tile.id) + "deg");
+      });
     });
   };
 
-  const showSingle = (): void => {
-    if (mode !== "single") return;
+  // shows the next photo and says whether it was a new arrival (which is then given a little longer)
+  const showSingle = (): boolean => {
+    if (mode !== "single") return false;
     const id = nextToShow(items, shown, fresh);
+    const arrival = fresh.includes(id);
     fresh = fresh.filter((f) => f !== id);
-    if (id < 0) return;
+    if (id < 0) return false;
     shown = id;
     const frame = document.createElement("figure");
-    frame.className = "single";
     frame.append(img(id));
     const text = caption(id);
     if (text) {
@@ -121,12 +128,17 @@ export function initWall(): void {
       c.textContent = text;
       frame.append(c);
     }
-    stage.append(frame);
-    requestAnimationFrame(() => frame.classList.add("in"));
-    Array.from(stage.querySelectorAll("figure.single")).slice(0, -1).forEach((old) => {
-      old.classList.remove("in");
-      setTimeout(() => old.remove(), 1500);
-    });
+    present(stage, frame, holdFor(SHOW_MS, arrival), arrival);
+    return arrival;
+  };
+  // one photo after another: each stays SHOW_MS, a new arrival longer; what arrives is shown as soon as it is seen
+  let slide: ReturnType<typeof setTimeout> | undefined;
+  const arm = (ms: number): void => {
+    clearTimeout(slide);
+    slide = setTimeout(() => arm(holdFor(SHOW_MS, showSingle())), ms);
+  };
+  const showNow = (): void => {
+    if (mode === "single") arm(holdFor(SHOW_MS, showSingle()));
   };
 
   let noteIndex = 0;
@@ -136,7 +148,12 @@ export function initWall(): void {
     if (!m) return;
     note.textContent = m.name ? `${m.text} — ${m.name}` : m.text;
     note.hidden = false;
-    setTimeout(() => (note.hidden = true), 8000);
+    void note.offsetWidth;
+    note.classList.add("in"); // it rises in, stays, and fades out
+    setTimeout(() => {
+      note.classList.remove("in");
+      setTimeout(() => (note.hidden = true), 1000);
+    }, 8000);
   };
 
   const poll = (): void => {
@@ -150,7 +167,8 @@ export function initWall(): void {
         if (before > 0) fresh.push(...incoming.map((i) => i.id)); // what arrives after the first look is shown at once
         messages = data.messages ?? [];
         draw();
-        if (before === 0 && items.length > 0) showSingle();
+        if (before === 0 && items.length > 0) showNow();
+        else if (before > 0 && incoming.length > 0 && mode === "single") showNow(); // a new arrival is shown at once
       })
       .catch(() => {
         /* the screen keeps showing what it has and asks again */
@@ -164,27 +182,13 @@ export function initWall(): void {
       stage.replaceChildren();
       shown = -1;
       draw();
-      showSingle();
+      clearTimeout(slide);
+      showNow();
     }),
   );
-  root.querySelector(".wall-full")?.addEventListener("click", () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void root.requestFullscreen?.();
-  });
-  // the controls are there for the person who set the screen up, and fade when nobody moves the mouse
-  let hide: ReturnType<typeof setTimeout> | undefined;
-  const wake = (): void => {
-    controls?.classList.add("on");
-    clearTimeout(hide);
-    hide = setTimeout(() => controls?.classList.remove("on"), 3000);
-  };
-  document.addEventListener("mousemove", wake);
-  document.addEventListener("touchstart", wake);
-  wake();
 
   draw();
   poll();
   setInterval(poll, POLL_MS);
-  setInterval(showSingle, SHOW_MS);
   setInterval(showMessage, SHOW_MS * 3);
 }

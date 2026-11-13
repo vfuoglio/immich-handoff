@@ -40,6 +40,17 @@ export function initEffects(): void {
     glow.animate([{ opacity: 0 }, { opacity: 0.9, offset: 0.18 }, { opacity: 0 }], { duration: 1100, easing: "ease-out" });
   });
 
+  // a soft light under the pointer inside a card (the style sheet shows it while the pointer is over the card)
+  if (fine) {
+    addEventListener("pointermove", (ev) => {
+      const card = ev.target instanceof Element ? ev.target.closest<HTMLElement>(".card") : null;
+      if (!card) return;
+      const box = card.getBoundingClientRect();
+      card.style.setProperty("--sx", `${(ev.clientX - box.left).toFixed(0)}px`);
+      card.style.setProperty("--sy", `${(ev.clientY - box.top).toFixed(0)}px`);
+    }, { passive: true });
+  }
+
   // cards tilt toward the pointer
   if (!fine) return;
   root.dataset["fxTilt"] = "on";

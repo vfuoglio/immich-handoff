@@ -166,6 +166,7 @@ type SceneLane struct {
 type SceneStage struct {
 	Service string
 	Where   string // one line about the receiving side
+	Out     bool   // the person sends here: the photos fly away from them, not toward them
 	Lanes   []SceneLane
 }
 
@@ -174,6 +175,7 @@ type NeedAction struct {
 	Label, Path, Vals string
 	Confirm           string // asked before it runs; empty: no question
 	Primary           bool
+	Key               string // a key that presses it from the keyboard (shown on the button); empty: none
 }
 
 // NeedView is one thing that waits on the person: a request to approve, a connection to restore, a pause or a
@@ -380,7 +382,7 @@ type DropResultLine struct {
 
 templ Layout(title, user string) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -399,8 +401,8 @@ templ Layout(title, user string) {
 				<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials"/>
 			}
 			<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
-			<meta name="theme-color" content="#f5f2fd" media="(prefers-color-scheme: light)"/>
-			<meta name="theme-color" content="#0d0b20" media="(prefers-color-scheme: dark)"/>
+			<meta name="theme-color" content={ themeColor(paletteOf(ctx), false) } media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content={ themeColor(paletteOf(ctx), true) } media="(prefers-color-scheme: dark)"/>
 			<meta name="apple-mobile-web-app-title" content="Handoff"/>
 			<link rel="stylesheet" href="static/app.css"/>
 			@templ.JSONScript("i18n", clientCatalog(ctx))
@@ -416,13 +418,6 @@ templ Layout(title, user string) {
 						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
-					if hasTabs(ctx) {
-						<nav class="tabs" aria-label={ t(ctx, "Views") }>
-							<a href="#overview" data-view="overview">{ t(ctx, "Overview") }</a>
-							<a href="#services" data-view="services">{ t(ctx, "Services") }</a>
-							<a href="#activity" data-view="activity">{ t(ctx, "Activity") }</a>
-						</nav>
-					}
 					<details class="lang">
 						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>
@@ -440,9 +435,19 @@ templ Layout(title, user string) {
 								<a class="adminlink" href="admin">{ t(ctx, "Admin") }</a>
 							}
 							if hasTabs(ctx) {
-								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }>{ t(ctx, "Search") } <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
+								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="lbl">{ t(ctx, "Search") }</span> <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
 							}
 							<span id="live" class="live off" title={ t(ctx, "Live updates") } role="img" aria-label={ t(ctx, "Live updates") }></span>
+							<details class="scheme">
+								<summary class="icon-btn" aria-label={ t(ctx, "Colour scheme") } title={ t(ctx, "Choose the colour scheme") }>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.6-1.4-.6-2.2 0-.9.7-1.5 1.7-1.5H16a5 5 0 0 0 5-5c0-4.2-4-7.7-9-7.7z"></path><circle cx="7.5" cy="11" r="1" fill="currentColor"></circle><circle cx="10.5" cy="7" r="1" fill="currentColor"></circle><circle cx="15" cy="7.5" r="1" fill="currentColor"></circle></svg>
+								</summary>
+								<ul class="scheme-menu" role="menu">
+									for _, p := range Themes() {
+										<li role="none"><button type="button" role="menuitemradio" data-palette={ p } aria-checked={ checked(paletteOf(ctx) == p) }><span class={ "swatch", p } aria-hidden="true"></span>{ themeLabel(ctx, p) }</button></li>
+									}
+								</ul>
+							</details>
 							<button type="button" class="icon-btn" id="theme" aria-label={ t(ctx, "Dark theme") } title={ t(ctx, "Switch between the light and the dark theme") } aria-pressed="false">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17" ></path><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path></svg>
 							</button>
@@ -456,6 +461,14 @@ templ Layout(title, user string) {
 						</div>
 					}
 				</header>
+				if hasTabs(ctx) {
+					<nav class="tabs" aria-label={ t(ctx, "Views") }>
+						<i class="blob" aria-hidden="true"></i>
+						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
+						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
+						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+					</nav>
+				}
 				<main>
 					{ children... }
 				</main>
@@ -463,7 +476,7 @@ templ Layout(title, user string) {
 					<footer>
 						{ t(ctx, "Photos you tag in Immich are handed over automatically.") }
 						if v := versionOf(ctx); v != "" && user != "" {
-							<span class="version" title={ t(ctx, "The version of Immich Handoff that is running") }>\u00b7 Immich Handoff { v }</span>
+							<span class="version" title={ t(ctx, "The version of Immich Handoff that is running") }>· Immich Handoff { v }</span>
 						}
 					</footer>
 				}
@@ -506,8 +519,14 @@ templ Dashboard(d DashboardData) {
 		}
 		<div id="gated" { gate(d.TagsOff)... }>
 		<section class="view" id="v-overview" aria-label={ t(ctx, "Overview") }>
+			<p class="eyebrow" data-today aria-hidden="true"></p>
 			<h1>{ d.Headline } <em>{ d.Gist }</em></h1>
 			<p class="lead">{ t(ctx, "Everything that was handed over went through; these are the only things that wait on a person. Tag a photo in the Immich app and it is handed over within seconds.") }</p>
+			if len(d.Scene) > 0 {
+				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
+				@Scene(d.Scene)
+			}
+			<button type="button" class="cmdbar" id="cmdbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="grow">{ t(ctx, "Type a command or the name of a service") }</span><span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
 			<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
 			if len(d.Needs) == 0 {
 				<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
@@ -523,10 +542,6 @@ templ Dashboard(d DashboardData) {
 			}
 			if d.Guide != nil {
 				@Guide(*d.Guide)
-			}
-			if len(d.Scene) > 0 {
-				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
-				@Scene(d.Scene)
 			}
 			if d.Mail.Available {
 				@MailCard(d.Mail)
@@ -1599,9 +1614,9 @@ templ NeedCard(n NeedView) {
 			<p class="row">
 				for _, a := range n.Actions {
 					if a.Confirm != "" {
-						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ a.Confirm } data-confirm-title={ a.Label + "?" } data-confirm-label={ a.Label }>{ a.Label }</button>
+						<button class={ primaryIf(a.Primary) } { keyAttr(a.Key)... } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ a.Confirm } data-confirm-title={ a.Label + "?" } data-confirm-label={ a.Label }>{ a.Label }</button>
 					} else {
-						<button class={ primaryIf(a.Primary) } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ a.Label }</button>
+						<button class={ primaryIf(a.Primary) } { keyAttr(a.Key)... } hx-post={ a.Path } hx-vals={ a.Vals } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ a.Label }</button>
 					}
 				}
 			</p>
@@ -1700,7 +1715,7 @@ templ Scene(stages []SceneStage) {
 	<section id="scene" class="scene" hx-get="fragments/scene" hx-trigger="scene:refresh from:body" hx-swap="outerHTML" aria-label={ t(ctx, "Live hand-overs") }>
 		<p class="meta scene-offline" data-offline hidden>{ t(ctx, "Live updates are off for now: the connection to the app dropped. They come back by themselves; the numbers above still refresh when you reload the page.") }</p>
 		for _, st := range stages {
-			<article class="card stage" data-stage data-service={ st.Service }>
+			<article class="card stage" data-stage data-service={ st.Service } data-dir={ sceneDir(st) }>
 				<header>
 					<h3>{ st.Service }</h3>
 					<span class="meta">{ st.Where }</span>
@@ -1992,7 +2007,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					<ul class="plain guestbook">
 						for _, m := range b.Messages {
 							<li>
-								<span class="meta">{ messageAuthor(ctx, m.Name) } \u00b7 { m.When }</span>
+								<span class="meta">{ messageAuthor(ctx, m.Name) } · { m.When }</span>
 								if m.Text != "" {
 									<span>{ m.Text }</span>
 								}
@@ -2113,7 +2128,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					if len(b.OnwardLog) > 0 {
 						<ul class="plain">
 							for _, o := range b.OnwardLog {
-								<li class="meta">{ o.When } \u00b7 { t(ctx, "{n} photos ({what}) to {service}", "n", o.Count, "what", o.Scope, "service", o.Service) } \u00b7 { o.By }</li>
+								<li class="meta">{ o.When } · { t(ctx, "{n} photos ({what}) to {service}", "n", o.Count, "what", o.Scope, "service", o.Service) } · { o.By }</li>
 							}
 						</ul>
 					}
@@ -2164,7 +2179,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 										} else {
 											<span class="thumb-video">{ t(ctx, "video") }</span>
 										}
-										<label><input type="checkbox" name="item" value={ p.ID }/> <span class="meta">{ p.Name } \u00b7 { p.Size }</span></label>
+										<label><input type="checkbox" name="item" value={ p.ID }/> <span class="meta">{ p.Name } · { p.Size }</span></label>
 									</li>
 								}
 							</ul>
@@ -2188,7 +2203,7 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					for _, h := range b.Hosts {
 						<p class="row">
 							<span class="chip">{ h.Name }</span>
-							<span class="meta">{ h.Email } \u00b7 { hostRoleLabel(ctx, h.Manage) }</span>
+							<span class="meta">{ h.Email } · { hostRoleLabel(ctx, h.Manage) }</span>
 							<button hx-post="dropbox/host/remove" hx-vals={ hostVals(b.ID, h.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Remove") }</button>
 						</p>
 					}
@@ -2477,7 +2492,7 @@ templ DropMine(name, token string, files []GuestFileView, msg string) {
 			<ul class="plain">
 				for _, f := range files {
 					<li>
-						<span class="meta">{ f.Name } \u00b7 { f.Size }</span>
+						<span class="meta">{ f.Name } · { f.Size }</span>
 						if f.Waiting {
 							<span class="chip warn">{ t(ctx, "waiting for approval") }</span>
 						}
@@ -2511,10 +2526,35 @@ templ DropCard(user, name, message, link, mailAddress string) {
 	}
 }
 
+// WallControls are the buttons that appear when the pointer moves on a wall or a frame and fade again: how photos are
+// laid out (the wall only), how one gives way to the next, what is behind them, and full screen.
+templ WallControls(modes bool, mode string) {
+	<nav class="wall-controls" aria-label={ t(ctx, "Wall controls") }>
+		if modes {
+			<div class="grp" role="group" aria-label={ t(ctx, "Single photo") + ", " + t(ctx, "Collage") + ", " + t(ctx, "Grid") }>
+				<button type="button" data-mode="single" aria-pressed={ checked(mode == "single") }>{ t(ctx, "Single photo") }</button>
+				<button type="button" data-mode="collage" aria-pressed={ checked(mode == "collage") }>{ t(ctx, "Collage") }</button>
+				<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
+			</div>
+		}
+		<div class="grp" role="group" aria-label={ t(ctx, "Transition") }>
+			<button type="button" data-fx="fade" aria-pressed="true">{ t(ctx, "Fade") }</button>
+			<button type="button" data-fx="zoom" aria-pressed="false">{ t(ctx, "Zoom") }</button>
+			<button type="button" data-fx="slide" aria-pressed="false">{ t(ctx, "Slide") }</button>
+			<button type="button" data-fx="rise" aria-pressed="false">{ t(ctx, "Rise") }</button>
+		</div>
+		<div class="grp" role="group" aria-label={ t(ctx, "Backdrop") }>
+			<button type="button" data-bg="glow" aria-pressed="true">{ t(ctx, "Glow") }</button>
+			<button type="button" data-bg="black" aria-pressed="false">{ t(ctx, "Black") }</button>
+		</div>
+		<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
+	</nav>
+}
+
 // WallPage is the slideshow a screen opens: no sign-in, no bar, only the photos and a few controls that fade away.
 templ WallPage(name, token, mode string) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -2533,12 +2573,7 @@ templ WallPage(name, token, mode string) {
 				<div class="wall-stage" aria-live="polite"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 				<div class="wall-note" hidden></div>
-				<nav class="wall-controls" aria-label={ t(ctx, "Wall controls") }>
-					<button type="button" data-mode="single" aria-pressed={ checked(mode == "single") }>{ t(ctx, "Single photo") }</button>
-					<button type="button" data-mode="collage" aria-pressed={ checked(mode == "collage") }>{ t(ctx, "Collage") }</button>
-					<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
-					<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
-				</nav>
+				@WallControls(true, mode)
 			</main>
 		</body>
 	</html>
@@ -2638,7 +2673,7 @@ templ FrameRow(f FrameView, id string, open bool) {
 // FramePage is the page a frame opens: full screen, no sign-in, no controls.
 templ FramePage(name, token string, seconds int) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -2656,6 +2691,7 @@ templ FramePage(name, token string, seconds int) {
 			<main id="frame" data-feed={ "frame/" + token + "/feed" } data-photo={ "frame/" + token + "/photo/" } data-seconds={ fmt.Sprint(seconds) }>
 				<div class="wall-stage single" aria-live="off"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
+				@WallControls(false, "")
 			</main>
 		</body>
 	</html>

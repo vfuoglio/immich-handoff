@@ -1,7 +1,10 @@
 // A frame: a screen (a photo frame, an old tablet, a TV) shows an album's photos one after another. It holds no sign-in;
 // it asks the app for the list of photos now and then and fetches each picture through the app. It has to run on cheap
 // hardware that may be slow, may sleep and may lose the network, so it is small, it keeps showing what it has, and it
-// asks again with growing pauses when something fails.
+// asks again with growing pauses when something fails. How one photo gives way to the next, and what is behind them, is
+// the engine in stage.ts, which the wall shares.
+
+import { holdFor, initStage, present } from "./stage.ts";
 
 /** The state of the show: which photos were shown in this round, which came in after the page opened, and the last one. */
 export interface Show {
@@ -42,8 +45,6 @@ export function backoff(failures: number): number {
   return Math.min(15 * 60_000, 5_000 * 2 ** Math.max(0, failures - 1));
 }
 
-const FADE_MS = 1500;
-
 export function initFrame(): void {
   const root = document.getElementById("frame");
   const stage = root?.querySelector<HTMLElement>(".wall-stage");
@@ -52,6 +53,7 @@ export function initFrame(): void {
   const photo = root.dataset["photo"] ?? "";
   const hold = Math.max(3, Number(root.dataset["seconds"] ?? "15") || 15) * 1000;
   const wait = root.querySelector<HTMLElement>(".wall-wait");
+  initStage(root, stage);
 
   let items: string[] | null = null;
   let show: Show = { shown: [], fresh: [], last: "" };
@@ -71,31 +73,35 @@ export function initFrame(): void {
       img.src = photo + id;
     });
 
-  const next = async (): Promise<void> => {
-    if (showing || items === null) return;
+  // shows the next photo and says whether it was a new arrival (which is then given a little longer)
+  const next = async (): Promise<boolean> => {
+    if (showing || items === null) return false;
     showing = true;
     try {
       for (let tries = 0; tries < 3; tries++) { // a picture that does not load is skipped
+        const arrival = show.fresh.length > 0;
         const chosen = pick(items, show, Math.random);
-        if (!chosen) return;
+        if (!chosen) return false;
         show = chosen.show;
         const img = await load(chosen.id);
         if (!img) continue;
         const frame = document.createElement("figure");
-        frame.className = "single";
         frame.append(img);
-        stage.append(frame);
-        requestAnimationFrame(() => frame.classList.add("in"));
-        Array.from(stage.querySelectorAll("figure.single")).slice(0, -1).forEach((old) => {
-          old.classList.remove("in");
-          setTimeout(() => old.remove(), FADE_MS + 200);
-        });
-        return;
+        present(stage, frame, holdFor(hold, arrival), arrival);
+        return arrival;
       }
+      return false;
     } finally {
       showing = false;
     }
   };
+  // one photo after another: each stays `hold`, a new arrival longer
+  let slide: ReturnType<typeof setTimeout> | undefined;
+  const arm = (ms: number): void => {
+    clearTimeout(slide);
+    slide = setTimeout(() => void next().then((arrival) => arm(holdFor(hold, arrival))), ms);
+  };
+  const showNow = (): void => void next().then((arrival) => arm(holdFor(hold, arrival)));
 
   const poll = (): void => {
     void fetch(feed, { cache: "no-store" })
@@ -109,7 +115,7 @@ export function initFrame(): void {
         failures = 0;
         refreshMs = Math.max(5, data.refresh ?? 120) * 1000;
         if (wait) wait.hidden = ids.length > 0;
-        if (first || fresh.length > 0) void next();
+        if (first || fresh.length > 0) showNow();
       })
       .catch(() => {
         failures++; // keep showing what is there; ask again later, and less often the longer it fails
@@ -120,7 +126,7 @@ export function initFrame(): void {
       });
   };
 
-  setInterval(() => void next(), hold);
+  arm(hold);
   root.addEventListener("dblclick", () => {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void root.requestFullscreen?.();

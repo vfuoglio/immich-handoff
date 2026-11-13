@@ -31,6 +31,7 @@ type scene struct {
 	clip           string // an XPath: only this element is kept (the crop is written to crop.txt)
 	pad            float64
 	steps          []step
+	prep           func() (string, []step) // sets the scene up and says where to look (and what to do while filming)
 }
 
 type step struct {
@@ -49,9 +50,10 @@ func scenes() map[string]scene {
 		// the command palette, in the dark: open it, type, move down, choose
 		"palette-dark": {name: "palette-dark", who: "bob@test.local", url: appURL, w: 1280, h: 720, dark: true, secs: 9,
 			steps: []step{{1.2, click("#palette")}, {2.4, typeText("#cmd-q", "ser", 280*time.Millisecond)}, {4.2, key("ArrowDown")}, {5.4, key("Enter")}}},
-		// the theme button: light, dark, light
-		"theme-switch": {name: "theme-switch", who: "bob@test.local", url: appURL, w: 1280, h: 720, secs: 8,
-			steps: []step{{1.5, click("#theme")}, {4.8, click("#theme")}}},
+		// the two buttons in the bar: light, dark, light; then the colour scheme menu and the other scheme, in light and dark
+		"theme-switch": {name: "theme-switch", who: "bob@test.local", url: appURL, w: 1280, h: 720, secs: 15,
+			steps: []step{{1.2, click("#theme")}, {3, click("#theme")}, {4.8, click("details.scheme > summary")}, {6, click(`button[data-palette="immich"]`)},
+				{8, click("#theme")}, {10, click("details.scheme > summary")}, {11.2, click(`button[data-palette="twilight"]`)}}},
 		// tabs, and a service row that opens in place, with the cards tilting toward the pointer (light)
 		"services-light": {name: "services-light", who: "bob@test.local", url: appURL, w: 1280, h: 760, secs: 10,
 			steps: []step{{1, click(`nav.tabs a[data-view="services"]`)}, {2.4, click("#v-services details.svc > summary")},
@@ -62,6 +64,8 @@ func scenes() map[string]scene {
 			steps: []step{{0.8, js(`const r=[...document.querySelectorAll('#v-services details.svc')].find(d=>d.querySelector('input.invite')); r.open=true`)},
 				{1.8, js(`document.querySelector('input.invite').scrollIntoView({block:'center', behavior:'smooth'})`)},
 				{3.2, click("button.show-qr")}, {5.6, click("button.copy-message")}}},
+		// the wall on a screen, in the dark: a photo arrives, then the styles and the layouts are tried
+		"wall": {name: "wall", w: 1280, h: 720, dark: true, secs: 36, prep: wallScene},
 		// the page on a phone, in the dark, while photos are handed over
 		"phone-dark": {name: "phone-dark", who: "alice@test.local", url: appURL, w: 390, h: 844, mobile: true, dark: true, secs: 36,
 			steps: []step{{0.2, js(`window.scrollTo(0, 400)`)}, {3, fire}}},
@@ -147,6 +151,11 @@ func film(name, dir string) {
 		}
 		log.Fatalf("unknown scene %q; scenes: %s", name, strings.Join(names, ", "))
 	}
+	if sc.prep != nil {
+		var more []step
+		sc.url, more = sc.prep()
+		sc.steps = append(sc.steps, more...)
+	}
 	os.RemoveAll(dir)
 	os.MkdirAll(dir, 0o755)
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -172,11 +181,13 @@ func film(name, dir string) {
 			return browser.GrantPermissions([]browser.PermissionType{browser.PermissionTypeClipboardReadWrite, browser.PermissionTypeClipboardSanitizedWrite}).Do(ctx)
 		}),
 	}
-	for _, c := range loginCookies(sc.who) {
-		c := c
-		tasks = append(tasks, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(c.Name, c.Value).WithDomain(c.Domain).WithPath(c.Path).WithHTTPOnly(c.HTTPOnly).Do(ctx)
-		}))
+	if sc.who != "" { // the wall needs no sign-in
+		for _, c := range loginCookies(sc.who) {
+			c := c
+			tasks = append(tasks, chromedp.ActionFunc(func(ctx context.Context) error {
+				return network.SetCookie(c.Name, c.Value).WithDomain(c.Domain).WithPath(c.Path).WithHTTPOnly(c.HTTPOnly).Do(ctx)
+			}))
+		}
 	}
 	tasks = append(tasks, chromedp.Navigate(sc.url), chromedp.WaitReady("body"),
 		chromedp.Poll(settled, nil, chromedp.WithPollingTimeout(30*time.Second)), chromedp.Sleep(2500*time.Millisecond))

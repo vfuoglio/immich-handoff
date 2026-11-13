@@ -14,12 +14,21 @@ export function initTabs(): void {
   const tabs = document.querySelectorAll<HTMLAnchorElement>("nav.tabs a[data-view]");
   if (tabs.length === 0) return;
 
+  // the gradient under the showing view: its place and width are handed to the style sheet, which slides it there
+  const nav = document.querySelector<HTMLElement>("nav.tabs");
+  const place = (): void => {
+    const on = document.querySelector<HTMLElement>("nav.tabs a[aria-current]");
+    if (!nav || !on) return;
+    nav.style.setProperty("--bx", `${on.offsetLeft}px`);
+    nav.style.setProperty("--bw", `${on.offsetWidth}px`);
+  };
   const show = (view: string): void => {
     document.documentElement.dataset["view"] = view;
     tabs.forEach((tab) => {
       if (tab.dataset["view"] === view) tab.setAttribute("aria-current", "page");
       else tab.removeAttribute("aria-current");
     });
+    place();
     window.scrollTo(0, 0);
   };
   const change = (view: string): void => {
@@ -29,6 +38,8 @@ export function initTabs(): void {
   };
 
   show(current());
+  addEventListener("resize", place);
+  document.fonts?.ready.then(place); // the labels change width when the font arrives
   tabs.forEach((tab) =>
     tab.addEventListener("click", (e) => {
       e.preventDefault(); // the page has a <base> on some routes, so a bare #fragment link must not navigate

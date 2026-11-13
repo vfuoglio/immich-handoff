@@ -42,20 +42,23 @@ Everyone's phone keeps backing up to their own account, and anyone can hand phot
 
 ## In action
 
-Everything below is recorded from the real page, in the dark theme or the light one.
+Everything below is recorded from the real page, in the dark or the light variant of its two colour schemes.
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/images/arrival-dark.gif" alt="The Overview in the dark theme: six photos are tagged and Waiting jumps to six, then Handed over rolls up to six and the chart climbs while Waiting counts back down to zero"><br><sub><b>Tag, and watch it go.</b> The numbers roll like a departures board.</sub></td>
+    <td width="50%" valign="top"><img src="docs/images/arrival-dark.gif" alt="The Overview in the dark theme: six photos are tagged, and each flies out of the You gate as an outlined square with an arrow while the counter climbs to six"><br><sub><b>Tag, and watch it go.</b> Photos fly along their lane, both ways, and the counters climb.</sub></td>
     <td width="50%" valign="top" align="center"><img src="docs/images/phone-dark.gif" alt="The same on a phone, in the dark theme: the numbers roll and the live lane shows each photo travelling" width="260"><br><sub><b>On a phone,</b> the same page, and it installs like an app.</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/images/palette-dark.gif" alt="The command palette in the dark theme: Ctrl K, typing ser, moving down, and a service opening in place"><br><sub><b>Everything from the keyboard.</b> Ctrl K, type, Enter.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/theme-switch.gif" alt="The Overview switching from the light theme to the dark one and back"><br><sub><b>Light or dark,</b> as you like it; it also follows your phone or browser.</sub></td>
+    <td width="50%" valign="top"><img src="docs/images/theme-switch.gif" alt="The bar's two buttons: the Overview switches to dark and back to light, then the colour scheme menu changes it to the Immich blues, in light and in dark"><br><sub><b>Two colour schemes, light or dark,</b> as you like them; they also follow your phone or browser.</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/images/services-light.gif" alt="The Services tab in the light theme: a service opens in place while the cards tilt toward the pointer, then the Activity timeline"><br><sub><b>Services open in place,</b> and the activity is a timeline.</sub></td>
     <td width="50%" valign="top"><img src="docs/images/invite-qr.gif" alt="An invitation: the link, a QR code that opens, and the button that copies a ready-written message"><br><sub><b>Invite someone</b> with a link, a ready-written message or a QR code.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top" align="center"><img src="docs/images/wall.gif" alt="A wall on a screen: a new photo arrives with a soft ring round it, then the style changes between fade, zoom, slide and rise, and the layout between a grid and a collage" width="520"><br><sub><b>A wall for the party.</b> Photos guests send arrive on a big screen, in the style you choose.</sub></td>
   </tr>
 </table>
 

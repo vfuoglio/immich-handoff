@@ -37,6 +37,8 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `CLEANUP_INTERVAL_MINUTES` | `15` | How often photos filed in an album or past their expiry lose the inbox tag. `0` leaves that to the daily check. See [why a timer](using.md#when-the-inbox-tag-goes-away). |
 | `LOG_LEVEL` | `info` | `debug` also logs incoming events. |
 | `DRY_RUN` | `false` | Log what would happen and change nothing. |
+| `THEME` | `twilight` | The colour scheme the pages start in: `twilight` (the indigo, magenta and orange of the app's icon) or `immich` (calm blues on near-neutral greys, close to Immich's own look). Everyone can pick the other one from the palette button in the bar; their choice is kept in their own browser and wins over this setting. An unknown value is ignored with a warning in the log. |
+| `THEME_MODE` | `auto` | `auto` follows each browser's own light or dark setting; `light` or `dark` makes the pages start in that variant. Both colour schemes have both variants, and the half-moon button in the bar lets each person decide for themselves. |
 
 ## Fixed accounts only
 

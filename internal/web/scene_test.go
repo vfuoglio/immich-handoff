@@ -110,3 +110,18 @@ func TestTheSceneCanBeAskedForAgain(t *testing.T) {
 		t.Errorf("the scene fragment: %d %.200s", code, body)
 	}
 }
+
+// Photos fly toward the person who receives and away from the person who sends, so each stage says which it is and the
+// page can draw the two apart (a glowing square into "You", an outlined one with an arrow out of "You").
+func TestEachStageSaysWhichWayThePhotosFly(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	owner := get(t, app.URL, "sess=family")
+	if !regexp.MustCompile(`data-service="club" data-dir="in"`).MatchString(owner) {
+		t.Errorf("an owner receives, so the photos fly in: %.300s", owner)
+	}
+	sender := get(t, app.URL, "sess=other")
+	if !regexp.MustCompile(`data-stage data-service="[^"]*" data-dir="out"`).MatchString(sender) {
+		t.Errorf("a sender's photos fly out: %.300s", sender)
+	}
+}
