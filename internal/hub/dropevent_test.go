@@ -547,3 +547,54 @@ func (w blockingWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+func TestGuestsHaveAFewZipsAtATimeAndOnlyWhereDownloadsAreAllowed(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"": jpeg}
+	b := newBox(t, e, hub.DropParams{Name: "Trip", Gallery: true, GalleryDownload: true})
+	plain := newBox(t, e, hub.DropParams{Name: "Look only", Gallery: true})
+	e.h.ReceiveDropFile(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "g")
+	gb, _ := e.h.GalleryBox(ctx, b.Token)
+	var buf bytes.Buffer
+	if n, err := e.h.GalleryZip(ctx, gb, "ann", &buf); err != nil || n != 1 {
+		t.Fatalf("zip: %d %v", n, err)
+	}
+	pb, _ := e.h.GalleryBox(ctx, plain.Token)
+	if _, err := e.h.GalleryZip(ctx, pb, "ann", io.Discard); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a box that does not allow downloads: %v", err)
+	}
+
+	// a guest has one at a time; a box has three
+	var releases []chan struct{}
+	var dones []chan error
+	hold := func(who string) {
+		started, release := make(chan struct{}), make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			_, err := e.h.GalleryZip(ctx, gb, who, blockingWriter{started, release})
+			done <- err
+		}()
+		<-started
+		releases, dones = append(releases, release), append(dones, done)
+	}
+	hold("ann")
+	if _, err := e.h.GalleryZip(ctx, gb, "ann", io.Discard); !errors.Is(err, hub.ErrZipBusy) {
+		t.Errorf("a second ZIP for the same guest: %v", err)
+	}
+	hold("bob")
+	hold("eve")
+	if _, err := e.h.GalleryZip(ctx, gb, "zoe", io.Discard); !errors.Is(err, hub.ErrZipBusy) {
+		t.Errorf("a fourth guest at the same moment: %v", err)
+	}
+	for _, r := range releases {
+		close(r)
+	}
+	for _, d := range dones {
+		if err := <-d; err != nil {
+			t.Errorf("a held ZIP: %v", err)
+		}
+	}
+	if _, err := e.h.GalleryZip(ctx, gb, "zoe", io.Discard); err != nil {
+		t.Errorf("when they are done: %v", err)
+	}
+}

@@ -183,3 +183,35 @@ func (w *Server) galleryHeart(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(map[string]any{"hearted": hearted, "hearts": n})
 }
+
+// galleryZip gives a guest every photo of the gallery as originals in one ZIP, if the box allows downloads.
+func (w *Server) galleryZip(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.galleryBox(rw, r)
+	if !ok {
+		return
+	}
+	if !b.GalleryDownload {
+		http.NotFound(rw, r)
+		return
+	}
+	who := hub.DropWho(b.Token, w.clientAddr(r))
+	if s := guestSecret(r, b); s != "" {
+		who = hub.GuestKey(s)
+	}
+	h := rw.Header()
+	h.Set("Content-Type", "application/zip")
+	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": b.Name + " photos.zip"}))
+	h.Set("Cache-Control", "private, no-store")
+	n, err := w.Hub.GalleryZip(r.Context(), b, who, rw)
+	switch {
+	case errors.Is(err, hub.ErrZipBusy):
+		h.Del("Content-Disposition")
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("Retry-After", "30")
+		http.Error(rw, t(r.Context(), "Other ZIPs are being made right now. Try again in a minute."), http.StatusServiceUnavailable)
+	case errors.Is(err, hub.ErrDropGone):
+		http.NotFound(rw, r)
+	case err != nil:
+		w.Log.Warn("gallery zip failed", "box", b.Name, "photos", n, "err", err)
+	}
+}

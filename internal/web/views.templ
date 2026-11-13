@@ -2486,6 +2486,9 @@ templ DropPage(d DropPageView) {
 templ Gallery(token string, download bool) {
 	<section class="gallery" data-gallery data-feed={ "drop/" + token + "/gallery" } data-photo={ "drop/" + token + "/photo/" } data-original={ "drop/" + token + "/original/" } data-heart={ "drop/" + token + "/heart/" } data-download?={ download } data-love={ t(ctx, "Heart") } data-unlove={ t(ctx, "Take the heart back") } data-save={ t(ctx, "Download") } data-by={ t(ctx, "by {name}") } data-open={ t(ctx, "Look at the photo") } data-close={ t(ctx, "Close") }>
 		<h2>{ t(ctx, "The photos so far") }</h2>
+		if download {
+			<p class="row gallery-zip"><a class="button" href={ templ.SafeURL("drop/" + token + "/zip") } download>{ t(ctx, "Download all as a ZIP") }</a> <small class="meta">{ t(ctx, "The originals of all the photos, made while you download, so it can take a while.") }</small></p>
+		}
 		<p class="meta gallery-empty">{ t(ctx, "No photos yet. They appear here by themselves as they are kept.") }</p>
 		<ul class="plain gal" aria-live="polite"></ul>
 		<p class="row"><button type="button" class="gallery-more" hidden>{ t(ctx, "Show more") }</button></p>

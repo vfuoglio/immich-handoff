@@ -119,6 +119,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /drop/{token}/gallery", w.galleryFeed)
 	mux.HandleFunc("GET /drop/{token}/photo/{id}", w.galleryPhoto)
 	mux.HandleFunc("GET /drop/{token}/original/{id}", w.galleryOriginal)
+	mux.HandleFunc("GET /drop/{token}/zip", w.galleryZip)
 	mux.HandleFunc("POST /drop/{token}/heart/{id}", w.galleryHeart)
 	mux.HandleFunc("GET /drop/{token}/mine", w.dropMine)
 	mux.HandleFunc("POST /drop/{token}/mine/delete", w.dropMineDelete)

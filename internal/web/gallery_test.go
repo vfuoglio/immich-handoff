@@ -404,3 +404,40 @@ func TestTheOwnerDownloadsTheBoxAsAZipAndNobodyElse(t *testing.T) {
 		t.Errorf("from this site: %d", code)
 	}
 }
+
+func TestAGuestDownloadsAllThePhotosAsAZipWhereTheBoxAllowsDownloads(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("0d", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Trip", InboxTag: "inbox/Trip", Gallery: true, GalleryDownload: true}))
+	g := guest(t)
+	base := app.URL + "/drop/" + token
+	for _, n := range []string{"a.jpg", "b.jpg"} {
+		if code, _ := sendFiles(t, base+"/upload", nil, map[string][]byte{n: append(jpegBytes, n[0])}); code != 200 {
+			t.Fatal("upload")
+		}
+	}
+	if _, _, page := fetch(t, g, "GET", base); !strings.Contains(page, `href="drop/`+token+`/zip"`) || !strings.Contains(page, "Download all as a ZIP") {
+		t.Error("the page offers the ZIP")
+	}
+	code, hdr, body := fetch(t, g, "GET", base+"/zip")
+	zr, err := zip.NewReader(strings.NewReader(body), int64(len(body)))
+	if code != 200 || hdr.Get("Content-Type") != "application/zip" || !strings.Contains(hdr.Get("Content-Disposition"), "Trip photos.zip") || err != nil || len(zr.File) != 2 {
+		t.Fatalf("zip: %d %v %v", code, hdr.Get("Content-Disposition"), err)
+	}
+	if zr.File[0].Name != "IMG_0042.jpg" || zr.File[1].Name != "IMG_0042 (2).jpg" {
+		t.Errorf("names: %s, %s", zr.File[0].Name, zr.File[1].Name)
+	}
+
+	// no downloads, no ZIP and no button; no gallery, nothing
+	st.SetDropGallery(context.Background(), firstBox(t, st), true, false, false)
+	if code, _, _ := fetch(t, g, "GET", base+"/zip"); code != 404 {
+		t.Errorf("a gallery that does not allow downloads: %d", code)
+	}
+	if _, _, page := fetch(t, g, "GET", base); strings.Contains(page, "Download all as a ZIP") {
+		t.Error("no button without downloads")
+	}
+	st.SetDropGallery(context.Background(), firstBox(t, st), false, false, false)
+	if code, _, _ := fetch(t, g, "GET", base+"/zip"); code != 404 {
+		t.Errorf("no gallery: %d", code)
+	}
+}
