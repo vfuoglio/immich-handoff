@@ -1275,7 +1275,15 @@ func (w *Server) wallFeed(rw http.ResponseWriter, r *http.Request) {
 		Messages []message `json:"messages"`
 	}{Items: []item{}, Messages: []message{}}
 	for _, i := range items {
-		out.Items = append(out.Items, item{i.ID, i.Caption})
+		caption := i.Caption
+		if i.By != "" { // "The cake · by Ann", or "by Ann" for a photo with no prompt
+			by := t(r.Context(), "by {name}", "name", i.By)
+			if caption != "" {
+				caption += " · "
+			}
+			caption += by
+		}
+		out.Items = append(out.Items, item{i.ID, caption})
 	}
 	for _, m := range msgs {
 		out.Messages = append(out.Messages, message{m.Name, m.Text})

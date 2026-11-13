@@ -385,3 +385,30 @@ func TestTheHostIsToldOnceThatFilesWaitAndAgainWhenTheQueueWasEmptied(t *testing
 		t.Errorf("a new file after the queue was emptied tells again: %v", told)
 	}
 }
+
+func TestTheWallShowsWhoSentAPhotoOnlyWhereTheBoxShowsNames(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"": jpeg}
+	named := newBox(t, e, hub.DropParams{Name: "Named", Gallery: true, GalleryNames: true, Prompts: []string{"The cake"}})
+	plain := newBox(t, e, hub.DropParams{Name: "Plain", Gallery: true})
+	for _, b := range []store.DropBox{named, plain} {
+		if _, err := e.h.ReceiveDropFileWith(ctx, b.ID, "a.jpg", bytes.NewReader(jpeg), "g", hub.DropMeta{Name: "Ann", Prompt: "p1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct {
+		b    store.DropBox
+		want string
+	}{{named, "Ann"}, {plain, ""}} {
+		full, _ := e.st.DropBox(ctx, c.b.ID)
+		items, _, err := e.h.WallFeed(ctx, full, 0)
+		if err != nil || len(items) != 1 || items[0].By != c.want {
+			t.Errorf("%s: %+v %v", c.b.Name, items, err)
+		}
+	}
+	if full, _ := e.st.DropBox(ctx, named.ID); true {
+		if items, _, _ := e.h.WallFeed(ctx, full, 0); items[0].Caption != "The cake" {
+			t.Errorf("the prompt stays: %+v", items[0])
+		}
+	}
+}

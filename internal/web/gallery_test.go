@@ -331,3 +331,38 @@ func TestOnlyTheOwnerMakesAndEndsTheModeratorLink(t *testing.T) {
 }
 
 func uuidText() string { return "00000000-0000-0000-0000-000000000000" }
+
+func TestTheWallCaptionsAPhotoWithItsPromptAndItsSender(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("4a", 16)
+	wall := strings.Repeat("d7", 32)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Wedding", InboxTag: "inbox/Wedding", Wall: wall, GalleryNames: true, Gallery: true,
+		Prompts: []store.Prompt{{ID: "p1", Text: "The cake"}}}))
+	send := func(fields map[string]string) {
+		if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/upload", fields, map[string][]byte{"a.jpg": append(jpegBytes, byte(len(fields)))}); code != 200 {
+			t.Fatal("upload")
+		}
+	}
+	send(map[string]string{"guest": "Ann", "prompt": "p1"})
+	send(map[string]string{"guest": "Eve"})
+	send(map[string]string{"prompt": "p1"})
+	code, _, body := fetch(t, guest(t), "GET", app.URL+"/wall/"+wall+"/feed")
+	if code != 200 {
+		t.Fatal(code)
+	}
+	var feed struct {
+		Items []struct {
+			Caption string `json:"caption"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(body), &feed); err != nil || len(feed.Items) != 3 {
+		t.Fatalf("feed: %s %v", body, err)
+	}
+	got := []string{feed.Items[0].Caption, feed.Items[1].Caption, feed.Items[2].Caption}
+	want := []string{"The cake · by Ann", "by Eve", "The cake"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("caption %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

@@ -69,10 +69,12 @@ func (h *Hub) WallBox(ctx context.Context, token string) (store.DropBox, error) 
 	return b, nil
 }
 
-// WallItem is a photo on the wall: its place in the box's list and, if the guest named a prompt, what it is for.
+// WallItem is a photo on the wall: its place in the box's list, what it is for if the guest named a prompt, and who sent
+// it if the box shows names.
 type WallItem struct {
 	ID      int64
 	Caption string
+	By      string // the name the guest gave, when the box shows names
 }
 
 // WallFeed is what a wall page asks for: the photos after the last one it has (or the latest ones, for a page that has
@@ -96,7 +98,11 @@ func (h *Hub) WallFeed(ctx context.Context, b store.DropBox, after int64) ([]Wal
 	}
 	items := make([]WallItem, 0, len(list))
 	for _, a := range list {
-		items = append(items, WallItem{ID: a.ID, Caption: text[a.Prompt]})
+		it := WallItem{ID: a.ID, Caption: text[a.Prompt]}
+		if b.GalleryNames {
+			it.By = a.GuestName
+		}
+		items = append(items, it)
 	}
 	msgs, _ := h.Store.WallMessages(ctx, b.ID, 20)
 	return items, msgs, nil
