@@ -70,6 +70,7 @@ var (
 	ErrDropFull     = store.ErrDropFull
 	ErrDropGone     = store.ErrDropBoxGone
 	ErrDropBusy     = errors.New("too many requests, try again later")
+	ErrBadMark      = errors.New("that is not something a photo can be marked as")
 	ErrDropPassword = errors.New("the password is not right")
 )
 

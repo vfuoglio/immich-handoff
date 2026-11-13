@@ -154,9 +154,15 @@ func (c *wallCache) put(k string, p wallPic) {
 // the box kept (and that was not taken back) can be asked for, by its place in the box's list, never by its id in Immich.
 func (h *Hub) WallImage(ctx context.Context, b store.DropBox, id int64) ([]byte, string, error) {
 	a, err := h.Store.DropAssetByID(ctx, b.ID, id)
-	if err != nil {
+	if err != nil || a.Hidden { // a photo the host hid is not shown
 		return nil, "", ErrDropGone
 	}
+	return h.assetImage(ctx, b, a)
+}
+
+// assetImage fetches the picture of a photo of a box with the box's own key, through a cache shared by everything that
+// shows pictures.
+func (h *Hub) assetImage(ctx context.Context, b store.DropBox, a store.DropAsset) ([]byte, string, error) {
 	key := b.ID + "/" + a.AssetID
 	if p, ok := h.wall.get(key); ok {
 		return p.data, p.kind, nil

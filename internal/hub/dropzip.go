@@ -117,7 +117,7 @@ func (h *Hub) GalleryZip(ctx context.Context, b store.DropBox, who string, w io.
 	if err != nil {
 		return 0, err
 	}
-	ids, err := h.Store.DropAssetIDs(ctx, b.ID)
+	ids, err := h.Store.DropVisibleAssetIDs(ctx, b.ID) // what the host hid is not given
 	if err != nil {
 		return 0, err
 	}

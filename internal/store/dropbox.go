@@ -943,10 +943,11 @@ type DropAsset struct {
 	BoxID, AssetID string
 	Prompt         string
 	GuestName      string // the name the guest gave with it, if any
+	Hidden, Pinned bool   // the host's picks: hidden from guests, always in a best-of
 	At             time.Time
 }
 
-const assetCols = `id, box_id, asset_id, prompt, guest_name, at`
+const assetCols = `id, box_id, asset_id, prompt, guest_name, hidden, pinned, at`
 
 func scanAssets(rows *sql.Rows) ([]DropAsset, error) {
 	defer rows.Close()
@@ -954,7 +955,7 @@ func scanAssets(rows *sql.Rows) ([]DropAsset, error) {
 	for rows.Next() {
 		var a DropAsset
 		var at string
-		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &a.GuestName, &at); err != nil {
+		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &a.GuestName, &a.Hidden, &a.Pinned, &at); err != nil {
 			return nil, err
 		}
 		a.At, _ = time.Parse(time.RFC3339Nano, at)
@@ -981,7 +982,7 @@ func (s *Store) RemoveDropAsset(ctx context.Context, boxID, assetID string) erro
 
 // DropAssetsAfter lists a box's photos newer than a position, oldest first.
 func (s *Store) DropAssetsAfter(ctx context.Context, boxID string, after int64, limit int) ([]DropAsset, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND id > ? ORDER BY id LIMIT ?`, boxID, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND hidden = 0 AND id > ? ORDER BY id LIMIT ?`, boxID, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -993,16 +994,112 @@ func (s *Store) DropAssetsLatest(ctx context.Context, boxID string, limit int) (
 	return s.DropAssetsBefore(ctx, boxID, 0, limit)
 }
 
-// DropAssetsBefore lists a box's photos older than a position (0: from the newest), newest first.
+// DropAssetsBefore lists a box's photos older than a position (0: from the newest), newest first, without the ones the
+// host hid.
 func (s *Store) DropAssetsBefore(ctx context.Context, boxID string, before int64, limit int) ([]DropAsset, error) {
+	return s.dropAssetsBefore(ctx, boxID, before, limit, false)
+}
+
+// DropAssetsAll is DropAssetsBefore with the hidden ones too, for the host who chooses what to hide.
+func (s *Store) DropAssetsAll(ctx context.Context, boxID string, before int64, limit int) ([]DropAsset, error) {
+	return s.dropAssetsBefore(ctx, boxID, before, limit, true)
+}
+
+func (s *Store) dropAssetsBefore(ctx context.Context, boxID string, before int64, limit int, withHidden bool) ([]DropAsset, error) {
 	if before <= 0 {
 		before = 1<<62 - 1
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND id < ? ORDER BY id DESC LIMIT ?`, boxID, before, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND (hidden = 0 OR ?) AND id < ? ORDER BY id DESC LIMIT ?`, boxID, withHidden, before, limit)
 	if err != nil {
 		return nil, err
 	}
 	return scanAssets(rows)
+}
+
+// MarkAsset sets one of the host's picks on a photo of a box: "hidden" or "pinned". A photo that is not the box's is not
+// found.
+func (s *Store) MarkAsset(ctx context.Context, boxID string, id int64, field string, on bool) error {
+	var q string
+	switch field {
+	case "hidden":
+		q = `UPDATE dropbox_assets SET hidden = ? WHERE box_id = ? AND id = ?`
+	case "pinned":
+		q = `UPDATE dropbox_assets SET pinned = ? WHERE box_id = ? AND id = ?`
+	default:
+		return errors.New("store: not a mark")
+	}
+	r, err := s.db.ExecContext(ctx, q, b2i(on), boxID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AssetMarks is the host's picks on a box's photos, by the photo's id in the library (only the ones with a pick).
+func (s *Store) AssetMarks(ctx context.Context, boxID string) (hidden, pinned map[string]bool, err error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, hidden, pinned FROM dropbox_assets WHERE box_id = ? AND (hidden = 1 OR pinned = 1)`, boxID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	hidden, pinned = map[string]bool{}, map[string]bool{}
+	for rows.Next() {
+		var id string
+		var h, p bool
+		if err := rows.Scan(&id, &h, &p); err != nil {
+			return nil, nil, err
+		}
+		if h {
+			hidden[id] = true
+		}
+		if p {
+			pinned[id] = true
+		}
+	}
+	return hidden, pinned, rows.Err()
+}
+
+// LovedAssetIDs is the photos of a box that guests gave hearts or the host pinned, without the hidden ones: the pinned
+// first, then the most hearts, at most limit of them.
+func (s *Store) LovedAssetIDs(ctx context.Context, boxID string, limit int) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT a.asset_id FROM dropbox_assets a
+		LEFT JOIN (SELECT asset_id, COUNT(*) AS c FROM dropbox_hearts WHERE box_id = ? GROUP BY asset_id) h ON h.asset_id = a.id
+		WHERE a.box_id = ? AND a.hidden = 0 AND (a.pinned = 1 OR COALESCE(h.c, 0) > 0)
+		ORDER BY a.pinned DESC, COALESCE(h.c, 0) DESC, a.id LIMIT ?`, boxID, boxID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// DropVisibleAssetIDs is DropAssetIDs without the photos the host hid: what guests may be given.
+func (s *Store) DropVisibleAssetIDs(ctx context.Context, boxID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id FROM dropbox_assets WHERE box_id = ? AND hidden = 0 ORDER BY id`, boxID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // DropAssetByID finds one photo of a box.
@@ -1026,8 +1123,10 @@ func (s *Store) DropAssetByID(ctx context.Context, boxID string, id int64) (Drop
 // ToggleHeart gives a photo of a box one guest's heart, or takes it back if that guest had given it. It says whether the
 // guest now has a heart on the photo and how many hearts it has in all. A photo that is not the box's is not found.
 func (s *Store) ToggleHeart(ctx context.Context, boxID string, asset int64, guest string) (hearted bool, count int, err error) {
-	if _, err := s.DropAssetByID(ctx, boxID, asset); err != nil {
+	if a, err := s.DropAssetByID(ctx, boxID, asset); err != nil {
 		return false, 0, err
+	} else if a.Hidden {
+		return false, 0, ErrNotFound // a hidden photo cannot be hearted
 	}
 	r, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_hearts WHERE box_id = ? AND asset_id = ? AND guest = ?`, boxID, asset, guest)
 	if err != nil {

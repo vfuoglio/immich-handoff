@@ -78,3 +78,74 @@ func (h *Hub) ModDecide(ctx context.Context, b store.DropBox, only []string, app
 	}
 	return h.decide(ctx, full, "", only, approve)
 }
+
+// ModPhoto is a photo the box kept, as the moderator sees it when choosing what to pin or hide.
+type ModPhoto struct {
+	ID             int64
+	Name           string // who sent it, when the box shows names
+	Hearts         int
+	Hidden, Pinned bool
+}
+
+// ModPhotos lists photos the box kept, newest first, hidden ones too, from the one before a position (0: the newest).
+func (h *Hub) ModPhotos(ctx context.Context, b store.DropBox, before int64, limit int) ([]ModPhoto, error) {
+	list, err := h.Store.DropAssetsAll(ctx, b.ID, before, limit)
+	if err != nil || len(list) == 0 {
+		return nil, err
+	}
+	lo, hi := list[0].ID, list[0].ID
+	for _, a := range list {
+		lo, hi = min(lo, a.ID), max(hi, a.ID)
+	}
+	hearts, err := h.Store.HeartCounts(ctx, b.ID, lo, hi)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ModPhoto, 0, len(list))
+	for _, a := range list {
+		p := ModPhoto{ID: a.ID, Hearts: hearts[a.ID], Hidden: a.Hidden, Pinned: a.Pinned}
+		if b.GalleryNames {
+			p.Name = a.GuestName
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// ModImage fetches the picture of one photo of the box for the moderator, hidden ones too. It needs the box's key to be
+// allowed to view pictures, which it is while the box has a gallery or a wall.
+func (h *Hub) ModImage(ctx context.Context, b store.DropBox, id int64) ([]byte, string, error) {
+	a, err := h.Store.DropAssetByID(ctx, b.ID, id)
+	if err != nil {
+		return nil, "", ErrDropGone
+	}
+	full, err := h.Store.DropBox(ctx, b.ID)
+	if err != nil {
+		return nil, "", ErrDropGone
+	}
+	return h.assetImage(ctx, full, a)
+}
+
+// ModMark pins or hides a photo of the box, or takes the pick back: action is "pin", "unpin", "hide" or "show". A
+// pinned photo is always in a best-of; a hidden one is not shown to guests (gallery, wall, ZIP) and is left out of a
+// best-of. Nothing leaves the owner's library.
+func (h *Hub) ModMark(ctx context.Context, b store.DropBox, id int64, action string) error {
+	var field string
+	var on bool
+	switch action {
+	case "pin":
+		field, on = "pinned", true
+	case "unpin":
+		field = "pinned"
+	case "hide":
+		field, on = "hidden", true
+	case "show":
+		field = "hidden"
+	default:
+		return ErrBadMark
+	}
+	if err := h.Store.MarkAsset(ctx, b.ID, id, field, on); err != nil {
+		return ErrDropGone
+	}
+	return nil
+}

@@ -441,3 +441,99 @@ func TestAGuestDownloadsAllThePhotosAsAZipWhereTheBoxAllowsDownloads(t *testing.
 		t.Errorf("no gallery: %d", code)
 	}
 }
+
+func TestAModeratorPinsAndHidesThePhotosTheBoxKept(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("5e", 16)
+	mod := strings.Repeat("a9", 32)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Gala", InboxTag: "inbox/Gala", Gallery: true, GalleryNames: true, ModToken: mod}))
+	g := guest(t)
+	base := app.URL + "/mod/" + mod
+	for i, n := range []string{"a.jpg", "b.jpg"} {
+		if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/upload", map[string]string{"guest": "Ann"}, map[string][]byte{n: append(jpegBytes, byte(i))}); code != 200 {
+			t.Fatal("upload")
+		}
+	}
+	_, _, page := fetch(t, g, "GET", base)
+	for _, want := range []string{"The photos kept", `name="do" value="pin"`, `name="do" value="hide"`, `src="mod/` + mod + `/photo/`, "by Ann"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	photos := regexp.MustCompile(`id="photo-(\d+)"`).FindAllStringSubmatch(page, -1)
+	if len(photos) != 2 {
+		t.Fatalf("photos: %d", len(photos))
+	}
+	first := photos[0][1] // the newest
+	if code, _, pic := fetch(t, g, "GET", base+"/photo/"+first); code != 200 || len(pic) != len(jpegBytes) {
+		t.Errorf("the picture: %d", code)
+	}
+	if code, _, _ := fetch(t, g, "GET", base+"/photo/99999"); code != 404 {
+		t.Errorf("a photo that is not there: %d", code)
+	}
+
+	// hide it: guests no longer see it; the moderator sees it marked, and can show it again
+	code, hdr, _ := postTo(t, g, base+"/mark", "item="+first+"&do=hide")
+	if code != 303 || !strings.HasPrefix(hdr.Get("Location"), "../"+mod) || !strings.HasSuffix(hdr.Get("Location"), "#photo-"+first) {
+		t.Fatalf("hide: %d %v", code, hdr.Get("Location"))
+	}
+	_, _, feed := fetch(t, g, "GET", app.URL+"/drop/"+token+"/gallery")
+	if strings.Count(feed, `"id":`) != 1 || strings.Contains(feed, `"id":`+first+`,`) {
+		t.Errorf("guests see: %s", feed)
+	}
+	if _, _, page = fetch(t, g, "GET", base); !strings.Contains(page, `value="show"`) || !strings.Contains(page, "is-hidden") {
+		t.Error("the moderator sees the hidden one, marked, with a way to show it")
+	}
+	if code, _, _ := fetch(t, g, "GET", app.URL+"/drop/"+token+"/photo/"+first); code != 404 {
+		t.Errorf("a hidden photo's picture for a guest: %d", code)
+	}
+	postTo(t, g, base+"/mark", "item="+first+"&do=pin")
+	if _, _, page = fetch(t, g, "GET", base); !strings.Contains(page, "is-pinned") || !strings.Contains(page, `value="unpin"`) {
+		t.Error("a pinned photo is marked")
+	}
+	postTo(t, g, base+"/mark", "item="+first+"&do=show")
+	if _, _, feed = fetch(t, g, "GET", app.URL+"/drop/"+token+"/gallery"); strings.Count(feed, `"id":`) != 2 {
+		t.Errorf("shown again: %s", feed)
+	}
+
+	// bad requests and a wrong link
+	for _, form := range []string{"item=abc&do=hide", "item=" + first + "&do=delete", "item=99999&do=hide", ""} {
+		if code, _, _ := postTo(t, g, base+"/mark", form); code != 404 {
+			t.Errorf("%q: %d", form, code)
+		}
+	}
+	if code, _, _ := postTo(t, g, app.URL+"/mod/"+strings.Repeat("0", 64)+"/mark", "item="+first+"&do=hide"); code != 404 {
+		t.Errorf("a wrong link: %d", code)
+	}
+}
+
+func TestAModeratorOfABoxWithNoGalleryOrWallDoesNotSeeThePhotos(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("6f", 16)
+	mod := strings.Repeat("b8", 32)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Quiet", InboxTag: "inbox/Quiet", ModToken: mod}))
+	sendFiles(t, app.URL+"/drop/"+token+"/upload", nil, map[string][]byte{"a.jpg": jpegBytes})
+	g := guest(t)
+	if _, _, page := fetch(t, g, "GET", app.URL+"/mod/"+mod); strings.Contains(page, "The photos kept") {
+		t.Error("the key cannot view pictures, so the page does not offer them")
+	}
+	if code, _, _ := fetch(t, g, "GET", app.URL+"/mod/"+mod+"/photo/1"); code != 404 {
+		t.Errorf("the picture: %d", code)
+	}
+}
+
+func TestTheOwnerMakesTheAlbumOfLovedPhotos(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("7a", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Party", InboxTag: "inbox/Party"}))
+	id := firstBox(t, st)
+	if page := get(t, app.URL, "sess=family"); !strings.Contains(page, "Make the album of loved photos") || !strings.Contains(page, `hx-post="dropbox/loved"`) {
+		t.Error("the owner is offered the album of loved photos")
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/loved", "sess=other", "service="+id); code != 409 {
+		t.Errorf("somebody else's box: %d", code)
+	}
+	if code, body := postForm(t, app.URL+"/dropbox/loved", "sess=family", "service="+id); code != 409 || !strings.Contains(body, "no photo has a heart") {
+		t.Errorf("nothing is loved yet: %d %s", code, body)
+	}
+}

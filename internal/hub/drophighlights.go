@@ -30,6 +30,7 @@ const (
 	VerdictBright    = "bright"
 	VerdictBlurry    = "blurry"
 	VerdictDuplicate = "duplicate"
+	VerdictHidden    = "hidden" // the host hid it from the guests, so it is left out
 )
 
 const sameMoment = 60 * time.Minute // two pictures this far apart in time are never the same moment
@@ -136,6 +137,9 @@ func (h *Hub) runHighlights(ctx context.Context, sess *immich.API, b store.DropB
 	}
 
 	verdicts := judge(results, st)
+	if hidden, pinned, err := h.Store.AssetMarks(ctx, b.ID); err == nil { // the host's picks win over the looks of a photo
+		applyMarks(results, verdicts, hidden, pinned)
+	}
 	kept := map[uuid.UUID]bool{}
 	var vs []store.Verdict
 	for i, v := range verdicts {
@@ -215,6 +219,20 @@ func judge(rs []lookedAt, st Strictness) []judgement {
 		}
 	}
 	return out
+}
+
+// applyMarks lets the host's picks win over what a photo looks like: a photo the host pinned is kept, whatever its
+// brightness, sharpness or likeness to another; one the host hid is left out. A pick is by the photo's id in the library.
+func applyMarks(rs []lookedAt, out []judgement, hidden, pinned map[string]bool) {
+	for i, r := range rs {
+		id := r.a.Id.String()
+		switch {
+		case hidden[id]:
+			out[i] = judgement{VerdictHidden, "hidden by the host"}
+		case pinned[id]:
+			out[i] = judgement{VerdictKept, "pinned by the host"}
+		}
+	}
 }
 
 // fillAlbum makes the album hold exactly the kept photos among this box's, and leaves anything else the owner put in it alone.

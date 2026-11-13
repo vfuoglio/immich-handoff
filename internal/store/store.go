@@ -479,6 +479,10 @@ var migrations = []string{
 	// A moderator link: a page where a helper with no account approves or rejects what waits in a box.
 	`ALTER TABLE dropboxes ADD COLUMN mod_token TEXT NOT NULL DEFAULT '';
 	 CREATE UNIQUE INDEX dropboxes_mod ON dropboxes (mod_token) WHERE mod_token <> '';`,
+	// The host's picks among the photos a box kept: one can be pinned (always in a best-of) or hidden (from the guests'
+	// gallery, the wall and the guests' ZIP, and left out of a best-of).
+	`ALTER TABLE dropbox_assets ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_assets ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

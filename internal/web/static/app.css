@@ -761,6 +761,19 @@ dialog.gal-lightbox img { display: block; max-width: 96vw; max-height: 86vh; bor
 @media (max-width: 640px) { ul.gal { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; } }
 @media (prefers-reduced-motion: reduce) { .gal-item.new, .gal-heart.pop svg { animation: none !important; } }
 
+/* The moderator's page: the photos the box kept, to pin or hide. A hidden photo is dimmed, a pinned one has a ring. */
+.mod-photos { margin: 1.6rem 0 2rem; }
+.mod-photos h2 { font-family: var(--font-display); margin: 0 0 .5rem; }
+ul.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .8rem; margin: 0; padding: 0; list-style: none; }
+.mod-photo { display: grid; gap: .3rem; justify-items: stretch; padding: .4rem; border-radius: var(--radius-sm); background: var(--glass); border: 1px solid var(--border); }
+.mod-photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: calc(var(--radius-sm) - 4px); background: var(--surface-2); transition: opacity .2s ease; }
+.mod-photo.is-hidden img { opacity: .35; }
+.mod-photo.is-pinned { outline: 2px solid var(--accent); outline-offset: -1px; }
+.mod-mark { display: flex; gap: .35rem; }
+.mod-mark button { flex: 1 1 0; padding: .4rem .3rem; font-size: .85rem; }
+.mod-mark button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+@media (max-width: 640px) { ul.mod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 /* the wall and the frame: a dark stage with a soft glow behind the photos (or plain black), a choice of how one photo
    gives way to the next, a ring for a new arrival and a calm waiting screen. Everything moves with transform and opacity
    alone and slowly, nothing flashes, a kinder mode (data-lite) is for old hardware, and reduced motion stops it all. */

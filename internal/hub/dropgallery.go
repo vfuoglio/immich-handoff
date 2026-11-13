@@ -211,7 +211,7 @@ func (h *Hub) GalleryOriginal(ctx context.Context, b store.DropBox, id int64) (*
 		return nil, ErrDropGone
 	}
 	a, err := h.Store.DropAssetByID(ctx, b.ID, id)
-	if err != nil {
+	if err != nil || a.Hidden {
 		return nil, ErrDropGone
 	}
 	asset, err := uuid.Parse(a.AssetID)

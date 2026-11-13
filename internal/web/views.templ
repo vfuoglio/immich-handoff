@@ -302,6 +302,16 @@ type ModPageView struct {
 	Token, Name, Message string
 	Total                int
 	Items                []PendingView
+	Looks                bool           // the key may look at pictures, so the photos the box kept can be shown
+	Photos               []ModPhotoView // the photos the box kept, newest first
+	More                 string         // the position to ask for the next page from ("" when there is none)
+}
+
+// ModPhotoView is a photo the box kept, with what the host picked for it.
+type ModPhotoView struct {
+	ID, By         string
+	Hearts         int
+	Hidden, Pinned bool
 }
 
 // HighlightView is a box's best-of as the owner reads it.
@@ -2132,6 +2142,9 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 						</button>
 						<small class="meta">{ t(ctx, "Looks at every photo in this box and leaves out the ones that are too dark, too bright or blurred, and all but the sharpest of shots of the same moment (within an hour). The rest go into an album of yours called \"{name} best of\". It never deletes or changes a photo, and running it again with another setting corrects the album, leaving anything else you put in it alone. Photos Immich keeps only as WebP previews cannot be looked at, so they are kept.", "name", b.Name) }</small>
 					</form>
+					<h3>{ t(ctx, "Loved by guests") }</h3>
+					<p class="meta">{ t(ctx, "Puts the photos guests gave hearts, and the ones a moderator pinned, in an album of yours called \"{box} loved by guests\": the pinned first, then the most hearts, at most a hundred, never a hidden one. Run it again to correct the album; what you added yourself stays.", "box", b.Name) }</p>
+					<p class="row"><button hx-post="dropbox/loved" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make the album of loved photos") }</button></p>
 					<h3>{ t(ctx, "Hand the photos on") }</h3>
 					if len(b.OnwardOptions) == 0 {
 						<p class="meta">{ t(ctx, "You do not send to any service yet. Join one on this page (under You can join) and you can hand this box's photos on to it, to a family member's library for instance.") }</p>
@@ -2557,6 +2570,46 @@ templ ModPage(d ModPageView) {
 					<button type="submit" name="all" value="1">{ t(ctx, "Approve all") }</button>
 				</p>
 			</form>
+		}
+		if d.Looks {
+			<section class="mod-photos" id="photos">
+				<h2>{ t(ctx, "The photos kept") }</h2>
+				<p class="meta">{ t(ctx, "Pin a photo so it is always in the best-of. Hide one and guests no longer see it (the gallery, the wall and the ZIP); it stays in the owner's library.") }</p>
+				if len(d.Photos) == 0 {
+					<p class="meta">{ t(ctx, "No photo has been kept yet.") }</p>
+				}
+				<ul class="plain mod-grid">
+					for _, p := range d.Photos {
+						<li id={ "photo-" + p.ID } class={ "mod-photo", templ.KV("is-hidden", p.Hidden), templ.KV("is-pinned", p.Pinned) }>
+							<img src={ "mod/" + d.Token + "/photo/" + p.ID } alt="" loading="lazy" width="160" height="160"/>
+							<span class="meta">
+								if p.Hearts > 0 {
+									{ fmt.Sprint(p.Hearts) } ♥
+								}
+								if p.By != "" {
+									{ p.By }
+								}
+							</span>
+							<form class="mod-mark" method="post" action={ "mod/" + d.Token + "/mark" }>
+								<input type="hidden" name="item" value={ p.ID }/>
+								if p.Pinned {
+									<button type="submit" name="do" value="unpin" aria-pressed="true">{ t(ctx, "Pinned") }</button>
+								} else {
+									<button type="submit" name="do" value="pin" aria-pressed="false">{ t(ctx, "Pin") }</button>
+								}
+								if p.Hidden {
+									<button type="submit" name="do" value="show" aria-pressed="true">{ t(ctx, "Hidden") }</button>
+								} else {
+									<button type="submit" name="do" value="hide" aria-pressed="false">{ t(ctx, "Hide") }</button>
+								}
+							</form>
+						</li>
+					}
+				</ul>
+				if d.More != "" {
+					<p class="row"><a class="button" href={ templ.SafeURL("mod/" + d.Token + "?before=" + d.More + "#photos") }>{ t(ctx, "Older photos") }</a></p>
+				}
+			</section>
 		}
 	}
 }

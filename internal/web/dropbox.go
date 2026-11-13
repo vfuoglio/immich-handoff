@@ -1409,6 +1409,8 @@ func verdictText(ctx context.Context, v store.Verdict) string {
 		return t(ctx, "blurry")
 	case hub.VerdictDuplicate:
 		return t(ctx, "the same moment as a better photo")
+	case hub.VerdictHidden:
+		return t(ctx, "hidden by the host")
 	}
 	return v.Verdict
 }

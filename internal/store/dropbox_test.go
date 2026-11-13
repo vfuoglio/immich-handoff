@@ -538,3 +538,73 @@ func TestAModeratorLinkAndOnceOnlyMessages(t *testing.T) {
 		t.Error("after clearing, the bit can be claimed again")
 	}
 }
+
+func TestHidingAndPinningPhotosOfAGallery(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "pins-token-1234567890", Name: "Pins", Key: "k"})
+	other, _ := s.AddDropBox(ctx, DropBox{Token: "other-pins-token-12345", Name: "Other", Key: "k"})
+	for _, a := range []string{"a1", "a2", "a3", "a4"} {
+		s.AddDropAsset(ctx, b.ID, a, "", "")
+	}
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
+	all, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
+	if err := s.MarkAsset(ctx, b.ID, all[1].ID, "hidden", true); err != nil {
+		t.Fatal(err)
+	}
+	s.MarkAsset(ctx, b.ID, all[2].ID, "pinned", true)
+	if err := s.MarkAsset(ctx, b.ID, all[0].ID, "colour", true); err == nil {
+		t.Error("an unknown mark is refused")
+	}
+	oa, _ := s.DropAssetsAfter(ctx, other.ID, 0, 1)
+	if err := s.MarkAsset(ctx, b.ID, oa[0].ID, "hidden", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another box's photo: %v", err)
+	}
+
+	// guests' queries leave the hidden out; the host's do not
+	if got, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10); len(got) != 3 {
+		t.Errorf("after: %d", len(got))
+	}
+	if got, _ := s.DropAssetsBefore(ctx, b.ID, 0, 10); len(got) != 3 || got[0].AssetID != "a4" {
+		t.Errorf("before: %+v", got)
+	}
+	if got, _ := s.DropAssetsLatest(ctx, b.ID, 10); len(got) != 3 {
+		t.Errorf("latest: %d", len(got))
+	}
+	host, _ := s.DropAssetsAll(ctx, b.ID, 0, 10)
+	if len(host) != 4 || !host[2].Hidden || !host[1].Pinned || host[3].Hidden {
+		t.Errorf("all: %+v", host)
+	}
+	if ids, _ := s.DropVisibleAssetIDs(ctx, b.ID); len(ids) != 3 || ids[1] != "a3" {
+		t.Errorf("visible ids: %v", ids)
+	}
+	if ids, _ := s.DropAssetIDs(ctx, b.ID); len(ids) != 4 {
+		t.Errorf("all ids: %v", ids)
+	}
+	if _, _, err := s.ToggleHeart(ctx, b.ID, all[1].ID, "ann"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a heart on a hidden photo: %v", err)
+	}
+	hidden, pinned, _ := s.AssetMarks(ctx, b.ID)
+	if !hidden["a2"] || !pinned["a3"] || len(hidden) != 1 || len(pinned) != 1 {
+		t.Errorf("marks: %v %v", hidden, pinned)
+	}
+
+	// loved: the pinned first, then the most hearts, never a hidden one
+	s.ToggleHeart(ctx, b.ID, all[0].ID, "g1")
+	s.ToggleHeart(ctx, b.ID, all[0].ID, "g2")
+	s.ToggleHeart(ctx, b.ID, all[3].ID, "g1")
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 10); len(loved) != 3 || loved[0] != "a3" || loved[1] != "a1" || loved[2] != "a4" {
+		t.Errorf("loved: %v", loved)
+	}
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 2); len(loved) != 2 {
+		t.Errorf("the most: %v", loved)
+	}
+	s.MarkAsset(ctx, b.ID, all[0].ID, "hidden", true)
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 10); len(loved) != 2 || loved[1] != "a4" {
+		t.Errorf("a hidden one is never loved: %v", loved)
+	}
+	s.MarkAsset(ctx, b.ID, all[1].ID, "hidden", false)
+	if got, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10); len(got) != 3 {
+		t.Errorf("shown again: %d", len(got))
+	}
+}

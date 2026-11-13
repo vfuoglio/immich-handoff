@@ -58,9 +58,92 @@ func (w *Server) modPage(rw http.ResponseWriter, r *http.Request) {
 	case done > 0:
 		view.Message = n(ctx, "{n} file approved.", "{n} files approved.", done)
 	}
+	// the photos the box kept, to pin or hide, when the key may look at pictures (a gallery or a wall)
+	if b.Gallery || b.Wall != "" {
+		view.Looks = true
+		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+		photos, err := w.Hub.ModPhotos(ctx, b, before, 36)
+		if err == nil {
+			for _, p := range photos {
+				by := ""
+				if p.Name != "" {
+					by = t(ctx, "by {name}", "name", p.Name)
+				}
+				view.Photos = append(view.Photos, ModPhotoView{ID: strconv.FormatInt(p.ID, 10), By: by, Hearts: p.Hearts, Hidden: p.Hidden, Pinned: p.Pinned})
+			}
+			if len(photos) == 36 {
+				view.More = strconv.FormatInt(photos[len(photos)-1].ID, 10)
+			}
+		}
+	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 	ModPage(view).Render(ctx, rw)
+}
+
+// modImage gives the moderator the picture of a photo the box kept.
+func (w *Server) modImage(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.modBox(rw, r)
+	if !ok || !(b.Gallery || b.Wall != "") {
+		if ok {
+			http.NotFound(rw, r)
+		}
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	data, kind, err := w.Hub.ModImage(r.Context(), b, id)
+	if err != nil {
+		if errors.Is(err, hub.ErrDropGone) {
+			http.NotFound(rw, r)
+		} else {
+			http.Error(rw, "try again", http.StatusBadGateway)
+		}
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=600")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+// modMark pins or hides a photo, or takes that back, and goes back to the page.
+func (w *Server) modMark(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.modBox(rw, r)
+	if !ok {
+		return
+	}
+	r.ParseForm()
+	id, err := strconv.ParseInt(r.PostFormValue("item"), 10, 64)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	switch err := w.Hub.ModMark(r.Context(), b, id, r.PostFormValue("do")); {
+	case errors.Is(err, hub.ErrDropGone), errors.Is(err, hub.ErrBadMark):
+		http.NotFound(rw, r)
+		return
+	case err != nil:
+		http.Error(rw, "try again", http.StatusServiceUnavailable)
+		return
+	}
+	loc := "../" + r.PathValue("token")
+	if before := r.PostFormValue("before"); before != "" {
+		loc += "?before=" + url.QueryEscape(before)
+	}
+	rw.Header().Set("Location", loc+"#photo-"+strconv.FormatInt(id, 10))
+	rw.WriteHeader(http.StatusSeeOther)
+}
+
+// lovedDropBox puts the photos guests loved and the host pinned in an album of the owner's.
+func (w *Server) lovedDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "loved album", func(ctx context.Context, me *member, id string) error {
+		_, _, err := w.Hub.MakeLovedAlbum(ctx, me.sess, me.user, id)
+		return err
+	})
 }
 
 func (w *Server) modFile(rw http.ResponseWriter, r *http.Request) {

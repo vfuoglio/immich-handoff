@@ -598,3 +598,175 @@ func TestGuestsHaveAFewZipsAtATimeAndOnlyWhereDownloadsAreAllowed(t *testing.T) 
 		t.Errorf("when they are done: %v", err)
 	}
 }
+
+// rowOf is a box's photo (its place in the box's list) by the file name it was sent under.
+func rowOf(t *testing.T, e *env, boxID, name string) store.DropAsset {
+	t.Helper()
+	want := idOfName(e, name)
+	all, _ := e.st.DropAssetsAll(context.Background(), boxID, 0, 1000)
+	for _, a := range all {
+		if a.AssetID == want {
+			return a
+		}
+	}
+	t.Fatalf("no photo %s in the box", name)
+	return store.DropAsset{}
+}
+
+func TestThePhotosAModeratorPinsOrHidesAreTreatedAsTheyWereChosen(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.f.thumbs = map[string][]byte{"a": synth("sharp"), "b": synth("scene"), "c": synth("dark")}
+	b := newBox(t, e, hub.DropParams{Name: "Gala", Gallery: true, GalleryDownload: true, Days: 3})
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	token, _ := e.h.SetDropModerator(ctx, bob, b.ID, true)
+	mb, _ := e.h.ModBox(ctx, token)
+	a, bb, c := rowOf(t, e, b.ID, "a.jpg"), rowOf(t, e, b.ID, "b.jpg"), rowOf(t, e, b.ID, "c.jpg")
+
+	for _, bad := range []string{"", "delete", "pin; drop"} {
+		if err := e.h.ModMark(ctx, mb, a.ID, bad); !errors.Is(err, hub.ErrBadMark) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	if err := e.h.ModMark(ctx, mb, 99999, "hide"); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a photo that is not there: %v", err)
+	}
+	other := newBox(t, e, hub.DropParams{Name: "Other"})
+	e.h.ReceiveDropFile(ctx, other.ID, "o.jpg", bytes.NewReader(jpeg), "m")
+	oa, _ := e.st.DropAssetsLatest(ctx, other.ID, 1)
+	if err := e.h.ModMark(ctx, mb, oa[0].ID, "hide"); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("another box's photo: %v", err)
+	}
+
+	// hidden: the moderator still sees it (marked), guests do not (gallery, picture, original, heart, wall, ZIP)
+	if err := e.h.ModMark(ctx, mb, bb.ID, "hide"); err != nil {
+		t.Fatal(err)
+	}
+	gb, _ := e.h.GalleryBox(ctx, b.Token)
+	items, _ := e.h.GalleryFeed(ctx, gb, "", 0, 0, 0)
+	if len(items) != 2 {
+		t.Errorf("guests see %d photos", len(items))
+	}
+	for _, it := range items {
+		if it.ID == bb.ID {
+			t.Error("a hidden photo is in the gallery")
+		}
+	}
+	if _, _, err := e.h.GalleryImage(ctx, gb, bb.ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a hidden photo's picture: %v", err)
+	}
+	if _, err := e.h.GalleryOriginal(ctx, gb, bb.ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a hidden photo's original: %v", err)
+	}
+	if _, _, err := e.h.GalleryHeart(ctx, gb, hub.NewGuestSecret(), bb.ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a heart on a hidden photo: %v", err)
+	}
+	full, _ := e.st.DropBox(ctx, b.ID)
+	if wall, _, _ := e.h.WallFeed(ctx, full, 0); len(wall) != 2 {
+		t.Errorf("the wall shows %d photos", len(wall))
+	}
+	if _, _, err := e.h.WallImage(ctx, full, bb.ID); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a hidden photo on the wall: %v", err)
+	}
+	var zipped bytes.Buffer
+	if n, err := e.h.GalleryZip(ctx, gb, "ann", &zipped); err != nil || n != 2 {
+		t.Errorf("guests' ZIP: %d %v", n, err)
+	}
+	if n, err := e.h.ZipPhotos(ctx, e.sess, bob, b.ID, io.Discard); err != nil || n != 3 {
+		t.Errorf("the owner's ZIP keeps everything: %d %v", n, err)
+	}
+	mod, _ := e.h.ModPhotos(ctx, mb, 0, 10)
+	if len(mod) != 3 || !mod[1].Hidden || mod[0].Hidden || mod[2].Hidden {
+		t.Errorf("the moderator sees all three, one hidden: %+v", mod)
+	}
+	if data, _, err := e.h.ModImage(ctx, mb, bb.ID); err != nil || len(data) == 0 {
+		t.Errorf("the moderator sees a hidden photo's picture: %v", err)
+	}
+
+	// pinned and hidden win over the looks of a photo in the best-of: the dark one is kept, the nice one is out
+	if err := e.h.ModMark(ctx, mb, c.ID, "pin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.StartHighlights(ctx, e.sess, bob, b.ID, "normal"); err != nil {
+		t.Fatal(err)
+	}
+	h := waitHighlight(t, e, b.ID)
+	why := map[string]string{}
+	all, _ := e.st.DropVerdicts(ctx, b.ID, true, 100)
+	for _, v := range all {
+		why[v.Name] = v.Verdict
+	}
+	if h.Status != store.HighlightDone || why["b.jpg"] != hub.VerdictHidden || why["c.jpg"] != "" {
+		t.Errorf("left out: %v (%+v)", why, h)
+	}
+	ks, _ := e.st.DropVerdicts(ctx, b.ID, false, 100)
+	kept := map[string]bool{}
+	for _, v := range ks {
+		kept[v.Name] = true
+	}
+	if !kept["c.jpg"] || kept["b.jpg"] || !kept["a.jpg"] {
+		t.Errorf("kept: %v", kept)
+	}
+
+	// and taking the picks back puts everything as it was
+	e.h.ModMark(ctx, mb, bb.ID, "show")
+	e.h.ModMark(ctx, mb, c.ID, "unpin")
+	if items, _ := e.h.GalleryFeed(ctx, gb, "", 0, 0, 0); len(items) != 3 {
+		t.Errorf("after showing it again: %d photos", len(items))
+	}
+}
+
+func TestTheAlbumOfLovedPhotosHoldsTheHeartedAndThePinnedAndNeverTheHidden(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Wedding", Gallery: true, Days: 3})
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "m"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := e.h.MakeLovedAlbum(ctx, e.sess, bob, b.ID); !errors.Is(err, hub.ErrNoLoved) {
+		t.Fatalf("nothing is loved yet: %v", err)
+	}
+	row := func(n string) int64 { return rowOf(t, e, b.ID, n).ID }
+	for _, who := range []string{"g1", "g2", "g3"} {
+		e.st.ToggleHeart(ctx, b.ID, row("a.jpg"), who) // three hearts
+	}
+	e.st.ToggleHeart(ctx, b.ID, row("b.jpg"), "g1") // one
+	e.st.ToggleHeart(ctx, b.ID, row("c.jpg"), "g1") // one, but hidden afterwards
+	e.st.MarkAsset(ctx, b.ID, row("c.jpg"), "hidden", true)
+	e.st.MarkAsset(ctx, b.ID, row("e.jpg"), "pinned", true) // no hearts, pinned
+
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if _, _, err := e.h.MakeLovedAlbum(ctx, e.ann, ann, b.ID); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host: %v", err)
+	}
+	name, n, err := e.h.MakeLovedAlbum(ctx, e.sess, bob, b.ID)
+	if err != nil || name != "Wedding loved by guests" || n != 3 {
+		t.Fatalf("album: %q %d %v", name, n, err)
+	}
+	album := ""
+	for _, a := range e.f.albums {
+		if a["albumName"] == name {
+			album = a["id"].(string)
+		}
+	}
+	in := e.f.members[album]
+	if len(in) != 3 || !in[idOfName(e, "a.jpg")] || !in[idOfName(e, "b.jpg")] || !in[idOfName(e, "e.jpg")] || in[idOfName(e, "c.jpg")] || in[idOfName(e, "d.jpg")] {
+		t.Errorf("the album: %v", in)
+	}
+	// run again after a change: the hidden one stays out, a new heart brings one in, what the owner added stays
+	foreign := uuid.NewString()
+	in[foreign] = true
+	e.st.ToggleHeart(ctx, b.ID, row("d.jpg"), "g2")
+	e.st.MarkAsset(ctx, b.ID, row("b.jpg"), "hidden", true)
+	if _, n, err = e.h.MakeLovedAlbum(ctx, e.sess, bob, b.ID); err != nil || n != 3 {
+		t.Fatalf("again: %d %v", n, err)
+	}
+	in = e.f.members[album]
+	if in[idOfName(e, "b.jpg")] || !in[idOfName(e, "d.jpg")] || !in[foreign] || len(in) != 4 {
+		t.Errorf("the corrected album: %v", in)
+	}
+}
