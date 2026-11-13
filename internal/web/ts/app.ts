@@ -12,6 +12,8 @@ import { parseLive } from "./live";
 import { initScene } from "./scene";
 import { enhance } from "./odometer";
 import { initEffects } from "./effects";
+import { initKeys } from "./keys";
+import { initToday } from "./today";
 import { initLanguage } from "./lang";
 import { initPalette } from "./palette";
 import { initRows } from "./rows";
@@ -82,6 +84,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCatalog();
   initLanguage();
   initTabs();
+  initToday();
+  initKeys();
   initRows();
   initBackup();
   initPush();

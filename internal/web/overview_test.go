@@ -44,6 +44,11 @@ func TestTheOverviewLeadsWithWhatNeedsThePerson(t *testing.T) {
 	}
 	owner = get(t, app.URL, "sess=family")
 	has(t, owner, "<em>One thing needs you.</em>", "Dana wants to send to club", "dana@x.test", "Approve", "Decline", `class="count-badge">1<`)
+	// the two answers wear the keys that press them (A and D), the date line is there for the browser to fill, and the stream comes first
+	has(t, owner, `data-key="A"`, `data-key="D"`, `data-today`)
+	if i, j, k := strings.Index(owner, `id="scene"`), strings.Index(owner, `id="cmdbar"`), strings.Index(owner, "Dana wants to send to"); i < 0 || j < i || k < j {
+		t.Errorf("the Overview runs: stream, search bar, what needs you (%d, %d, %d)", i, j, k)
+	}
 	lacks(t, owner, "All clear")
 	if n := strings.Count(owner, ">Approve<"); n != 1 {
 		t.Errorf("a request is answered in one place, found %d Approve buttons", n)

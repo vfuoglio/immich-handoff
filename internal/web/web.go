@@ -616,8 +616,8 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Request"), Title: t(ctx, "{name} wants to send to {service}", "name", r.Name, "service", o.Name),
 				Text: t(ctx, "{email} asks to send. You decide.", "email", r.Email),
 				Actions: []NeedAction{
-					{Label: t(ctx, "Approve"), Path: "decide", Vals: decideVals(o.Name, r.ID, "approve"), Primary: true},
-					{Label: t(ctx, "Decline"), Path: "decide", Vals: decideVals(o.Name, r.ID, "decline")}}})
+					{Label: t(ctx, "Approve"), Path: "decide", Vals: decideVals(o.Name, r.ID, "approve"), Primary: true, Key: "A"},
+					{Label: t(ctx, "Decline"), Path: "decide", Vals: decideVals(o.Name, r.ID, "decline"), Key: "D"}}})
 		}
 		if o.Paused {
 			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Paused"), Title: o.Name,

@@ -189,7 +189,9 @@ h2 {
   margin: 2rem 0 .75rem;
 }
 p.lead { color: var(--muted); margin: 0 0 1.2rem; max-width: 56ch; }
-/* each view opens with a centred headline, as a calm hero */
+/* each view opens with a centred headline, as a calm hero; the Overview adds the date above it */
+.view > .eyebrow { text-align: center; margin: 1.8rem 0 0; font: 600 .74rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); min-height: 1em; }
+.view > .eyebrow + h1 { margin-top: .5rem; }
 .view > h1, main > h1 { text-align: center; margin-top: 2.4rem; font-size: clamp(2.2rem, 6.2vw, 3.8rem); }
 .view > p.lead, main > p.lead { text-align: center; margin-inline: auto; }
 
@@ -308,12 +310,24 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 .count-badge { font: 600 .74rem var(--font-mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: .02rem .5rem; margin-left: .4rem; letter-spacing: 0; }
 .needs { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
 .needs .card, .card.need { margin: 0; }
-.card.need { display: grid; gap: .5rem; padding-left: 1.3rem; overflow: hidden; }
+.card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
+.card.need > b { grid-area: t; }
+.card.need > p.meta { grid-area: m; }
+.card.need > p.row { grid-area: a; flex-wrap: nowrap; justify-content: flex-end; }
+.card.need:not(:has(> p.row)) { grid-template-areas: "t" "m"; grid-template-columns: minmax(0, 1fr); }
+/* a button that a key presses wears the key */
+button[data-key]::after { content: attr(data-key); margin-left: .55rem; padding: 0 .4rem; border-radius: 6px; font: 700 .68rem var(--font-mono); background: color-mix(in oklab, currentColor 16%, transparent); border: 1px solid color-mix(in oklab, currentColor 28%, transparent); border-bottom-width: 2px; }
+@media (pointer: coarse) { button[data-key]::after { display: none; } }
+@media (max-width: 560px) {
+  .card.need { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "a"; }
+  .card.need > p.row { justify-content: stretch; margin-top: .4rem; }
+  .card.need > p.row button { flex: 1; }
+}
 .card.need::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--muted); }
 .card.need.bad::before { background: var(--bad); }
 .card.need.warn::before { background: var(--warn); }
 .card.need.allclear::before { background: var(--ok); }
-.card.need b { font: 700 1rem var(--font-display); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.card.need b { font: 700 1.12rem var(--font-display); letter-spacing: -.01em; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .card.need p { margin: 0; }
 .card.need .row { gap: .5rem; }
 

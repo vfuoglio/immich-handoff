@@ -336,6 +336,14 @@ func limitText(ctx context.Context, photos, mb int) string {
 	return ""
 }
 
+// keyAttr marks a button with the key that presses it, for the style sheet to show and keys.ts to listen for.
+func keyAttr(key string) templ.Attributes {
+	if key == "" {
+		return nil
+	}
+	return templ.Attributes{"data-key": key}
+}
+
 func primaryIf(primary bool) string {
 	if primary {
 		return "primary"
