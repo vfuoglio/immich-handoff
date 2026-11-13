@@ -156,3 +156,19 @@ func TestTheWallAndFrameAnimateOnlyWhatIsCheapAndStopForReducedMotion(t *testing
 		}
 	}
 }
+
+// A \u escape in the text of a template is not turned into the character, it is shown as typed ("·" in the footer
+// once was); the characters belong in the template as themselves.
+func TestNoPageShowsAnEscapeSequenceAsText(t *testing.T) {
+	app, _ := setup(t, func(s *web.Server) { s.Version = "1.2.3" })
+	for _, who := range []string{"sess=alice", "sess=family"} {
+		_, body := do(t, "GET", app.URL+"/", who, nil)
+		if strings.Contains(body, `\u00`) || strings.Contains(body, `\u2`) {
+			i := strings.Index(body, `\u`)
+			t.Errorf("%s: the page shows an escape sequence as text: %.80s", who, body[max(0, i-40):min(len(body), i+40)])
+		}
+		if !strings.Contains(body, "· Immich Handoff 1.2.3") {
+			t.Errorf("%s: the footer should read \"· Immich Handoff 1.2.3\"", who)
+		}
+	}
+}
