@@ -416,13 +416,6 @@ templ Layout(title, user string) {
 						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
-					if hasTabs(ctx) {
-						<nav class="tabs" aria-label={ t(ctx, "Views") }>
-							<a href="#overview" data-view="overview">{ t(ctx, "Overview") }</a>
-							<a href="#services" data-view="services">{ t(ctx, "Services") }</a>
-							<a href="#activity" data-view="activity">{ t(ctx, "Activity") }</a>
-						</nav>
-					}
 					<details class="lang">
 						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>
@@ -440,7 +433,7 @@ templ Layout(title, user string) {
 								<a class="adminlink" href="admin">{ t(ctx, "Admin") }</a>
 							}
 							if hasTabs(ctx) {
-								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }>{ t(ctx, "Search") } <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
+								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="lbl">{ t(ctx, "Search") }</span> <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
 							}
 							<span id="live" class="live off" title={ t(ctx, "Live updates") } role="img" aria-label={ t(ctx, "Live updates") }></span>
 							<details class="scheme">
@@ -466,6 +459,14 @@ templ Layout(title, user string) {
 						</div>
 					}
 				</header>
+				if hasTabs(ctx) {
+					<nav class="tabs" aria-label={ t(ctx, "Views") }>
+						<i class="blob" aria-hidden="true"></i>
+						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
+						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
+						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+					</nav>
+				}
 				<main>
 					{ children... }
 				</main>
