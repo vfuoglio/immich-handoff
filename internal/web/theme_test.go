@@ -107,3 +107,52 @@ func TestBothSchemesDefineTheSameColoursAndTheScriptRemembersTheChoice(t *testin
 		}
 	}
 }
+
+// The wall and the frame run on old televisions and tablets, so everything that moves there moves with transform and
+// opacity alone (which the graphics card does without redrawing), and reduced motion stops all of it.
+func TestTheWallAndFrameAnimateOnlyWhatIsCheapAndStopForReducedMotion(t *testing.T) {
+	app, _ := setup(t)
+	res, err := http.Get(app.URL + "/static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	css := string(b)
+	names := regexp.MustCompile(`@keyframes (wall-[a-z-]+) \{`).FindAllStringSubmatch(css, -1)
+	if len(names) < 6 {
+		t.Fatalf("the wall's animations are missing: %v", names)
+	}
+	for _, n := range names {
+		start := strings.Index(css, "@keyframes "+n[1]+" {")
+		rest := css[start:]
+		// a keyframes rule ends where its braces balance
+		depth, end := 0, 0
+		for i, c := range rest {
+			if c == '{' {
+				depth++
+			} else if c == '}' {
+				depth--
+				if depth == 0 {
+					end = i
+					break
+				}
+			}
+		}
+		for _, prop := range regexp.MustCompile(`([a-z-]+)\s*:`).FindAllStringSubmatch(rest[strings.Index(rest, "{")+1:end], -1) {
+			if prop[1] != "transform" && prop[1] != "opacity" {
+				t.Errorf("%s animates %s; on a television only transform and opacity are cheap", n[1], prop[1])
+			}
+		}
+	}
+	i := strings.LastIndex(css, "@media (prefers-reduced-motion: reduce) {")
+	if i < 0 {
+		t.Fatal("no reduced-motion rule")
+	}
+	reduced := css[i:]
+	for _, want := range []string{"wall-stage figure.arrive", "figure.single.fresh::after", ".wall-wait::before", `[data-fx] figure.single img`, "animation: none !important"} {
+		if !strings.Contains(reduced, want) {
+			t.Errorf("reduced motion must stop %s", want)
+		}
+	}
+}

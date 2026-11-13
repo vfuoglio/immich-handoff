@@ -2526,10 +2526,35 @@ templ DropCard(user, name, message, link, mailAddress string) {
 	}
 }
 
+// WallControls are the buttons that appear when the pointer moves on a wall or a frame and fade again: how photos are
+// laid out (the wall only), how one gives way to the next, what is behind them, and full screen.
+templ WallControls(modes bool, mode string) {
+	<nav class="wall-controls" aria-label={ t(ctx, "Wall controls") }>
+		if modes {
+			<div class="grp" role="group" aria-label={ t(ctx, "Single photo") + ", " + t(ctx, "Collage") + ", " + t(ctx, "Grid") }>
+				<button type="button" data-mode="single" aria-pressed={ checked(mode == "single") }>{ t(ctx, "Single photo") }</button>
+				<button type="button" data-mode="collage" aria-pressed={ checked(mode == "collage") }>{ t(ctx, "Collage") }</button>
+				<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
+			</div>
+		}
+		<div class="grp" role="group" aria-label={ t(ctx, "Transition") }>
+			<button type="button" data-fx="fade" aria-pressed="true">{ t(ctx, "Fade") }</button>
+			<button type="button" data-fx="zoom" aria-pressed="false">{ t(ctx, "Zoom") }</button>
+			<button type="button" data-fx="slide" aria-pressed="false">{ t(ctx, "Slide") }</button>
+			<button type="button" data-fx="rise" aria-pressed="false">{ t(ctx, "Rise") }</button>
+		</div>
+		<div class="grp" role="group" aria-label={ t(ctx, "Backdrop") }>
+			<button type="button" data-bg="glow" aria-pressed="true">{ t(ctx, "Glow") }</button>
+			<button type="button" data-bg="black" aria-pressed="false">{ t(ctx, "Black") }</button>
+		</div>
+		<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
+	</nav>
+}
+
 // WallPage is the slideshow a screen opens: no sign-in, no bar, only the photos and a few controls that fade away.
 templ WallPage(name, token, mode string) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -2548,12 +2573,7 @@ templ WallPage(name, token, mode string) {
 				<div class="wall-stage" aria-live="polite"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 				<div class="wall-note" hidden></div>
-				<nav class="wall-controls" aria-label={ t(ctx, "Wall controls") }>
-					<button type="button" data-mode="single" aria-pressed={ checked(mode == "single") }>{ t(ctx, "Single photo") }</button>
-					<button type="button" data-mode="collage" aria-pressed={ checked(mode == "collage") }>{ t(ctx, "Collage") }</button>
-					<button type="button" data-mode="grid" aria-pressed={ checked(mode == "grid") }>{ t(ctx, "Grid") }</button>
-					<button type="button" class="wall-full">{ t(ctx, "Full screen") }</button>
-				</nav>
+				@WallControls(true, mode)
 			</main>
 		</body>
 	</html>
@@ -2653,7 +2673,7 @@ templ FrameRow(f FrameView, id string, open bool) {
 // FramePage is the page a frame opens: full screen, no sign-in, no controls.
 templ FramePage(name, token string, seconds int) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -2671,6 +2691,7 @@ templ FramePage(name, token string, seconds int) {
 			<main id="frame" data-feed={ "frame/" + token + "/feed" } data-photo={ "frame/" + token + "/photo/" } data-seconds={ fmt.Sprint(seconds) }>
 				<div class="wall-stage single" aria-live="off"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
+				@WallControls(false, "")
 			</main>
 		</body>
 	</html>

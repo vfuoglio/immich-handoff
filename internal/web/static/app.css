@@ -722,32 +722,79 @@ textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7r
 
 footer .version { opacity: .75; white-space: nowrap; }
 
-/* the wall */
+/* the wall and the frame: a dark stage with a soft glow behind the photos (or plain black), a choice of how one photo
+   gives way to the next, a ring for a new arrival and a calm waiting screen. Everything moves with transform and opacity
+   alone and slowly, nothing flashes, a kinder mode (data-lite) is for old hardware, and reduced motion stops it all. */
+html:has(body.wall) { color-scheme: dark; }
 body.wall { background: #000; color: #fff; margin: 0; overflow: hidden; }
 body.wall #glow { display: none; }
-#wall, #frame { position: fixed; inset: 0; background: #000; }
+#wall, #frame { position: fixed; inset: 0; background: #000; overflow: hidden; isolation: isolate; }
 #frame { cursor: none; }
-.wall-stage { position: absolute; inset: 0; }
+#frame:has(.wall-controls.on) { cursor: default; }
+/* the glow: two faint lights drifting for ever, slowly, in the colour scheme */
+#wall::before, #wall::after, #frame::before, #frame::after { content: ""; position: absolute; inset: -12%; z-index: 0; pointer-events: none; opacity: 0; transition: opacity 1.2s ease; will-change: transform; }
+:is(#wall, #frame)[data-bg="glow"]::before, :is(#wall, #frame)[data-bg="glow"]::after { opacity: 1; }
+:is(#wall, #frame)::before { background: radial-gradient(46vmax 36vmax at 22% 28%, color-mix(in oklab, var(--accent) 34%, transparent), transparent 70%); animation: wall-glow-a 40s ease-in-out infinite alternate; }
+:is(#wall, #frame)::after {
+  background: radial-gradient(40vmax 32vmax at 80% 72%, color-mix(in oklab, var(--magenta) 26%, transparent), transparent 70%),
+    radial-gradient(44vmax 24vmax at 55% 108%, color-mix(in oklab, var(--horizon) 24%, transparent), transparent 70%);
+  animation: wall-glow-b 52s ease-in-out infinite alternate;
+}
+@keyframes wall-glow-a { to { transform: translate3d(9%, 7%, 0) scale(1.12); } }
+@keyframes wall-glow-b { to { transform: translate3d(-8%, -6%, 0) scale(1.1); } }
+:is(#wall, #frame)[data-lite]::before, :is(#wall, #frame)[data-lite]::after { animation: none; }
+
+.wall-stage { position: absolute; inset: 0; z-index: 1; }
 .wall-stage figure { margin: 0; }
-.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; display: grid; place-items: center; }
-.wall-stage.single figure.single.in { opacity: 1; }
+.wall-stage.single figure.single { position: absolute; inset: 0; opacity: 0; display: grid; place-items: center; transition: opacity 1.4s ease, transform 1.4s var(--ease); }
 .wall-stage.single img { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* how a photo comes in and goes out: the fade needs nothing more; the others move a little as they fade */
+.wall-stage[data-fx="slide"].single figure.single { transform: translateX(7%); }
+.wall-stage[data-fx="slide"].single figure.single.out { transform: translateX(-7%); }
+.wall-stage[data-fx="rise"].single figure.single { transform: translateY(5%) scale(.97); }
+.wall-stage[data-fx="rise"].single figure.single.out { transform: translateY(-3%) scale(1.02); }
+.wall-stage.single figure.single.in { opacity: 1; transform: none; }
+/* the zoom drifts for as long as the photo stays (stage.ts passes how long), one way and then the other */
+.wall-stage[data-fx="zoom"].single figure.single img { animation: wall-zoom var(--hold, 10s) linear both; }
+.wall-stage[data-fx="zoom"].single figure.single.alt img { animation-name: wall-zoom-alt; }
+@keyframes wall-zoom { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.2%, -.9%); } }
+@keyframes wall-zoom-alt { from { transform: scale(1.09) translate(1.2%, .9%); } to { transform: scale(1); } }
+:is(#wall, #frame)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
+/* a new arrival is given a moment: a ring of the scheme's light settles round the picture and fades */
+.wall-stage figure.single.fresh::after { content: ""; position: absolute; inset: 1.4vmin; border-radius: 2.4vmin; pointer-events: none; animation: wall-fresh 3.2s ease-out both;
+  box-shadow: inset 0 0 0 .45vmin color-mix(in oklab, var(--accent) 80%, transparent), inset 0 0 7vmin color-mix(in oklab, var(--accent) 55%, transparent); }
+@keyframes wall-fresh { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
 .wall-stage figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 2rem; font-size: clamp(1.1rem, 3vw, 2.4rem); text-align: center; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
 .wall-stage.grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr; gap: 4px; padding: 4px; }
-.wall-stage.grid figure { position: relative; overflow: hidden; }
+.wall-stage.grid figure { position: relative; overflow: hidden; border-radius: 6px; }
 .wall-stage.grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wall-stage.grid figcaption { font-size: 1rem; padding: .5rem; }
 .wall-stage.collage { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 1.2vmin; padding: 3vmin; }
 .wall-stage.collage figure { position: relative; transform: rotate(var(--tilt, 0deg)); box-shadow: 0 6px 24px rgba(0,0,0,.6); border: 1.2vmin solid #fff; border-bottom-width: 3vmin; }
 .wall-stage.collage img { height: 26vmin; width: auto; max-width: 40vmin; object-fit: cover; display: block; }
 .wall-stage.collage figcaption { position: static; color: #111; background: none; padding: .2rem; font-size: 1rem; }
-.wall-stage figure.arrive { animation: wall-arrive 1.2s ease both; }
-@keyframes wall-arrive { from { opacity: 0; transform: scale(.8) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
-.wall-wait { position: absolute; inset: 0; display: grid; place-items: center; font-size: 2rem; opacity: .6; margin: 0; }
+.wall-stage figure.arrive { animation: wall-arrive 1.3s var(--spring) both; }
+@keyframes wall-arrive { from { opacity: 0; transform: scale(.78) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: scale(1) rotate(var(--tilt, 0deg)); } }
+/* waiting for the first photo: a slow breathing ring over the glow, nothing sudden */
+.wall-wait { position: absolute; inset: 0; z-index: 2; display: grid; gap: 1.6rem; place-content: center; justify-items: center; font-size: 2rem; text-align: center; margin: 0; color: color-mix(in oklab, #fff 72%, transparent); }
+.wall-wait::before { content: ""; width: 9rem; height: 9rem; border-radius: 50%; border: 2px solid color-mix(in oklab, var(--accent) 62%, transparent);
+  box-shadow: 0 0 5rem color-mix(in oklab, var(--accent) 35%, transparent), inset 0 0 3rem color-mix(in oklab, var(--accent) 22%, transparent); animation: wall-breathe 6s ease-in-out infinite; }
+@keyframes wall-breathe { 0%, 100% { transform: scale(.9); opacity: .35; } 50% { transform: scale(1.08); opacity: .8; } }
 .wall-wait[hidden] { display: none; }
-.wall-note { position: absolute; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.2rem; background: rgba(20,20,40,.82); font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; }
-.wall-controls { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .5rem; opacity: 0; transition: opacity .4s; }
+/* a message to the host rises in, stays and fades out */
+.wall-note { position: absolute; z-index: 2; left: 6vw; right: 6vw; bottom: 8vh; padding: 1.4rem 2rem; border-radius: 1.4rem; background: rgba(14, 12, 34, .78); border: 1px solid rgba(255,255,255,.14);
+  font-size: clamp(1.2rem, 3.2vw, 2.6rem); text-align: center; opacity: 0; transform: translateY(2.2rem) scale(.98); transition: opacity .9s ease, transform .9s var(--ease); }
+.wall-note.in { opacity: 1; transform: none; }
+.wall-note[hidden] { display: none; }
+.wall-controls { position: absolute; z-index: 3; top: 1rem; right: 1rem; left: 1rem; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem .8rem; opacity: 0; transition: opacity .4s; }
 .wall-controls.on { opacity: 1; }
-.wall-controls button { background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: .6rem; padding: .4rem .8rem; }
-.wall-controls button[aria-pressed="true"] { background: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .wall-stage figure.arrive { animation: none; } .wall-stage.single figure.single { transition: none; } }
+.wall-controls .grp { display: flex; gap: .2rem; padding: .2rem; border-radius: 99px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); }
+.wall-controls button { background: transparent; color: #fff; border: 0; border-radius: 99px; padding: .4rem .85rem; font-size: .85rem; box-shadow: none; }
+.wall-controls button[aria-pressed="true"] { background: var(--grad); color: var(--on-accent); }
+.wall-controls .wall-full { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.18); }
+@media (prefers-reduced-motion: reduce) {
+  .wall-stage figure.arrive, .wall-stage figure.single.fresh::after, .wall-wait::before, :is(#wall, #frame)::before, :is(#wall, #frame)::after { animation: none !important; }
+  .wall-stage[data-fx] figure.single img { animation: none !important; }
+  .wall-stage.single figure.single { transform: none !important; transition: opacity .6s ease !important; }
+  .wall-note { transform: none !important; transition: opacity .4s ease !important; }
+}

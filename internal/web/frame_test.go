@@ -90,6 +90,15 @@ func TestAFramePageNeedsNoSignInAndShowsOnlyItsAlbumsPhotos(t *testing.T) {
 			t.Errorf("the frame page lacks %s", want)
 		}
 	}
+	// a frame has the same buttons for the transition and the backdrop, and none for the layout (it only shows one photo)
+	for _, want := range []string{`data-fx="zoom"`, `data-fx="slide"`, `data-bg="black"`, `class="wall-full"`, `data-palette="twilight"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the frame page lacks %s", want)
+		}
+	}
+	if strings.Contains(page, `data-mode=`) {
+		t.Error("a frame shows one photo at a time, so it has no layout buttons")
+	}
 	if res.StatusCode != 200 || res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Referrer-Policy") != "no-referrer" {
 		t.Errorf("%d %v", res.StatusCode, res.Header)
 	}

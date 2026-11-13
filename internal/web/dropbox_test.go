@@ -833,6 +833,12 @@ func TestTheWallIsAScreenWithNoSignInThatSeesOnlyItsBoxesPhotos(t *testing.T) {
 	if _, p := do(t, "GET", app.URL+"/wall/"+wall+"?mode=grid", "", nil); !strings.Contains(p, `data-mode="grid"`) {
 		t.Error("the layout can be chosen in the address")
 	}
+	// the buttons for how photos give way to each other and for what is behind them, the choices and their defaults
+	for _, want := range []string{`data-fx="fade"`, `data-fx="zoom"`, `data-fx="slide"`, `data-fx="rise"`, `data-bg="glow"`, `data-bg="black"`, `class="wall-full"`, `data-palette="twilight"`} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the wall lacks %s", want)
+		}
+	}
 	// the box's own link is not a wall, and a wall link is not a box
 	for _, path := range []string{"/wall/" + token, "/wall/" + strings.Repeat("0", 64), "/drop/" + wall} {
 		if code, _ := do(t, "GET", app.URL+path, "", nil); code != 404 {
