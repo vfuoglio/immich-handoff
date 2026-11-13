@@ -115,8 +115,8 @@ a { color: var(--accent); }
    "fixed" mean "fixed to the header") */
 header.bar {
   position: sticky; top: .5rem; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-  margin: .5rem 0 0; padding: .45rem .6rem .45rem .8rem; min-height: 56px; border: 1px solid var(--border); border-radius: 20px;
-  background: color-mix(in oklab, var(--surface) 55%, transparent);
+  margin: .5rem 0 0; padding: .45rem .6rem .45rem .8rem; min-height: 56px; border: 1px solid transparent; border-radius: 20px;
+  background: color-mix(in oklab, var(--bg) 42%, transparent); box-shadow: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent);
   -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
 }
 .brand { display: flex; align-items: center; gap: .6rem; font: 700 1.1rem/1 var(--font-display); letter-spacing: -.01em; white-space: nowrap; }
