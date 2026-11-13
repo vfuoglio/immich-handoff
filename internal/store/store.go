@@ -483,6 +483,14 @@ var migrations = []string{
 	// gallery, the wall and the guests' ZIP, and left out of a best-of).
 	`ALTER TABLE dropbox_assets ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE dropbox_assets ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`,
+	// What makes a box's guest pages the host's own: a title (the box's name stays the internal one, which is also its
+	// tag) and a logo.
+	`ALTER TABLE dropboxes ADD COLUMN title TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_logos (
+	   box_id TEXT PRIMARY KEY,
+	   kind   TEXT NOT NULL,
+	   data   BLOB NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

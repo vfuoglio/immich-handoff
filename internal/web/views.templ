@@ -290,6 +290,8 @@ type DropBoxView struct {
 	MaxDim      int
 	HasCover    bool
 	GuestDelete bool
+	Title       string // the name guests see, if the host gave one
+	HasLogo     bool
 	KeepDays    int    // days after the box ends that what guests left with it is kept (0: until it is revoked)
 	KeepUntil   string // when that goes, once the box has an end
 
@@ -394,6 +396,7 @@ type DropPageView struct {
 	Prompts              []PromptView
 	PromptRequired       bool
 	GuestBook            bool
+	Logo                 bool // the box has a logo
 	Gallery              bool // guests may look at the photos the box kept, and heart them
 	GalleryDownload      bool // and download them
 	GalleryNames         bool // and the page asks for a name to show with the photos
@@ -1975,6 +1978,11 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 									}
 								</select>
 							</label>
+							<label>{ t(ctx, "Title guests see (optional, otherwise the box's name)") } <input name="title" maxlength="60" value={ b.Title } placeholder={ b.Name }/></label>
+							<label>{ t(ctx, "Logo (JPEG, PNG or WebP, up to 300 KB)") } <input name="logo" type="file" accept="image/jpeg,image/png,image/webp"/></label>
+							if b.HasLogo {
+								<label><input name="nologo" type="checkbox" value="1"/> { t(ctx, "Remove the logo") }</label>
+							}
 							<label>{ t(ctx, "Cover photo (JPEG, PNG or WebP, up to 900 KB)") } <input name="cover" type="file" accept="image/jpeg,image/png,image/webp"/></label>
 							if b.HasCover {
 								<label><input name="nocover" type="checkbox" value="1"/> { t(ctx, "Remove the cover photo") }</label>
@@ -2398,6 +2406,9 @@ templ DropPage(d DropPageView) {
 			<img class="drop-cover" src={ "drop/" + d.Token + "/cover" } alt="" width="640" height="240"/>
 		}
 		<section class="invite-hero">
+			if d.Logo {
+				<img class="drop-logo" src={ "drop/" + d.Token + "/logo" } alt={ d.Name } height="64"/>
+			}
 			<h1>{ d.Name }</h1>
 			if d.Message != "" {
 				<p class="lead">{ d.Message }</p>
@@ -2516,6 +2527,9 @@ templ DropAlbum(d DropPageView, share *ShareView) {
 			<img class="drop-cover" src={ "drop/" + d.Token + "/cover" } alt="" width="640" height="240"/>
 		}
 		<section class="invite-hero">
+			if d.Logo {
+				<img class="drop-logo" src={ "drop/" + d.Token + "/logo" } alt={ d.Name } height="64"/>
+			}
 			<h1>{ d.Name }</h1>
 			<p class="lead">{ t(ctx, "This event is over. Thank you for being part of it!") }</p>
 		</section>
@@ -2764,7 +2778,7 @@ templ WallControls(modes bool, mode string) {
 }
 
 // WallPage is the slideshow a screen opens: no sign-in, no bar, only the photos and a few controls that fade away.
-templ WallPage(name, token, mode string) {
+templ WallPage(name, token, mode string, logo bool) {
 	<!DOCTYPE html>
 	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
@@ -2785,6 +2799,9 @@ templ WallPage(name, token, mode string) {
 				<div class="wall-stage" aria-live="polite"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 				<div class="wall-note" hidden></div>
+				if logo {
+					<img class="wall-logo" src={ "wall/" + token + "/logo" } alt=""/>
+				}
 				@WallControls(true, mode)
 			</main>
 		</body>

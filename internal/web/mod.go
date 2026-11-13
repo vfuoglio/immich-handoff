@@ -41,7 +41,7 @@ func (w *Server) modPage(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "try again", http.StatusServiceUnavailable)
 		return
 	}
-	view := ModPageView{Token: r.PathValue("token"), Name: b.Name, Total: total}
+	view := ModPageView{Token: r.PathValue("token"), Name: b.GuestTitle(), Total: total}
 	for _, p := range list {
 		view.Items = append(view.Items, PendingView{ID: p.ID, Name: p.Name, Size: megabytes(p.Size), Image: p.Kind == "image"})
 	}

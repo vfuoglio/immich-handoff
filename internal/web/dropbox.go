@@ -177,7 +177,7 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 			}
 			rw.Header().Set("Cache-Control", "no-store")
 			rw.Header().Set("Referrer-Policy", "no-referrer")
-			DropAlbum(DropPageView{Token: r.PathValue("token"), Name: gb.Name, Cover: w.Hub.Store.HasDropCover(r.Context(), gb.ID), GalleryDownload: gb.GalleryDownload}, share).Render(r.Context(), rw)
+			DropAlbum(DropPageView{Token: r.PathValue("token"), Name: gb.GuestTitle(), Cover: w.Hub.Store.HasDropCover(r.Context(), gb.ID), Logo: w.Hub.Store.HasDropLogo(r.Context(), gb.ID), GalleryDownload: gb.GalleryDownload}, share).Render(r.Context(), rw)
 			return
 		}
 		// a box that has shared its photos back says so, to the people who have its link
@@ -190,7 +190,7 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 				r = w.forGuest(r, gb, r.PathValue("token"))
 				rw.Header().Set("Cache-Control", "no-store")
 				rw.Header().Set("Referrer-Policy", "no-referrer")
-				DropThanks(gb.Name, sh.Message, w.shareView(sh)).Render(r.Context(), rw)
+				DropThanks(gb.GuestTitle(), sh.Message, w.shareView(sh)).Render(r.Context(), rw)
 				return
 			}
 		}
@@ -207,7 +207,7 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "" && b.PasswordScope != store.DropScopePage, PhotosOnly: b.PhotosOnly,
+	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.GuestTitle(), Logo: w.Hub.Store.HasDropLogo(r.Context(), b.ID), Message: b.Message, Password: b.Password != "" && b.PasswordScope != store.DropScopePage, PhotosOnly: b.PhotosOnly,
 		Approve: b.Approve, Limits: dropLimitText(r.Context(), b), MaxDim: b.MaxDim, Cover: w.Hub.Store.HasDropCover(r.Context(), b.ID),
 		CanDelete: b.GuestDelete, Prompts: w.promptViews(r.Context(), b), PromptRequired: b.PromptRequired, GuestBook: b.GuestBook,
 		Gallery: b.Gallery, GalleryDownload: b.GalleryDownload, GalleryNames: b.GalleryNames}).Render(r.Context(), rw)
@@ -318,7 +318,7 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(rw).Encode(out)
 		return
 	}
-	DropDone(b.Name, "drop/"+token, b.GuestDelete, lines).Render(ctx, rw)
+	DropDone(b.GuestTitle(), "drop/"+token, b.GuestDelete, lines).Render(ctx, rw)
 }
 
 // dropReason is what a guest is told about one file.
@@ -477,6 +477,7 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
 			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
 		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
+		v.Title, v.HasLogo = b.Title, w.Hub.Store.HasDropLogo(ctx, b.ID)
 		v.KeepDays, v.Gallery, v.GalleryDownload, v.GalleryNames = b.KeepDays, b.Gallery, b.GalleryDownload, b.GalleryNames
 		if until := b.KeepUntil(); !until.IsZero() {
 			v.KeepUntil = loc(ctx).Stamp(until.Local())
@@ -771,14 +772,6 @@ func (w *Server) guestBox(rw http.ResponseWriter, r *http.Request) (store.DropBo
 }
 
 // onAccent is the text colour that reads on a colour: black or white, whichever has the better contrast.
-func onAccent(hex string) string {
-	var r, g, b int
-	fmt.Sscanf(strings.TrimPrefix(hex, "#"), "%02x%02x%02x", &r, &g, &b)
-	if (299*r+587*g+114*b)/1000 > 150 {
-		return "#111111"
-	}
-	return "#ffffff"
-}
 
 func (w *Server) dropTheme(rw http.ResponseWriter, r *http.Request) {
 	b, ok := w.guestBox(rw, r)
@@ -796,7 +789,8 @@ func (w *Server) dropTheme(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// :root three times over, so a box's own colour beats the colour scheme the page starts with (which sits on :root and :root[data-palette])
-	fmt.Fprintf(rw, ":root:root:root{--accent:%s;--on-accent:%s}\n", b.Accent, onAccent(b.Accent))
+	light, dark := accentInk(b.Accent)
+	fmt.Fprintf(rw, ":root:root:root{--accent:%s;--on-accent:%s;--accent-ink:light-dark(%s,%s)}\n", b.Accent, onAccent(b.Accent), light, dark)
 }
 
 func (w *Server) dropCover(rw http.ResponseWriter, r *http.Request) {
@@ -815,6 +809,35 @@ func (w *Server) dropCover(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(data)
 }
 
+func (w *Server) dropLogo(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.guestBox(rw, r)
+	if !ok {
+		return
+	}
+	w.serveLogo(rw, r, b)
+}
+
+func (w *Server) serveLogo(rw http.ResponseWriter, r *http.Request, b store.DropBox) {
+	kind, data, err := w.Hub.Store.DropLogo(r.Context(), b.ID)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=300")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+// wallLogo gives the wall the box's logo.
+func (w *Server) wallLogo(rw http.ResponseWriter, r *http.Request) {
+	b, ok := w.wallBox(rw, r)
+	if !ok {
+		return
+	}
+	w.serveLogo(rw, r, b)
+}
+
 // dropManifest lets a guest install a box's page on their phone, under the box's own name.
 func (w *Server) dropManifest(rw http.ResponseWriter, r *http.Request) {
 	b, ok := w.guestBox(rw, r)
@@ -822,7 +845,7 @@ func (w *Server) dropManifest(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	short := []rune(b.Name)
+	short := []rune(b.GuestTitle())
 	if len(short) > 12 {
 		short = short[:12]
 	}
@@ -831,7 +854,7 @@ func (w *Server) dropManifest(rw http.ResponseWriter, r *http.Request) {
 		color = b.Accent
 	}
 	m := map[string]any{
-		"name": b.Name, "short_name": string(short), "description": b.Message,
+		"name": b.GuestTitle(), "short_name": string(short), "description": b.Message,
 		"start_url": "../" + token, "scope": "../", "display": "standalone",
 		"background_color": "#0d0b20", "theme_color": color,
 		"icons": []map[string]string{
@@ -874,7 +897,7 @@ func (w *Server) dropMine(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	DropMine(b.Name, token, view, r.URL.Query().Get("msg")).Render(r.Context(), rw)
+	DropMine(b.GuestTitle(), token, view, r.URL.Query().Get("msg")).Render(r.Context(), rw)
 }
 
 func (w *Server) dropMineDelete(rw http.ResponseWriter, r *http.Request) {
@@ -949,12 +972,19 @@ func (w *Server) lookDropBox(rw http.ResponseWriter, r *http.Request) {
 				return hub.ErrBadDropLook
 			}
 		}
-		var cover []byte
+		var cover, logo []byte
 		if f, _, err := r.FormFile("cover"); err == nil {
 			defer f.Close()
 			cover, _ = io.ReadAll(io.LimitReader(f, 1<<20))
 		}
-		return w.Hub.SetDropLook(ctx, me.user, id, r.PostFormValue("accent"), r.PostFormValue("lang"), dim, cover, r.PostFormValue("nocover") == "1")
+		if f, _, err := r.FormFile("logo"); err == nil {
+			defer f.Close()
+			logo, _ = io.ReadAll(io.LimitReader(f, 400<<10))
+		}
+		if err := w.Hub.SetDropLook(ctx, me.user, id, r.PostFormValue("accent"), r.PostFormValue("lang"), dim, cover, r.PostFormValue("nocover") == "1"); err != nil {
+			return err
+		}
+		return w.Hub.SetDropBrand(ctx, me.user, id, r.PostFormValue("title"), logo, r.PostFormValue("nologo") == "1")
 	})
 }
 
@@ -1122,7 +1152,7 @@ func (w *Server) dropMessage(rw http.ResponseWriter, r *http.Request) {
 			Notice(t(ctx, "The message was not kept"), text, true).Render(ctx, rw)
 			return
 		}
-		DropMessageDone(b.Name, "drop/"+token).Render(ctx, rw)
+		DropMessageDone(b.GuestTitle(), "drop/"+token).Render(ctx, rw)
 	}
 	if pageLocked(r, b) {
 		answer(http.StatusForbidden, hub.ErrDropPassword)
@@ -1286,7 +1316,7 @@ func (w *Server) wallPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
-	WallPage(b.Name, r.PathValue("token"), mode).Render(r.Context(), rw)
+	WallPage(b.GuestTitle(), r.PathValue("token"), mode, w.Hub.Store.HasDropLogo(r.Context(), b.ID)).Render(r.Context(), rw)
 }
 
 // wallFeed tells the wall which photos came since the last one it has, and which messages to show.

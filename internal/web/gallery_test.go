@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -535,5 +536,96 @@ func TestTheOwnerMakesTheAlbumOfLovedPhotos(t *testing.T) {
 	}
 	if code, body := postForm(t, app.URL+"/dropbox/loved", "sess=family", "service="+id); code != 409 || !strings.Contains(body, "no photo has a heart") {
 		t.Errorf("nothing is loved yet: %d %s", code, body)
+	}
+}
+
+func TestAHostPutsTheirTitleAndLogoOnTheGuestPagesTheAlbumAndTheWall(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("8b", 16)
+	wall := strings.Repeat("e2", 32)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "rossi-2026-06", InboxTag: "inbox/rossi-2026-06", Wall: wall, Accent: "#ffe066", Gallery: true}))
+	id := firstBox(t, st)
+	form := func(fields map[string]string, logo []byte) int {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		mw.WriteField("service", id)
+		for k, v := range fields {
+			mw.WriteField(k, v)
+		}
+		if logo != nil {
+			fw, _ := mw.CreateFormFile("logo", "logo.png")
+			fw.Write(logo)
+		}
+		mw.Close()
+		req, _ := http.NewRequest("POST", app.URL+"/dropbox/look", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.Header.Set("Cookie", "sess=family")
+		req.Header.Set("X-Requested-With", "immich-handoff")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	g := guest(t)
+	base := app.URL + "/drop/" + token
+
+	// before: the box's own name, no logo
+	if _, _, page := fetch(t, g, "GET", base); !strings.Contains(page, "rossi-2026-06") || strings.Contains(page, "drop-logo") {
+		t.Error("without a title the name is shown, and no logo")
+	}
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)
+	for name, logo := range map[string][]byte{"an SVG": svg, "a page": []byte("<html>x</html>"), "too big": append(append([]byte{}, pngBytes...), make([]byte, 301<<10)...)} {
+		if code := form(map[string]string{"title": "Nope"}, logo); code != 409 {
+			t.Errorf("%s as a logo: %d, want 409", name, code)
+		}
+	}
+	if code := form(map[string]string{"title": strings.Repeat("x", 61)}, nil); code != 409 {
+		t.Errorf("a title that is too long: %d", code)
+	}
+	if code := form(map[string]string{"title": "Anna & Marco's wedding", "accent": "#ffe066"}, pngBytes); code != 204 {
+		t.Fatalf("title and logo: %d", code)
+	}
+
+	// after: the title everywhere guests look, the box's name nowhere
+	_, _, page := fetch(t, g, "GET", base)
+	if !strings.Contains(page, "Anna &amp; Marco&#39;s wedding") || strings.Contains(page, "rossi-2026-06") || !strings.Contains(page, `src="drop/`+token+`/logo"`) {
+		t.Errorf("the guest page: %.600s", page)
+	}
+	if code, hdr, logo := fetch(t, g, "GET", base+"/logo"); code != 200 || hdr.Get("Content-Type") != "image/png" || len(logo) != len(pngBytes) || !strings.Contains(hdr.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("the logo: %d %v", code, hdr)
+	}
+	if _, _, m := fetch(t, g, "GET", base+"/manifest.webmanifest"); !strings.Contains(m, "Anna \\u0026 Marco's wedding") && !strings.Contains(m, "Anna & Marco's wedding") {
+		t.Errorf("the installed app's name: %s", m)
+	}
+	if _, _, w := fetch(t, g, "GET", app.URL+"/wall/"+wall); !strings.Contains(w, `class="wall-logo"`) || !strings.Contains(w, "Marco") || strings.Contains(w, "rossi-2026-06") {
+		t.Errorf("the wall: %.500s", w)
+	}
+	if code, _, _ := fetch(t, g, "GET", app.URL+"/wall/"+wall+"/logo"); code != 200 {
+		t.Errorf("the wall's logo: %d", code)
+	}
+	if code, _, _ := fetch(t, g, "GET", app.URL+"/wall/"+strings.Repeat("0", 64)+"/logo"); code != 404 {
+		t.Errorf("a wrong wall: %d", code)
+	}
+	// the host's colour is made to read: the pale yellow gets a darker ink for a light page
+	if _, _, css := fetch(t, g, "GET", base+"/theme.css"); !strings.Contains(css, "--accent:#ffe066") || !strings.Contains(css, "--on-accent:#111111") || !strings.Contains(css, "--accent-ink:light-dark(#") || strings.Contains(css, "light-dark(#ffe066,") {
+		t.Errorf("theme: %s", css)
+	}
+	// the owner's page keeps the real name; the album after the end carries the title and the logo
+	if owner := get(t, app.URL, "sess=family"); !strings.Contains(owner, "rossi-2026-06") || !strings.Contains(owner, "Remove the logo") {
+		t.Error("the owner still sees the box's name and can remove the logo")
+	}
+	st.SetDropSchedule(context.Background(), id, time.Time{}, time.Now().Add(-time.Hour))
+	if _, _, album := fetch(t, g, "GET", base); !strings.Contains(album, "This event is over") || !strings.Contains(album, "drop-logo") || !strings.Contains(album, "Marco") {
+		t.Errorf("the album: %.500s", album)
+	}
+
+	// taking the logo away, and the title
+	if code := form(map[string]string{"title": "", "nologo": "1", "accent": "#ffe066"}, nil); code != 204 {
+		t.Fatal(code)
+	}
+	if code, _, _ := fetch(t, g, "GET", base+"/logo"); code != 404 {
+		t.Errorf("the logo after removing it: %d", code)
 	}
 }

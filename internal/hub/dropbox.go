@@ -70,6 +70,7 @@ var (
 	ErrDropFull     = store.ErrDropFull
 	ErrDropGone     = store.ErrDropBoxGone
 	ErrDropBusy     = errors.New("too many requests, try again later")
+	ErrBadLogo      = errors.New("the logo must be a JPEG, PNG or WebP picture of at most 300 KB")
 	ErrBadMark      = errors.New("that is not something a photo can be marked as")
 	ErrDropPassword = errors.New("the password is not right")
 )

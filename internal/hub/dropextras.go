@@ -82,6 +82,47 @@ func (h *Hub) SetDropLook(ctx context.Context, user immich.User, id, accent, lan
 	return nil
 }
 
+// maxLogo is the largest logo a box takes.
+const maxLogo = 300 << 10
+
+// SetDropBrand sets what makes a box's guest pages the host's own: the title guests see ("" for the box's name) and a
+// logo (nil keeps it; removeLogo takes it away). A logo is a JPEG, PNG or WebP (never an SVG, which can carry script) of at
+// most 300 KB. The owner and the co-hosts who manage may.
+func (h *Hub) SetDropBrand(ctx context.Context, user immich.User, id, title string, logo []byte, removeLogo bool) error {
+	b, _, err := h.dropBoxFor(ctx, user.ID, id, "manage")
+	if err != nil {
+		return err
+	}
+	title = strings.TrimSpace(title)
+	if utf8.RuneCountInString(title) > 60 || strings.ContainsAny(title, "\r\n\x00\t") {
+		return ErrBadDropName
+	}
+	var kind string
+	if len(logo) > 0 {
+		if len(logo) > maxLogo {
+			return ErrBadLogo
+		}
+		switch ct := http.DetectContentType(logo); ct {
+		case "image/jpeg", "image/png", "image/webp":
+			kind = ct
+		default:
+			return ErrBadLogo
+		}
+	}
+	if title != b.Title {
+		if err := h.Store.SetDropTitle(ctx, b.ID, title); err != nil {
+			return err
+		}
+	}
+	switch {
+	case kind != "":
+		return h.Store.SetDropLogo(ctx, b.ID, kind, logo)
+	case removeLogo:
+		return h.Store.SetDropLogo(ctx, b.ID, "", nil)
+	}
+	return nil
+}
+
 // EventSettings are the settings that make a drop box an event: what guests may do beyond sending, and how long what
 // they leave with the box is kept once it has ended.
 type EventSettings struct {

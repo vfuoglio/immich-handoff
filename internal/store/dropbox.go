@@ -70,8 +70,17 @@ type DropBox struct {
 	GalleryDownload          bool      // and download them
 	GalleryNames             bool      // and see the name the sender gave
 	ModToken                 string    // the token of the moderator link (empty: none)
+	Title                    string    // the name guests see (empty: the box's name)
 	KeepDays                 int       // how many days after the box ends what guests left with it (names, hearts, the gallery) is kept; 0: until the box is revoked
 	CreatedAt, EndedAt       time.Time
+}
+
+// GuestTitle is the name guests see: the title the host gave, or the box's name.
+func (b DropBox) GuestTitle() string {
+	if b.Title != "" {
+		return b.Title
+	}
+	return b.Name
 }
 
 // Expired reports whether the box has passed its end.
@@ -109,7 +118,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days, gallery, gallery_download, gallery_names, mod_token`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days, gallery, gallery_download, gallery_names, mod_token, title`
 
 // What a box's password guards.
 const (
@@ -140,7 +149,7 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays, b2i(b.Gallery), b2i(b.GalleryDownload), b2i(b.GalleryNames), b.ModToken)
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays, b2i(b.Gallery), b2i(b.GalleryDownload), b2i(b.GalleryNames), b.ModToken, b.Title)
 	return b, err
 }
 
@@ -149,7 +158,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays, &b.Gallery, &b.GalleryDownload, &b.GalleryNames, &b.ModToken); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays, &b.Gallery, &b.GalleryDownload, &b.GalleryNames, &b.ModToken, &b.Title); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -318,6 +327,7 @@ func (s *Store) PruneDropBoxes(ctx context.Context, cutoff time.Time) error {
 		`DELETE FROM dropbox_verdicts WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_onward WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropbox_covers WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
+		`DELETE FROM dropbox_logos WHERE box_id IN (SELECT id FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?)`,
 		`DELETE FROM dropboxes WHERE state = 'revoked' AND ended_at <> '' AND ended_at < ?`,
 		`DELETE FROM dropbox_events WHERE at < ?`,
 	} {
@@ -629,6 +639,38 @@ func (s *Store) DropCover(ctx context.Context, id string) (kind string, data []b
 		err = ErrNotFound
 	}
 	return
+}
+
+// SetDropTitle sets the name guests see ("" for the box's own name).
+func (s *Store) SetDropTitle(ctx context.Context, id, title string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET title = ? WHERE id = ? AND state <> ?`, title, id, DropRevoked)
+	return err
+}
+
+// SetDropLogo keeps a box's logo (empty data: none).
+func (s *Store) SetDropLogo(ctx context.Context, id, kind string, data []byte) error {
+	if len(data) == 0 {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_logos WHERE box_id = ?`, id)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_logos (box_id, kind, data) VALUES (?,?,?) ON CONFLICT(box_id) DO UPDATE SET kind = excluded.kind, data = excluded.data`, id, kind, data)
+	return err
+}
+
+// DropLogo returns a box's logo.
+func (s *Store) DropLogo(ctx context.Context, id string) (kind string, data []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT kind, data FROM dropbox_logos WHERE box_id = ?`, id).Scan(&kind, &data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil, ErrNotFound
+	}
+	return kind, data, err
+}
+
+// HasDropLogo says whether a box has a logo.
+func (s *Store) HasDropLogo(ctx context.Context, id string) bool {
+	var n int
+	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dropbox_logos WHERE box_id = ?`, id).Scan(&n)
+	return n > 0
 }
 
 // HasDropCover says whether a box has a cover photo.

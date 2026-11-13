@@ -770,3 +770,56 @@ func TestTheAlbumOfLovedPhotosHoldsTheHeartedAndThePinnedAndNeverTheHidden(t *te
 		t.Errorf("the corrected album: %v", in)
 	}
 }
+
+func TestATitleAndALogoAreCheckedAndOnlyHostsWhoManageSetThem(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "rossi-2026-06", Days: 3})
+	png := append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 100)...)
+	if got := b.GuestTitle(); got != "rossi-2026-06" {
+		t.Errorf("no title: the name: %q", got)
+	}
+	if err := e.h.SetDropBrand(ctx, bob, b.ID, "  Anna & Marco  ", png, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.st.DropBox(ctx, b.ID)
+	if got.Title != "Anna & Marco" || got.GuestTitle() != "Anna & Marco" || got.Name != "rossi-2026-06" || got.InboxTag != "inbox/rossi-2026-06" {
+		t.Errorf("the title is for guests; the name and the tag stay: %+v", got)
+	}
+	if !e.st.HasDropLogo(ctx, b.ID) {
+		t.Error("the logo is kept")
+	}
+	// a title is not made of line breaks or too long; a logo is a picture and small
+	for _, title := range []string{"two\nlines", strings.Repeat("x", 61)} {
+		if err := e.h.SetDropBrand(ctx, bob, b.ID, title, nil, false); !errors.Is(err, hub.ErrBadDropName) {
+			t.Errorf("%q: %v", title, err)
+		}
+	}
+	for name, logo := range map[string][]byte{"svg": []byte("<svg xmlns='http://www.w3.org/2000/svg'/>"), "text": []byte("hello"), "big": append(append([]byte{}, png...), make([]byte, 300<<10)...)} {
+		if err := e.h.SetDropBrand(ctx, bob, b.ID, "Anna", logo, false); !errors.Is(err, hub.ErrBadLogo) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// a failed save changes nothing
+	if again, _ := e.st.DropBox(ctx, b.ID); again.Title != "Anna & Marco" {
+		t.Errorf("the title after refusals: %q", again.Title)
+	}
+	// co-hosts: one who manages may, one who only looks may not
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostView)
+	if err := e.h.SetDropBrand(ctx, ann, b.ID, "Hijacked", nil, false); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host who only looks: %v", err)
+	}
+	e.h.RemoveDropHost(ctx, bob, b.ID, annID)
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if err := e.h.SetDropBrand(ctx, ann, b.ID, "Anna & Marco's wedding", nil, true); err != nil {
+		t.Errorf("a co-host who manages: %v", err)
+	}
+	if e.st.HasDropLogo(ctx, b.ID) {
+		t.Error("the logo is removed")
+	}
+	if err := e.h.SetDropBrand(ctx, bob, b.ID, "", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if final, _ := e.st.DropBox(ctx, b.ID); final.Title != "" || final.GuestTitle() != "rossi-2026-06" {
+		t.Errorf("an empty title is the name again: %+v", final)
+	}
+}

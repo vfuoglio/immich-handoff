@@ -75,6 +75,7 @@
 :root {
   --primary: var(--accent);
   --primary-text: var(--on-accent);
+  --accent-ink: var(--accent); /* the colour of text in the accent colour: a drop box with a colour of its own sets it so it always reads */
   --glass: color-mix(in oklab, var(--surface) 72%, transparent);
   --field: color-mix(in oklab, var(--surface) 70%, transparent);
   --spot: color-mix(in oklab, var(--accent) 22%, transparent);
@@ -107,7 +108,7 @@ body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: radial-gradient(60rem 26rem at calc(50% + (var(--px, .5) - .5) * 24%) 114%, var(--glow-c), transparent 62%);
 }
-a { color: var(--accent); }
+a { color: var(--accent-ink); }
 .wrap { max-width: 56rem; margin: 0 auto; padding: 0 1rem 3rem; }
 
 /* shell: a glass bar with the app icon and the controls; the views are a floating pill in its middle on a wide screen
@@ -178,7 +179,7 @@ html.js .view > :nth-child(n+10) { animation-delay: 500ms; }
 }
 .icon-btn:hover { color: var(--text); background: var(--surface-2); }
 .icon-btn svg { width: 18px; height: 18px; display: block; }
-.adminlink { color: var(--accent); font-weight: 600; text-decoration: none; }
+.adminlink { color: var(--accent-ink); font-weight: 600; text-decoration: none; }
 .adminlink:hover { text-decoration: underline; }
 
 h1, h2, h3 { font-family: var(--font-display); }
@@ -287,7 +288,7 @@ ul.events li { font-size: .95rem; }
 details.offer { margin: 1.25rem 0 .75rem; }
 details.offer > summary {
   cursor: pointer; font-weight: 600; padding: .85rem 1.15rem; border-radius: var(--radius); list-style: none;
-  border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--accent);
+  border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--accent-ink);
   background: linear-gradient(160deg, color-mix(in oklab, var(--surface) 78%, transparent), color-mix(in oklab, var(--surface-2) 52%, transparent));
 }
 details.offer > summary::-webkit-details-marker { display: none; }
@@ -579,7 +580,7 @@ dialog.cmd li small { color: var(--muted); font-family: var(--font-mono); font-s
 .form-grid .wide { grid-column: 1 / -1; }
 .field small { color: var(--muted); font-size: .8rem; }
 details.more { margin: .6rem 0 0; border-top: 1px solid var(--border); padding-top: .4rem; }
-details.more > summary { cursor: pointer; padding: .5rem 0; font-weight: 600; font-size: .9rem; color: var(--accent); list-style: none; }
+details.more > summary { cursor: pointer; padding: .5rem 0; font-weight: 600; font-size: .9rem; color: var(--accent-ink); list-style: none; }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "+"; display: inline-block; width: 1.1rem; font-weight: 700; }
 details.more[open] > summary::before { content: "\2212"; }
@@ -614,7 +615,7 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
   border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
 .lang-menu button, .scheme-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
 .lang-menu button:hover, .scheme-menu button:hover { background: var(--surface-2); transform: none; }
-.lang-menu button[aria-checked="true"], .scheme-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
+.lang-menu button[aria-checked="true"], .scheme-menu button[aria-checked="true"] { color: var(--accent-ink); font-weight: 700; }
 .lang-menu button[aria-checked="true"]::after, .scheme-menu button[aria-checked="true"]::after { content: " \2713"; }
 
 .qr { margin-top: .8rem; }
@@ -626,6 +627,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; 
 /* the guest page of a drop box */
 main:has(.drop-form) { max-width: 40rem; margin-inline: auto; }
 .drop-send { width: 100%; padding: .9rem 1.4rem; font-size: 1.05rem; }
+.drop-logo { display: block; max-height: 4rem; max-width: 60%; width: auto; margin: 0 auto .9rem; object-fit: contain; }
 .drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
 .drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius); }
 
@@ -651,7 +653,7 @@ main:has(.drop-form) { max-width: 40rem; margin-inline: auto; }
 .drop-summary { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-weight: 600; }
 .drop-summary[hidden] { display: none; }
 .bad-note { color: var(--bad); font-weight: 600; }
-button.link { border: 0; background: transparent; padding: .2rem .4rem; color: var(--accent); font-weight: 600; box-shadow: none; }
+button.link { border: 0; background: transparent; padding: .2rem .4rem; color: var(--accent-ink); font-weight: 600; box-shadow: none; }
 button.link:hover { text-decoration: underline; transform: none; background: transparent; }
 .drop-list { grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: .8rem; }
 .drop-item { position: relative; display: grid; gap: .25rem; align-content: start; min-width: 0;
@@ -750,7 +752,7 @@ ul.gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem,
 .gal-heart[aria-pressed="true"] svg { fill: currentColor; }
 .gal-heart.pop svg { animation: gal-pop .45s var(--spring); }
 .gal-heart:hover { background: var(--surface-2); }
-.gal-save { flex: none; font-size: .78rem; color: var(--accent); text-decoration: none; padding: .3rem .1rem; }
+.gal-save { flex: none; font-size: .78rem; color: var(--accent-ink); text-decoration: none; padding: .3rem .1rem; }
 .gal-save:hover { text-decoration: underline; }
 dialog.gal-lightbox { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 96vh; overflow: visible; }
 dialog.gal-lightbox::backdrop { background: #000c; }
@@ -773,6 +775,9 @@ ul.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5
 .mod-mark button { flex: 1 1 0; padding: .4rem .3rem; font-size: .85rem; }
 .mod-mark button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 @media (max-width: 640px) { ul.mod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* a host's logo in a corner of the wall: quiet, never in the way of a photo */
+.wall-logo { position: fixed; top: 1.2rem; left: 1.4rem; max-height: 4.2rem; max-width: 22vw; width: auto; object-fit: contain; opacity: .85; z-index: 6; pointer-events: none; }
 
 /* the wall and the frame: a dark stage with a soft glow behind the photos (or plain black), a choice of how one photo
    gives way to the next, a ring for a new arrival and a calm waiting screen. Everything moves with transform and opacity
