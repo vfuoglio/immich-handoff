@@ -15,76 +15,69 @@
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-display: swap; font-weight: 100 800; src: url(fonts/jetbrains-mono-cyrillic.woff2) format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
 
 :root {
-  /* palette: light */
-  --bg: #f5f2fd;
-  --surface: #ffffff;
-  --surface-2: #ece8fb;
-  --text: #1d1745;
-  --muted: #5f5a86;
-  --border: #1d174526;
-  --accent: #4250af;
-  --horizon: #e5702b;
-  --magenta: #b23bad;
-  --ok: #14804b;
-  --warn: #9a5a00;
-  --bad: #b3261e;
-  --on-accent: #ffffff;
-  --glow-a: #4250af30;
-  --glow-b: #b23bad22;
-  --glow-c: #e5702b30;
-  --shadow: 0 1px 2px rgb(29 23 69 / .06), 0 18px 40px -26px rgb(29 23 69 / .35);
-  /* aliases used by older rules */
-  --primary: var(--accent);
-  --primary-text: var(--on-accent);
+  color-scheme: light dark; /* follow the browser; the two rules below let the page's own switch decide */
   /* type, space, shape */
   --font-display: "Bricolage Grotesque", "Onest", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   --font-body: "Figtree", "Onest", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 22px;
   --radius-sm: 12px;
-  color-scheme: light;
+  --ease: cubic-bezier(.2, .9, .3, 1);
+  --spring: cubic-bezier(.3, 1.5, .5, 1);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d0b20;
-    --surface: #1a1640;
-    --surface-2: #26205a;
-    --text: #f3f0ff;
-    --muted: #a9a3cb;
-    --border: #ffffff22;
-    --accent: #98a6ff;
-    --horizon: #ff9b5e;
-    --magenta: #d860d2;
-    --ok: #66e5a6;
-    --warn: #ffc562;
-    --bad: #ff808a;
-    --on-accent: #0d0b20;
-    --glow-a: #98a6ff4d;
-    --glow-b: #d860d238;
-    --glow-c: #ff9b5e4d;
-    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 24px 50px -30px rgb(0 0 0 / .8);
-    color-scheme: dark;
-  }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* The colour schemes. Each sets the same names, light value first and dark second (light-dark() picks by the variant in
+   force), so everything below is written once. Twilight is the default and what the page falls back to; THEME or a
+   person's own choice puts data-palette on <html>. A drop box's own colour (theme.css) is written to beat these. */
+:root, :root[data-palette="twilight"] {
+  --bg: light-dark(#f5f2fd, #0d0b20);
+  --surface: light-dark(#ffffff, #1a1640);
+  --surface-2: light-dark(#ece8fb, #26205a);
+  --text: light-dark(#1d1745, #f3f0ff);
+  --muted: light-dark(#5f5a86, #a9a3cb);
+  --border: light-dark(#1d174526, #ffffff22);
+  --accent: light-dark(#4250af, #98a6ff);
+  --horizon: light-dark(#e5702b, #ff9b5e);
+  --magenta: light-dark(#b23bad, #d860d2);
+  --ok: light-dark(#14804b, #66e5a6);
+  --warn: light-dark(#9a5a00, #ffc562);
+  --bad: light-dark(#b3261e, #ff808a);
+  --on-accent: light-dark(#ffffff, #0d0b20);
+  --glow-a: light-dark(#4250af30, #98a6ff4d);
+  --glow-b: light-dark(#b23bad22, #d860d238);
+  --glow-c: light-dark(#e5702b30, #ff9b5e4d);
+  --shadow: 0 1px 2px light-dark(rgb(29 23 69 / .06), rgb(0 0 0 / .4)), 0 24px 50px -30px light-dark(rgb(29 23 69 / .35), rgb(0 0 0 / .8));
+  --grad: linear-gradient(100deg, var(--accent), var(--magenta) 58%, var(--horizon));
 }
-:root[data-theme="dark"] {
-  --bg: #0d0b20;
-  --surface: #1a1640;
-  --surface-2: #26205a;
-  --text: #f3f0ff;
-  --muted: #a9a3cb;
-  --border: #ffffff22;
-  --accent: #98a6ff;
-  --horizon: #ff9b5e;
-  --magenta: #d860d2;
-  --ok: #66e5a6;
-  --warn: #ffc562;
-  --bad: #ff808a;
-  --on-accent: #0d0b20;
-  --glow-a: #98a6ff4d;
-  --glow-b: #d860d238;
-  --glow-c: #ff9b5e4d;
-  --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 24px 50px -30px rgb(0 0 0 / .8);
-  color-scheme: dark;
+:root[data-palette="immich"] {
+  --bg: light-dark(#f5f7fd, #07080d);
+  --surface: light-dark(#ffffff, #11131c);
+  --surface-2: light-dark(#eaeefb, #1b1e2b);
+  --text: light-dark(#0f1330, #eef0f8);
+  --muted: light-dark(#5d6690, #8e96b3);
+  --border: light-dark(#1a246026, #ffffff1f);
+  --accent: light-dark(#4250af, #adcbfa);
+  --horizon: light-dark(#8c9bf0, #cfe0ff);
+  --magenta: light-dark(#5b6bd6, #7fa6f0);
+  --ok: light-dark(#14804b, #66e5a6);
+  --warn: light-dark(#9a5a00, #ffc562);
+  --bad: light-dark(#b3261e, #ff808a);
+  --on-accent: light-dark(#ffffff, #06142e);
+  --glow-a: light-dark(#4250af26, #adcbfa33);
+  --glow-b: light-dark(#5b6bd622, #7fa6f022);
+  --glow-c: light-dark(#8c9bf026, #cfe0ff22);
+  --shadow: 0 1px 2px light-dark(rgb(15 19 48 / .06), rgb(0 0 0 / .45)), 0 24px 50px -30px light-dark(rgb(15 19 48 / .3), rgb(0 0 0 / .85));
+  --grad: linear-gradient(100deg, var(--accent), var(--magenta));
+}
+/* names built from the above, so they follow whichever scheme and variant is in force (and a box's own accent) */
+:root {
+  --primary: var(--accent);
+  --primary-text: var(--on-accent);
+  --glass: color-mix(in oklab, var(--surface) 72%, transparent);
+  --field: color-mix(in oklab, var(--surface) 70%, transparent);
+  --spot: color-mix(in oklab, var(--accent) 22%, transparent);
 }
 
 * { box-sizing: border-box; }
@@ -490,16 +483,22 @@ details.more[open] > summary::before { content: "\2212"; }
 
 /* the language menu in the bar */
 details.lang { position: relative; margin-left: auto; margin-right: .5rem; }
+details.scheme { position: relative; }
+details.scheme > summary { list-style: none; cursor: pointer; }
+details.scheme > summary::-webkit-details-marker { display: none; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; margin-right: .55rem; vertical-align: -2px; border: 1px solid var(--border); }
+.swatch.twilight { background: linear-gradient(135deg, #4250af, #b23bad 55%, #e5702b); }
+.swatch.immich { background: linear-gradient(135deg, #4250af, #adcbfa); }
 details.lang > summary { list-style: none; cursor: pointer; }
 details.lang > summary::-webkit-details-marker { display: none; }
 details.lang > summary.icon-btn.wide { display: inline-flex; }
 .lang-code { font: 600 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
-.lang-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
+.lang-menu, .scheme-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
   border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
-.lang-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
-.lang-menu button:hover { background: var(--surface-2); transform: none; }
-.lang-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
-.lang-menu button[aria-checked="true"]::after { content: " \2713"; }
+.lang-menu button, .scheme-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .5rem .7rem; border-radius: 10px; font-weight: 500; }
+.lang-menu button:hover, .scheme-menu button:hover { background: var(--surface-2); transform: none; }
+.lang-menu button[aria-checked="true"], .scheme-menu button[aria-checked="true"] { color: var(--accent); font-weight: 700; }
+.lang-menu button[aria-checked="true"]::after, .scheme-menu button[aria-checked="true"]::after { content: " \2713"; }
 
 .qr { margin-top: .8rem; }
 .qr img { display: block; width: 220px; height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--border); }

@@ -55,6 +55,8 @@ type Server struct {
 	DownloadGap     time.Duration   // the least time between two downloads (default 10 minutes)
 	Bus             *live.Bus       // what is happening, for the open pages (nil: only the "run" signal is sent)
 	ClientIPHeader  string          // DROPBOX_CLIENT_IP_HEADER: the header in which a reverse proxy puts a guest's real address (empty: the connection's)
+	Theme           string          // THEME: the colour scheme people start with, twilight (default) or immich; each person can change it
+	ThemeMode       string          // THEME_MODE: auto (default, the browser decides), light or dark
 
 	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
 
@@ -221,7 +223,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("Content-Language", string(lang))
 		h.Add("Vary", "Accept-Language")
 		h.Add("Vary", "Cookie")
-		r = r.WithContext(context.WithValue(i18n.With(r.Context(), i18n.For(lang)), versionKey{}, w.Version))
+		r = r.WithContext(withTheme(context.WithValue(i18n.With(r.Context(), i18n.For(lang)), versionKey{}, w.Version), w.Theme, w.ThemeMode))
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") {

@@ -748,7 +748,8 @@ func (w *Server) dropTheme(rw http.ResponseWriter, r *http.Request) {
 	if !regexp.MustCompile(`^#[0-9a-f]{6}$`).MatchString(b.Accent) {
 		return
 	}
-	fmt.Fprintf(rw, ":root{--accent:%[1]s;--on-accent:%[2]s}\n:root:not([data-theme=\"light\"]){--accent:%[1]s;--on-accent:%[2]s}\n:root[data-theme=\"dark\"]{--accent:%[1]s;--on-accent:%[2]s}\n", b.Accent, onAccent(b.Accent))
+	// :root three times over, so a box's own colour beats the colour scheme the page starts with (which sits on :root and :root[data-palette])
+	fmt.Fprintf(rw, ":root:root:root{--accent:%s;--on-accent:%s}\n", b.Accent, onAccent(b.Accent))
 }
 
 func (w *Server) dropCover(rw http.ResponseWriter, r *http.Request) {

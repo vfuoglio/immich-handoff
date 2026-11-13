@@ -253,7 +253,15 @@ func run(log *slog.Logger) error {
 	s.Provider = h
 	s.Usage = h // what senders hand over is kept in the data file, for services with a daily limit
 
-	w := &web.Server{S: s, Hub: h, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
+	theme, ok := web.NormalizeTheme(os.Getenv("THEME"))
+	if !ok {
+		log.Warn("THEME is not one of twilight or immich; using twilight", "THEME", os.Getenv("THEME"))
+	}
+	themeMode, ok := web.NormalizeThemeMode(os.Getenv("THEME_MODE"))
+	if !ok {
+		log.Warn("THEME_MODE is not one of auto, light or dark; using auto", "THEME_MODE", os.Getenv("THEME_MODE"))
+	}
+	w := &web.Server{S: s, Hub: h, Theme: theme, ThemeMode: themeMode, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
 		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
 

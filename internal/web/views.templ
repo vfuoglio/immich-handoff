@@ -380,7 +380,7 @@ type DropResultLine struct {
 
 templ Layout(title, user string) {
 	<!DOCTYPE html>
-	<html lang={ loc(ctx).Code() }>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -399,8 +399,8 @@ templ Layout(title, user string) {
 				<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials"/>
 			}
 			<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
-			<meta name="theme-color" content="#f5f2fd" media="(prefers-color-scheme: light)"/>
-			<meta name="theme-color" content="#0d0b20" media="(prefers-color-scheme: dark)"/>
+			<meta name="theme-color" content={ themeColor(paletteOf(ctx), false) } media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content={ themeColor(paletteOf(ctx), true) } media="(prefers-color-scheme: dark)"/>
 			<meta name="apple-mobile-web-app-title" content="Handoff"/>
 			<link rel="stylesheet" href="static/app.css"/>
 			@templ.JSONScript("i18n", clientCatalog(ctx))
@@ -443,6 +443,16 @@ templ Layout(title, user string) {
 								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }>{ t(ctx, "Search") } <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
 							}
 							<span id="live" class="live off" title={ t(ctx, "Live updates") } role="img" aria-label={ t(ctx, "Live updates") }></span>
+							<details class="scheme">
+								<summary class="icon-btn" aria-label={ t(ctx, "Colour scheme") } title={ t(ctx, "Choose the colour scheme") }>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.6-1.4-.6-2.2 0-.9.7-1.5 1.7-1.5H16a5 5 0 0 0 5-5c0-4.2-4-7.7-9-7.7z"></path><circle cx="7.5" cy="11" r="1" fill="currentColor"></circle><circle cx="10.5" cy="7" r="1" fill="currentColor"></circle><circle cx="15" cy="7.5" r="1" fill="currentColor"></circle></svg>
+								</summary>
+								<ul class="scheme-menu" role="menu">
+									for _, p := range Themes() {
+										<li role="none"><button type="button" role="menuitemradio" data-palette={ p } aria-checked={ checked(paletteOf(ctx) == p) }><span class={ "swatch", p } aria-hidden="true"></span>{ themeLabel(ctx, p) }</button></li>
+									}
+								</ul>
+							</details>
 							<button type="button" class="icon-btn" id="theme" aria-label={ t(ctx, "Dark theme") } title={ t(ctx, "Switch between the light and the dark theme") } aria-pressed="false">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17" ></path><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path></svg>
 							</button>
