@@ -542,8 +542,9 @@ dialog.cmd li small { color: var(--muted); font-family: var(--font-mono); font-s
 .card.notice.tags button.primary { padding: .7rem 1.3rem; font-size: 1rem; }
 
 /* the invitation page */
-.invite-hero { padding-top: 1rem; }
-.invite-hero .lead { max-width: 48ch; }
+.invite-hero { padding-top: 1rem; text-align: center; }
+.invite-hero h1 { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+.invite-hero .lead { max-width: 48ch; margin-inline: auto; }
 .invite-card .card { padding: 1.3rem 1.4rem; border-radius: 28px; }
 .invite-card .card h3 { font-size: 1.5rem; }
 .invite-card .card .row button { padding: .7rem 1.2rem; font-size: 1rem; }
@@ -595,6 +596,8 @@ details.lang > summary.icon-btn.wide { display: inline-flex; }
 ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
 
 /* the guest page of a drop box */
+main:has(.drop-form) { max-width: 40rem; margin-inline: auto; }
+.drop-send { width: 100%; padding: .9rem 1.4rem; font-size: 1.05rem; }
 .drop-cover { display: block; width: 100%; max-height: 14rem; object-fit: cover; border-radius: 1.1rem; margin: 0 0 .8rem; }
 .drop-form.dragging { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius); }
 
