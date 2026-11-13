@@ -90,15 +90,22 @@ func (a *API) FindUserByEmail(ctx context.Context, email string) (User, bool, er
 }
 
 // DropBoxPermissionsFor is the key of a new drop box: the five a box needs, the album ones when it files into an album,
-// and, only when the owner lets guests delete what they sent, asset.read (to check a photo is still in the inbox) and
-// asset.delete (which moves it to the owner's trash, never deletes it for good).
-func DropBoxPermissionsFor(album, guestDelete bool) []Permission {
+// asset.read and asset.delete only when the owner lets guests delete what they sent (to check a photo is still in the
+// inbox, and to move it to the owner's trash, never to delete it for good), asset.view when guests may look at the
+// photos (pictures only) and asset.download when they may download them.
+func DropBoxPermissionsFor(album, guestDelete, view, download bool) []Permission {
 	out := append([]Permission{}, DropBoxPermissions...)
 	if album {
 		out = append(out, "album.read", "album.create", "albumAsset.create")
 	}
 	if guestDelete {
 		out = append(out, "asset.read", "asset.delete")
+	}
+	if view {
+		out = append(out, "asset.view")
+	}
+	if download {
+		out = append(out, "asset.download")
 	}
 	return out
 }
@@ -173,4 +180,19 @@ func (a *API) RemoveFromAlbum(ctx context.Context, album openapi_types.UUID, ids
 		return statusErr("removeAssetFromAlbum", r.StatusCode(), r.Body)
 	}
 	return nil
+}
+
+// Original opens the original file of a photo, to be streamed to a guest who may download it. It needs asset.download.
+// The caller closes the body. There is no limit on the time it takes: a video can be large.
+func (a *API) Original(ctx context.Context, id openapi_types.UUID) (*http.Response, error) {
+	resp, err := a.bulk.DownloadAsset(ctx, id, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
+		resp.Body.Close()
+		return nil, statusErr("downloadAsset", resp.StatusCode, b)
+	}
+	return resp, nil
 }

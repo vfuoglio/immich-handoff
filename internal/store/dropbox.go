@@ -66,6 +66,9 @@ type DropBox struct {
 	OnwardService            string    // the service the photos are handed on to when the box closes (empty: none)
 	OnwardAuto               bool      // hand them on by itself when the box closes
 	MailCode                 string    // the part after the plus sign of the box's mail address (empty: none)
+	Gallery                  bool      // guests may look at the photos the box kept, and heart them
+	GalleryDownload          bool      // and download them
+	GalleryNames             bool      // and see the name the sender gave
 	KeepDays                 int       // how many days after the box ends what guests left with it (names, hearts, the gallery) is kept; 0: until the box is revoked
 	CreatedAt, EndedAt       time.Time
 }
@@ -105,7 +108,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days, gallery, gallery_download, gallery_names`
 
 // What a box's password guards.
 const (
@@ -136,7 +139,7 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays)
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays, b2i(b.Gallery), b2i(b.GalleryDownload), b2i(b.GalleryNames))
 	return b, err
 }
 
@@ -145,7 +148,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays, &b.Gallery, &b.GalleryDownload, &b.GalleryNames); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -417,6 +420,7 @@ func (s *Store) HostedBoxes(ctx context.Context, user uuid.UUID) (map[string]str
 type DropPending struct {
 	ID, BoxID, Name, Kind, Who, Path string
 	Prompt                           string // the id of the prompt it is for
+	GuestName                        string // the name the guest gave, if any
 	Size                             int64
 	At                               time.Time
 }
@@ -427,8 +431,8 @@ func (s *Store) AddDropPending(ctx context.Context, p DropPending) (DropPending,
 		p.ID = uuid.NewString()
 	}
 	p.At = time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_pending (id, box_id, name, size, kind, who, at, path, prompt) VALUES (?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.BoxID, p.Name, p.Size, p.Kind, p.Who, p.At.Format(time.RFC3339Nano), p.Path, p.Prompt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_pending (id, box_id, name, size, kind, who, at, path, prompt, guest_name) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.BoxID, p.Name, p.Size, p.Kind, p.Who, p.At.Format(time.RFC3339Nano), p.Path, p.Prompt, p.GuestName)
 	return p, err
 }
 
@@ -438,7 +442,7 @@ func scanPending(rows *sql.Rows) ([]DropPending, error) {
 	for rows.Next() {
 		var p DropPending
 		var at string
-		if err := rows.Scan(&p.ID, &p.BoxID, &p.Name, &p.Size, &p.Kind, &p.Who, &at, &p.Path, &p.Prompt); err != nil {
+		if err := rows.Scan(&p.ID, &p.BoxID, &p.Name, &p.Size, &p.Kind, &p.Who, &at, &p.Path, &p.Prompt, &p.GuestName); err != nil {
 			return nil, err
 		}
 		p.At, _ = time.Parse(time.RFC3339Nano, at)
@@ -447,7 +451,7 @@ func scanPending(rows *sql.Rows) ([]DropPending, error) {
 	return out, rows.Err()
 }
 
-const pendingCols = `id, box_id, name, size, kind, who, at, path, prompt`
+const pendingCols = `id, box_id, name, size, kind, who, at, path, prompt, guest_name`
 
 // DropPendingOf lists a box's waiting files, oldest first, at most limit of them.
 func (s *Store) DropPendingOf(ctx context.Context, boxID string, limit int) ([]DropPending, error) {
@@ -901,73 +905,150 @@ type DropAsset struct {
 	ID             int64
 	BoxID, AssetID string
 	Prompt         string
+	GuestName      string // the name the guest gave with it, if any
 	At             time.Time
 }
 
-// AddDropAsset records a photo a box kept (once).
-func (s *Store) AddDropAsset(ctx context.Context, boxID, assetID, prompt string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO dropbox_assets (box_id, asset_id, prompt, at) VALUES (?,?,?,?)`,
-		boxID, assetID, prompt, time.Now().UTC().Format(time.RFC3339Nano))
+const assetCols = `id, box_id, asset_id, prompt, guest_name, at`
+
+func scanAssets(rows *sql.Rows) ([]DropAsset, error) {
+	defer rows.Close()
+	var out []DropAsset
+	for rows.Next() {
+		var a DropAsset
+		var at string
+		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &a.GuestName, &at); err != nil {
+			return nil, err
+		}
+		a.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// AddDropAsset records a photo a box kept (once), with the name the guest gave.
+func (s *Store) AddDropAsset(ctx context.Context, boxID, assetID, prompt, guestName string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO dropbox_assets (box_id, asset_id, prompt, guest_name, at) VALUES (?,?,?,?,?)`,
+		boxID, assetID, prompt, guestName, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 
-// RemoveDropAsset forgets a photo (a guest took it back).
+// RemoveDropAsset forgets a photo (a guest took it back), and the hearts it had.
 func (s *Store) RemoveDropAsset(ctx context.Context, boxID, assetID string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_hearts WHERE box_id = ? AND asset_id IN (SELECT id FROM dropbox_assets WHERE box_id = ? AND asset_id = ?)`, boxID, boxID, assetID); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_assets WHERE box_id = ? AND asset_id = ?`, boxID, assetID)
 	return err
 }
 
 // DropAssetsAfter lists a box's photos newer than a position, oldest first.
 func (s *Store) DropAssetsAfter(ctx context.Context, boxID string, after int64, limit int) ([]DropAsset, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? AND id > ? ORDER BY id LIMIT ?`, boxID, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND id > ? ORDER BY id LIMIT ?`, boxID, after, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []DropAsset
-	for rows.Next() {
-		var a DropAsset
-		var at string
-		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at); err != nil {
-			return nil, err
-		}
-		a.At, _ = time.Parse(time.RFC3339Nano, at)
-		out = append(out, a)
-	}
-	return out, rows.Err()
+	return scanAssets(rows)
 }
 
 // DropAssetsLatest lists the newest photos of a box, newest first.
 func (s *Store) DropAssetsLatest(ctx context.Context, boxID string, limit int) ([]DropAsset, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? ORDER BY id DESC LIMIT ?`, boxID, limit)
+	return s.DropAssetsBefore(ctx, boxID, 0, limit)
+}
+
+// DropAssetsBefore lists a box's photos older than a position (0: from the newest), newest first.
+func (s *Store) DropAssetsBefore(ctx context.Context, boxID string, before int64, limit int) ([]DropAsset, error) {
+	if before <= 0 {
+		before = 1<<62 - 1
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND id < ? ORDER BY id DESC LIMIT ?`, boxID, before, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []DropAsset
-	for rows.Next() {
-		var a DropAsset
-		var at string
-		if err := rows.Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at); err != nil {
-			return nil, err
-		}
-		a.At, _ = time.Parse(time.RFC3339Nano, at)
-		out = append(out, a)
-	}
-	return out, rows.Err()
+	return scanAssets(rows)
 }
 
 // DropAssetByID finds one photo of a box.
 func (s *Store) DropAssetByID(ctx context.Context, boxID string, id int64) (DropAsset, error) {
-	var a DropAsset
-	var at string
-	err := s.db.QueryRowContext(ctx, `SELECT id, box_id, asset_id, prompt, at FROM dropbox_assets WHERE box_id = ? AND id = ?`, boxID, id).
-		Scan(&a.ID, &a.BoxID, &a.AssetID, &a.Prompt, &at)
-	if errors.Is(err, sql.ErrNoRows) {
-		return a, ErrNotFound
+	rows, err := s.db.QueryContext(ctx, `SELECT `+assetCols+` FROM dropbox_assets WHERE box_id = ? AND id = ?`, boxID, id)
+	if err != nil {
+		return DropAsset{}, err
 	}
-	a.At, _ = time.Parse(time.RFC3339Nano, at)
-	return a, err
+	list, err := scanAssets(rows)
+	if err != nil {
+		return DropAsset{}, err
+	}
+	if len(list) == 0 {
+		return DropAsset{}, ErrNotFound
+	}
+	return list[0], nil
+}
+
+// --- hearts ---
+
+// ToggleHeart gives a photo of a box one guest's heart, or takes it back if that guest had given it. It says whether the
+// guest now has a heart on the photo and how many hearts it has in all. A photo that is not the box's is not found.
+func (s *Store) ToggleHeart(ctx context.Context, boxID string, asset int64, guest string) (hearted bool, count int, err error) {
+	if _, err := s.DropAssetByID(ctx, boxID, asset); err != nil {
+		return false, 0, err
+	}
+	r, err := s.db.ExecContext(ctx, `DELETE FROM dropbox_hearts WHERE box_id = ? AND asset_id = ? AND guest = ?`, boxID, asset, guest)
+	if err != nil {
+		return false, 0, err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO dropbox_hearts (box_id, asset_id, guest, at) VALUES (?,?,?,?)`, boxID, asset, guest, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return false, 0, err
+		}
+		hearted = true
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM dropbox_hearts WHERE box_id = ? AND asset_id = ?`, boxID, asset).Scan(&count)
+	return hearted, count, err
+}
+
+// HeartCounts is how many hearts each photo of a box has, for the photos with an id from lo to hi (those with none are
+// left out of the answer).
+func (s *Store) HeartCounts(ctx context.Context, boxID string, lo, hi int64) (map[int64]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, COUNT(*) FROM dropbox_hearts WHERE box_id = ? AND asset_id BETWEEN ? AND ? GROUP BY asset_id`, boxID, lo, hi)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// GuestHearts is the photos, from lo to hi, that one guest has given a heart.
+func (s *Store) GuestHearts(ctx context.Context, boxID, guest string, lo, hi int64) (map[int64]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id FROM dropbox_hearts WHERE box_id = ? AND guest = ? AND asset_id BETWEEN ? AND ?`, boxID, guest, lo, hi)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// SetDropGallery changes what guests may do with the photos a box kept.
+func (s *Store) SetDropGallery(ctx context.Context, id string, gallery, download, names bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET gallery = ?, gallery_download = ?, gallery_names = ? WHERE id = ? AND state <> ?`,
+		b2i(gallery), b2i(download && gallery), b2i(names && gallery), id, DropRevoked)
+	return err
 }
 
 // DropAssetIDs lists every photo a box kept (their ids in the library), oldest first.

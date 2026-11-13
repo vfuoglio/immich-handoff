@@ -48,8 +48,10 @@ func (h *Hub) StopWall(ctx context.Context, sess *immich.API, owner immich.User,
 	if err := h.Store.SetDropWall(ctx, b.ID, ""); err != nil {
 		return err
 	}
-	if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
-		h.Log.Warn("stop the wall: could not take asset.view off the key", "err", err)
+	if !b.Gallery { // the guests' gallery needs it too
+		if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
+			h.Log.Warn("stop the wall: could not take asset.view off the key", "err", err)
+		}
 	}
 	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} stopped the wall", "name", owner.Name), "")
 	return nil

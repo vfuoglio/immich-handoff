@@ -74,12 +74,15 @@ type Hub struct {
 	granted     map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
 	drop        dropGuard                  // what the drop boxes' limits know about their guests
 	wall        wallCache                  // the pictures a wall fetched last
-	hlRun       map[string]bool            // boxes whose best-of is being made now
-	digestRun   map[string]bool            // services whose digest is being made now
-	frames      frameCache                 // the albums frames last read
-	remotes     map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
-	retries     map[string]*time.Timer     // when each unreachable receiver on another server is tried again
-	bridgeTries bridgeGuard                // what the invitation pages know about who tried
+	hearts      heartGuard                 // when each guest gave hearts in the last hour
+	slots       chan struct{}              // places for downloads of originals (see originals)
+	slotsOnce   sync.Once
+	hlRun       map[string]bool         // boxes whose best-of is being made now
+	digestRun   map[string]bool         // services whose digest is being made now
+	frames      frameCache              // the albums frames last read
+	remotes     map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
+	retries     map[string]*time.Timer  // when each unreachable receiver on another server is tried again
+	bridgeTries bridgeGuard             // what the invitation pages know about who tried
 }
 
 // SelfService reports whether people can join and leave from the web page.

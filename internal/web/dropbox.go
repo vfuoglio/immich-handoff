@@ -161,6 +161,25 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 	b, err := w.Hub.OpenDropBox(r.Context(), r.PathValue("token"))
 	if err != nil {
 		// a box that has shared its photos back says so, to the people who have its link
+		// a box that has ended but keeps its gallery shows it, with the thanks
+		if gb, gerr := w.Hub.GalleryBox(r.Context(), r.PathValue("token")); gerr == nil {
+			if pageLocked(r, gb) {
+				w.dropLocked(rw, r, gb, r.PathValue("token"), false)
+				return
+			}
+			r = w.forGuest(r, gb, r.PathValue("token"))
+			w.guestSecretFor(rw, r, gb)
+			var share *ShareView
+			if sh, ok := w.Hub.DropShareFor(r.Context(), gb.ID); ok {
+				sv := w.shareView(sh)
+				share = &sv
+			}
+			rw.Header().Set("Cache-Control", "no-store")
+			rw.Header().Set("Referrer-Policy", "no-referrer")
+			DropAlbum(DropPageView{Token: r.PathValue("token"), Name: gb.Name, Cover: w.Hub.Store.HasDropCover(r.Context(), gb.ID), GalleryDownload: gb.GalleryDownload}, share).Render(r.Context(), rw)
+			return
+		}
+		// a box that has shared its photos back says so, to the people who have its link
 		if gb, gerr := w.Hub.DropBoxForGuest(r.Context(), r.PathValue("token")); gerr == nil {
 			if sh, ok := w.Hub.DropShareFor(r.Context(), gb.ID); ok {
 				if pageLocked(r, gb) {
@@ -182,11 +201,15 @@ func (w *Server) dropPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r = w.forGuest(r, b, r.PathValue("token"))
+	if b.Gallery {
+		w.guestSecretFor(rw, r, b) // so a heart can be found again
+	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 	DropPage(DropPageView{Token: r.PathValue("token"), Name: b.Name, Message: b.Message, Password: b.Password != "" && b.PasswordScope != store.DropScopePage, PhotosOnly: b.PhotosOnly,
 		Approve: b.Approve, Limits: dropLimitText(r.Context(), b), MaxDim: b.MaxDim, Cover: w.Hub.Store.HasDropCover(r.Context(), b.ID),
-		CanDelete: b.GuestDelete, Prompts: w.promptViews(r.Context(), b), PromptRequired: b.PromptRequired, GuestBook: b.GuestBook}).Render(r.Context(), rw)
+		CanDelete: b.GuestDelete, Prompts: w.promptViews(r.Context(), b), PromptRequired: b.PromptRequired, GuestBook: b.GuestBook,
+		Gallery: b.Gallery, GalleryDownload: b.GalleryDownload, GalleryNames: b.GalleryNames}).Render(r.Context(), rw)
 }
 
 // dropUpload takes what a guest sent. The files are read from the request one by one and streamed on to Immich, so
@@ -208,14 +231,8 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 	who := hub.DropWho(b.Token, w.clientAddr(r)) // the mark is made from the long token, so both ways in tell a guest by the same one
 	asJSON := strings.Contains(r.Header.Get("Accept"), "application/json")
 	secret := ""
-	if b.GuestDelete {
-		if c, err := r.Cookie(guestSecretCookie(b.ID)); err == nil && len(c.Value) == 32 {
-			secret = c.Value
-		} else {
-			secret = hub.NewGuestSecret()
-			http.SetCookie(rw, &http.Cookie{Name: guestSecretCookie(b.ID), Value: secret, Path: "/", MaxAge: 60 * 24 * 3600, HttpOnly: true,
-				SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
-		}
+	if b.GuestDelete || b.Gallery {
+		secret = w.guestSecretFor(rw, r, b)
 	}
 	if err := w.Hub.AllowDrop(ctx, b, who); err != nil {
 		rw.Header().Set("Retry-After", "600")
@@ -234,7 +251,7 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unlocked := b.Password == "" || (b.PasswordScope == store.DropScopePage && !pageLocked(r, b)) // given on the page, or with the files
-	prompt := ""                                                                                  // the prompt of the shot list the next file is for (a field sent before it)
+	prompt, guestName := "", ""                                                                   // the prompt of the shot list the next file is for, and the name the guest gave (fields sent before it)
 	var lines []DropResultLine
 	for len(lines) < maxDropFilesPerRequest {
 		part, err := mr.NextPart()
@@ -248,13 +265,16 @@ func (w *Server) dropUpload(rw http.ResponseWriter, r *http.Request) {
 		case part.FormName() == "prompt":
 			v, _ := io.ReadAll(io.LimitReader(part, 20))
 			prompt = string(v)
+		case part.FormName() == "guest":
+			v, _ := io.ReadAll(io.LimitReader(part, 400))
+			guestName = string(v)
 		case part.FormName() == "files" && part.FileName() != "":
 			if !unlocked {
 				rw.WriteHeader(http.StatusForbidden)
 				Notice(t(ctx, "Wrong password"), t(ctx, "The password is not right. Go back and try again."), true).Render(ctx, rw)
 				return
 			}
-			outcome, err := w.Hub.ReceiveDropFileWith(ctx, b.ID, part.FileName(), part, who, hub.DropMeta{Secret: secret, Prompt: prompt})
+			outcome, err := w.Hub.ReceiveDropFileWith(ctx, b.ID, part.FileName(), part, who, hub.DropMeta{Secret: secret, Prompt: prompt, Name: guestName})
 			text := dropReason(ctx, err)
 			if err == nil && outcome == hub.DropHeld {
 				text = t(ctx, "Received, waiting for approval")
@@ -456,7 +476,7 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
 			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
 		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
-		v.KeepDays = b.KeepDays
+		v.KeepDays, v.Gallery, v.GalleryDownload, v.GalleryNames = b.KeepDays, b.Gallery, b.GalleryDownload, b.GalleryNames
 		if until := b.KeepUntil(); !until.IsZero() {
 			v.KeepUntil = loc(ctx).Stamp(until.Local())
 		}
@@ -618,6 +638,7 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 		p.Prompts = strings.Split(strings.ReplaceAll(r.PostFormValue("prompts"), "\r", ""), "\n")
 		p.PromptRequired = r.PostFormValue("required") == "1"
 		p.GuestBook = r.PostFormValue("guestbook") == "1"
+		p.Gallery, p.GalleryDownload, p.GalleryNames = r.PostFormValue("gallery") == "1", r.PostFormValue("gallerydownload") == "1", r.PostFormValue("gallerynames") == "1"
 		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
@@ -634,7 +655,8 @@ func (w *Server) eventDropBox(rw http.ResponseWriter, r *http.Request) {
 				return hub.ErrBadDropLimit
 			}
 		}
-		return w.Hub.SetDropEvent(ctx, me.user, id, hub.EventSettings{KeepDays: keep})
+		return w.Hub.SetDropEvent(ctx, me.sess, me.user, id, hub.EventSettings{KeepDays: keep, Gallery: r.PostFormValue("gallery") == "1",
+			Download: r.PostFormValue("gallerydownload") == "1", Names: r.PostFormValue("gallerynames") == "1"})
 	})
 }
 

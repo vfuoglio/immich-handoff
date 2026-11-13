@@ -292,6 +292,8 @@ type DropBoxView struct {
 	GuestDelete bool
 	KeepDays    int    // days after the box ends that what guests left with it is kept (0: until it is revoked)
 	KeepUntil   string // when that goes, once the box has an end
+
+	Gallery, GalleryDownload, GalleryNames bool // guests may look at the photos and heart them; download them; see who sent them
 }
 
 // HighlightView is a box's best-of as the owner reads it.
@@ -374,6 +376,9 @@ type DropPageView struct {
 	Prompts              []PromptView
 	PromptRequired       bool
 	GuestBook            bool
+	Gallery              bool // guests may look at the photos the box kept, and heart them
+	GalleryDownload      bool // and download them
+	GalleryNames         bool // and the page asks for a name to show with the photos
 }
 
 // DropResultLine is what became of one file a guest sent.
@@ -1969,8 +1974,12 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 								<label for={ "keep-" + b.ID }>{ t(ctx, "Keep what guests leave for (days after it ends)") }</label>
 								<input id={ "keep-" + b.ID } name="keepdays" type="number" min="0" max="3650" value={ fmt.Sprint(b.KeepDays) }/>
 							</div>
+							<label class="wide"><input name="gallery" type="checkbox" value="1" checked?={ b.Gallery }/> { t(ctx, "Guests may look at the photos and heart them") }</label>
+							<label class="wide"><input name="gallerydownload" type="checkbox" value="1" checked?={ b.GalleryDownload }/> { t(ctx, "and download them") }</label>
+							<label class="wide"><input name="gallerynames" type="checkbox" value="1" checked?={ b.GalleryNames }/> { t(ctx, "and see who sent each photo (the page asks guests for a name)") }</label>
 							<p class="row form-actions"><button type="submit">{ t(ctx, "Save") }</button></p>
 						</form>
+						<small class="meta">{ t(ctx, "Every guest with the link then sees every photo the box has kept, not only their own. Photos waiting for your approval are never shown. The box's key gets permission to view pictures, and to download if you allow it.") }</small>
 						if b.KeepUntil != "" {
 							<small class="meta">{ t(ctx, "What guests left with the box (their names, their hearts, the gallery) goes on {when}. The photos in your library stay.", "when", b.KeepUntil) }</small>
 						} else {
@@ -2324,6 +2333,10 @@ templ DropBoxForm() {
 			</div>
 			<label class="wide"><input name="required" type="checkbox" value="1"/> { t(ctx, "Every photo must say which one it is for") }</label>
 			<label class="wide"><input name="guestbook" type="checkbox" value="1"/> { t(ctx, "Message to the host: guests may leave a message, with their name, and a voice note") }</label>
+			<label class="wide"><input name="gallery" type="checkbox" value="1"/> { t(ctx, "Guests may look at the photos and heart them") }</label>
+			<label class="wide"><input name="gallerydownload" type="checkbox" value="1"/> { t(ctx, "and download them") }</label>
+			<label class="wide"><input name="gallerynames" type="checkbox" value="1"/> { t(ctx, "and see who sent each photo (the page asks guests for a name)") }</label>
+			<small class="meta wide">{ t(ctx, "Every guest with the link then sees every photo the box has kept, not only their own. Photos waiting for your approval are never shown. The box's key gets permission to view pictures, and to download if you allow it.") }</small>
 			<label class="wide"><input name="guestdelete" type="checkbox" value="1"/> { t(ctx, "Guests may take back what they sent, while it is still in the inbox") }</label>
 			<small class="meta wide">{ t(ctx, "For that the box's key also gets permission to read photos and move them to your trash (never to delete them for good). Guests keep a secret in their browser, so only they can take back their own files.") }</small>
 			<small class="meta wide">{ t(ctx, "An album gives the key permission to find, make and add to albums, nothing more. Files that wait for you are kept on this server's disk until you decide, and deleted after two weeks.") }</small>
@@ -2374,6 +2387,12 @@ templ DropPage(d DropPageView) {
 					}
 				</ul>
 			}
+			if d.GalleryNames {
+				<div class="field">
+					<label for="drop-guest">{ t(ctx, "Your name (shown with your photos)") }</label>
+					<input id="drop-guest" name="guest" maxlength="40" autocomplete="name" data-remember="guest"/>
+				</div>
+			}
 			<div class="dz" data-photos-only?={ d.PhotosOnly }>
 				<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
 				<label class="dz-title" for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
@@ -2391,7 +2410,11 @@ templ DropPage(d DropPageView) {
 			<ul class="plain drop-list" aria-live="polite" hidden></ul>
 			<div class="drop-result" role="status" aria-live="polite" hidden></div>
 			<p class="meta">{ d.Limits }</p>
-			<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			if d.Gallery {
+				<p class="meta">{ t(ctx, "Everyone who has this link can see the photos that were kept, below.") }</p>
+			} else {
+				<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			}
 			if d.Approve {
 				<p class="meta">{ t(ctx, "What you send is looked at before it is kept.") }</p>
 			}
@@ -2400,6 +2423,9 @@ templ DropPage(d DropPageView) {
 			}
 			<p class="row form-actions"><button class="primary drop-send" type="submit" data-label={ t(ctx, "Send") }>{ t(ctx, "Send") }</button></p>
 		</form>
+		if d.Gallery {
+			@Gallery(d.Token, d.GalleryDownload)
+		}
 		if d.GuestBook {
 			<form class="card offer-form guestbook-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/message" }>
 				<h2>{ t(ctx, "Message to the host") }</h2>
@@ -2420,6 +2446,40 @@ templ DropPage(d DropPageView) {
 				<p class="meta guestbook-status" role="status" aria-live="polite"></p>
 			</form>
 		}
+	}
+}
+
+// Gallery is the photos a box has kept, as a guest sees them: a grid that fills in by itself (ts/gallery.ts), a heart on
+// each and, when the box allows, a way to download the original.
+templ Gallery(token string, download bool) {
+	<section class="gallery" data-gallery data-feed={ "drop/" + token + "/gallery" } data-photo={ "drop/" + token + "/photo/" } data-original={ "drop/" + token + "/original/" } data-heart={ "drop/" + token + "/heart/" } data-download?={ download } data-love={ t(ctx, "Heart") } data-unlove={ t(ctx, "Take the heart back") } data-save={ t(ctx, "Download") } data-by={ t(ctx, "by {name}") } data-open={ t(ctx, "Look at the photo") } data-close={ t(ctx, "Close") }>
+		<h2>{ t(ctx, "The photos so far") }</h2>
+		<p class="meta gallery-empty">{ t(ctx, "No photos yet. They appear here by themselves as they are kept.") }</p>
+		<ul class="plain gal" aria-live="polite"></ul>
+		<p class="row"><button type="button" class="gallery-more" hidden>{ t(ctx, "Show more") }</button></p>
+	</section>
+}
+
+// DropAlbum is what a guest opens after the box has closed, for as long as what guests left with it is kept: the photos,
+// to look at and heart (and download, if the box allows), and the owner's thanks. Nothing can be sent any more.
+templ DropAlbum(d DropPageView, share *ShareView) {
+	@Layout(d.Name, "") {
+		if d.Cover {
+			<img class="drop-cover" src={ "drop/" + d.Token + "/cover" } alt="" width="640" height="240"/>
+		}
+		<section class="invite-hero">
+			<h1>{ d.Name }</h1>
+			<p class="lead">{ t(ctx, "This event is over. Thank you for being part of it!") }</p>
+		</section>
+		if share != nil {
+			<p class="row">
+				<a class="button primary share-link" data-share-key={ share.Key } data-share-url={ share.URL } href={ templ.SafeURL(shareHref(*share)) }>{ t(ctx, "See all the photos") }</a>
+			</p>
+			if share.Expires != "" {
+				<p class="meta">{ t(ctx, "Open until {when}.", "when", share.Expires) }</p>
+			}
+		}
+		@Gallery(d.Token, d.GalleryDownload)
 	}
 }
 

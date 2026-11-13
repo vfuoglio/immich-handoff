@@ -330,9 +330,9 @@ func TestDropBoxAssetsWallHighlightsAndOnward(t *testing.T) {
 
 	// the photos a box kept: once each, in order, found by their place, and forgotten when taken back
 	for _, a := range []string{"a1", "a2", "a3", "a2"} {
-		s.AddDropAsset(ctx, b.ID, a, "p1")
+		s.AddDropAsset(ctx, b.ID, a, "p1", "Ann")
 	}
-	s.AddDropAsset(ctx, other.ID, "o1", "")
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
 	list, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
 	if len(list) != 3 || list[0].AssetID != "a1" || list[2].AssetID != "a3" || list[0].ID >= list[1].ID {
 		t.Fatalf("assets: %+v", list)
@@ -428,5 +428,70 @@ func TestDropBoxAssetsWallHighlightsAndOnward(t *testing.T) {
 	}
 	if log, _ := s.DropOnwardLog(ctx, b.ID, 10); len(log) != 0 {
 		t.Error("a pruned box keeps no log")
+	}
+}
+
+func TestHeartsAndNamesOfAGallery(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "gallery-token-123456", Name: "Gallery", Key: "k", Gallery: true, GalleryDownload: true, GalleryNames: true, KeepDays: 7})
+	other, _ := s.AddDropBox(ctx, DropBox{Token: "other-token-1234567", Name: "Other", Key: "k"})
+	if got, _ := s.DropBox(ctx, b.ID); !got.Gallery || !got.GalleryDownload || !got.GalleryNames || got.KeepDays != 7 {
+		t.Fatalf("the settings come back: %+v", got)
+	}
+	for _, a := range []string{"a1", "a2", "a3", "a4"} {
+		s.AddDropAsset(ctx, b.ID, a, "", "Name of "+a)
+	}
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
+	all, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
+	if all[2].GuestName != "Name of a3" {
+		t.Errorf("the name given comes back: %+v", all[2])
+	}
+
+	// a page of older photos, newest first
+	if older, _ := s.DropAssetsBefore(ctx, b.ID, all[3].ID, 2); len(older) != 2 || older[0].AssetID != "a3" || older[1].AssetID != "a2" {
+		t.Errorf("before the newest: %+v", older)
+	}
+	if first, _ := s.DropAssetsBefore(ctx, b.ID, 0, 10); len(first) != 4 || first[0].AssetID != "a4" {
+		t.Errorf("from the newest: %+v", first)
+	}
+
+	// a heart is one guest's, given once, taken back by the same tap, counted for everyone
+	h, n, err := s.ToggleHeart(ctx, b.ID, all[0].ID, "ann")
+	if err != nil || !h || n != 1 {
+		t.Fatalf("first heart: %v %d %v", h, n, err)
+	}
+	if h, n, _ = s.ToggleHeart(ctx, b.ID, all[0].ID, "bob"); !h || n != 2 {
+		t.Errorf("second guest: %v %d", h, n)
+	}
+	if h, n, _ = s.ToggleHeart(ctx, b.ID, all[0].ID, "ann"); h || n != 1 {
+		t.Errorf("taking it back: %v %d", h, n)
+	}
+	s.ToggleHeart(ctx, b.ID, all[1].ID, "bob")
+	counts, _ := s.HeartCounts(ctx, b.ID, all[0].ID, all[3].ID)
+	if counts[all[0].ID] != 1 || counts[all[1].ID] != 1 || len(counts) != 2 {
+		t.Errorf("counts: %v", counts)
+	}
+	if mine, _ := s.GuestHearts(ctx, b.ID, "bob", all[0].ID, all[3].ID); !mine[all[0].ID] || !mine[all[1].ID] || len(mine) != 2 {
+		t.Errorf("bob's hearts: %v", mine)
+	}
+	if mine, _ := s.GuestHearts(ctx, b.ID, "ann", all[0].ID, all[3].ID); len(mine) != 0 {
+		t.Errorf("ann took hers back: %v", mine)
+	}
+	// a photo of another box cannot be hearted through this one
+	oa, _ := s.DropAssetsAfter(ctx, other.ID, 0, 1)
+	if _, _, err := s.ToggleHeart(ctx, b.ID, oa[0].ID, "ann"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another box's photo: %v", err)
+	}
+	// a photo that goes takes its hearts with it
+	s.RemoveDropAsset(ctx, b.ID, all[0].AssetID)
+	if counts, _ = s.HeartCounts(ctx, b.ID, 0, 1<<40); len(counts) != 1 || counts[all[1].ID] != 1 {
+		t.Errorf("after the photo went: %v", counts)
+	}
+
+	// the settings are switched together: download and names need the gallery
+	s.SetDropGallery(ctx, b.ID, false, true, true)
+	if got, _ := s.DropBox(ctx, b.ID); got.Gallery || got.GalleryDownload || got.GalleryNames {
+		t.Errorf("no gallery, no download or names: %+v", got)
 	}
 }

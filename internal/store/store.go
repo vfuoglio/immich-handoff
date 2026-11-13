@@ -462,6 +462,20 @@ var migrations = []string{
 	`ALTER TABLE dropboxes ADD COLUMN password_scope TEXT NOT NULL DEFAULT 'upload';`,
 	// How long after a box has ended what guests left with it (their names, their hearts, the gallery) is kept.
 	`ALTER TABLE dropboxes ADD COLUMN keep_days INTEGER NOT NULL DEFAULT 0;`,
+	// The gallery of a drop box: guests may look at what the box kept, heart it, and, if the owner allows, download it
+	// and see who sent it. The name a guest gave comes with the photo; a heart is one guest's, kept as a hash.
+	`ALTER TABLE dropboxes ADD COLUMN gallery INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN gallery_download INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN gallery_names INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_assets ADD COLUMN guest_name TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropbox_pending ADD COLUMN guest_name TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_hearts (
+	   box_id   TEXT NOT NULL,
+	   asset_id INTEGER NOT NULL,
+	   guest    TEXT NOT NULL,
+	   at       TEXT NOT NULL,
+	   PRIMARY KEY (box_id, asset_id, guest)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

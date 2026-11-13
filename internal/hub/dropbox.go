@@ -110,6 +110,9 @@ type DropParams struct {
 	PromptRequired          bool     // every photo must say which prompt it is for
 	GuestBook               bool     // guests may leave a message (with their name) and a voice note
 	KeepDays                int      // days after the box ends that what guests left with it (names, hearts, the gallery) is kept; 0: until it is revoked
+	Gallery                 bool     // guests may look at the photos the box kept, and heart them
+	GalleryDownload         bool     // and download them (needs Gallery)
+	GalleryNames            bool     // and see the name the sender gave (needs Gallery)
 }
 
 func checkDropParams(p DropParams) error {
@@ -179,7 +182,8 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 	if p.Approve && h.StageDir == "" {
 		return store.DropBox{}, ErrNoStaging
 	}
-	perms := immich.DropBoxPermissionsFor(p.Album != "", p.GuestDelete)
+	p.GalleryDownload, p.GalleryNames = p.GalleryDownload && p.Gallery, p.GalleryNames && p.Gallery
+	perms := immich.DropBoxPermissionsFor(p.Album != "", p.GuestDelete, p.Gallery, p.GalleryDownload)
 	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(p.Name)+" (drop box)", perms)
 	if err != nil {
 		return store.DropBox{}, fmt.Errorf("could not create an API key in your Immich account: %w", err)
@@ -202,7 +206,7 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		MaxFiles: p.MaxFiles, MaxMB: p.MaxMB, MaxFileMB: p.MaxFileMB, PhotosOnly: p.PhotosOnly,
 		Album: p.Album, ExtraTag: p.ExtraTag, Approve: p.Approve, StartsAt: p.Opens,
 		Accent: strings.ToLower(p.Accent), Lang: p.Lang, MaxDim: p.MaxDim, GuestDelete: p.GuestDelete,
-		GuestBook: p.GuestBook, KeepDays: p.KeepDays,
+		GuestBook: p.GuestBook, KeepDays: p.KeepDays, Gallery: p.Gallery, GalleryDownload: p.GalleryDownload, GalleryNames: p.GalleryNames,
 	}
 	switch {
 	case !p.Closes.IsZero():
@@ -719,9 +723,9 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 
 // kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
 // allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
-func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt string, asset uuid.UUID) {
+func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt, guestName string, asset uuid.UUID) {
 	c := context.WithoutCancel(ctx)
-	_ = h.Store.AddDropAsset(c, b.ID, asset.String(), prompt)
+	_ = h.Store.AddDropAsset(c, b.ID, asset.String(), prompt, guestName)
 	if prompt != "" {
 		_ = h.Store.AddPromptCount(c, b.ID, prompt, 1)
 	}
@@ -756,6 +760,7 @@ func (h *Hub) ReceiveDropFileFor(ctx context.Context, boxID, filename string, fi
 // prompt of the shot list it is for (the prompt's id).
 type DropMeta struct {
 	Secret, Prompt string
+	Name           string // the name the guest gives, to be shown with the photo (kept only by a box that shows names)
 }
 
 // ReceiveDropFileWith is ReceiveDropFileFor for a guest who also names the prompt a file is for.
@@ -805,12 +810,16 @@ func (h *Hub) ReceiveDropFileWith(ctx context.Context, boxID, filename string, f
 	cr := &capReader{r: br, max: limit}
 	name := dropFileName(filename, ext)
 
+	guestName := ""
+	if b.GalleryNames {
+		guestName = CleanGuestName(meta.Name)
+	}
 	guest := ""
 	if b.GuestDelete && secret != "" {
 		guest = GuestKey(secret)
 	}
 	if b.Approve {
-		p, err := h.stage(ctx, b, name, kind, who, prompt, cr)
+		p, err := h.stage(ctx, b, name, kind, who, prompt, guestName, cr)
 		if err != nil {
 			if cr.hit || errors.Is(err, ErrDropTooBig) {
 				h.RejectDrop(ctx, b, who, filename, ErrDropTooBig)
@@ -847,7 +856,7 @@ func (h *Hub) ReceiveDropFileWith(ctx context.Context, boxID, filename string, f
 	}
 	kept = true
 	h.fileDrop(ctx, api, b, id, prompt)
-	h.kept(ctx, b, who, name, cr.n, true, prompt, id)
+	h.kept(ctx, b, who, name, cr.n, true, prompt, guestName, id)
 	if guest != "" {
 		_ = h.Store.AddDropUpload(context.WithoutCancel(ctx), store.DropUpload{BoxID: b.ID, Guest: guest, AssetID: id.String(), Name: name, Size: cr.n, Prompt: prompt})
 	}
@@ -855,7 +864,7 @@ func (h *Hub) ReceiveDropFileWith(ctx context.Context, boxID, filename string, f
 }
 
 // stage keeps a file that waits for approval on disk, in a folder of its own for the box, and records it.
-func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who, prompt string, r io.Reader) (store.DropPending, error) {
+func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who, prompt, guestName string, r io.Reader) (store.DropPending, error) {
 	var none store.DropPending
 	if h.StageDir == "" {
 		return none, ErrNoStaging
@@ -882,7 +891,7 @@ func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who, promp
 		return none, err
 	}
 	c := context.WithoutCancel(ctx)
-	p, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name(), Prompt: prompt})
+	p, err := h.Store.AddDropPending(c, store.DropPending{BoxID: b.ID, Name: name, Size: n, Kind: kind, Who: who, Path: f.Name(), Prompt: prompt, GuestName: guestName})
 	if err != nil {
 		os.Remove(f.Name())
 		return none, err
@@ -1004,7 +1013,7 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 		} else {
 			_ = h.Store.DropUploadApproved(c, p.ID, imageID.String())
 			h.fileDrop(ctx, api, b, imageID, p.Prompt)
-			h.kept(ctx, b, p.Who, p.Name, p.Size, false, p.Prompt, imageID)
+			h.kept(ctx, b, p.Who, p.Name, p.Size, false, p.Prompt, p.GuestName, imageID)
 		}
 		done++
 	}

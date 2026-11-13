@@ -4,6 +4,7 @@
 
 import { initCard, initDrop, initGuestBook, initSecure, initShare } from "./drop.ts";
 import { initFrame } from "./frame.ts";
+import { initGallery } from "./gallery.ts";
 import { initWall } from "./wall.ts";
 import { initBackup } from "./backup";
 import { initPush } from "./push";
@@ -91,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPush();
   initEffects();
   initDrop();
+  initGallery();
   initCard();
   initGuestBook();
   initSecure();

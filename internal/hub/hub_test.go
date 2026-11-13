@@ -275,6 +275,24 @@ func (f *fakeImmich) handler() http.Handler {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(data)
 	})
+	mux.HandleFunc("GET /api/assets/{id}/original", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		name, ok := f.assetName[r.PathValue("id")]
+		var data []byte
+		for prefix, d := range f.thumbs {
+			if strings.HasPrefix(name, prefix) {
+				data = d
+			}
+		}
+		f.mu.Unlock()
+		if !ok || data == nil {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+		w.Write(data)
+	})
 	mux.HandleFunc("PUT /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct{ Ids []string }
 		json.NewDecoder(r.Body).Decode(&body)

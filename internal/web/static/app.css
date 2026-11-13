@@ -732,6 +732,35 @@ textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .7r
 
 footer .version { opacity: .75; white-space: nowrap; }
 
+/* The gallery of an event, on the guest page: a grid of the photos the box kept, newest first. Each tile is a picture
+   with a bar under it: who sent it (or its prompt), a heart, and a way to save the original when the owner allows it.
+   New photos come in by fading and rising a little; a heart pops. Only `transform` and `opacity` move. */
+.gallery { margin: 1.6rem 0 2rem; }
+.gallery h2 { font-family: var(--font-display); margin: 0 0 .7rem; }
+ul.gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: .8rem; margin: 0; padding: 0; list-style: none; }
+.gal-item { display: grid; grid-template-rows: auto auto; border-radius: var(--radius-sm); overflow: hidden; background: var(--glass); border: 1px solid var(--border); }
+.gal-item.new { animation: gal-in .7s var(--ease) both; }
+.gal-open { display: block; width: 100%; padding: 0; border: 0; background: var(--surface-2); cursor: zoom-in; aspect-ratio: 1; }
+.gal-open img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.gal-bar { display: flex; align-items: center; gap: .4rem; padding: .35rem .5rem; font-size: .82rem; min-height: 2.4rem; }
+.gal-by { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.gal-heart { display: inline-flex; align-items: center; gap: .25rem; padding: .3rem .45rem; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font: inherit; min-height: 2rem; min-width: 2rem; justify-content: center; }
+.gal-heart svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.gal-heart[aria-pressed="true"] { color: #e5457a; }
+.gal-heart[aria-pressed="true"] svg { fill: currentColor; }
+.gal-heart.pop svg { animation: gal-pop .45s var(--spring); }
+.gal-heart:hover { background: var(--surface-2); }
+.gal-save { flex: none; font-size: .78rem; color: var(--accent); text-decoration: none; padding: .3rem .1rem; }
+.gal-save:hover { text-decoration: underline; }
+dialog.gal-lightbox { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 96vh; overflow: visible; }
+dialog.gal-lightbox::backdrop { background: #000c; }
+dialog.gal-lightbox img { display: block; max-width: 96vw; max-height: 86vh; border-radius: var(--radius-sm); margin: 0 auto; }
+.gal-close { display: block; margin: .7rem auto 0; }
+@keyframes gal-in { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes gal-pop { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
+@media (max-width: 640px) { ul.gal { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; } }
+@media (prefers-reduced-motion: reduce) { .gal-item.new, .gal-heart.pop svg { animation: none !important; } }
+
 /* the wall and the frame: a dark stage with a soft glow behind the photos (or plain black), a choice of how one photo
    gives way to the next, a ring for a new arrival and a calm waiting screen. Everything moves with transform and opacity
    alone and slowly, nothing flashes, a kinder mode (data-lite) is for old hardware, and reduced motion stops it all. */
@@ -808,3 +837,4 @@ body.wall #glow { display: none; }
   .wall-stage.single figure.single { transform: none !important; transition: opacity .6s ease !important; }
   .wall-note { transform: none !important; transition: opacity .4s ease !important; }
 }
+
