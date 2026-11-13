@@ -139,4 +139,5 @@ export function initPalette(): void {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); open(); }
   });
   document.getElementById("palette")?.addEventListener("click", open);
+  document.getElementById("cmdbar")?.addEventListener("click", open);
 }

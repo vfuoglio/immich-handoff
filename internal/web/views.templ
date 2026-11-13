@@ -519,6 +519,11 @@ templ Dashboard(d DashboardData) {
 		<section class="view" id="v-overview" aria-label={ t(ctx, "Overview") }>
 			<h1>{ d.Headline } <em>{ d.Gist }</em></h1>
 			<p class="lead">{ t(ctx, "Everything that was handed over went through; these are the only things that wait on a person. Tag a photo in the Immich app and it is handed over within seconds.") }</p>
+			<button type="button" class="cmdbar" id="cmdbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="grow">{ t(ctx, "Type a command or the name of a service") }</span><span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
+			if len(d.Scene) > 0 {
+				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
+				@Scene(d.Scene)
+			}
 			<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
 			if len(d.Needs) == 0 {
 				<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
@@ -534,10 +539,6 @@ templ Dashboard(d DashboardData) {
 			}
 			if d.Guide != nil {
 				@Guide(*d.Guide)
-			}
-			if len(d.Scene) > 0 {
-				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
-				@Scene(d.Scene)
 			}
 			if d.Mail.Available {
 				@MailCard(d.Mail)

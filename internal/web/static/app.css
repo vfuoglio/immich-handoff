@@ -108,7 +108,7 @@ body::before {
   background: radial-gradient(60rem 26rem at calc(50% + (var(--px, .5) - .5) * 24%) 114%, var(--glow-c), transparent 62%);
 }
 a { color: var(--accent); }
-.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1rem 3rem; }
+.wrap { max-width: 56rem; margin: 0 auto; padding: 0 1rem 3rem; }
 
 /* shell: a glass bar with the app icon and the controls; the views are a floating pill in its middle on a wide screen
    and a bar at the bottom of a phone's screen (the bar is not inside the header because the header's blur would make
@@ -173,7 +173,7 @@ html.js .view > :nth-child(n+10) { animation-delay: 500ms; }
   display: inline-grid; place-items: center; font: 700 .9rem var(--font-display);
 }
 .icon-btn {
-  width: 34px; height: 34px; padding: 0; border-radius: 11px; display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 99px; display: inline-grid; place-items: center;
   background: transparent; color: var(--muted); border: 1px solid var(--border);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface-2); }
@@ -189,14 +189,19 @@ h2 {
   margin: 2rem 0 .75rem;
 }
 p.lead { color: var(--muted); margin: 0 0 1.2rem; max-width: 56ch; }
+/* each view opens with a centred headline, as a calm hero */
+.view > h1 { text-align: center; margin-top: 2.4rem; font-size: clamp(2.2rem, 6.2vw, 3.8rem); }
+.view > p.lead { text-align: center; margin-inline: auto; }
 
 /* surfaces */
 .card {
   position: relative; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 1rem 1.15rem; margin: 0 0 .8rem; min-width: 0;
-  background: linear-gradient(160deg, color-mix(in oklab, var(--surface) 78%, transparent), color-mix(in oklab, var(--surface-2) 52%, transparent));
-  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  padding: 1rem 1.15rem; margin: 0 0 .8rem; min-width: 0; --spotc: transparent;
+  background: radial-gradient(380px circle at var(--sx, 50%) var(--sy, 0%), var(--spotc), transparent 62%), var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  transition: border-color .3s, transform .5s var(--ease);
 }
+.card:hover { --spotc: var(--spot); border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .card, header.bar { background: var(--surface); } }
 .card header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .35rem; }
 .card h3 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; }
@@ -221,25 +226,43 @@ code.tag { font-family: var(--font-mono); background: color-mix(in oklab, var(--
 
 /* controls */
 button, .btn {
-  font: inherit; font-weight: 600; font-size: .92rem; cursor: pointer; border-radius: var(--radius-sm); padding: .55rem 1rem;
+  font: inherit; font-weight: 600; font-size: .92rem; cursor: pointer; border-radius: 99px; padding: .6rem 1.15rem;
   border: 1px solid var(--border); color: var(--text);
   background: color-mix(in oklab, var(--surface-2) 70%, transparent);
-  transition: transform .15s, background .2s, border-color .2s;
+  transition: transform .35s var(--spring), background .2s, border-color .2s, box-shadow .3s;
 }
 button:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
-button.primary { background: linear-gradient(135deg, var(--accent), var(--magenta)); color: var(--on-accent); border-color: transparent; }
+button:active { transform: scale(.96); }
+button.primary { background: var(--grad); color: var(--on-accent); border-color: transparent; box-shadow: 0 10px 28px -12px var(--accent); }
+button.primary:hover { box-shadow: 0 14px 36px -10px var(--accent); }
 button:disabled, button.htmx-request { opacity: .6; cursor: progress; transform: none; }
 :focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 65%, transparent); outline-offset: 2px; border-radius: 8px; }
 
 .field { display: grid; gap: .25rem; margin: .75rem 0; }
 .field label { font-weight: 600; font-size: .9rem; }
 input, select {
-  font: inherit; color: var(--text); background: color-mix(in oklab, var(--surface) 70%, transparent);
-  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .55rem .7rem; width: 100%;
+  font: inherit; color: var(--text); background: var(--field);
+  border: 1px solid var(--border); border-radius: 16px; padding: .65rem .85rem; width: 100%;
+  transition: border-color .25s, box-shadow .25s;
 }
+select { appearance: none; -webkit-appearance: none; padding-right: 2.4rem; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 1.3rem) 52%, calc(100% - .95rem) 52%; background-size: .4rem .4rem; background-repeat: no-repeat; }
+/* a checkbox is a switch */
+input[type="checkbox"] { appearance: none; -webkit-appearance: none; flex: none; width: 44px; height: 26px; padding: 0; border-radius: 99px; position: relative;
+  cursor: pointer; vertical-align: middle; background: color-mix(in oklab, var(--muted) 30%, transparent); border: 1px solid var(--border);
+  transition: background .3s, border-color .3s; }
+input[type="checkbox"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .35); transition: left .4s var(--spring), width .2s; }
+input[type="checkbox"]:checked { background: var(--grad); border-color: transparent; }
+input[type="checkbox"]:checked::after { left: 20px; }
+input[type="checkbox"]:active::after { width: 26px; }
+input[type="checkbox"]:checked:active::after { left: 14px; }
+input[type="checkbox"]:disabled { opacity: .5; cursor: not-allowed; }
 input.narrow { width: 6.5rem; }
 input[readonly] { font-family: var(--font-mono); font-size: .85rem; }
-input:focus-visible, select:focus-visible { outline-offset: 0; border-color: var(--accent); }
+input:focus-visible, select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 22%, transparent); }
+input[type="checkbox"]:focus-visible { outline: 3px solid color-mix(in oklab, var(--accent) 65%, transparent); outline-offset: 2px; box-shadow: none; }
 
 /* states */
 .notice { border-left: 5px solid var(--accent); }
@@ -353,7 +376,6 @@ form.rules small { flex-basis: auto; }
 form.rules input[type=time] { width: 8.5rem; }
 form.rules select { max-width: 100%; }
 form.rules label { white-space: nowrap; }
-form.rules input[type=checkbox] { width: 1.1rem; height: 1.1rem; flex: none; }
 @media (max-width: 640px) { form.rules label { white-space: normal; } }
 @media (max-width: 560px) {
   .svc > summary { grid-template-columns: auto minmax(0, 1fr) auto auto; }
@@ -369,6 +391,13 @@ button.danger:hover { background: color-mix(in oklab, var(--bad) 14%, transparen
 /* the page's own question dialog */
 dialog.confirm { border: 1px solid var(--border); border-radius: var(--radius); padding: 1.4rem; width: min(27rem, calc(100vw - 2rem)); color: var(--text); background: var(--surface); box-shadow: 0 50px 100px -30px #000; }
 dialog.confirm::backdrop { background: color-mix(in oklab, var(--bg) 62%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+dialog.confirm[open], dialog.cmd[open] { animation: pop-in .4s var(--ease); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+@media (max-width: 640px) {
+  dialog.confirm { margin: auto 0 0; width: 100%; max-width: none; border-radius: 28px 28px 0 0; padding-bottom: calc(1.4rem + env(safe-area-inset-bottom)); }
+  dialog.confirm[open] { animation: sheet-up .5s var(--ease); }
+}
+@keyframes sheet-up { from { transform: translateY(100%); } }
 dialog.confirm h3 { margin: 0 0 .5rem; font-size: 1.25rem; letter-spacing: -.01em; }
 dialog.confirm p { margin: 0 0 1.1rem; }
 .confirm-actions { justify-content: flex-end; margin: 0; }
@@ -441,7 +470,7 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 
 /* header: search, sound */
 .icon-btn.wide { width: auto; padding: 0 .6rem; gap: .45rem; display: inline-flex; align-items: center; font-size: .85rem; font-weight: 600; }
-.kbd { font: 500 .7rem var(--font-mono); color: var(--muted); }
+.kbd { font: 600 .7rem var(--font-mono); color: var(--muted); padding: .08rem .45rem; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 7px; background: var(--glass); }
 #palette { width: 34px; padding: 0; justify-content: center; }
 #palette .lbl, #palette .kbd { display: none; }
 #palette svg { width: 18px; height: 18px; }
@@ -460,6 +489,15 @@ html[data-fx-tilt="on"] .is-tilting::after { content: ""; position: absolute; in
 .odo > i { display: block; font-style: normal; transition: transform .9s cubic-bezier(.2, .9, .2, 1); }
 .odo > i b { display: block; height: 1em; font-weight: inherit; }
 [data-odo][role="img"] { display: inline-flex; }
+
+/* the search bar under the headline: opens the command palette */
+.cmdbar { display: flex; align-items: center; gap: .8rem; width: 100%; margin: .4rem 0 1.1rem; padding: .85rem 1.1rem; border-radius: 16px; text-align: left;
+  background: var(--glass); border: 1px solid var(--border); color: var(--muted); font-weight: 500; font-size: 1rem;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 20px 50px -34px #000; }
+.cmdbar:hover { transform: none; border-color: color-mix(in oklab, var(--accent) 50%, var(--border)); box-shadow: 0 0 40px -12px var(--accent); }
+.cmdbar svg { width: 18px; height: 18px; flex: none; }
+.cmdbar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (pointer: coarse) { .cmdbar .kbd { display: none; } }
 
 /* the command palette */
 dialog.cmd { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0; width: min(34rem, calc(100vw - 2rem)); margin-top: 12vh; overflow: hidden; box-shadow: 0 50px 100px -30px #000; }
@@ -524,6 +562,7 @@ details.scheme > summary::-webkit-details-marker { display: none; }
 details.lang > summary { list-style: none; cursor: pointer; }
 details.lang > summary::-webkit-details-marker { display: none; }
 details.lang > summary.icon-btn.wide { display: inline-flex; }
+@media (min-width: 901px) { .lang-code { display: none; } details.lang > summary.icon-btn.wide { width: 34px; padding: 0; justify-content: center; } }
 .lang-code { font: 600 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; }
 .lang-menu, .scheme-menu { list-style: none; margin: .4rem 0 0; padding: .3rem; position: absolute; right: 0; z-index: 6; min-width: 11rem; border-radius: 16px;
   border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
