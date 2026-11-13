@@ -1,4 +1,5 @@
 {
+ "0 keeps it until you revoke the box. The photos in your library always stay.": "0 хранит это, пока вы не отзовёте ящик. Фото в вашей библиотеке остаются всегда.",
  "0 means no limit. Photos over the limit wait, tagged, until the day moves on.": "0 означает без ограничения. Фото сверх лимита ждут с меткой, пока не наступит новый день.",
  "1. Make a key in your Immich": "1. Создайте ключ в вашем Immich",
  "2. Enter it here": "2. Введите его здесь",
@@ -183,6 +184,7 @@
  "Join {name}?": "Присоединиться к {name}?",
  "Joining from this page is not switched on.": "Присоединение с этой страницы не включено.",
  "Jump anywhere or do something from the keyboard (Ctrl K)": "Перейдите куда угодно или выполните действие с клавиатуры (Ctrl K)",
+ "Keep what guests leave for (days after it ends)": "Хранить то, что оставили гости, столько (дней после окончания)",
  "Landscape only": "Только альбомная",
  "Language": "Язык",
  "Largest file (MB)": "Самый большой файл (МБ)",
@@ -435,6 +437,7 @@
   "one": "Дневной лимит достигнут, поэтому {n} фото ждёт, всё ещё с меткой. Оно будет передано с {when}.",
   "other": "Дневной лимит достигнут, поэтому {n} фото ждут, всё ещё с меткой. Они будут переданы с {when}."
  },
+ "The event: what is kept afterwards": "Событие: что хранится после него",
  "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.": "Файл содержит все сохранённые ключи API (всё ещё зашифрованные), а также имя и электронную почту каждого. Скачивайте его только чтобы сохранить в надёжном месте.",
  "The key": "Ключ",
  "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.": "Ключ также может перемещать в вашу корзину фото, переданные приложением (копии с истекающим сроком, отозванная передача), но никогда не удаляет их навсегда.",
@@ -534,6 +537,7 @@
  "Weekly digest": "Еженедельная подборка",
  "What <em>happened</em>": "Что <em>произошло</em>",
  "What arrives is put in the album <strong>{album}</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.": "Поступающее помещается в альбом <strong>{album}</strong> в вашей учётной записи Immich (он создаётся, когда придёт первое фото, если его нет) вместо метки inbox.",
+ "What guests left with the box (their names, their hearts, the gallery) goes on {when}. The photos in your library stay.": "То, что гости оставили в ящике (их имена, сердечки, галерея), будет удалено {when}. Фото в вашей библиотеке останутся.",
  "What is the photo for?": "Для чего это фото?",
  "What just happened": "Что только что произошло",
  "What should happen to your originals?": "Что должно происходить с вашими оригиналами?",
@@ -734,6 +738,7 @@
  "{name} ({photos})": "{name} ({photos})",
  "{name} asked to send to {service}": "{name} попросил(а) разрешения отправлять в {service}",
  "{name} changed the rules of {service}": "{name} изменил(а) правила {service}",
+ "{name} changed what is kept after the event": "{name} изменил(а), что хранится после события",
  "{name} ended the pool {service}": "{name} завершил(а) пул {service}",
  "{name} gave the box a mail address": "{name} дал(а) ящику адрес электронной почты",
  "{name} linked the album {album} to {service}: everything in it is handed over": "{name} привязал(а) альбом {album} к {service}: всё, что в нём есть, передаётся",

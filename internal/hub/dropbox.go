@@ -109,6 +109,7 @@ type DropParams struct {
 	Prompts                 []string // the shot list: what guests are asked to photograph
 	PromptRequired          bool     // every photo must say which prompt it is for
 	GuestBook               bool     // guests may leave a message (with their name) and a voice note
+	KeepDays                int      // days after the box ends that what guests left with it (names, hearts, the gallery) is kept; 0: until it is revoked
 }
 
 func checkDropParams(p DropParams) error {
@@ -133,7 +134,7 @@ func checkDropParams(p DropParams) error {
 			return ErrBadDropLimit
 		}
 	}
-	if p.Days < 0 || p.Days > 365 {
+	if p.Days < 0 || p.Days > 365 || p.KeepDays < 0 || p.KeepDays > 3650 {
 		return ErrBadDropLimit
 	}
 	if err := checkDropLook(p.Accent, p.Lang, p.MaxDim); err != nil {
@@ -201,7 +202,7 @@ func (h *Hub) CreateDropBox(ctx context.Context, sess *immich.API, owner immich.
 		MaxFiles: p.MaxFiles, MaxMB: p.MaxMB, MaxFileMB: p.MaxFileMB, PhotosOnly: p.PhotosOnly,
 		Album: p.Album, ExtraTag: p.ExtraTag, Approve: p.Approve, StartsAt: p.Opens,
 		Accent: strings.ToLower(p.Accent), Lang: p.Lang, MaxDim: p.MaxDim, GuestDelete: p.GuestDelete,
-		GuestBook: p.GuestBook,
+		GuestBook: p.GuestBook, KeepDays: p.KeepDays,
 	}
 	switch {
 	case !p.Closes.IsZero():

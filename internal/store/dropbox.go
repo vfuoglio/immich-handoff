@@ -66,12 +66,22 @@ type DropBox struct {
 	OnwardService            string    // the service the photos are handed on to when the box closes (empty: none)
 	OnwardAuto               bool      // hand them on by itself when the box closes
 	MailCode                 string    // the part after the plus sign of the box's mail address (empty: none)
+	KeepDays                 int       // how many days after the box ends what guests left with it (names, hearts, the gallery) is kept; 0: until the box is revoked
 	CreatedAt, EndedAt       time.Time
 }
 
 // Expired reports whether the box has passed its end.
 func (b DropBox) Expired(now time.Time) bool {
 	return !b.ExpiresAt.IsZero() && !now.Before(b.ExpiresAt)
+}
+
+// KeepUntil is when what guests left with the box (names, hearts, the gallery) goes: KeepDays after the box ends. It is
+// zero for a box that does not end, or that keeps it until it is revoked.
+func (b DropBox) KeepUntil() time.Time {
+	if b.KeepDays <= 0 || b.ExpiresAt.IsZero() {
+		return time.Time{}
+	}
+	return b.ExpiresAt.AddDate(0, 0, b.KeepDays)
 }
 
 // Open reports whether guests may use the box now.
@@ -95,7 +105,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days`
 
 // What a box's password guards.
 const (
@@ -126,7 +136,7 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope))
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays)
 	return b, err
 }
 
@@ -135,7 +145,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -543,6 +553,12 @@ func (s *Store) SetDropToken(ctx context.Context, id, token string) error {
 // SetDropLook changes how the guest page looks and what the guest's browser does: colour, language, shrinking.
 func (s *Store) SetDropLook(ctx context.Context, id, accent, lang string, maxDim int) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET accent = ?, lang = ?, max_dim = ? WHERE id = ? AND state <> ?`, accent, lang, maxDim, id, DropRevoked)
+	return err
+}
+
+// SetDropKeep changes how many days after the box ends what guests left with it is kept.
+func (s *Store) SetDropKeep(ctx context.Context, id string, days int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET keep_days = ? WHERE id = ? AND state <> ?`, days, id, DropRevoked)
 	return err
 }
 

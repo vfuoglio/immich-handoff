@@ -456,6 +456,10 @@ func (w *Server) dropBoxViews(ctx context.Context, me *member) []DropBoxView {
 			Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Owner: a.Role == "owner", Manage: a.Role != "view",
 			Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete}
 		v.PromptRequired, v.GuestBook = b.PromptRequired, b.GuestBook
+		v.KeepDays = b.KeepDays
+		if until := b.KeepUntil(); !until.IsZero() {
+			v.KeepUntil = loc(ctx).Stamp(until.Local())
+		}
 		if v.Manage {
 			v.Short = b.Short
 			v.MailOn, v.MailAddress, v.MailLocked = w.Hub.MailIn != nil, w.Hub.MailAddress(b.MailCode), b.Password != ""
@@ -617,6 +621,20 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
+	})
+}
+
+// eventDropBox changes the settings that make a box an event.
+func (w *Server) eventDropBox(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "drop box event settings", func(ctx context.Context, me *member, id string) error {
+		keep := 0
+		if v := strings.TrimSpace(r.PostFormValue("keepdays")); v != "" {
+			var err error
+			if keep, err = strconv.Atoi(v); err != nil {
+				return hub.ErrBadDropLimit
+			}
+		}
+		return w.Hub.SetDropEvent(ctx, me.user, id, hub.EventSettings{KeepDays: keep})
 	})
 }
 

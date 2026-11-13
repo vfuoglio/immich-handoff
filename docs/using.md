@@ -209,6 +209,7 @@ What you set, all optional:
 |---|---|
 | **Open for (days)**, **Opens at**, **Closes at** | When the link works. By default it opens now and stops after the days you give (at most 365). Set **Opens at** to open later, and **Closes at** for an exact end (it replaces the days), for example Saturday 14:00 to Sunday 12:00. Times are in the app's time zone (`TZ`). Before it opens and after it closes the link looks like one that does not exist. |
 | **Message for guests** | Shown above the form. |
+| **Keep what guests leave for (days after it ends)** | How long what guests leave *with the box* (their names, their hearts and the gallery, see [An event](#an-event-from-the-first-guest-to-the-last-photo)) is kept after the box ends. `0` keeps it until you revoke the box; the default is 30. The photos in your library are never touched. Changed later by the owner under **The event: what is kept afterwards**. |
 | **Largest file / most megabytes / most files** | The most one file may weigh, and the most the box takes in all. A file that would go past the total is refused before it is stored. `0` is no limit. |
 | **Album**, **Another tag** | Where what arrives is filed besides the `inbox/<name>` tag: an album of yours with that name (made when the first photo arrives) and a tag of your own, for example the event's name. Choosing an album gives the box's key permission to find, make and add to albums, nothing more. The same photo sent twice is stored once: Immich recognises it by its checksum, the second copy is not kept, and the guest is told it was already there. |
 | **Shot list**, **Every photo must say which one it is for** | See [A shot list](#a-shot-list). |
@@ -305,6 +306,12 @@ When the event is over the whole set can go through the hand-over that already e
 **Protection against abuse.** One guest can make 30 upload requests in ten minutes and 300 files in an hour; a box takes four uploads at once and the whole app sixteen. If a box takes 1000 files in ten minutes, or turns away 200 files or guests in ten minutes, it **pauses by itself**, the log says why, and `NOTIFY_URL` is told. Look at the log, then resume it. The limits are the same for every box. More on what a link allows is in [Security](security.md#drop-boxes).
 
 **Making the link reachable.** Guests do not have your Immich login, so `/drop/` on the page must be open to the internet *without* any sign-in in front of it. See [Letting guests reach a drop box](operations.md#letting-guests-reach-a-drop-box).
+
+### An event, from the first guest to the last photo
+
+A drop box is also what you use for an **event**: a wedding, a party, a trip, a client's shoot. The box is the event; there is no second thing to set up. It has dates (**Opens at** and **Closes at**, which you can **extend**, or **Pause** to close the link at once), a link, a short link and a printable card with a QR code, an optional password, files that wait for approval, co-hosts, a wall, a best-of and a way to hand the photos on, all described above. Around it, an event adds what guests do and what they leave behind:
+
+- **What is kept afterwards.** What guests leave with the box (see the setting above) goes on the day the retention ends; the box's own log is not touched by it. The box shows the date on its row under **The event: what is kept afterwards**.
 
 ## Receiving on another Immich server
 

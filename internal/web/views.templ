@@ -290,6 +290,8 @@ type DropBoxView struct {
 	MaxDim      int
 	HasCover    bool
 	GuestDelete bool
+	KeepDays    int    // days after the box ends that what guests left with it is kept (0: until it is revoked)
+	KeepUntil   string // when that goes, once the box has an end
 }
 
 // HighlightView is a box's best-of as the owner reads it.
@@ -1960,6 +1962,21 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					</details>
 				}
 				if b.Owner {
+					<details class="more" data-event>
+						<summary>{ t(ctx, "The event: what is kept afterwards") }</summary>
+						<form class="limits" hx-post="dropbox/event" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+							<div class="field">
+								<label for={ "keep-" + b.ID }>{ t(ctx, "Keep what guests leave for (days after it ends)") }</label>
+								<input id={ "keep-" + b.ID } name="keepdays" type="number" min="0" max="3650" value={ fmt.Sprint(b.KeepDays) }/>
+							</div>
+							<p class="row form-actions"><button type="submit">{ t(ctx, "Save") }</button></p>
+						</form>
+						if b.KeepUntil != "" {
+							<small class="meta">{ t(ctx, "What guests left with the box (their names, their hearts, the gallery) goes on {when}. The photos in your library stay.", "when", b.KeepUntil) }</small>
+						} else {
+							<small class="meta">{ t(ctx, "0 keeps it until you revoke the box. The photos in your library always stay.") }</small>
+						}
+					</details>
 					<details class="more">
 						<summary>{ t(ctx, "Templates and copies") }</summary>
 						<form class="limits" hx-post="dropbox/template" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -2273,6 +2290,10 @@ templ DropBoxForm() {
 			<div class="field">
 				<label for="drop-files">{ t(ctx, "Most files in all") }</label>
 				<input id="drop-files" name="files" type="number" min="0" max="1000000" value="2000"/>
+			</div>
+			<div class="field">
+				<label for="drop-keep">{ t(ctx, "Keep what guests leave for (days after it ends)") }</label>
+				<input id="drop-keep" name="keepdays" type="number" min="0" max="3650" value="30"/>
 			</div>
 			<div class="field">
 				<label for="drop-secure">{ t(ctx, "Secure with a password...") }</label>

@@ -1,4 +1,5 @@
 {
+ "0 keeps it until you revoke the box. The photos in your library always stay.": "0 le garde jusqu'à ce que tu révoques la boîte. Les photos de ta bibliothèque restent toujours.",
  "0 means no limit. Photos over the limit wait, tagged, until the day moves on.": "0 signifie aucune limite. Les photos au-delà de la limite attendent, étiquetées, que la journée change.",
  "1. Make a key in your Immich": "1. Créez une clé dans votre Immich",
  "2. Enter it here": "2. Saisissez-la ici",
@@ -183,6 +184,7 @@
  "Join {name}?": "Rejoindre {name} ?",
  "Joining from this page is not switched on.": "Rejoindre depuis cette page n’est pas activé.",
  "Jump anywhere or do something from the keyboard (Ctrl K)": "Allez où vous voulez ou faites quelque chose au clavier (Ctrl K)",
+ "Keep what guests leave for (days after it ends)": "Garder ce que laissent les invités pendant (jours après la fin)",
  "Landscape only": "Paysage seulement",
  "Language": "Langue",
  "Largest file (MB)": "Plus gros fichier (Mo)",
@@ -429,6 +431,7 @@
   "one": "La limite quotidienne est atteinte, donc {n} photo attend, toujours étiquetée. Elle sera transmise à partir de {when}.",
   "other": "La limite quotidienne est atteinte, donc {n} photos attendent, toujours étiquetées. Elles seront transmises à partir de {when}."
  },
+ "The event: what is kept afterwards": "L'événement : ce qui est gardé ensuite",
  "The file holds every stored API key, still encrypted, and everyone's name and email. Only download it to keep it somewhere safe.": "Le fichier contient toutes les clés d'API enregistrées, toujours chiffrées, ainsi que le nom et l'e-mail de chacun. Ne le téléchargez que pour le garder en lieu sûr.",
  "The key": "La clé",
  "The key can also move photos the app handed over to your trash (copies that expire, a hand-over taken back), never delete them for good.": "La clé peut aussi mettre à la corbeille des photos que l'application a transmises (copies qui expirent, transmission reprise), sans jamais les supprimer définitivement.",
@@ -524,6 +527,7 @@
  "Weekly digest": "Résumé hebdomadaire",
  "What <em>happened</em>": "Ce qui s’est <em>passé</em>",
  "What arrives is put in the album <strong>{album}</strong> in your Immich account, made when the first photo comes if you do not have it, instead of being tagged inbox.": "Ce qui arrive est placé dans l’album <strong>{album}</strong> de votre compte Immich, créé à l’arrivée de la première photo si vous ne l’avez pas, au lieu d’être étiqueté inbox.",
+ "What guests left with the box (their names, their hearts, the gallery) goes on {when}. The photos in your library stay.": "Ce que les invités ont laissé dans la boîte (leurs noms, leurs cœurs, la galerie) disparaît le {when}. Les photos de ta bibliothèque restent.",
  "What is the photo for?": "À quoi sert la photo ?",
  "What just happened": "Ce qui vient de se passer",
  "What should happen to your originals?": "Que doit-il arriver à vos originaux ?",
@@ -718,6 +722,7 @@
  "{name} ({photos})": "{name} ({photos})",
  "{name} asked to send to {service}": "{name} a demandé à envoyer à {service}",
  "{name} changed the rules of {service}": "{name} a modifié les règles de {service}",
+ "{name} changed what is kept after the event": "{name} a changé ce qui est gardé après l'événement",
  "{name} ended the pool {service}": "{name} a terminé le pool {service}",
  "{name} gave the box a mail address": "{name} a donné une adresse e-mail à la boîte",
  "{name} linked the album {album} to {service}: everything in it is handed over": "{name} a lié l’album {album} à {service} : tout son contenu est transmis",
