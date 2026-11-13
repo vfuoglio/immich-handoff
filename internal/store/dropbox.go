@@ -69,6 +69,7 @@ type DropBox struct {
 	Gallery                  bool      // guests may look at the photos the box kept, and heart them
 	GalleryDownload          bool      // and download them
 	GalleryNames             bool      // and see the name the sender gave
+	ModToken                 string    // the token of the moderator link (empty: none)
 	KeepDays                 int       // how many days after the box ends what guests left with it (names, hearts, the gallery) is kept; 0: until the box is revoked
 	CreatedAt, EndedAt       time.Time
 }
@@ -108,7 +109,7 @@ var ErrDropBoxGone = errors.New("store: no such drop box")
 // ErrDropFull is returned when a box has taken all it was set to take.
 var ErrDropFull = errors.New("store: the drop box is full")
 
-const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days, gallery, gallery_download, gallery_names`
+const dropCols = `id, token, name, message, owner_id, owner_name, key_id, key_enc, inbox_tag, expires_at, max_files, max_mb, max_file_mb, photos_only, password, state, note, files, bytes, album, extra_tag, approve, starts_at, notified, short, accent, lang, max_dim, guest_delete, removed, prompts, prompt_required, guest_book, wall, onward_service, onward_auto, created_at, ended_at, mail_code, password_scope, keep_days, gallery, gallery_download, gallery_names, mod_token`
 
 // What a box's password guards.
 const (
@@ -139,7 +140,7 @@ func (s *Store) AddDropBox(ctx context.Context, b DropBox) (DropBox, error) {
 		`INSERT INTO dropboxes (`+dropCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", strings.Count(dropCols, ",")+1), ",")+`)`,
 		b.ID, b.Token, b.Name, b.Message, b.OwnerID.String(), b.OwnerName, b.KeyID.String(), enc, b.InboxTag, exp,
 		b.MaxFiles, b.MaxMB, b.MaxFileMB, b2i(b.PhotosOnly), b.Password, b.State, b.Note, 0, 0,
-		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays, b2i(b.Gallery), b2i(b.GalleryDownload), b2i(b.GalleryNames))
+		b.Album, b.ExtraTag, b2i(b.Approve), timeText(b.StartsAt), 0, b.Short, b.Accent, b.Lang, b.MaxDim, b2i(b.GuestDelete), 0, promptsJSON(b.Prompts), b2i(b.PromptRequired), b2i(b.GuestBook), b.Wall, b.OnwardService, b2i(b.OnwardAuto), b.CreatedAt.Format(time.RFC3339Nano), "", b.MailCode, scopeOrDefault(b.PasswordScope), b.KeepDays, b2i(b.Gallery), b2i(b.GalleryDownload), b2i(b.GalleryNames), b.ModToken)
 	return b, err
 }
 
@@ -148,7 +149,7 @@ func (s *Store) scanDropBox(sc interface{ Scan(...any) error }) (DropBox, error)
 	var owner, keyID, exp, starts, created, ended, prompts string
 	var enc []byte
 	if err := sc.Scan(&b.ID, &b.Token, &b.Name, &b.Message, &owner, &b.OwnerName, &keyID, &enc, &b.InboxTag, &exp,
-		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays, &b.Gallery, &b.GalleryDownload, &b.GalleryNames); err != nil {
+		&b.MaxFiles, &b.MaxMB, &b.MaxFileMB, &b.PhotosOnly, &b.Password, &b.State, &b.Note, &b.Files, &b.Bytes, &b.Album, &b.ExtraTag, &b.Approve, &starts, &b.Notified, &b.Short, &b.Accent, &b.Lang, &b.MaxDim, &b.GuestDelete, &b.Removed, &prompts, &b.PromptRequired, &b.GuestBook, &b.Wall, &b.OnwardService, &b.OnwardAuto, &created, &ended, &b.MailCode, &b.PasswordScope, &b.KeepDays, &b.Gallery, &b.GalleryDownload, &b.GalleryNames, &b.ModToken); err != nil {
 		return b, err
 	}
 	b.OwnerID, _ = uuid.Parse(owner)
@@ -344,6 +345,41 @@ func (s *Store) SetDropSchedule(ctx context.Context, id string, starts, ends tim
 func (s *Store) MarkDropNotified(ctx context.Context, id string, bit int) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET notified = notified | ? WHERE id = ?`, bit, id)
 	return err
+}
+
+// ClaimDropNotified sets a bit of Notified and says whether it was this call that did: of several uploads at once, one
+// tells.
+func (s *Store) ClaimDropNotified(ctx context.Context, id string, bit int) (bool, error) {
+	r, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET notified = notified | ? WHERE id = ? AND notified & ? = 0`, bit, id, bit)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
+}
+
+// ClearDropNotified forgets that a box told something (a bit of Notified), so it tells again next time.
+func (s *Store) ClearDropNotified(ctx context.Context, id string, bit int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET notified = notified & ~? WHERE id = ?`, bit, id)
+	return err
+}
+
+// SetDropMod sets the token of a box's moderator link ("" ends it).
+func (s *Store) SetDropMod(ctx context.Context, id, token string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE dropboxes SET mod_token = ? WHERE id = ? AND state <> ?`, token, id, DropRevoked)
+	return err
+}
+
+// DropBoxByMod finds the box a moderator link belongs to; a link that is unknown, ended or of a revoked box is gone.
+func (s *Store) DropBoxByMod(ctx context.Context, token string) (DropBox, error) {
+	if token == "" {
+		return DropBox{}, ErrDropBoxGone
+	}
+	b, err := s.scanDropBox(s.db.QueryRowContext(ctx, `SELECT `+dropCols+` FROM dropboxes WHERE mod_token = ? AND state <> ?`, token, DropRevoked))
+	if errors.Is(err, sql.ErrNoRows) {
+		return b, ErrDropBoxGone
+	}
+	return b, err
 }
 
 // --- co-hosts ---

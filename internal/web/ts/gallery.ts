@@ -144,6 +144,18 @@ function tile(item: GalleryItem, root: HTMLElement, labels: Labels, download: bo
   return li;
 }
 
+/** On the moderator's page, a button that ticks every file of the form (it is hidden until this script has run). */
+export function initSelectAll(): void {
+  document.querySelectorAll<HTMLButtonElement>("button.select-all").forEach((button) => {
+    button.hidden = false;
+    button.addEventListener("click", () => {
+      const boxes = Array.from(button.form?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="item"]') ?? []);
+      const every = boxes.length > 0 && boxes.every((b) => b.checked);
+      boxes.forEach((b) => (b.checked = !every));
+    });
+  });
+}
+
 /** A field marked data-remember keeps what was typed in it in this browser (a guest's name), so it is there next time. */
 function initRemember(): void {
   document.querySelectorAll<HTMLInputElement>("input[data-remember]").forEach((input) => {
@@ -166,6 +178,7 @@ function initRemember(): void {
 /** Fills the gallery of the page, and keeps it up to date while the page is open. */
 export function initGallery(): void {
   initRemember();
+  initSelectAll();
   const root = document.querySelector<HTMLElement>("section.gallery[data-gallery]");
   if (!root) return;
   const feedUrl = root.dataset["feed"] ?? "";

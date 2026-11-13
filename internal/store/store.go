@@ -476,6 +476,9 @@ var migrations = []string{
 	   at       TEXT NOT NULL,
 	   PRIMARY KEY (box_id, asset_id, guest)
 	 );`,
+	// A moderator link: a page where a helper with no account approves or rejects what waits in a box.
+	`ALTER TABLE dropboxes ADD COLUMN mod_token TEXT NOT NULL DEFAULT '';
+	 CREATE UNIQUE INDEX dropboxes_mod ON dropboxes (mod_token) WHERE mod_token <> '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -35,6 +35,8 @@
  "Anyone who knows this address can send photos to the box, like the link. Only photos and videos are taken, under the box's limits and approval; the rest of a mail is dropped and nobody gets a reply.": "Любой, кто знает этот адрес, может присылать фото в ящик, как и по ссылке. Берутся только фото и видео, в рамках лимитов и одобрения ящика; остальное в письме отбрасывается, и никто не получает ответа.",
  "Anything": "Что угодно",
  "Approve": "Одобрить",
+ "Approve all": "Одобрить все",
+ "Approve chosen": "Одобрить выбранные",
  "Approve or decline them under Needs you, above.": "Одобрите или отклоните их в разделе «Ждёт вас» выше.",
  "Approve {name} to send photos to {service}?": "Разрешить {name} отправлять фото в {service}?",
  "Approved": "Одобрено",
@@ -54,6 +56,8 @@
  "Cancel": "Отмена",
  "Check now": "Проверить сейчас",
  "Check the connections": "Проверить соединения",
+ "Choose all": "Выбрать все",
+ "Choose at least one file first.": "Сначала выберите хотя бы один файл.",
  "Choose one": "Выберите",
  "Choose photos first": "Сначала выберите фото",
  "Choose the colour scheme": "Выбрать цветовую схему",
@@ -254,6 +258,7 @@
  "Nothing has happened yet.": "Пока ничего не происходило.",
  "Nothing here yet from this browser.": "С этого браузера пока ничего нет.",
  "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.": "Больше ничего не передаётся. «Очистить» удалит ключ API и рабочий процесс, которые это приложение создало в вашей учётной записи Immich.",
+ "Nothing is waiting. This page does not refresh by itself: reload it to look again.": "Ничего не ожидает. Эта страница не обновляется сама: перезагрузите её, чтобы посмотреть снова.",
  "Nothing matches": "Ничего не найдено",
  "Nothing needs you": "Ничто не ждёт вас",
  "Nothing needs you right now. New requests and problems appear here first.": "Сейчас ничто не ждёт вас. Новые запросы и проблемы появляются сначала здесь.",
@@ -353,6 +358,7 @@
  "Reconnecting creates a new receiver key in your Immich account.": "Переподключение создаёт новый ключ получателя в вашей учётной записи Immich.",
  "Record a voice message": "Записать голосовое сообщение",
  "Record again": "Записать заново",
+ "Reject chosen": "Отклонить выбранные",
  "Remove": "Удалить",
  "Remove all": "Убрать всё",
  "Remove email address": "Убрать адрес электронной почты",
@@ -403,10 +409,12 @@
  "Show each photo for": "Показывать каждое фото",
  "Show more": "Показать ещё",
  "Showing": "Показывается",
+ "Showing the first {n}; decide on these and the rest appear.": "Показаны первые {n}; решите по ним, и появятся остальные.",
  "Shows each photo for {n} seconds.": "Показывает каждое фото {n} секунд.",
  "Sign in to Immich first": "Сначала войдите в Immich",
  "Single photo": "Одно фото",
  "Slide": "Сдвиг",
+ "Some files could not be stored and are still waiting. Try again in a moment.": "Некоторые файлы не удалось сохранить, они всё ещё ждут. Попробуйте ещё раз через минуту.",
  "Some updates were missed; refreshing": "Часть обновлений пропущена; обновляю",
  "Something went wrong on our side. Try again later.": "С нашей стороны что-то пошло не так. Попробуйте позже.",
  "Stop handing over this album": "Перестать передавать этот альбом",
@@ -561,6 +569,7 @@
  "Who may send": "Кто может отправлять",
  "Wrong password": "Неверный пароль",
  "You approve senders": "Вы одобряете отправителей",
+ "You are helping to look after this box. Approve the photos that may stay, reject the others.": "Вы помогаете присматривать за этим ящиком. Одобряйте фото, которые могут остаться, и отклоняйте остальные.",
  "You are invited to <em>{name}</em>": "Вас пригласили в <em>{name}</em>",
  "You can also drop files here.": "Файлы можно и перетащить сюда.",
  "You can cut the connection at any time by deleting the key in your Immich. Photos not yet sent stay with {owner}; nothing is lost.": "Вы можете в любой момент разорвать соединение, удалив ключ в своём Immich. Ещё не отправленные фото остаются у {owner}; ничего не теряется.",
@@ -736,6 +745,7 @@
   "one": "до {n} файла всего",
   "other": "до {n} файла всего"
  },
+ "video": "видео",
  "view": "раздел",
  "waiting": "ожидание",
  "waiting for approval": "ждёт одобрения",
@@ -830,11 +840,23 @@
   "many": "{n} файлов",
   "other": "{n} файла"
  },
+ "{n} file approved.": {
+  "one": "{n} файл одобрен.",
+  "few": "{n} файла одобрены.",
+  "many": "{n} файлов одобрено.",
+  "other": "{n} файла одобрены."
+ },
  "{n} file could not be sent": {
   "one": "Не удалось отправить {n} файл",
   "few": "Не удалось отправить {n} файла",
   "many": "Не удалось отправить {n} файлов",
   "other": "Не удалось отправить {n} файла"
+ },
+ "{n} file rejected.": {
+  "one": "{n} файл отклонён.",
+  "few": "{n} файла отклонены.",
+  "many": "{n} файлов отклонено.",
+  "other": "{n} файла отклонены."
  },
  "{n} file sent. Thank you!": {
   "one": "Отправлен {n} файл. Спасибо!",

@@ -35,6 +35,8 @@
  "Anyone who knows this address can send photos to the box, like the link. Only photos and videos are taken, under the box's limits and approval; the rest of a mail is dropped and nobody gets a reply.": "Quem conhecer este endereço pode enviar fotos para a caixa, como com o link. Só fotos e vídeos são aceitos, dentro dos limites e da aprovação da caixa; o resto de um e-mail é descartado e ninguém recebe resposta.",
  "Anything": "Qualquer coisa",
  "Approve": "Aprovar",
+ "Approve all": "Aprovar tudo",
+ "Approve chosen": "Aprovar a seleção",
  "Approve or decline them under Needs you, above.": "Aprove ou recuse em Precisa de você, acima.",
  "Approve {name} to send photos to {service}?": "Aprovar que {name} envie fotos para {service}?",
  "Approved": "Aprovado",
@@ -54,6 +56,8 @@
  "Cancel": "Cancelar",
  "Check now": "Verificar agora",
  "Check the connections": "Verificar as conexões",
+ "Choose all": "Escolher tudo",
+ "Choose at least one file first.": "Escolhe primeiro pelo menos um ficheiro.",
  "Choose one": "Escolha uma",
  "Choose photos first": "Escolha primeiro as fotos",
  "Choose the colour scheme": "Escolher o esquema de cores",
@@ -254,6 +258,7 @@
  "Nothing has happened yet.": "Nada aconteceu ainda.",
  "Nothing here yet from this browser.": "Ainda nada deste navegador.",
  "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.": "Nada mais é entregue. Limpar exclui a chave de API e o fluxo de trabalho que este app criou na sua conta do Immich.",
+ "Nothing is waiting. This page does not refresh by itself: reload it to look again.": "Não há nada à espera. Esta página não se atualiza sozinha: recarrega-a para voltar a ver.",
  "Nothing matches": "Nada corresponde",
  "Nothing needs you": "Nada precisa de você",
  "Nothing needs you right now. New requests and problems appear here first.": "Nada precisa de você agora. Novos pedidos e problemas aparecem primeiro aqui.",
@@ -349,6 +354,7 @@
  "Reconnecting creates a new receiver key in your Immich account.": "Reconectar cria uma nova chave de recebimento na sua conta do Immich.",
  "Record a voice message": "Gravar uma mensagem de voz",
  "Record again": "Gravar de novo",
+ "Reject chosen": "Rejeitar a seleção",
  "Remove": "Remover",
  "Remove all": "Remover tudo",
  "Remove email address": "Remover endereço de e-mail",
@@ -399,10 +405,12 @@
  "Show each photo for": "Mostrar cada foto por",
  "Show more": "Mostrar mais",
  "Showing": "Sendo mostrada",
+ "Showing the first {n}; decide on these and the rest appear.": "São mostrados os primeiros {n}; decide sobre estes e os restantes aparecem.",
  "Shows each photo for {n} seconds.": "Mostra cada foto por {n} segundos.",
  "Sign in to Immich first": "Entre no Immich primeiro",
  "Single photo": "Uma foto",
  "Slide": "Deslizar",
+ "Some files could not be stored and are still waiting. Try again in a moment.": "Alguns ficheiros não puderam ser guardados e continuam à espera. Tenta de novo daqui a pouco.",
  "Some updates were missed; refreshing": "Algumas atualizações foram perdidas; atualizando",
  "Something went wrong on our side. Try again later.": "Algo correu mal do nosso lado. Tenta mais tarde.",
  "Stop handing over this album": "Parar de entregar este álbum",
@@ -551,6 +559,7 @@
  "Who may send": "Quem pode enviar",
  "Wrong password": "Palavra-passe incorreta",
  "You approve senders": "Você aprova os remetentes",
+ "You are helping to look after this box. Approve the photos that may stay, reject the others.": "Estás a ajudar a cuidar desta caixa. Aprova as fotos que podem ficar e rejeita as outras.",
  "You are invited to <em>{name}</em>": "Você foi convidado para <em>{name}</em>",
  "You can also drop files here.": "Também pode largar ficheiros aqui.",
  "You can cut the connection at any time by deleting the key in your Immich. Photos not yet sent stay with {owner}; nothing is lost.": "Podes cortar a ligação a qualquer momento apagando a chave no teu Immich. As fotos ainda não enviadas ficam com {owner}; nada se perde.",
@@ -720,6 +729,7 @@
   "one": "até {n} ficheiro no total",
   "other": "até {n} ficheiros no total"
  },
+ "video": "vídeo",
  "view": "visualização",
  "waiting": "esperando",
  "waiting for approval": "a aguardar aprovação",
@@ -800,9 +810,17 @@
   "one": "{n} ficheiro",
   "other": "{n} ficheiros"
  },
+ "{n} file approved.": {
+  "one": "{n} ficheiro aprovado.",
+  "other": "{n} ficheiros aprovados."
+ },
  "{n} file could not be sent": {
   "one": "Não foi possível enviar {n} ficheiro",
   "other": "Não foi possível enviar {n} ficheiros"
+ },
+ "{n} file rejected.": {
+  "one": "{n} ficheiro rejeitado.",
+  "other": "{n} ficheiros rejeitados."
  },
  "{n} file sent. Thank you!": {
   "one": "{n} ficheiro enviado. Obrigado!",

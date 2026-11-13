@@ -35,6 +35,8 @@
  "Anyone who knows this address can send photos to the box, like the link. Only photos and videos are taken, under the box's limits and approval; the rest of a mail is dropped and nobody gets a reply.": "Jeder, der diese Adresse kennt, kann Fotos an die Box senden, wie beim Link. Nur Fotos und Videos werden genommen, im Rahmen der Grenzen und Freigabe der Box; der Rest einer Mail wird verworfen und niemand bekommt eine Antwort.",
  "Anything": "Egal",
  "Approve": "Genehmigen",
+ "Approve all": "Alle freigeben",
+ "Approve chosen": "Ausgewählte freigeben",
  "Approve or decline them under Needs you, above.": "Genehmige oder lehne sie oben unter „Aktion nötig“ ab.",
  "Approve {name} to send photos to {service}?": "{name} erlauben, Fotos an {service} zu senden?",
  "Approved": "Genehmigt",
@@ -54,6 +56,8 @@
  "Cancel": "Abbrechen",
  "Check now": "Jetzt prüfen",
  "Check the connections": "Verbindungen prüfen",
+ "Choose all": "Alle auswählen",
+ "Choose at least one file first.": "Wähle zuerst mindestens eine Datei aus.",
  "Choose one": "Wähle eines",
  "Choose photos first": "Wähle zuerst Fotos aus",
  "Choose the colour scheme": "Farbschema wählen",
@@ -254,6 +258,7 @@
  "Nothing has happened yet.": "Es ist noch nichts passiert.",
  "Nothing here yet from this browser.": "Von diesem Browser ist noch nichts da.",
  "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account.": "Es wird nichts mehr übergeben. Räume auf, um den API-Schlüssel und den Workflow zu löschen, die diese App in deinem Immich-Konto angelegt hat.",
+ "Nothing is waiting. This page does not refresh by itself: reload it to look again.": "Es wartet nichts. Diese Seite aktualisiert sich nicht von selbst: Lade sie neu, um erneut nachzusehen.",
  "Nothing matches": "Nichts passt",
  "Nothing needs you": "Nichts braucht dich",
  "Nothing needs you right now. New requests and problems appear here first.": "Im Moment braucht dich nichts. Neue Anfragen und Probleme erscheinen hier zuerst.",
@@ -349,6 +354,7 @@
  "Reconnecting creates a new receiver key in your Immich account.": "Beim erneuten Verbinden wird in deinem Immich-Konto ein neuer Empfängerschlüssel angelegt.",
  "Record a voice message": "Sprachnachricht aufnehmen",
  "Record again": "Neu aufnehmen",
+ "Reject chosen": "Ausgewählte ablehnen",
  "Remove": "Entfernen",
  "Remove all": "Alle entfernen",
  "Remove email address": "E-Mail-Adresse entfernen",
@@ -399,10 +405,12 @@
  "Show each photo for": "Jedes Foto zeigen für",
  "Show more": "Mehr zeigen",
  "Showing": "Wird gezeigt",
+ "Showing the first {n}; decide on these and the rest appear.": "Die ersten {n} werden gezeigt; entscheide über diese, dann erscheinen die übrigen.",
  "Shows each photo for {n} seconds.": "Zeigt jedes Foto {n} Sekunden lang.",
  "Sign in to Immich first": "Melde dich zuerst bei Immich an",
  "Single photo": "Einzelnes Foto",
  "Slide": "Schieben",
+ "Some files could not be stored and are still waiting. Try again in a moment.": "Einige Dateien konnten nicht gespeichert werden und warten noch. Versuche es gleich noch einmal.",
  "Some updates were missed; refreshing": "Einige Updates wurden verpasst; wird aktualisiert",
  "Something went wrong on our side. Try again later.": "Auf unserer Seite ist etwas schiefgegangen. Versuche es später noch einmal.",
  "Stop handing over this album": "Dieses Album nicht mehr übergeben",
@@ -551,6 +559,7 @@
  "Who may send": "Wer senden darf",
  "Wrong password": "Falsches Passwort",
  "You approve senders": "Du genehmigst Absender",
+ "You are helping to look after this box. Approve the photos that may stay, reject the others.": "Du hilfst, diese Box zu betreuen. Gib die Fotos frei, die bleiben dürfen, und lehne die anderen ab.",
  "You are invited to <em>{name}</em>": "Du bist zu <em>{name}</em> eingeladen",
  "You can also drop files here.": "Du kannst Dateien auch hierher ziehen.",
  "You can cut the connection at any time by deleting the key in your Immich. Photos not yet sent stay with {owner}; nothing is lost.": "Du kannst die Verbindung jederzeit trennen, indem du den Schlüssel in deinem Immich löschst. Noch nicht gesendete Fotos bleiben bei {owner}; nichts geht verloren.",
@@ -720,6 +729,7 @@
   "one": "bis zu {n} Datei insgesamt",
   "other": "bis zu {n} Dateien insgesamt"
  },
+ "video": "Video",
  "view": "Ansicht",
  "waiting": "wartend",
  "waiting for approval": "wartet auf Freigabe",
@@ -800,9 +810,17 @@
   "one": "{n} Datei",
   "other": "{n} Dateien"
  },
+ "{n} file approved.": {
+  "one": "{n} Datei freigegeben.",
+  "other": "{n} Dateien freigegeben."
+ },
  "{n} file could not be sent": {
   "one": "{n} Datei konnte nicht gesendet werden",
   "other": "{n} Dateien konnten nicht gesendet werden"
+ },
+ "{n} file rejected.": {
+  "one": "{n} Datei abgelehnt.",
+  "other": "{n} Dateien abgelehnt."
  },
  "{n} file sent. Thank you!": {
   "one": "{n} Datei gesendet. Danke!",

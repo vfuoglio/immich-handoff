@@ -294,6 +294,14 @@ type DropBoxView struct {
 	KeepUntil   string // when that goes, once the box has an end
 
 	Gallery, GalleryDownload, GalleryNames bool // guests may look at the photos and heart them; download them; see who sent them
+	ModToken                               string // the moderator link's token (the owner sees it), "" for none
+}
+
+// ModPageView is the moderator's page: what waits in the box, and how the last decision went.
+type ModPageView struct {
+	Token, Name, Message string
+	Total                int
+	Items                []PendingView
 }
 
 // HighlightView is a box's best-of as the owner reads it.
@@ -2224,6 +2232,26 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					}
 				}
 				if b.Owner {
+					<h3>{ t(ctx, "Moderator link") }</h3>
+					if b.ModToken != "" {
+						<div class="field">
+							<label for={ "mod-" + id }>{ t(ctx, "Link for a helper who looks at the files that wait (no account needed)") }</label>
+							<div class="row">
+								<input id={ "mod-" + id } class="invite" readonly data-link={ "mod/" + b.ModToken }/>
+								<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+								<button type="button" class="show-qr" data-for={ "mod-" + id } data-alt={ t(ctx, "QR code of the moderator link") }>{ t(ctx, "QR code") }</button>
+								<a class="button" href={ templ.SafeURL("mod/" + b.ModToken) } target="_blank" rel="noopener">{ t(ctx, "Open") }</a>
+							</div>
+							<div class="qr" id={ "qr-mod-" + id } hidden></div>
+						</div>
+						<p class="row">
+							<button hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current moderator link stops working. Continue?") } data-confirm-title={ t(ctx, "Make a new moderator link?") } data-confirm-label={ t(ctx, "New moderator link") }>{ t(ctx, "New moderator link") }</button>
+							<button class="danger" hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The moderator link stops working at once.") } data-confirm-title={ t(ctx, "End the moderator link?") } data-confirm-label={ t(ctx, "End the link") } data-danger="true">{ t(ctx, "End the moderator link") }</button>
+						</p>
+					} else {
+						<p class="meta">{ t(ctx, "A moderator link opens a page where someone with no account, a friend at the party for example, approves or rejects the files that wait for you. It shows nothing of your library and none of the box's settings, and cannot pause or end the box. Anyone who has the link can decide on the files, so share it with people you trust.") }</p>
+						<p class="row"><button hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make a moderator link") }</button></p>
+					}
 					<h3>{ t(ctx, "Co-hosts") }</h3>
 					<p class="meta">{ t(ctx, "People on this Immich server who help you look after the box. They see it on their own page. They never see your library, and only you can end the box.") }</p>
 					for _, h := range b.Hosts {
@@ -2480,6 +2508,49 @@ templ DropAlbum(d DropPageView, share *ShareView) {
 			}
 		}
 		@Gallery(d.Token, d.GalleryDownload)
+	}
+}
+
+// ModPage is the moderator's page: the files that wait, to approve or reject.
+templ ModPage(d ModPageView) {
+	@Layout(d.Name, "") {
+		<section class="invite-hero">
+			<h1>{ d.Name }</h1>
+			<p class="lead">{ t(ctx, "You are helping to look after this box. Approve the photos that may stay, reject the others.") }</p>
+		</section>
+		if d.Message != "" {
+			<p class="card mod-message" role="status">{ d.Message }</p>
+		}
+		if d.Total == 0 {
+			<p class="meta">{ t(ctx, "Nothing is waiting. This page does not refresh by itself: reload it to look again.") }</p>
+		} else {
+			<form class="card pending mod-form" method="post" action={ "mod/" + d.Token + "/approve" }>
+				<h2>{ t(ctx, "Waiting for approval") } <span class="count-badge">{ fmt.Sprint(d.Total) }</span></h2>
+				<ul class="plain thumbs">
+					for _, p := range d.Items {
+						<li>
+							if p.Image {
+								<img src={ "mod/" + d.Token + "/pending/" + p.ID } alt={ p.Name } loading="lazy" width="96" height="96"/>
+							} else {
+								<span class="thumb-video">{ t(ctx, "video") }</span>
+							}
+							<label><input type="checkbox" name="item" value={ p.ID }/> <span class="meta">{ p.Name } · { p.Size }</span></label>
+						</li>
+					}
+				</ul>
+				if d.Total > len(d.Items) {
+					<p class="meta">{ t(ctx, "Showing the first {n}; decide on these and the rest appear.", "n", len(d.Items)) }</p>
+				}
+				<p class="row">
+					<button type="button" class="select-all" hidden>{ t(ctx, "Choose all") }</button>
+					<button class="primary" type="submit">{ t(ctx, "Approve chosen") }</button>
+					<button type="submit" formaction={ "mod/" + d.Token + "/reject" } data-act="reject">{ t(ctx, "Reject chosen") }</button>
+				</p>
+				<p class="row">
+					<button type="submit" name="all" value="1">{ t(ctx, "Approve all") }</button>
+				</p>
+			</form>
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -209,3 +210,124 @@ func TestTheOwnerSwitchesTheGalleryOnFromTheEventSettings(t *testing.T) {
 		t.Fatalf("saving: %d %s", code, body)
 	}
 }
+
+func postTo(t *testing.T, c *http.Client, u, form string) (int, http.Header, string) {
+	t.Helper()
+	req, _ := http.NewRequest("POST", u, strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, res.Header, string(b)
+}
+
+func TestAModeratorWithNoAccountApprovesAndRejectsWhatWaits(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("6b", 16)
+	mod := strings.Repeat("c4", 32)
+	im := &storing{}
+	app, _ := setup(t, withDrop(t, &st, im, store.DropBox{Token: token, Name: "Wedding", InboxTag: "inbox/Wedding", Approve: true, ModToken: mod}))
+	g := guest(t)
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		if code, _ := sendFiles(t, app.URL+"/drop/"+token+"/upload", nil, map[string][]byte{n: jpegBytes}); code != 200 {
+			t.Fatal("upload")
+		}
+	}
+	code, hdr, page := fetch(t, g, "GET", app.URL+"/mod/"+mod)
+	if code != 200 || !strings.Contains(page, "Wedding") || !strings.Contains(page, "Approve chosen") || !strings.Contains(page, `class="count-badge">3<`) || hdr.Get("Cache-Control") != "no-store" {
+		t.Fatalf("the moderator's page: %d %.300s", code, page)
+	}
+	// nothing of the owner's side: no link, no settings, no way to end the box
+	for _, bad := range []string{token, "Revoke", "Extend", "Co-hosts", "data-link", "handoff-drop-"} {
+		if strings.Contains(page, bad) {
+			t.Errorf("the moderator's page shows %q", bad)
+		}
+	}
+	m := regexp.MustCompile(`src="mod/`+mod+`/pending/([0-9a-f-]{36})"`).FindAllStringSubmatch(page, -1)
+	if len(m) != 3 {
+		t.Fatalf("thumbnails: %d", len(m))
+	}
+	if code, hdr, body := fetch(t, g, "GET", app.URL+"/mod/"+mod+"/pending/"+m[0][1]); code != 200 || len(body) != len(jpegBytes) || !strings.Contains(hdr.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("a waiting file: %d %v", code, hdr)
+	}
+	if code, _, _ := fetch(t, g, "GET", app.URL+"/mod/"+mod+"/pending/"+uuidText()); code != 404 {
+		t.Errorf("a file that is not there: %d", code)
+	}
+
+	// choose nothing: asked to choose; approve one; reject one; approve the rest
+	if code, hdr, _ := postTo(t, g, app.URL+"/mod/"+mod+"/approve", ""); code != 303 || !strings.Contains(hdr.Get("Location"), "nothing=1") {
+		t.Errorf("nothing chosen: %d %v", code, hdr.Get("Location"))
+	}
+	code, hdr, _ = postTo(t, g, app.URL+"/mod/"+mod+"/approve", "item="+m[0][1])
+	if code != 303 || !strings.Contains(hdr.Get("Location"), "done=1") || !strings.Contains(hdr.Get("Location"), "did=approved") || !strings.HasPrefix(hdr.Get("Location"), "../"+mod+"?") {
+		t.Fatalf("approve one: %d %v", code, hdr.Get("Location"))
+	}
+	if len(im.names) != 1 {
+		t.Errorf("an approved file reaches the library: %v", im.names)
+	}
+	if code, hdr, _ = postTo(t, g, app.URL+"/mod/"+mod+"/reject", "item="+m[1][1]); code != 303 || !strings.Contains(hdr.Get("Location"), "did=rejected") {
+		t.Errorf("reject one: %d %v", code, hdr.Get("Location"))
+	}
+	if len(im.names) != 1 {
+		t.Errorf("a rejected file does not: %v", im.names)
+	}
+	_, _, after := fetch(t, g, "GET", app.URL+"/mod/"+mod+"?done=1&did=rejected")
+	if !strings.Contains(after, "1 file rejected.") || !strings.Contains(after, `class="count-badge">1<`) {
+		t.Errorf("the page says how it went: %.400s", after)
+	}
+	if code, _, _ = postTo(t, g, app.URL+"/mod/"+mod+"/approve", "all=1&item="+m[2][1]); code != 303 || len(im.names) != 2 {
+		t.Errorf("approve all: %d (%d stored)", code, len(im.names))
+	}
+	_, _, empty := fetch(t, g, "GET", app.URL+"/mod/"+mod)
+	if !strings.Contains(empty, "Nothing is waiting") {
+		t.Errorf("an empty queue says so: %.200s", empty)
+	}
+
+	// a wrong, a guest's or an ended link is no page
+	for _, path := range []string{"/mod/" + strings.Repeat("0", 64), "/mod/" + token, "/mod/short"} {
+		if code, _, _ := fetch(t, g, "GET", app.URL+path); code != 404 {
+			t.Errorf("%s: %d", path, code)
+		}
+	}
+	if code, _, _ := postTo(t, g, app.URL+"/mod/"+strings.Repeat("0", 64)+"/approve", "all=1"); code != 404 {
+		t.Errorf("approving through a wrong link: %d", code)
+	}
+}
+
+func TestOnlyTheOwnerMakesAndEndsTheModeratorLink(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("8d", 16)
+	app, _ := setup(t, withDrop(t, &st, &storing{}, store.DropBox{Token: token, Name: "Party", InboxTag: "inbox/Party"}))
+	id := firstBox(t, st)
+	if page := get(t, app.URL, "sess=family"); !strings.Contains(page, "Make a moderator link") {
+		t.Error("the owner is offered a moderator link")
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/moderator", "sess=other", "service="+id+"&on=1"); code != 409 {
+		t.Errorf("somebody else's box: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/moderator", "sess=family", "service="+id+"&on=1"); code != 204 {
+		t.Fatalf("make: %d", code)
+	}
+	box, _ := st.DropBox(context.Background(), id)
+	if len(box.ModToken) < 64 {
+		t.Fatalf("token: %q", box.ModToken)
+	}
+	page := get(t, app.URL, "sess=family")
+	if !strings.Contains(page, `data-link="mod/`+box.ModToken+`"`) || !strings.Contains(page, "End the moderator link") {
+		t.Error("the owner sees the link and can end it")
+	}
+	if code, _, _ := fetch(t, guest(t), "GET", app.URL+"/mod/"+box.ModToken); code != 200 {
+		t.Errorf("the link works with no sign-in: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/dropbox/moderator", "sess=family", "service="+id+"&on=0"); code != 204 {
+		t.Fatal("end")
+	}
+	if code, _, _ := fetch(t, guest(t), "GET", app.URL+"/mod/"+box.ModToken); code != 404 {
+		t.Errorf("the ended link: %d", code)
+	}
+}
+
+func uuidText() string { return "00000000-0000-0000-0000-000000000000" }

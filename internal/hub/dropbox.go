@@ -90,6 +90,7 @@ const (
 	dropPendingAge       = 14 * 24 * time.Hour // a file nobody decided on is deleted after this long
 	dropReminder         = 24 * time.Hour      // how long before its end a box reminds
 	dropMaxHosts         = 10
+	notifiedWaiting      = 8 // Notified bit: the host was told that files wait (cleared when none wait any more)
 )
 
 // DropParams describe a new drop box. Zero values mean no limit, no expiry and no password.
@@ -898,6 +899,9 @@ func (h *Hub) stage(ctx context.Context, b store.DropBox, name, kind, who, promp
 	}
 	_ = h.Store.AddDropBytes(c, b.ID, n)
 	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} waits for approval ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
+	if first, _ := h.Store.ClaimDropNotified(c, b.ID, notifiedWaiting); first { // once, until the queue has been emptied: a wedding sends hundreds
+		h.tell(notify.DropBox, fmt.Sprintf("Files wait for approval in the drop box %q of %s. Its owner, a co-host or a moderator can look at them.", b.Name, b.OwnerName))
+	}
 	return p, nil
 }
 
@@ -961,6 +965,12 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 	if err != nil {
 		return 0, 0, err
 	}
+	return h.decide(ctx, b, user.Name, only, approve)
+}
+
+// decide does what DecideDrop and a moderator's decision have in common. who is the name the log gives: a person's, or
+// "" for a moderator, who has no name.
+func (h *Hub) decide(ctx context.Context, b store.DropBox, who string, only []string, approve bool) (done, failed int, err error) {
 	list, err := h.Store.DropPendingOf(ctx, b.ID, 5000)
 	if err != nil {
 		return 0, 0, err
@@ -1022,7 +1032,16 @@ func (h *Hub) DecideDrop(ctx context.Context, user immich.User, id string, only 
 		if !approve {
 			one, msg = "{name} rejected {n} file", "{name} rejected {n} files"
 		}
-		h.dropEvent(ctx, b.ID, store.DropResumed, i18n.PackN(one, msg, done, "name", user.Name), "")
+		if who == "" {
+			one, msg = "A moderator approved {n} file", "A moderator approved {n} files"
+			if !approve {
+				one, msg = "A moderator rejected {n} file", "A moderator rejected {n} files"
+			}
+		}
+		h.dropEvent(ctx, b.ID, store.DropResumed, i18n.PackN(one, msg, done, "name", who), "")
+	}
+	if left, _, _ := h.Store.DropPendingTotals(c, b.ID); left == 0 { // the next file that waits tells the host again
+		_ = h.Store.ClearDropNotified(c, b.ID, notifiedWaiting)
 	}
 	return done, failed, nil
 }

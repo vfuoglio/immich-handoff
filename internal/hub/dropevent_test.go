@@ -13,6 +13,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -269,5 +270,118 @@ func TestAnOriginalIsDownloadedOnlyWhereTheBoxAllowsIt(t *testing.T) {
 	}
 	if _, err := e.h.GalleryOriginal(ctx, gb, litems[0].ID); !errors.Is(err, hub.ErrDropGone) {
 		t.Errorf("another box's photo: %v", err)
+	}
+}
+
+func TestAModeratorLinkLetsAHelperWithNoAccountDecideOnWhatWaits(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.h.StageDir = t.TempDir()
+	b := newBox(t, e, hub.DropParams{Name: "Wedding", Approve: true, Days: 3})
+	other := newBox(t, e, hub.DropParams{Name: "Other", Approve: true, Days: 3})
+	if _, err := e.h.ModBox(ctx, strings.Repeat("a", 64)); !errors.Is(err, hub.ErrDropGone) {
+		t.Fatalf("no link yet: %v", err)
+	}
+
+	// only the owner makes it
+	e.h.AddDropHost(ctx, e.sess, bob, b.ID, "ann@x.test", store.HostManage)
+	if _, err := e.h.SetDropModerator(ctx, ann, b.ID, true); !errors.Is(err, hub.ErrDropRole) {
+		t.Errorf("a co-host making the link: %v", err)
+	}
+	token, err := e.h.SetDropModerator(ctx, bob, b.ID, true)
+	if err != nil || len(token) < 64 {
+		t.Fatalf("make: %q %v", token, err)
+	}
+	mb, err := e.h.ModBox(ctx, token)
+	if err != nil || mb.ID != b.ID || mb.Key != "" {
+		t.Fatalf("the moderator's box, never with its key: %+v %v", mb, err)
+	}
+	if _, err := e.h.ModBox(ctx, b.Token); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("the guests' link is not a moderator link: %v", err)
+	}
+
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		if _, err := e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "g"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.h.ReceiveDropFile(ctx, other.ID, "o.jpg", bytes.NewReader(jpeg), "g")
+	list, total, err := e.h.ModPending(ctx, mb, 10)
+	if err != nil || total != 3 || len(list) != 3 {
+		t.Fatalf("what waits: %d %v", total, err)
+	}
+	otherList, _, _ := e.h.ModPending(ctx, other, 10)
+	if _, err := e.h.ModPendingFile(ctx, mb, otherList[0].ID); !errors.Is(err, hub.ErrNoDropBox) {
+		t.Errorf("another box's file: %v", err)
+	}
+	if p, err := e.h.ModPendingFile(ctx, mb, list[0].ID); err != nil || p.ID != list[0].ID {
+		t.Errorf("a file of the box: %v", err)
+	}
+
+	done, failed, err := e.h.ModDecide(ctx, mb, []string{list[0].ID}, true)
+	if err != nil || done != 1 || failed != 0 || len(e.f.uploads) != 1 {
+		t.Fatalf("approve one: %d %d %v (%d uploads)", done, failed, err, len(e.f.uploads))
+	}
+	if done, _, _ = e.h.ModDecide(ctx, mb, []string{list[1].ID}, false); done != 1 {
+		t.Errorf("reject one: %d", done)
+	}
+	if done, _, _ = e.h.ModDecide(ctx, mb, nil, true); done != 1 || len(e.f.uploads) != 2 {
+		t.Errorf("all that are left: %d (%d uploads)", done, len(e.f.uploads))
+	}
+	if left, _, _ := e.h.ModPending(ctx, other, 10); len(left) != 1 {
+		t.Errorf("another box is not touched: %d", len(left))
+	}
+	ev, _ := e.h.DropEvents(ctx, bobID, b.ID, 20)
+	text := ""
+	for _, x := range ev {
+		text += x.Text + "\n"
+	}
+	if !strings.Contains(text, "A moderator approved") || !strings.Contains(text, "A moderator rejected") {
+		t.Errorf("the log says a moderator did it: %s", text)
+	}
+
+	// a new link replaces the old; ending it ends it; a revoked box has none
+	again, _ := e.h.SetDropModerator(ctx, bob, b.ID, true)
+	if again == token {
+		t.Error("a new link is a new link")
+	}
+	if _, err := e.h.ModBox(ctx, token); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("the old link must stop: %v", err)
+	}
+	if _, err := e.h.SetDropModerator(ctx, bob, b.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.ModBox(ctx, again); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("the ended link: %v", err)
+	}
+	t2, _ := e.h.SetDropModerator(ctx, bob, b.ID, true)
+	e.h.RevokeDropBox(ctx, e.sess, bob, b.ID)
+	if _, err := e.h.ModBox(ctx, t2); !errors.Is(err, hub.ErrDropGone) {
+		t.Errorf("a revoked box: %v", err)
+	}
+}
+
+func TestTheHostIsToldOnceThatFilesWaitAndAgainWhenTheQueueWasEmptied(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	e.h.StageDir = t.TempDir()
+	var told []string
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
+	b := newBox(t, e, hub.DropParams{Name: "Careful", Approve: true})
+	for _, n := range []string{"a.jpg", "b.jpg", "c.jpg"} {
+		e.h.ReceiveDropFile(ctx, b.ID, n, bytes.NewReader(jpeg), "g")
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "wait for approval") || !strings.Contains(told[0], "Careful") {
+		t.Fatalf("one message for a hundred files: %v", told)
+	}
+	// deciding on some leaves the host told; deciding on all lets the next file tell again
+	pending, _, _ := e.h.DropPending(ctx, bobID, b.ID, 10)
+	e.h.DecideDrop(ctx, bob, b.ID, []string{pending[0].ID}, false)
+	e.h.ReceiveDropFile(ctx, b.ID, "d.jpg", bytes.NewReader(jpeg), "g")
+	if len(told) != 1 {
+		t.Errorf("still waiting, no new message: %v", told)
+	}
+	e.h.DecideDrop(ctx, bob, b.ID, nil, false)
+	e.h.ReceiveDropFile(ctx, b.ID, "e.jpg", bytes.NewReader(jpeg), "g")
+	if len(told) != 2 {
+		t.Errorf("a new file after the queue was emptied tells again: %v", told)
 	}
 }

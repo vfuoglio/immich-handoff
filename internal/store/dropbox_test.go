@@ -495,3 +495,46 @@ func TestHeartsAndNamesOfAGallery(t *testing.T) {
 		t.Errorf("no gallery, no download or names: %+v", got)
 	}
 }
+
+func TestAModeratorLinkAndOnceOnlyMessages(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "mod-box-token-123456", Name: "Mod", Key: "k"})
+	if _, err := s.DropBoxByMod(ctx, ""); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("an empty token finds nothing: %v", err)
+	}
+	if err := s.SetDropMod(ctx, b.ID, "the-moderator-token"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.DropBoxByMod(ctx, "the-moderator-token"); err != nil || got.ID != b.ID || got.Key != "k" || got.ModToken != "the-moderator-token" {
+		t.Errorf("by moderator token: %+v %v", got, err)
+	}
+	if _, err := s.DropBoxByMod(ctx, "mod-box-token-123456"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("the box's own token is not a moderator link: %v", err)
+	}
+	s.SetDropMod(ctx, b.ID, "")
+	if _, err := s.DropBoxByMod(ctx, "the-moderator-token"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("an ended link: %v", err)
+	}
+	s.SetDropMod(ctx, b.ID, "again")
+	s.SetDropBoxState(ctx, b.ID, DropRevoked, "")
+	if _, err := s.DropBoxByMod(ctx, "again"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("a revoked box: %v", err)
+	}
+
+	// of several callers, one claims a bit; clearing it lets the next claim
+	c, _ := s.AddDropBox(ctx, DropBox{Token: "claim-box-token-12345", Name: "Claim", Key: "k"})
+	first, _ := s.ClaimDropNotified(ctx, c.ID, 8)
+	second, _ := s.ClaimDropNotified(ctx, c.ID, 8)
+	if !first || second {
+		t.Errorf("claims: %v %v", first, second)
+	}
+	s.MarkDropNotified(ctx, c.ID, 1)
+	s.ClearDropNotified(ctx, c.ID, 8)
+	if got, _ := s.DropBox(ctx, c.ID); got.Notified != 1 {
+		t.Errorf("only the cleared bit goes: %d", got.Notified)
+	}
+	if again, _ := s.ClaimDropNotified(ctx, c.ID, 8); !again {
+		t.Error("after clearing, the bit can be claimed again")
+	}
+}
