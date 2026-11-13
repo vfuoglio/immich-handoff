@@ -321,6 +321,20 @@ func shots(set, outdir string) {
 		take(shot{name: "activity", who: "bob@test.local", url: appURL + "#activity", width: desktop, height: 900, fold: true, pause: live}, outdir)
 		take(shot{name: "palette", who: "bob@test.local", url: appURL, width: desktop, height: 900, fold: true, pause: live,
 			js: `document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true})); window.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}))`}, outdir)
+	case "audit": // every page that is not in the README, in both colour schemes and on a phone, to look at (not for the documentation)
+		openAll := `document.querySelectorAll('details').forEach(d => d.open = true)`
+		scheme := func(name string) string {
+			return fmt.Sprintf(`localStorage.setItem('handoff-palette','%[1]s'); document.documentElement.dataset.palette='%[1]s'`, name)
+		}
+		for _, v := range []struct {
+			name, palette string
+			dark, mobile  bool
+			width         int
+		}{{"twilight-dark", "twilight", true, false, desktop}, {"immich-light", "immich", false, false, desktop}, {"immich-dark-phone", "immich", true, true, 390}} {
+			take(shot{name: "audit-services-" + v.name, who: "bob@test.local", url: appURL + "#services", width: v.width, height: 900, dark: v.dark, mobile: v.mobile, pause: live, js: scheme(v.palette) + ";" + openAll}, outdir)
+			take(shot{name: "audit-activity-" + v.name, who: "bob@test.local", url: appURL + "#activity", width: v.width, height: 900, dark: v.dark, mobile: v.mobile, pause: live, js: scheme(v.palette)}, outdir)
+			take(shot{name: "audit-admin-" + v.name, who: "admin@test.local", url: appURL + "admin", width: v.width, height: 900, dark: v.dark, mobile: v.mobile, pause: live, js: scheme(v.palette) + ";" + openAll}, outdir)
+		}
 	case "lost":
 		take(shot{name: "connection-lost", who: "carol@test.local", url: appURL, width: desktop, height: 900,
 			xpath: `//div[contains(@class,'needs')]/article[contains(@class,'need')][1]`, pad: 16}, outdir)
