@@ -175,6 +175,60 @@ func TestRoom(t *testing.T) {
 		t.Error("the client can choose again")
 	}
 
+	run(t, phone, chromedp.Click(`form.room-done button`, chromedp.ByQuery))
+	until(t, phone, "the choice is sent again", `/your choice has been sent/i.test(document.body.textContent) && document.querySelectorAll('form.room-pick').length === 0`, 15*time.Second)
+
+	// until the photographer releases, a client can take nothing; then each gets the originals of their own choice
+	if c, _ := guestGetAs(t, cookie, port, "/room/"+token+"/zip"); c != 404 {
+		t.Errorf("before the release: %d", c)
+	}
+	if c, b := postBody(t, port, "/rooms/release", owner, url.Values{"room": {roomID}, "days": {"7"}}); c != 204 {
+		t.Fatalf("release: %d %s", c, b)
+	}
+	if !has(keyPermissions(t, alice, "handoff: room "+name), "asset.download") {
+		t.Error("the photographer's session gave the key the download permission at the release")
+	}
+	run(t, phone, chromedp.Reload(), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery))
+	if !js[bool](t, phone, `/your photos are ready/i.test(document.body.textContent) && document.querySelectorAll('a.room-dl').length === 2`) {
+		t.Error("the client's page offers the ZIP and a download for each chosen photo")
+	}
+	zreq, _ := http.NewRequest("GET", "http://localhost:"+port+"/room/"+token+"/zip", nil)
+	zreq.Header.Set("Cookie", cookie)
+	zres, err := http.DefaultClient.Do(zreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zdata, _ := io.ReadAll(zres.Body)
+	zres.Body.Close()
+	entries := zipEntries(t, zdata)
+	if zres.StatusCode != 200 || len(entries) != 2 {
+		t.Fatalf("the ZIP of the two chosen photos: %d %v", zres.StatusCode, entries)
+	}
+	want := map[int]bool{}
+	for _, id := range photos {
+		oreq, _ := http.NewRequest("GET", baseURL+"/api/assets/"+id+"/original", nil)
+		oreq.Header.Set("Authorization", "Bearer "+alice.token)
+		ores, err := http.DefaultClient.Do(oreq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ob, _ := io.ReadAll(ores.Body)
+		ores.Body.Close()
+		want[len(ob)] = true
+	}
+	for name, size := range entries {
+		if !want[size] {
+			t.Errorf("%s in the ZIP is %d bytes, which is not the size of an original of the album", name, size)
+		}
+	}
+	postBody(t, port, "/rooms/withdraw", owner, url.Values{"room": {roomID}})
+	if has(keyPermissions(t, alice, "handoff: room "+name), "asset.download") {
+		t.Error("taking the release back takes the permission off")
+	}
+	if c, _ := guestGetAs(t, cookie, port, "/room/"+token+"/zip"); c != 404 {
+		t.Errorf("after taking it back: %d", c)
+	}
+
 	// paused: the link says closed for now and gives no picture; resumed: it opens again; ended: gone, and the key with it
 	if c, _ := postBody(t, port, "/rooms/pause", owner, url.Values{"room": {roomID}, "paused": {"1"}}); c != 204 {
 		t.Fatalf("pause: %d", c)

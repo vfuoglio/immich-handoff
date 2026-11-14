@@ -16,6 +16,11 @@ var FramePermissions = perms("asset.view", "asset.read")
 // they release the originals, and never before.
 var RoomPermissions = perms("asset.view", "asset.read")
 
+// RoomPermissionsAuto is the key of a room that releases the originals by itself the moment a client sends a choice: nobody
+// is signed in then to add the permission, so the key has it from the start. The app still gives out nothing before the choice
+// is sent.
+var RoomPermissionsAuto = perms("asset.view", "asset.read", "asset.download")
+
 // DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
 // filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
 // own session.

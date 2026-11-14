@@ -25,25 +25,30 @@ const (
 
 // Room is a client room: a link for a client to look at an album of the photographer's, through marked pictures.
 type Room struct {
-	ID, Token string
-	OwnerID   uuid.UUID
-	OwnerName string
-	Name      string // what the photographer calls it
-	Title     string // what the client sees (empty: the name)
-	AlbumID   uuid.UUID
-	AlbumName string
-	KeyID     uuid.UUID // the room's key in Immich
-	Key       string    // decrypted
-	Password  string    // salted hash of the PIN; empty: none
-	Mark      string    // how the pictures are marked: "text", "logo" or "both"
-	MarkText  string    // the text repeated over the pictures
-	PickMode  string    // who chooses: "shared" (one selection for everyone), "visitor" (one each) or "named" (one client)
-	PickLimit int       // the most photos a selection may hold; 0: no limit
-	ClaimWho  string    // for "named": the visitor who claimed the room (empty: nobody yet)
-	ClaimName string    // and the name they gave
-	EndsAt    time.Time // zero: until the photographer ends it
-	State     string
-	CreatedAt time.Time
+	ID, Token    string
+	OwnerID      uuid.UUID
+	OwnerName    string
+	Name         string // what the photographer calls it
+	Title        string // what the client sees (empty: the name)
+	AlbumID      uuid.UUID
+	AlbumName    string
+	KeyID        uuid.UUID // the room's key in Immich
+	Key          string    // decrypted
+	Password     string    // salted hash of the PIN; empty: none
+	Mark         string    // how the pictures are marked: "text", "logo" or "both"
+	MarkText     string    // the text repeated over the pictures
+	PickMode     string    // who chooses: "shared" (one selection for everyone), "visitor" (one each) or "named" (one client)
+	PickLimit    int       // the most photos a selection may hold; 0: no limit
+	ClaimWho     string    // for "named": the visitor who claimed the room (empty: nobody yet)
+	ClaimName    string    // and the name they gave
+	AutoRelease  bool      // the originals are released the moment a client sends a choice
+	ReleaseDays  int       // how many days they can be downloaded after a release (0: as long as the room works)
+	ReleasedAt   time.Time // when they were released (zero: not yet)
+	ReleaseUntil time.Time // until when they can be downloaded (zero: as long as the room works)
+	Downloads    int       // how many ZIPs of originals clients started
+	EndsAt       time.Time // zero: until the photographer ends it
+	State        string
+	CreatedAt    time.Time
 }
 
 // ClientTitle is the name the client sees.
@@ -54,13 +59,13 @@ func (r Room) ClientTitle() string {
 	return r.Name
 }
 
-const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name`
+const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name, auto_release, release_days, released_at, release_until, downloads`
 
 func (s *Store) scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	var r Room
-	var owner, album, key, ends, created string
+	var owner, album, key, ends, created, released, until string
 	var enc []byte
-	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName); err != nil {
+	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName, &r.AutoRelease, &r.ReleaseDays, &released, &until, &r.Downloads); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -68,6 +73,8 @@ func (s *Store) scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	r.KeyID, _ = uuid.Parse(key)
 	r.EndsAt, _ = time.Parse(time.RFC3339Nano, ends)
 	r.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	r.ReleasedAt, _ = time.Parse(time.RFC3339Nano, released)
+	r.ReleaseUntil, _ = time.Parse(time.RFC3339Nano, until)
 	plain, err := s.vault.Open(enc, r.ID)
 	if err != nil {
 		return r, err
@@ -93,8 +100,8 @@ func (s *Store) AddRoom(ctx context.Context, r Room) (Room, error) {
 	if err != nil {
 		return r, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName, b2i(r.AutoRelease), r.ReleaseDays, tstr(r.ReleasedAt), tstr(r.ReleaseUntil), r.Downloads)
 	return r, err
 }
 
@@ -373,4 +380,22 @@ func less(a, b SelectionSummary) bool {
 		return a.Done
 	}
 	return a.DoneAt.Before(b.DoneAt)
+}
+
+// SetRoomRelease records that the originals were released (zero times: taken back).
+func (s *Store) SetRoomRelease(ctx context.Context, id string, at, until time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rooms SET released_at = ?, release_until = ? WHERE id = ?`, tstr(at), tstr(until), id)
+	return err
+}
+
+// SetRoomAutoRelease turns the release by itself on or off.
+func (s *Store) SetRoomAutoRelease(ctx context.Context, id string, on bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rooms SET auto_release = ? WHERE id = ?`, b2i(on), id)
+	return err
+}
+
+// AddRoomDownload counts a ZIP of originals that a client started.
+func (s *Store) AddRoomDownload(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rooms SET downloads = downloads + 1 WHERE id = ?`, id)
+	return err
 }

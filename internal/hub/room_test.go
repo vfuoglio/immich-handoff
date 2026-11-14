@@ -1,12 +1,14 @@
 package hub_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"image"
 	"image/color"
 	imgjpeg "image/jpeg"
 	"image/png"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -489,5 +491,201 @@ func TestWhenAClientFinishesThePhotographerGetsALineInTheirActivityAndCanGiveThe
 	}
 	if _, err := e.h.RoomPick(ctx, r, v, ids[0]); err != nil {
 		t.Errorf("the client can change it again: %v", err)
+	}
+}
+
+func zipNames(t *testing.T, data []byte) map[string]int {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("not a ZIP: %v", err)
+	}
+	out := map[string]int{}
+	for _, f := range zr.File {
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		out[f.Name] = len(b)
+	}
+	return out
+}
+
+func TestNothingIsReleasedUntilThePhotographerSaysSoAndThenOnlyTheClientsOwnSentChoice(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg", "c.jpg")
+	r := makeRoom(t, e, album, nil)
+	ids := pickIDs(t, e, r)
+	v := hub.RoomViewer{Who: "v1", Name: "Chiara"}
+	var zipped bytes.Buffer
+	if _, err := e.h.RoomZip(ctx, r, v, &zipped); err != hub.ErrNotReleased {
+		t.Errorf("before anything: %v", err)
+	}
+	if err := e.h.ReleaseRoom(ctx, e.sess, bob, r.ID, 30); err != hub.ErrNothingToRelease {
+		t.Errorf("no choice has been sent: %v", err)
+	}
+	e.h.RoomPick(ctx, r, v, ids[0])
+	e.h.RoomPick(ctx, r, v, ids[2])
+	if _, err := e.h.RoomDone(ctx, r, v); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.RoomDownloads(ctx, r, v); err != hub.ErrNotReleased {
+		t.Errorf("a sent choice is not released yet: %v", err)
+	}
+	if _, err := e.h.RoomOriginal(ctx, r, v, ids[0]); err != hub.ErrNotReleased {
+		t.Errorf("%v", err)
+	}
+	keyPerms := func() []string {
+		e.f.mu.Lock()
+		defer e.f.mu.Unlock()
+		return e.f.keyPerms[r.KeyID.String()]
+	}
+	if contains(keyPerms(), "asset.download") {
+		t.Fatal("the key cannot download before the release")
+	}
+	if err := e.h.ReleaseRoom(ctx, e.ann, ann, r.ID, 30); err != hub.ErrNoRoom {
+		t.Errorf("another person releases it: %v", err)
+	}
+	if err := e.h.ReleaseRoom(ctx, e.sess, bob, r.ID, 999); err != hub.ErrBadReleaseDays {
+		t.Errorf("%v", err)
+	}
+	clock := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	e.h.Now = func() time.Time { return clock }
+	if err := e.h.ReleaseRoom(ctx, e.sess, bob, r.ID, 30); err != nil {
+		t.Fatal(err)
+	}
+	if !contains(keyPerms(), "asset.download") {
+		t.Errorf("the photographer's own session gave the key the permission: %v", keyPerms())
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	if !e.h.RoomReleased(r) || r.ReleaseUntil.Sub(clock) != 30*24*time.Hour {
+		t.Fatalf("%+v", r)
+	}
+	d, err := e.h.RoomDownloads(ctx, r, v)
+	if err != nil || len(d.Photos) != 2 {
+		t.Fatalf("the client's two photos: %+v %v", d, err)
+	}
+	resp, err := e.h.RoomOriginal(ctx, r, v, ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	one, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(one) != "picture of a.jpg" {
+		t.Errorf("the original: %q", one)
+	}
+	if _, err := e.h.RoomOriginal(ctx, r, v, ids[1]); err != hub.ErrDropGone {
+		t.Errorf("a photo the client did not choose: %v", err)
+	}
+	if _, err := e.h.RoomOriginal(ctx, r, hub.RoomViewer{Who: "other"}, ids[0]); err != nil {
+		// in a shared room everybody is in the one selection
+		t.Errorf("a shared room shares its choice: %v", err)
+	}
+	n, err := e.h.RoomZip(ctx, r, v, &zipped)
+	if err != nil || n != 2 {
+		t.Fatalf("%d %v", n, err)
+	}
+	names := zipNames(t, zipped.Bytes())
+	if len(names) != 2 || names["a.jpg"] != len("picture of a.jpg") || names["c.jpg"] == 0 || names["b.jpg"] != 0 {
+		t.Errorf("only what was chosen, as originals: %v", names)
+	}
+	if got, _ := e.h.Store.RoomByIDAny(ctx, r.ID); got.Downloads != 1 {
+		t.Errorf("a ZIP is counted: %d", got.Downloads)
+	}
+	acts, _ := e.h.Activity(ctx, bobID, 10)
+	found := false
+	for _, a := range acts {
+		found = found || (a.Kind == "released" && strings.Contains(a.Text, "released the originals"))
+	}
+	if !found {
+		t.Errorf("the release is in the log: %+v", acts)
+	}
+
+	// after the days it is over; taking the release back removes the permission and the downloads
+	clock = clock.Add(31 * 24 * time.Hour)
+	r2, _ := e.h.Store.RoomByIDAny(ctx, r.ID)
+	if e.h.RoomReleased(r2) {
+		t.Error("30 days later it is over")
+	}
+	clock = clock.Add(-30 * 24 * time.Hour)
+	if err := e.h.WithdrawRoom(ctx, e.sess, bob, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if contains(keyPerms(), "asset.download") {
+		t.Error("the permission is taken off again")
+	}
+	r3, _ := e.h.Store.RoomByIDAny(ctx, r.ID)
+	if e.h.RoomReleased(r3) {
+		t.Error("withdrawn")
+	}
+	if _, err := e.h.RoomDownloads(ctx, r3, v); err != hub.ErrNotReleased {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestEachVisitorOfARoomWithOneChoiceEachGetsOnlyTheirOwnAndOnlyTheNamedClientInANamedRoom(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg")
+	each := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickMode = store.RoomVisitor })
+	ids := pickIDs(t, e, each)
+	ann, luca := hub.RoomViewer{Who: "ann", Name: "Ann"}, hub.RoomViewer{Who: "luca", Name: "Luca"}
+	e.h.RoomPick(ctx, each, ann, ids[0])
+	e.h.RoomPick(ctx, each, luca, ids[1])
+	e.h.RoomDone(ctx, each, ann)
+	if err := e.h.ReleaseRoom(ctx, e.sess, bob, each.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	each, _ = e.h.Store.RoomByIDAny(ctx, each.ID)
+	if d, err := e.h.RoomDownloads(ctx, each, ann); err != nil || len(d.Photos) != 1 || d.Photos[0].Name != "a.jpg" {
+		t.Errorf("Ann gets hers: %+v %v", d, err)
+	}
+	if _, err := e.h.RoomDownloads(ctx, each, luca); err != hub.ErrNotReleased {
+		t.Errorf("Luca has not sent his: %v", err)
+	}
+
+	named := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickMode = store.RoomNamed })
+	nids := pickIDs(t, e, named)
+	e.h.RoomClaim(ctx, named, ann)
+	named, _ = e.h.Store.RoomByIDAny(ctx, named.ID)
+	e.h.RoomPick(ctx, named, ann, nids[0])
+	e.h.RoomDone(ctx, named, ann)
+	e.h.ReleaseRoom(ctx, e.sess, bob, named.ID, 5)
+	named, _ = e.h.Store.RoomByIDAny(ctx, named.ID)
+	if _, err := e.h.RoomDownloads(ctx, named, ann); err != nil {
+		t.Errorf("the named client: %v", err)
+	}
+	if _, err := e.h.RoomDownloads(ctx, named, luca); err != hub.ErrNotReleased {
+		t.Errorf("somebody who only looks: %v", err)
+	}
+}
+
+func TestARoomThatReleasesByItselfHasAKeyThatCanDownloadFromTheStartButGivesNothingBeforeAChoiceIsSent(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg")
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.AutoRelease = true; p.ReleaseDays = 7 })
+	if !contains(e.f.lastPerms, "asset.download") || !r.AutoRelease {
+		t.Fatalf("nobody is signed in to add the permission later: %v", e.f.lastPerms)
+	}
+	ids := pickIDs(t, e, r)
+	v := hub.RoomViewer{Who: "v", Name: "Chiara"}
+	if _, err := e.h.RoomDownloads(ctx, r, v); err != hub.ErrNotReleased {
+		t.Errorf("a key that can download, and the app gives nothing yet: %v", err)
+	}
+	e.h.RoomPick(ctx, r, v, ids[0])
+	if _, err := e.h.RoomDone(ctx, r, v); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	if !e.h.RoomReleased(r) {
+		t.Fatal("sending the choice released it")
+	}
+	if d, err := e.h.RoomDownloads(ctx, r, v); err != nil || len(d.Photos) != 1 {
+		t.Errorf("%+v %v", d, err)
+	}
+	if err := e.h.WithdrawRoom(ctx, e.sess, bob, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	if r.AutoRelease || e.h.RoomReleased(r) {
+		t.Errorf("withdrawing also ends the release by itself: %+v", r)
 	}
 }

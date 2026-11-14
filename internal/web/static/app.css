@@ -829,6 +829,8 @@ span.room-heart.on { position: absolute; right: .3rem; top: .3rem; width: 2.2rem
 .room-count { font-weight: 700; }
 .room-done { margin: 0; }
 .room-heart-big { min-height: 2.75rem; }
+.room-dl { position: absolute; left: .3rem; bottom: .3rem; width: 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); text-decoration: none; font-size: 1.2rem; }
+.room-file { display: block; padding: .2rem .1rem 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 dialog.room-lightbox { max-width: 100vw; }
 .room-caption { text-align: center; color: #fff; margin: .5rem 0 0; }
 .room-bar { justify-content: center; margin: .4rem 0 0; }

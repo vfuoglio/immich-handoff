@@ -154,6 +154,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)
 	mux.HandleFunc("POST /rooms/end", w.endRoom)
 	mux.HandleFunc("POST /rooms/reopen", w.reopenRoomChoice)
+	mux.HandleFunc("GET /rooms/{id}/review", w.roomReview)
+	mux.HandleFunc("GET /rooms/{id}/photo/{pid}", w.roomReviewPhoto)
+	mux.HandleFunc("POST /rooms/release", w.releaseRoom)
+	mux.HandleFunc("POST /rooms/withdraw", w.withdrawRoom)
+	mux.HandleFunc("GET /room/{token}/original/{id}", w.roomOriginal)
+	mux.HandleFunc("GET /room/{token}/zip", w.roomZip)
 	mux.HandleFunc("GET /frame/{token}", w.framePage)
 	mux.HandleFunc("GET /frame/{token}/feed", w.frameFeed)
 	mux.HandleFunc("GET /frame/{token}/photo/{id}", w.framePhoto)
@@ -268,6 +274,9 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
 			base := strings.Repeat("../", len(strings.Split(strings.Trim(r.URL.Path, "/"), "/"))-1)
 			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, &guestInfo{}))
+		}
+		if strings.HasPrefix(r.URL.Path, "/rooms/") && strings.Count(r.URL.Path, "/") == 3 { // the photographer's pages about one room are two levels down
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))
 		}
 		if strings.HasPrefix(r.URL.Path, "/dropbox/card/") { // the printable card is two levels down
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))

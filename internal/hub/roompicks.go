@@ -181,6 +181,7 @@ func (h *Hub) RoomDone(ctx context.Context, r store.Room, v RoomViewer) (RoomSel
 		h.tell(notify.DropBox, fmt.Sprintf("%s finished choosing in the client room %q of %s: %d photos. Open the room on the Services tab to look at the choice.", who, r.Name, r.OwnerName, sel.Count))
 		h.Log.Info("a client finished choosing", "room", r.Name, "photos", sel.Count)
 	}
+	h.releaseIfAuto(ctx, r)
 	sel.Done, sel.CanPick = true, false
 	return sel, nil
 }

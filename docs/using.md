@@ -459,7 +459,10 @@ A **client room** is for photographers: a link where your client looks at one of
 
 - **What you see.** The room's row on the Services tab lists each selection (the name the client gave, how many photos, **Sent** with the time or **Still choosing**) and **Let them change it** gives a sent choice back to its client. When a client sends a choice you get a line in your Activity ("Chiara finished choosing in Rossi wedding: 28 photos"), a **Choice sent** card under *Needs you*, and, if you turned them on, a notification on your device or an email, which also reach you under "only what needs me"; the app's administrator is told too (kind *Drop boxes*).
 
-(This page grows as the room's parts arrive: notes, rounds and release.)
+- **Looking at the choice, and releasing the originals.** **Look at the choice and release the originals** on the room's row opens a page with each selection: the chosen photos as the client saw them (marked), numbered as in the room, with their **file names** (and a box with them all, one on each line, for finding the photos in your own library). **Release the originals** is yours to press (after you have been paid, say), with how long the downloads work (7, 30 or 90 days, or as long as the room works). Releasing adds the download permission to the room's key with your own sign-in, which is the first moment it has it; each client who sent a choice then sees **Your photos are ready** with a ZIP of the originals of *their own* photos (and a download on each), made while they download, and only for the choice they sent (a named room: only for the client who chose). **Take the release back** removes the permission again and stops all downloads. The ZIPs started are counted; a room gives out at most three ZIPs at a time and a client one.
+- **Release by itself.** In the room's form, **Release the originals as soon as the client sends their choice** skips your step. Nobody is signed in when a client presses *Done*, so the room's key has the download permission from the start; the app still gives out nothing before a choice is sent. Taking the release back also switches this off.
+
+(This page grows as the room's parts arrive: notes and rounds.)
 
 ## Frames: an album on a screen
 

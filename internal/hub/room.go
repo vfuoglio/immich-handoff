@@ -25,18 +25,19 @@ import (
 // read, like a frame, never kept), and ending it. The pictures a client sees are made in roomimage.go.
 
 var (
-	ErrBadRoomName   = errors.New("give the room a name of one to sixty characters")
-	ErrBadRoomTitle  = errors.New("the title the client sees can be at most sixty characters")
-	ErrBadRoomEnd    = errors.New("a room can end after 1 to 730 days, or never")
-	ErrTooManyRooms  = errors.New("you already have 20 rooms; remove one first")
-	ErrNoRoom        = errors.New("that room is not yours")
-	ErrBadRoomPIN    = errors.New("a PIN is 4 to 40 characters")
-	ErrRoomTooBig    = errors.New("that album has more photos than a room can show")
-	ErrRoomNotActive = errors.New("that room has ended")
-	ErrBadRoomMark   = errors.New("choose how the pictures are marked: text, a logo, or both")
-	ErrRoomMarkText  = errors.New("give the text to put on the pictures (up to 60 characters)")
-	ErrRoomLogo      = errors.New("a logo is needed for that, as a JPEG, PNG or WebP of at most 300 KB")
-	ErrRoomMarking   = errors.New("this picture could not be marked, so it is not shown")
+	ErrBadRoomName    = errors.New("give the room a name of one to sixty characters")
+	ErrBadRoomTitle   = errors.New("the title the client sees can be at most sixty characters")
+	ErrBadRoomEnd     = errors.New("a room can end after 1 to 730 days, or never")
+	ErrTooManyRooms   = errors.New("you already have 20 rooms; remove one first")
+	ErrNoRoom         = errors.New("that room is not yours")
+	ErrBadRoomPIN     = errors.New("a PIN is 4 to 40 characters")
+	ErrRoomTooBig     = errors.New("that album has more photos than a room can show")
+	ErrRoomNotActive  = errors.New("that room has ended")
+	ErrBadRoomMark    = errors.New("choose how the pictures are marked: text, a logo, or both")
+	ErrRoomMarkText   = errors.New("give the text to put on the pictures (up to 60 characters)")
+	ErrRoomLogo       = errors.New("a logo is needed for that, as a JPEG, PNG or WebP of at most 300 KB")
+	ErrBadReleaseDays = errors.New("the originals can be downloaded for 1 to 730 days, or as long as the room works")
+	ErrRoomMarking    = errors.New("this picture could not be marked, so it is not shown")
 )
 
 const (
@@ -57,6 +58,8 @@ type RoomParams struct {
 	Logo        []byte // the logo, for "logo" and "both"
 	PickMode    string // who chooses: "shared", "visitor" or "named" (empty: shared)
 	PickLimit   int    // the most photos a selection may hold; 0: no limit
+	AutoRelease bool   // release the originals the moment a client sends a choice
+	ReleaseDays int    // how many days the originals can be downloaded after a release (0: as long as the room works; empty form: 30)
 }
 
 // CreateRoom makes a room of one of the photographer's own albums. It has a key of its own, made with their session, that can
@@ -74,6 +77,9 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 	}
 	if p.EndsInDays < 0 || p.EndsInDays > 730 {
 		return store.Room{}, ErrBadRoomEnd
+	}
+	if p.ReleaseDays < 0 || p.ReleaseDays > 730 {
+		return store.Room{}, ErrBadReleaseDays
 	}
 	if p.PIN != "" {
 		if n := utf8.RuneCountInString(p.PIN); n < roomMinPINChars || n > 40 {
@@ -106,7 +112,11 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 	if album == nil {
 		return store.Room{}, ErrNoAlbum
 	}
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName("room "+name), immich.RoomPermissions)
+	perms := immich.RoomPermissions
+	if p.AutoRelease {
+		perms = immich.RoomPermissionsAuto
+	}
+	keyID, secret, err := sess.CreateAPIKey(ctx, keyName("room "+name), perms)
 	if err != nil {
 		return store.Room{}, err
 	}
@@ -130,7 +140,7 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		return store.Room{}, ErrRoomTooBig
 	}
 	r := store.Room{Token: newToken() + newToken(), OwnerID: owner.ID, OwnerName: owner.Name, Name: name, Title: title,
-		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText, PickMode: pickMode, PickLimit: pickLimit}
+		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText, PickMode: pickMode, PickLimit: pickLimit, AutoRelease: p.AutoRelease, ReleaseDays: p.ReleaseDays}
 	if p.PIN != "" {
 		if r.Password, err = HashDropPassword(p.PIN); err != nil {
 			undo()

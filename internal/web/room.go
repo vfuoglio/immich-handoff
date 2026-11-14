@@ -81,6 +81,10 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 		}
 		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("ends")))
 		limit, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("picklimit")))
+		relDays, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("releasedays")))
+		if err != nil {
+			relDays = 30
+		}
 		var logo []byte
 		if f, _, err := r.FormFile("logo"); err == nil {
 			defer f.Close()
@@ -90,7 +94,8 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 		}
 		_, err = w.Hub.CreateRoom(ctx, me.sess, me.user, hub.RoomParams{Name: r.PostFormValue("name"), Title: r.PostFormValue("title"),
 			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days,
-			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo, PickMode: r.PostFormValue("pickmode"), PickLimit: limit})
+			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo, PickMode: r.PostFormValue("pickmode"), PickLimit: limit,
+			AutoRelease: r.PostFormValue("autorelease") == "1", ReleaseDays: relDays})
 		return err
 	})
 }
@@ -172,8 +177,18 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	d := RoomPageData{Title: room.ClientTitle(), Token: room.Token, Name: v.Name, Count: sel.Count, Limit: sel.Limit, Done: sel.Done, CanPick: sel.CanPick,
 		NeedsName: sel.NeedsName, Chooser: sel.Chooser, Mode: sel.Mode, CounterText: pickCounter(ctx, sel.Count, sel.Limit), Message: roomMessage(ctx, r.URL.Query().Get("e"))}
+	mine := map[string]bool{}
+	if dl, err := w.Hub.RoomDownloads(ctx, room, v); err == nil {
+		d.Released = true
+		for _, p := range dl.Photos {
+			mine[p.ID] = true
+		}
+		if !dl.Until.IsZero() {
+			d.Until = loc(ctx).Stamp(dl.Until.Local())
+		}
+	}
 	for i, p := range photos {
-		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID]})
+		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID], Mine: mine[p.ID]})
 	}
 	RoomPage(d).Render(ctx, rw)
 }
@@ -393,4 +408,186 @@ func (w *Server) reopenRoomChoice(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "choice reopened", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.ReopenRoomSelection(ctx, me.user, r.PostFormValue("room"), r.PostFormValue("who"))
 	})
+}
+
+// roomReview is the photographer's page for the choices clients sent.
+func (w *Server) roomReview(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	room, err := w.Hub.RoomOf(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	review, err := w.Hub.RoomReview(r.Context(), room)
+	if err != nil {
+		http.Error(rw, "try again", http.StatusBadGateway)
+		return
+	}
+	ctx := r.Context()
+	l := loc(ctx)
+	photos, _ := w.Hub.RoomPhotos(ctx, room)
+	place := map[string]int{}
+	for i, p := range photos {
+		place[p.ID] = i + 1
+	}
+	d := ReviewData{User: me.user.Name, ID: room.ID, Name: room.Name, Released: w.Hub.RoomReleased(room), Downloads: room.Downloads, Auto: room.AutoRelease, Limit: room.PickLimit}
+	if !room.ReleasedAt.IsZero() {
+		d.ReleasedAt = l.Stamp(room.ReleasedAt.Local())
+	}
+	if !room.ReleaseUntil.IsZero() {
+		d.Until = l.Stamp(room.ReleaseUntil.Local())
+	}
+	for _, sel := range review {
+		rs := ReviewSel{Name: sel.Name, Done: sel.Done}
+		if sel.Done {
+			rs.When = l.Stamp(sel.DoneAt.Local())
+		}
+		var names []string
+		for _, p := range sel.Photos {
+			rs.Photos = append(rs.Photos, ReviewPhoto{N: place[p.ID], ID: p.ID, File: p.Name})
+			names = append(names, p.Name)
+		}
+		rs.Names = strings.Join(names, "\n")
+		d.Selections = append(d.Selections, rs)
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	ctx = context.WithValue(ctx, adminKey{}, me.user.IsAdmin)
+	RoomReviewPage(d).Render(ctx, rw)
+}
+
+// roomReviewPhoto gives the photographer the marked picture of a photo of their room, as a client sees it.
+func (w *Server) roomReviewPhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	room, err := w.Hub.RoomOf(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	data, kind, err := w.Hub.RoomImage(r.Context(), room, r.PathValue("pid"))
+	if err != nil {
+		if errors.Is(err, hub.ErrDropGone) {
+			http.NotFound(rw, r)
+		} else {
+			http.Error(rw, "try again", http.StatusBadGateway)
+		}
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=600")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Write(data)
+}
+
+func (w *Server) releaseRoom(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "room released", func(ctx context.Context, me *member, _ string) error {
+		days, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("days")))
+		if err != nil {
+			days = 30
+		}
+		return w.Hub.ReleaseRoom(ctx, me.sess, me.user, r.PostFormValue("room"), days)
+	})
+}
+
+func (w *Server) withdrawRoom(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "release withdrawn", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.WithdrawRoom(ctx, me.sess, me.user, r.PostFormValue("room"))
+	})
+}
+
+// roomOriginal gives a client the original of one photo of their own sent choice, once the photographer has released it.
+func (w *Server) roomOriginal(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	v := w.roomViewer(rw, r, room)
+	resp, err := w.Hub.RoomOriginal(r.Context(), room, v, r.PathValue("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, hub.ErrDropGone), errors.Is(err, hub.ErrNotReleased):
+			http.NotFound(rw, r)
+		case errors.Is(err, hub.ErrDropBusy):
+			rw.Header().Set("Retry-After", "30")
+			http.Error(rw, "busy, try again in a moment", http.StatusServiceUnavailable)
+		default:
+			http.Error(rw, "try again", http.StatusBadGateway)
+		}
+		return
+	}
+	defer resp.Body.Close()
+	for _, h := range []string{"Content-Type", "Content-Length", "Content-Disposition"} {
+		if v := resp.Header.Get(h); v != "" {
+			rw.Header().Set(h, v)
+		}
+	}
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Header().Set("Cache-Control", "private, no-store")
+	io.Copy(rw, resp.Body)
+}
+
+// roomZip streams the originals of the client's own sent choice as a ZIP.
+func (w *Server) roomZip(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	v := w.roomViewer(rw, r, room)
+	if _, err := w.Hub.RoomDownloads(r.Context(), room, v); err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	cw := &countWriter{w: rw}
+	n, err := w.Hub.RoomZip(r.Context(), room, v, headerOnce{cw, rw})
+	if err != nil {
+		switch {
+		case cw.n == 0 && errors.Is(err, hub.ErrZipBusy):
+			rw.Header().Set("Retry-After", "60")
+			http.Error(rw, t(r.Context(), "Your photos are being got ready already, or too many people are asking at once. Try again in a minute."), http.StatusTooManyRequests)
+		case cw.n == 0:
+			w.Log.Warn("a room's ZIP failed before it began", "err", err)
+			http.Error(rw, "try again", http.StatusBadGateway)
+		default:
+			w.Log.Warn("a room's ZIP failed half way", "err", err)
+		}
+		return
+	}
+	_ = n
+}
+
+// countWriter counts what was written, to tell a ZIP that never began from one that broke off.
+type countWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// headerOnce sets the headers of a ZIP when its first byte is written, so an answer that is refused before it begins is not a
+// 200 with nothing in it.
+type headerOnce struct {
+	*countWriter
+	rw http.ResponseWriter
+}
+
+func (h headerOnce) Write(p []byte) (int, error) {
+	if h.n == 0 {
+		h.rw.Header().Set("Content-Type", "application/zip")
+		h.rw.Header().Set("Content-Disposition", `attachment; filename="photos.zip"`)
+		h.rw.Header().Set("Cache-Control", "private, no-store")
+		h.rw.Header().Set("X-Content-Type-Options", "nosniff")
+	}
+	return h.countWriter.Write(p)
 }

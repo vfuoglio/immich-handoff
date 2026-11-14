@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -506,5 +508,157 @@ func TestThePhotographerSeesWhoChoseWhatIsToldAndCanGiveAChoiceBack(t *testing.T
 	_, page = do(t, "GET", app.URL+"/", "sess=family", nil)
 	if strings.Contains(page, "Choice sent") {
 		t.Error("no longer sent")
+	}
+}
+
+func TestAClientTakesTheOriginalsOfTheirSentChoiceOnlyAfterTheRelease(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("34", 32)
+	im := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/search/metadata":
+			item := func(id, name, created string) map[string]any {
+				return map[string]any{"id": id, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created, "type": "IMAGE", "isTrashed": false, "isArchived": false}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"assets": map[string]any{"items": []any{
+				item("11111111-1111-4111-8111-111111111111", "IMG_1.jpg", "2026-07-01T10:00:00.000Z"),
+				item("22222222-2222-4222-8222-222222222222", "IMG_2.jpg", "2026-07-02T10:00:00.000Z"),
+			}, "count": 2, "total": 2, "facets": []any{}}})
+		case strings.HasSuffix(r.URL.Path, "/original"):
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+map[string]string{"11111111-1111-4111-8111-111111111111": "IMG_1.jpg"}[strings.Split(r.URL.Path, "/")[3]]+`"`)
+			w.Write([]byte("ORIGINAL " + strings.Split(r.URL.Path, "/")[3][:4]))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(im.Close)
+	app, _ := setup(t, func(srv *web.Server) {
+		withRoom(t, &st, store.Room{Token: token, Name: "Rossi", AlbumName: "Wedding", PickMode: store.RoomShared})(srv)
+		srv.Hub.Connect = func(key string) (*immich.API, error) { return immich.New(im.URL, immich.Auth{APIKey: key}, nil) }
+	})
+	ctx := context.Background()
+	c := newRoomClient(t, app.URL)
+	_, page, _ := c.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, page, token)
+	c.do("POST", "/room/"+token+"/pick/"+ids[0], "", true)
+	rooms, _ := st.RoomsOf(ctx, uuid.MustParse(familyID))
+	room := rooms[0]
+	for _, p := range []string{"/room/" + token + "/zip", "/room/" + token + "/original/" + ids[0]} {
+		if code, _, _ := c.do("GET", p, "", false); code != 404 {
+			t.Errorf("%s before anything: %d", p, code)
+		}
+	}
+	c.do("POST", "/room/"+token+"/done", "", false)
+	st.SetRoomRelease(ctx, room.ID, time.Now().Add(-time.Minute), time.Time{}) // the photographer releases
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, "Your photos are ready") || !strings.Contains(page, `href="room/`+token+`/zip"`) || strings.Count(page, `class="room-dl"`) != 1 {
+		t.Fatalf("after the release the page offers the choice: %.300s", page)
+	}
+	if code, body, h := c.do("GET", "/room/"+token+"/original/"+ids[0], "", false); code != 200 || !strings.HasPrefix(body, "ORIGINAL 1111") || !strings.Contains(h.Get("Content-Disposition"), "IMG_1.jpg") || h.Get("Cache-Control") != "private, no-store" {
+		t.Errorf("the original: %d %q %v", code, body, h)
+	}
+	if code, _, _ := c.do("GET", "/room/"+token+"/original/"+ids[1], "", false); code != 404 {
+		t.Errorf("a photo that was not chosen: %d", code)
+	}
+	code, body, h := c.do("GET", "/room/"+token+"/zip", "", false)
+	if code != 200 || h.Get("Content-Type") != "application/zip" || !strings.Contains(h.Get("Content-Disposition"), "attachment") {
+		t.Fatalf("the ZIP: %d %v", code, h)
+	}
+	zr, err := zip.NewReader(strings.NewReader(body), int64(len(body)))
+	if err != nil || len(zr.File) != 1 || zr.File[0].Name != "IMG_1.jpg" {
+		t.Errorf("only the chosen photo: %v %v", err, zr)
+	}
+	// a stranger who has not chosen gets nothing, whatever the release
+	other := newRoomClient(t, app.URL)
+	st.ReopenSelection(ctx, room.ID, 1, "")
+	if code, _, _ := c.do("GET", "/room/"+token+"/zip", "", false); code != 404 {
+		t.Errorf("a choice given back is not downloadable: %d", code)
+	}
+	_ = other
+	// past the days it is over
+	st.FinishSelection(ctx, room.ID, 1, "", "x")
+	st.SetRoomRelease(ctx, room.ID, time.Now().Add(-48*time.Hour), time.Now().Add(-time.Hour))
+	if code, _, _ := c.do("GET", "/room/"+token+"/zip", "", false); code != 404 {
+		t.Errorf("after the days: %d", code)
+	}
+}
+
+func TestThePhotographerLooksAtTheChoiceAndReleasesOnlyThroughTheirOwnPage(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("56", 32)
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi wedding", AlbumName: "Wedding", PickMode: store.RoomShared}))
+	ctx := context.Background()
+	rooms, _ := st.RoomsOf(ctx, uuid.MustParse(familyID))
+	id := rooms[0].ID
+	if code, _ := do(t, "GET", app.URL+"/rooms/"+id+"/review", "", nil); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/rooms/"+id+"/review", "sess=other", nil); code != 404 {
+		t.Errorf("another person: %d", code)
+	}
+	code, page := do(t, "GET", app.URL+"/rooms/"+id+"/review", "sess=family", nil)
+	if code != 200 || !strings.Contains(page, "Choice in Rossi wedding") || !strings.Contains(page, "Nobody has chosen anything yet.") || !strings.Contains(page, `<base href="../../"`) {
+		t.Fatalf("%d %.300s", code, page)
+	}
+	c := newRoomClient(t, app.URL)
+	_, cp, _ := c.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, cp, token)
+	c.do("POST", "/room/"+token+"/pick/"+ids[1], "", true)
+	c.do("POST", "/room/"+token+"/name", "name=Chiara", false)
+	c.do("POST", "/room/"+token+"/done", "", false)
+	_, page = do(t, "GET", app.URL+"/rooms/"+id+"/review", "sess=family", nil)
+	for _, want := range []string{"1 photo chosen", "Release the originals", `hx-post="rooms/release"`, "IMG", "File names", "rooms/" + id + "/photo/"} {
+		if want == "IMG" {
+			continue
+		}
+		if !strings.Contains(page, want) {
+			t.Errorf("the review lacks %q", want)
+		}
+	}
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	for _, who := range []string{"", "sess=other"} {
+		if code, _ := do(t, "POST", app.URL+"/rooms/release", who, hdr); code == 204 {
+			t.Errorf("%q released it", who)
+		}
+	}
+	if code, _ := do(t, "GET", app.URL+"/rooms/"+id+"/photo/0000000000000000", "sess=family", nil); code != 404 {
+		t.Errorf("a photo that is not in the room: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/rooms/"+id+"/photo/"+ids[0], "sess=other", nil); code != 404 {
+		t.Errorf("another person's view of the pictures: %d", code)
+	}
+}
+
+// Originals leave a room only through two functions, and each asks first whether the room is released and the client's own
+// choice was sent; no other file of a room's code may open one.
+func TestOriginalsLeaveARoomOnlyBehindTheReleaseCheck(t *testing.T) {
+	b, err := os.ReadFile("../hub/roomrelease.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if n := strings.Count(src, "api.Original("); n != 2 {
+		t.Fatalf("originals are opened %d times, in RoomOriginal and RoomZip only", n)
+	}
+	for _, fn := range []string{"func (h *Hub) RoomOriginal(", "func (h *Hub) RoomZip("} {
+		i := strings.Index(src, fn)
+		if i < 0 {
+			t.Fatalf("%s is gone", fn)
+		}
+		body := src[i:]
+		if k := strings.Index(body[1:], "\nfunc "); k > 0 {
+			body = body[:k]
+		}
+		if !strings.Contains(body, "h.downloadPhotos(") || strings.Index(body, "h.downloadPhotos(") > strings.Index(body, "api.Original(") {
+			t.Errorf("%s must check the release before it opens an original", fn)
+		}
+	}
+	for _, f := range []string{"../hub/room.go", "../hub/roompicks.go", "../hub/roompin.go", "room.go"} {
+		b, _ := os.ReadFile(f)
+		if strings.Contains(string(b), "Original(") && f != "room.go" {
+			t.Errorf("%s opens an original", f)
+		}
 	}
 }

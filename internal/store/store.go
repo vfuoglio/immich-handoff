@@ -540,6 +540,13 @@ var migrations = []string{
 	   at      TEXT NOT NULL,
 	   PRIMARY KEY (room_id, round, who)
 	 );`,
+	// Releasing a client room's originals: by hand (the photographer's own session adds the key's download permission) or
+	// automatically when a client sends a choice; until when they can be downloaded; how many ZIPs were made.
+	`ALTER TABLE rooms ADD COLUMN auto_release INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN release_days INTEGER NOT NULL DEFAULT 30;
+	 ALTER TABLE rooms ADD COLUMN released_at TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN release_until TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN downloads INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

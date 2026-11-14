@@ -30,6 +30,7 @@ type RoomView struct {
 	Selections                    []SelectionView
 	Mode                          string
 	Limit                         int
+	Released                      bool
 }
 
 // SelectionView is one selection of a room as the photographer sees it.
@@ -3169,6 +3170,19 @@ templ RoomSection(rooms []RoomView) {
 				<input id="rm-picklimit" name="picklimit" type="number" min="1" max="5000" inputmode="numeric" placeholder="30"/>
 			</div>
 			<div class="field">
+				<label><input type="checkbox" name="autorelease" value="1"/> { t(ctx, "Release the originals as soon as the client sends their choice") }</label>
+				<small class="meta">{ t(ctx, "Leave this off to look at the choice first, for example until you have been paid, and release it yourself. If you switch it on, the room's key may download from the start (nothing is given out before a choice is sent).") }</small>
+			</div>
+			<div class="field">
+				<label for="rm-days">{ t(ctx, "After a release the originals can be downloaded") }</label>
+				<select id="rm-days" name="releasedays">
+					<option value="7">{ t(ctx, "for 7 days") }</option>
+					<option value="30" selected>{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="0">{ t(ctx, "as long as the room works") }</option>
+				</select>
+			</div>
+			<div class="field">
 				<label for="rm-pin">{ t(ctx, "PIN (optional)") }</label>
 				<input id="rm-pin" name="pin" maxlength="40" autocomplete="off" placeholder={ t(ctx, "4 to 40 characters") }/>
 			</div>
@@ -3233,6 +3247,7 @@ templ RoomRow(r RoomView, id string, open bool) {
 					}
 				</p>
 				if len(r.Selections) > 0 {
+					<p class="row"><a class="button" href={ templ.SafeURL("rooms/" + r.ID + "/review") }>{ t(ctx, "Look at the choice and release the originals") }</a></p>
 					<ul class="plain room-selections">
 						for _, sel := range r.Selections {
 							<li>
@@ -3279,6 +3294,7 @@ type RoomTile struct {
 	ID     string
 	Video  bool
 	Picked bool
+	Mine   bool // the original can be downloaded
 }
 
 // RoomPageData is what the client's page shows.
@@ -3294,6 +3310,8 @@ type RoomPageData struct {
 	Chooser      string // a named room somebody else has claimed: who
 	Mode         string
 	Message      string // what went wrong with the last press, in words
+	Released     bool   // the originals of this client's sent choice can be downloaded
+	Until        string // until when, "" for as long as the room works
 }
 
 // RoomPage is what the client sees: the room's title, the marked pictures in the order of the shoot, a way to choose and to send
@@ -3312,6 +3330,18 @@ templ RoomPage(d RoomPageData) {
 				<section class="card notice">
 					<h2>{ t(ctx, "Your choice has been sent") }</h2>
 					<p class="meta">{ t(ctx, "The photographer has been told which photos you chose. You can still look at all the pictures.") }</p>
+				</section>
+			}
+			if d.Released {
+				<section class="card notice">
+					<h2>{ t(ctx, "Your photos are ready") }</h2>
+					<p class="row"><a class="button primary" href={ templ.SafeURL("room/" + d.Token + "/zip") } download>{ t(ctx, "Download the photos you chose (ZIP)") }</a></p>
+					<p class="meta">
+						{ t(ctx, "They are the originals, as the photographer took them. The ZIP is made while you download, so it can take a while.") }
+						if d.Until != "" {
+							{ t(ctx, "You can download them until {when}.", "when", d.Until) }
+						}
+					</p>
 				</section>
 			}
 			if d.NeedsName || (d.Name == "" && !d.Done && d.Chooser == "") {
@@ -3356,6 +3386,9 @@ templ RoomPage(d RoomPageData) {
 								<span class="room-video" aria-hidden="true">&#9654;</span>
 							}
 						</a>
+						if tile.Mine {
+							<a class="room-dl" href={ templ.SafeURL("room/" + d.Token + "/original/" + tile.ID) } download aria-label={ t(ctx, "Download photo {n}", "n", tile.N) } title={ t(ctx, "Download photo {n}", "n", tile.N) }>&#8681;</a>
+						}
 						if d.CanPick {
 							<form class="room-pick" method="post" action={ "room/" + d.Token + "/pick/" + tile.ID }>
 								<button type="submit" class="room-heart" aria-pressed={ checked(tile.Picked) } aria-label={ pickLabel(ctx, tile.Picked, tile.N) } title={ pickLabel(ctx, tile.Picked, tile.N) }>
@@ -3404,5 +3437,102 @@ templ RoomPaused() {
 			<h1>{ t(ctx, "This room is closed for now") }</h1>
 			<p class="lead">{ t(ctx, "The photographer has paused it. Try again later.") }</p>
 		</section>
+	}
+}
+
+// ReviewData is the photographer's page for the choices clients sent in a room.
+type ReviewData struct {
+	User, ID, Name   string
+	Selections       []ReviewSel
+	Released         bool
+	ReleasedAt       string
+	Until            string
+	Downloads        int
+	Auto             bool
+	Limit            int
+}
+
+// ReviewSel is one selection on the review page.
+type ReviewSel struct {
+	Name, When string
+	Done       bool
+	Photos     []ReviewPhoto
+	Names      string // the file names, one on each line
+}
+
+// ReviewPhoto is one chosen photo on the review page.
+type ReviewPhoto struct {
+	N    int
+	ID   string
+	File string
+}
+
+// RoomReviewPage is where the photographer looks at what clients chose, and releases the originals.
+templ RoomReviewPage(d ReviewData) {
+	@Layout(t(ctx, "Choice in {room}", "room", d.Name), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "Choice in {room}", "room", d.Name) }</h1>
+		<p class="lead">{ t(ctx, "What your client chose, as they saw it (marked). The file names are for finding the photos in your own library.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<section class="card">
+			<h2>{ t(ctx, "The originals") }</h2>
+			if d.Released {
+				<p><span class="chip ok">{ t(ctx, "Released") }</span> { t(ctx, "Released on {when}.", "when", d.ReleasedAt) }
+					if d.Until != "" {
+						{ t(ctx, "Clients can download until {when}.", "when", d.Until) }
+					} else {
+						{ t(ctx, "Clients can download as long as the room works.") }
+					}
+					{ n(ctx, "{n} ZIP was started.", "{n} ZIPs were started.", d.Downloads) }
+				</p>
+				<p class="row"><button hx-post="rooms/withdraw" hx-vals={ vals("room", d.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Clients will no longer be able to download anything, and the room will not release by itself any more. Continue?") } data-confirm-title={ t(ctx, "Take the release back?") } data-confirm-label={ t(ctx, "Take it back") } data-danger="true">{ t(ctx, "Take the release back") }</button></p>
+			} else {
+				<p class="meta">{ t(ctx, "Nothing can be downloaded yet. When you release, each client who sent a choice can download the originals of their own photos.") }
+					if d.Auto {
+						{ t(ctx, "This room releases by itself when a choice is sent.") }
+					}
+				</p>
+				<form class="row" hx-post="rooms/release" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Clients who sent a choice will be able to download the originals of their photos. Continue?") } data-confirm-title={ t(ctx, "Release the originals?") } data-confirm-label={ t(ctx, "Release") }>
+					<input type="hidden" name="room" value={ d.ID }/>
+					<label for="rel-days">{ t(ctx, "They can download") }</label>
+					<select id="rel-days" name="days">
+						<option value="7">{ t(ctx, "for 7 days") }</option>
+						<option value="30" selected>{ t(ctx, "for 30 days") }</option>
+						<option value="90">{ t(ctx, "for 90 days") }</option>
+						<option value="0">{ t(ctx, "as long as the room works") }</option>
+					</select>
+					<button class="primary" type="submit">{ t(ctx, "Release the originals") }</button>
+				</form>
+			}
+		</section>
+		if len(d.Selections) == 0 {
+			<p class="meta">{ t(ctx, "Nobody has chosen anything yet.") }</p>
+		}
+		for _, sel := range d.Selections {
+			<section class="card">
+				<h2>{ selectionName(ctx, sel.Name) }</h2>
+				<p class="meta">{ n(ctx, "{n} photo chosen", "{n} photos chosen", len(sel.Photos)) }
+					if sel.Done {
+						<span class="chip ok">{ t(ctx, "Sent {when}", "when", sel.When) }</span>
+					} else {
+						<span class="chip warn">{ t(ctx, "Still choosing") }</span>
+					}
+				</p>
+				<ul class="plain room-grid">
+					for _, p := range sel.Photos {
+						<li class="room-item">
+							<a class="room-tile" href={ templ.SafeURL("rooms/" + d.ID + "/photo/" + p.ID) } target="_blank" rel="noopener">
+								<img src={ "rooms/" + d.ID + "/photo/" + p.ID } alt="" loading="lazy"/>
+								<span class="room-n" aria-hidden="true">{ fmt.Sprint(p.N) }</span>
+							</a>
+							<small class="meta room-file">{ p.File }</small>
+						</li>
+					}
+				</ul>
+				<div class="field">
+					<label for={ "names-" + sel.Name }>{ t(ctx, "File names") }</label>
+					<textarea id={ "names-" + sel.Name } readonly rows="4">{ sel.Names }</textarea>
+				</div>
+			</section>
+		}
 	}
 }
