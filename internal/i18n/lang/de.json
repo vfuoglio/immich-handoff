@@ -255,6 +255,7 @@
  "Need attention": "Aufmerksamkeit nötig",
  "Needs approval": "Braucht Genehmigung",
  "Needs you": "Aktion nötig",
+ "Never": "Nie",
  "New link": "Neuer Link",
  "Newest backup: {name}, made {when}.": "Neuestes Backup: {name}, erstellt {when}.",
  "Next digest: {when}": "Nächste Zusammenfassung: {when}",
@@ -296,6 +297,7 @@
  "On": "An",
  "On an iPhone or iPad, add this page to the Home Screen first, then open it from there.": "Füge diese Seite auf einem iPhone oder iPad zuerst dem Home-Bildschirm hinzu und öffne sie dann von dort.",
  "One message to each destination, whatever it takes. Nothing else is changed.": "Eine Nachricht an jedes Ziel, egal was es annimmt. Sonst wird nichts geändert.",
+ "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open.": "Eine Mitteilung auf diesem Gerät für alles, was du gesendet hast, auch bei ausgeschaltetem Bildschirm, wo der Browser die App im Hintergrund weiterarbeiten lässt (Android). Auf einem iPhone werden Dateien nur gesendet, solange diese Seite offen ist.",
  "One thing needs you.": "Eine Sache braucht dich.",
  "Only files larger than (MB) wait for those hours": "Nur Dateien über (MB) warten auf diese Zeit",
  "Only on Wi-Fi": "Nur im WLAN",
@@ -308,6 +310,7 @@
  "Only the person who made this link and the people who help them can read or hear it.": "Nur die Person, die diesen Link erstellt hat, und ihre Helfer können sie lesen oder hören.",
  "Only the person who made this link can see what you send. You will not see anyone else's photos.": "Nur die Person, die diesen Link erstellt hat, sieht, was du sendest. Fotos anderer siehst du nicht.",
  "Only what needs me": "Nur, was mich braucht",
+ "Only when something went wrong": "Nur wenn etwas schiefging",
  "Open": "Offen",
  "Open Immich Handoff": "Immich Handoff öffnen",
  "Open a service to see how it works, change who can send, pause it or set a daily limit. What cannot be undone sits at the bottom of each one.": "Öffne einen Dienst, um zu sehen, wie er funktioniert, wer senden darf, ihn zu pausieren oder ein Tageslimit zu setzen. Was sich nicht rückgängig machen lässt, steht jeweils ganz unten.",
@@ -347,6 +350,7 @@
  "Photos arrive in your library with a tag that says who they are from, inside the tag \"from\".": "Die Fotos kommen in deiner Bibliothek mit einem Tag an, der sagt, von wem sie sind, innerhalb des Tags „from“.",
  "Photos arrive tagged <code class=\"tag\">{tag}</code>.": "Fotos kommen mit dem Tag <code class=\"tag\">{tag}</code> an.",
  "Photos by email": "Fotos per E-Mail",
+ "Photos from this device": "Fotos von diesem Gerät",
  "Photos handed over per day, oldest first: {days}": "Pro Tag übergebene Fotos, älteste zuerst: {days}",
  "Photos handed over to this service are moved to your trash, never deleted for good, after this many days, unless you file them in an album or take the inbox tag off. Empty or 0: they stay.": "Fotos, die diesem Dienst übergeben werden, kommen nach dieser Zahl von Tagen in deinen Papierkorb (nie endgültig gelöscht), außer du legst sie in ein Album oder nimmst den Eingangs-Tag ab. Leer oder 0: sie bleiben.",
  "Photos only (no videos)": "Nur Fotos (keine Videos)",
@@ -476,6 +480,7 @@
  "Take the heart back": "Herz zurücknehmen",
  "Taken back. It is in the owner's trash, not in their library.": "Zurückgenommen. Es liegt im Papierkorb des Besitzers, nicht in seiner Bibliothek.",
  "Takes {limits}.": "Nimmt {limits} an.",
+ "Tell me when it is done": "Sag mir Bescheid, wenn es fertig ist",
  "Thank you for your message!": "Danke für deine Nachricht!",
  "Thank you!": "Danke!",
  "That could not be taken back right now. Please try again.": "Das konnte gerade nicht zurückgenommen werden. Bitte versuch es noch einmal.",
@@ -540,6 +545,7 @@
  "This box takes messages to the host. Only the people who manage it can read them.": "Diese Box nimmt Nachrichten an den Gastgeber an. Nur die Personen, die sie verwalten, können sie lesen.",
  "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.": "Dieser Browser kann Dateien nicht warten lassen, während die Seite geschlossen ist; lass diese Seite offen, bis sie gesendet sind.",
  "This browser cannot show notifications from this page.": "Dieser Browser kann von dieser Seite keine Benachrichtigungen anzeigen.",
+ "This browser sends only while this page is open. Keep it open until everything is sent.": "Dieser Browser sendet nur, solange diese Seite offen ist. Lass sie offen, bis alles gesendet ist.",
  "This creates an API key named \"handoff: {name}\" in your Immich account that can read and download the photos you tag \"{tag}\" and also receive photos. Every photo you tag \"{tag}\" will be handed over to everyone else in this pool, and the photos they tag will come to you, each tagged with who took it. Your originals stay where they are. People you do not know may be in the pool if its owner lets anyone join. You can stop at any time with Leave: you keep what you received, and nothing more is shared with you.": "Das erstellt in deinem Immich einen API-Schlüssel namens „handoff: {name}“, der die Fotos lesen und herunterladen kann, die du mit „{tag}“ markierst, und auch Fotos empfangen kann. Jedes Foto, das du mit „{tag}“ markierst, geht an alle anderen in diesem Pool, und die Fotos, die sie markieren, kommen zu dir, jeweils markiert mit dem, der sie gemacht hat. Deine Originale bleiben, wo sie sind. Es können dir unbekannte Leute im Pool sein, wenn der Besitzer jeden beitreten lässt. Du kannst jederzeit mit „Verlassen“ aufhören: Du behältst, was du erhalten hast, und es wird nichts mehr mit dir geteilt.",
  "This creates an API key named \"handoff: {name}\" in your Immich account. Immich Handoff uses it to read and download the photos you tag \"{tag}\" and to delete the originals after they have been handed over. Nobody else can see the key. You can stop at any time with Leave, or by deleting that key in Immich.": "Dadurch wird in deinem Immich-Konto ein API-Schlüssel namens „handoff: {name}“ angelegt. Immich Handoff nutzt ihn, um die Fotos zu lesen und herunterzuladen, die du mit „{tag}“ taggst, und um die Originale nach der Übergabe zu löschen. Niemand sonst kann den Schlüssel sehen. Du kannst jederzeit mit „Verlassen“ aufhören oder indem du den Schlüssel in Immich löschst.",
  "This creates an API key named \"handoff: {name}\" in your Immich account. Immich Handoff uses it to read and download the photos you tag \"{tag}\". Your originals are kept: the key has no permission to delete anything. Nobody else can see the key. You can stop at any time with Leave, or by deleting that key in Immich.": "Dadurch wird in deinem Immich-Konto ein API-Schlüssel namens „handoff: {name}“ angelegt. Immich Handoff nutzt ihn, um die Fotos zu lesen und herunterzuladen, die du mit „{tag}“ taggst. Deine Originale bleiben erhalten: Der Schlüssel hat keine Berechtigung, etwas zu löschen. Niemand sonst kann den Schlüssel sehen. Du kannst jederzeit mit „Verlassen“ aufhören oder indem du den Schlüssel in Immich löschst.",
@@ -604,6 +610,7 @@
  "What was left out, and why": "Was weggelassen wurde und warum",
  "What you send is looked at before it is kept.": "Was du sendest, wird angesehen, bevor es behalten wird.",
  "What you sent to {name}. You can take a photo back while the owner has not filed it in their library.": "Was du an {name} gesendet hast. Ein Foto kannst du zurücknehmen, solange es der Besitzer nicht in seiner Bibliothek abgelegt hat.",
+ "When everything has arrived, or something went wrong": "Wenn alles angekommen ist oder etwas schiefging",
  "Where should they go?": "Wohin sollen sie gehen?",
  "Who can find it": "Wer es finden kann",
  "Who may send": "Wer senden darf",
@@ -923,6 +930,14 @@
   "one": "{n} Foto von {name} in {service} angekommen",
   "other": "{n} Fotos von {name} in {service} angekommen"
  },
+ "{n} photo arrived in your Immich": {
+  "one": "{n} Foto ist in deinem Immich angekommen",
+  "other": "{n} Fotos sind in deinem Immich angekommen"
+ },
+ "{n} photo could not be sent": {
+  "one": "{n} Foto konnte nicht gesendet werden",
+  "other": "{n} Fotos konnten nicht gesendet werden"
+ },
  "{n} photo from the album {album} handed over to {service}": {
   "one": "{n} Foto aus dem Album {album} an {service} übergeben",
   "other": "{n} Fotos aus dem Album {album} an {service} übergeben"
@@ -934,6 +949,10 @@
  "{n} photo handed over {when}": {
   "one": "{n} Foto übergeben {when}",
   "other": "{n} Fotos übergeben {when}"
+ },
+ "{n} photo is waiting for you to sign in to Immich again": {
+  "one": "{n} Foto wartet darauf, dass du dich wieder bei Immich anmeldest",
+  "other": "{n} Fotos warten darauf, dass du dich wieder bei Immich anmeldest"
  },
  "{n} photo of the week from {people} in the album {album}": {
   "one": "{n} Foto der Woche von {people} im Album {album}",

@@ -55,3 +55,10 @@ export function n(one: string, other: string, count: number, args?: Record<strin
   }
   return fill(text, { n: count, ...args });
 }
+
+/** The forms of a counted message as templates ({n} left in), by plural category, for something that has to make the text
+ *  later, in another place (the worker's notification). */
+export function forms(one: string, other: string): Record<string, string> {
+  const entry = catalog.messages[one];
+  return entry !== undefined && typeof entry !== "string" ? { ...entry } : { one, other };
+}

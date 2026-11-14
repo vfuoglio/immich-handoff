@@ -3072,7 +3072,17 @@ templ SendPage(d SendPageView) {
 					<input type="checkbox" id="send-wifi"/>
 					<span><b>{ t(ctx, "Only on Wi-Fi") }</b><small class="meta">{ t(ctx, "Files wait until the device is off mobile data. This goes by what the browser says: some browsers do not tell, and then everything is sent.") }</small></span>
 				</label>
+				<div class="field">
+					<label for="send-tell">{ t(ctx, "Tell me when it is done") }</label>
+					<select id="send-tell">
+						<option value="all">{ t(ctx, "When everything has arrived, or something went wrong") }</option>
+						<option value="problems">{ t(ctx, "Only when something went wrong") }</option>
+						<option value="none">{ t(ctx, "Never") }</option>
+					</select>
+					<small class="meta">{ t(ctx, "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open.") }</small>
+				</div>
 				<p class="row form-actions"><button class="primary" type="submit" id="send-go" disabled>{ t(ctx, "Send") }</button></p>
+				<p class="meta" id="send-bg" role="status" hidden>{ t(ctx, "This browser sends only while this page is open. Keep it open until everything is sent.") }</p>
 				<ul class="plain send-list" id="send-list" aria-live="polite"></ul>
 				<p class="row"><button type="button" class="link" id="send-clear" hidden>{ t(ctx, "Clear the finished ones") }</button></p>
 				<p class="meta">{ t(ctx, "A file you chose waits in this browser until it is sent, also after the page is closed or the phone is switched off, and goes on by itself where it stopped. It is only ever sent as the person who chose it: after someone else signs in here, your files wait for you.") }</p>

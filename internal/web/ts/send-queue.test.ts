@@ -147,3 +147,76 @@ test("finished files are cleared from the list and the store", async () => {
   assert.deepEqual(q.items, []);
   assert.deepEqual(await store.all(), []);
 });
+
+test("when another runner has the line (the worker, with the screen off), this one sends nothing", async () => {
+  const { q, calls } = rig(() => done(), { exclusive: async () => false });
+  await q.add([file("a.jpg")], "");
+  await q.run();
+  assert.deepEqual(calls, []);
+  assert.equal(q.items[0]!.state, "waiting");
+});
+
+test("the worker takes the line, reads what the page left, and sends it", async () => {
+  const store = new MemoryStore();
+  const page = rig(() => done(), {}, store);
+  await page.q.add([file("a.jpg"), file("b.jpg")], "family");
+  const items = await store.all();
+  items[0]!.state = "sending"; // the page was killed while it was sending
+  items[0]!.serverId = "u7";
+  await store.put(items[0]!);
+  const held: string[] = [];
+  const worker = rig(() => done(), { owner: "", exclusive: async (work) => { held.push("took"); await work(); held.push("let go"); return true; } }, store);
+  await worker.q.resume();
+  assert.deepEqual(held, ["took", "let go"]);
+  assert.deepEqual(worker.calls, ["a.jpg", "b.jpg"]);
+  assert.deepEqual((await store.all()).map((i) => i.state).sort(), ["done", "done"]);
+});
+
+test("a worker whose network is gone again ends with an error, so the browser wakes it later, and keeps where the file stands", async () => {
+  const { q, store } = rig(() => ({ kind: "offline", serverId: "u1", sent: 3 }), { pause: () => Promise.reject(new Error("offline")) });
+  await q.add([file("a.jpg")], "");
+  await assert.rejects(q.resume(), /offline/);
+  const kept = (await store.all())[0]!;
+  assert.equal(kept.state, "offline");
+  assert.equal(kept.serverId, "u1");
+  assert.equal(kept.sent, 3);
+  assert.equal(q.busy, false, "the line is let go of");
+});
+
+test("halting stops after the piece being sent and does not wait for the network", async () => {
+  let q: Queue | undefined;
+  const r = rig((n) => { if (n === "a.jpg") q!.halt(); return { kind: "offline", serverId: "u2", sent: 1 }; }, { pause: () => new Promise<void>(() => undefined) });
+  q = r.q;
+  await q.add([file("a.jpg"), file("b.jpg")], "");
+  await q.run(); // returns instead of waiting for the network for ever
+  assert.deepEqual(r.calls, ["a.jpg"]);
+  assert.equal(q.items[0]!.state, "offline");
+  assert.equal(q.items[1]!.state, "waiting");
+});
+
+test("a file's end is stamped, so that only what ended since the last message is told", async () => {
+  const { q } = rig((n) => (n === "bad.jpg" ? { kind: "failed", serverId: "", text: "no" } : done()), { now: () => 77 });
+  await q.add([file("ok.jpg"), file("bad.jpg")], "");
+  await q.run();
+  assert.deepEqual(q.items.map((i) => i.ended), [77, 77]);
+});
+
+test("where a file stands is kept while it goes, so a phone that dies mid-file carries on from the server's piece", async () => {
+  let t = 0;
+  const store = new MemoryStore();
+  const calls: string[] = [];
+  const env: Env = {
+    base: "http://x/", owner: "me", held: () => false, now: () => (t += 1500), newId: () => "k1", pause: async () => undefined,
+    send: async (_b, _f, _job, hooks) => {
+      hooks.progress(0, "srv-1");
+      const mid = (await store.all())[0]!;
+      calls.push(`${mid.serverId}:${mid.state}`); // what a restart would find
+      hooks.progress(4, "srv-1");
+      return done("srv-1");
+    },
+  };
+  const queue = new Queue(store, env, () => undefined);
+  await queue.add([file("a.jpg")], "");
+  await queue.run();
+  assert.deepEqual(calls, ["srv-1:sending"]);
+});

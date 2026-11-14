@@ -4,19 +4,28 @@
 package e2e
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/cdproto/serviceworker"
 	"github.com/chromedp/chromedp"
 )
 
@@ -281,6 +290,72 @@ func TestSend(t *testing.T) {
 		})
 	})
 
+	t.Run("with the page gone, the worker finishes the queue with the screen off and tells the person once", func(t *testing.T) {
+		origin := "http://localhost:" + port
+		var mu sync.Mutex
+		var regID serviceworker.RegistrationID
+		chromedp.ListenTarget(phone, func(ev any) {
+			if e, ok := ev.(*serviceworker.EventWorkerRegistrationUpdated); ok {
+				for _, r := range e.Registrations {
+					if strings.HasSuffix(r.ScopeURL, "/static/") && !r.IsDeleted {
+						mu.Lock()
+						regID = r.RegistrationID
+						mu.Unlock()
+					}
+				}
+			}
+		})
+		run(t, phone,
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				return browser.GrantPermissions([]browser.PermissionType{browser.PermissionTypeNotifications}).WithOrigin(origin).Do(cdp.WithExecutor(ctx, chromedp.FromContext(ctx).Browser))
+			}),
+			serviceworker.Enable())
+		open()
+		until(t, phone, "the page asks for a worker and Background Sync is there", `'SyncManager' in window`, 10*time.Second)
+		first, second := fmt.Sprintf("f-%s.jpg", stamp), fmt.Sprintf("g-%s.jpg", stamp)
+		p1, p2 := phoneFile(t, first, seed+6, 12<<20), phoneFile(t, second, seed+7, 0)
+		connection(false, 2_000_000)
+		choose("", p1, p2)
+		until(t, phone, "the first is under way", progress(first)+` > 5 && `+progress(first)+` < 100`, 30*time.Second)
+		connection(true, -1)
+		until(t, phone, "it waits for the network", `/network/i.test(`+row(first)+`?.querySelector('.state')?.textContent ?? '')`, 30*time.Second)
+		run(t, phone, chromedp.Navigate("about:blank")) // the screen goes off: nobody sends but the worker
+		connection(false, -1)
+		eventually(t, "the worker knows its registration", 20*time.Second, func() bool { mu.Lock(); defer mu.Unlock(); return regID != "" })
+		mu.Lock()
+		id := regID
+		mu.Unlock()
+		run(t, phone, chromedp.ActionFunc(func(ctx context.Context) error {
+			return serviceworker.DispatchSyncEvent(origin, id, "handoff-send", false).Do(ctx)
+		}))
+		arrived(t, first, p1)
+		arrived(t, second, p2)
+		open()
+		var shown []string
+		eventually(t, "one message tells the person it all arrived", 30*time.Second, func() bool {
+			run(t, phone, chromedp.Evaluate(`navigator.serviceWorker.getRegistration('static/').then(r => r.getNotifications()).then(list => list.map(n => n.body))`, &shown, func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) }))
+			return len(shown) > 0
+		})
+		if len(shown) != 1 || !strings.Contains(shown[0], "2 photos arrived in your Immich") {
+			t.Errorf("one message for the whole batch: %q", shown)
+		}
+	})
+
+	t.Run("a photo sent from a phone is announced on the live stream like any hand-over", func(t *testing.T) {
+		_, feed := openStream(t, port, cookie)
+		time.Sleep(500 * time.Millisecond)
+		data := jpegBytes(seed + 8)
+		start := apiSend(t, port, cookie, "POST", "/send/start", []byte(fmt.Sprintf(`{"name":"live-%s.jpg","size":%d,"service":"phone-open"}`, stamp, len(data))))
+		var st struct{ ID string }
+		json.Unmarshal(start, &st)
+		apiSend(t, port, cookie, "PUT", "/send/"+st.ID+"/chunk?offset=0", data)
+		apiSend(t, port, cookie, "POST", "/send/"+st.ID+"/done", nil)
+		ev := waitEvent(t, "bob", feed, 120*time.Second, func(e map[string]any) bool { return e["kind"] == "handed" && e["service"] == "phone-open" })
+		if ev["count"] != float64(1) {
+			t.Errorf("one photo handed over: %v", ev)
+		}
+	})
+
 	t.Run("files chosen by one person are not sent as another", func(t *testing.T) {
 		start := func(owner string) int {
 			req, _ := http.NewRequest("POST", "http://localhost:"+port+"/send/start", strings.NewReader(`{"name":"x.jpg","size":10,"owner":"`+owner+`"}`))
@@ -300,4 +375,22 @@ func TestSend(t *testing.T) {
 			t.Errorf("bob's own: %d", c)
 		}
 	})
+}
+
+// apiSend calls the phone endpoints the way the page's script does, and returns the reply.
+func apiSend(t *testing.T, port, cookie, method, path string, body []byte) []byte {
+	t.Helper()
+	req, _ := http.NewRequest(method, "http://localhost:"+port+path, bytes.NewReader(body))
+	req.Header.Set("Cookie", cookie)
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode >= 300 {
+		t.Fatalf("%s %s: %d %s", method, path, res.StatusCode, b)
+	}
+	return b
 }

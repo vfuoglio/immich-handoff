@@ -83,6 +83,8 @@ export interface Item {
   duplicate: boolean;
   /** When it was put in the queue (milliseconds since 1970). */
   added: number;
+  /** When it was finished, sent or refused (0: not yet). What the person is told is what ended since the last telling. */
+  ended: number;
 }
 
 /** The next file to send: the first that is waiting for its turn or for the network, and is the person's own (an empty
@@ -111,7 +113,7 @@ export function tally(items: readonly Pick<Item, "state">[]): { done: number; fa
 
 /** A fresh item for a file. */
 export function newItem(id: string, name: string, size: number, taken: number, service: string, owner: string, now: number): Item {
-  return { id, name, size, taken, service, serverId: "", owner, sent: 0, state: "waiting", text: "", tries: 0, photo: "", duplicate: false, added: now };
+  return { id, name, size, taken, service, serverId: "", owner, sent: 0, state: "waiting", text: "", tries: 0, photo: "", duplicate: false, added: now, ended: 0 };
 }
 
 /** What the browser says about the connection (the Network Information API; Chrome on Android has it, Safari does not). */

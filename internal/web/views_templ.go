@@ -22022,59 +22022,137 @@ func SendPage(d SendPageView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1876, "</small></span></label><p class=\"row form-actions\"><button class=\"primary\" type=\"submit\" id=\"send-go\" disabled>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1876, "</small></span></label><div class=\"field\"><label for=\"send-tell\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var1323 string
-				templ_7745c5c3_Var1323, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send"))
+				templ_7745c5c3_Var1323, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Tell me when it is done"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3075, Col: 108}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3076, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1323))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1877, "</button></p><ul class=\"plain send-list\" id=\"send-list\" aria-live=\"polite\"></ul><p class=\"row\"><button type=\"button\" class=\"link\" id=\"send-clear\" hidden>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1877, "</label> <select id=\"send-tell\"><option value=\"all\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var1324 string
-				templ_7745c5c3_Var1324, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Clear the finished ones"))
+				templ_7745c5c3_Var1324, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "When everything has arrived, or something went wrong"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3077, Col: 112}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3078, Col: 90}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1324))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1878, "</button></p><p class=\"meta\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1878, "</option> <option value=\"problems\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var1325 string
-				templ_7745c5c3_Var1325, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "A file you chose waits in this browser until it is sent, also after the page is closed or the phone is switched off, and goes on by itself where it stopped. It is only ever sent as the person who chose it: after someone else signs in here, your files wait for you."))
+				templ_7745c5c3_Var1325, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Only when something went wrong"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3078, Col: 296}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3079, Col: 73}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1325))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1879, "</p><p class=\"meta\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1879, "</option> <option value=\"none\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var1326 string
-				templ_7745c5c3_Var1326, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.", "mb", fmt.Sprint(d.FileMB)))
+				templ_7745c5c3_Var1326, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Never"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3079, Col: 197}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3080, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1326))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1880, "</p></form>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1880, "</option></select> <small class=\"meta\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1327 string
+				templ_7745c5c3_Var1327, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open."))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3082, Col: 230}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1327))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1881, "</small></div><p class=\"row form-actions\"><button class=\"primary\" type=\"submit\" id=\"send-go\" disabled>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1328 string
+				templ_7745c5c3_Var1328, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3084, Col: 108}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1328))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1882, "</button></p><p class=\"meta\" id=\"send-bg\" role=\"status\" hidden>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1329 string
+				templ_7745c5c3_Var1329, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "This browser sends only while this page is open. Keep it open until everything is sent."))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3085, Col: 153}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1329))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1883, "</p><ul class=\"plain send-list\" id=\"send-list\" aria-live=\"polite\"></ul><p class=\"row\"><button type=\"button\" class=\"link\" id=\"send-clear\" hidden>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1330 string
+				templ_7745c5c3_Var1330, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Clear the finished ones"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3087, Col: 112}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1330))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1884, "</button></p><p class=\"meta\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1331 string
+				templ_7745c5c3_Var1331, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "A file you chose waits in this browser until it is sent, also after the page is closed or the phone is switched off, and goes on by itself where it stopped. It is only ever sent as the person who chose it: after someone else signs in here, your files wait for you."))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3088, Col: 296}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1331))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1885, "</p><p class=\"meta\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1332 string
+				templ_7745c5c3_Var1332, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.", "mb", fmt.Sprint(d.FileMB)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 3089, Col: 197}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1332))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1886, "</p></form>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

@@ -255,6 +255,7 @@
  "Need attention": "Требуют внимания",
  "Needs approval": "Требует одобрения",
  "Needs you": "Ждёт вас",
+ "Never": "Никогда",
  "New link": "Новая ссылка",
  "Newest backup: {name}, made {when}.": "Последняя резервная копия: {name}, сделана {when}.",
  "Next digest: {when}": "Следующая подборка: {when}",
@@ -296,6 +297,7 @@
  "On": "Включено",
  "On an iPhone or iPad, add this page to the Home Screen first, then open it from there.": "На iPhone или iPad сначала добавьте эту страницу на экран «Домой», затем откройте её оттуда.",
  "One message to each destination, whatever it takes. Nothing else is changed.": "Одно сообщение на каждое назначение, что бы оно ни принимало. Больше ничего не меняется.",
+ "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open.": "Одно уведомление на этом устройстве обо всём отправленном, в том числе при выключенном экране там, где браузер позволяет приложению работать в фоне (Android). На iPhone файлы уходят только пока эта страница открыта.",
  "One thing needs you.": "Вас ждёт одно дело.",
  "Only files larger than (MB) wait for those hours": "Только файлы больше (МБ) ждут эти часы",
  "Only on Wi-Fi": "Только по Wi-Fi",
@@ -310,6 +312,7 @@
  "Only the person who made this link and the people who help them can read or hear it.": "Прочитать или услышать его могут только тот, кто создал эту ссылку, и те, кто ему помогает.",
  "Only the person who made this link can see what you send. You will not see anyone else's photos.": "То, что вы отправляете, видит только тот, кто создал эту ссылку. Чужих фото вы не увидите.",
  "Only what needs me": "Только то, что требует меня",
+ "Only when something went wrong": "Только если что-то пошло не так",
  "Open": "Открыт",
  "Open Immich Handoff": "Открыть Immich Handoff",
  "Open a service to see how it works, change who can send, pause it or set a daily limit. What cannot be undone sits at the bottom of each one.": "Откройте сервис, чтобы увидеть, как он работает, изменить, кто может отправлять, поставить его на паузу или задать дневной лимит. То, что нельзя отменить, находится внизу каждого.",
@@ -349,6 +352,7 @@
  "Photos arrive in your library with a tag that says who they are from, inside the tag \"from\".": "Фото попадают в вашу библиотеку с тегом, который говорит, от кого они, внутри тега «from».",
  "Photos arrive tagged <code class=\"tag\">{tag}</code>.": "Фото приходят с меткой <code class=\"tag\">{tag}</code>.",
  "Photos by email": "Фото по почте",
+ "Photos from this device": "Фото с этого устройства",
  "Photos handed over per day, oldest first: {days}": "Передано фото по дням, начиная с самого раннего: {days}",
  "Photos handed over to this service are moved to your trash, never deleted for good, after this many days, unless you file them in an album or take the inbox tag off. Empty or 0: they stay.": "Фото, переданные в этот сервис, перемещаются в вашу корзину (но не удаляются навсегда) через указанное число дней, если вы не положите их в альбом и не снимете метку входящих. Пусто или 0: они остаются.",
  "Photos only (no videos)": "Только фото (без видео)",
@@ -482,6 +486,7 @@
  "Take the heart back": "Убрать сердечко",
  "Taken back. It is in the owner's trash, not in their library.": "Забрано. Оно в корзине владельца, а не в его библиотеке.",
  "Takes {limits}.": "Принимает: {limits}.",
+ "Tell me when it is done": "Сообщить, когда всё готово",
  "Thank you for your message!": "Спасибо за ваше сообщение!",
  "Thank you!": "Спасибо!",
  "That could not be taken back right now. Please try again.": "Сейчас забрать не получилось. Попробуйте ещё раз.",
@@ -552,6 +557,7 @@
  "This box takes messages to the host. Only the people who manage it can read them.": "Этот ящик принимает сообщения хозяину. Прочитать их могут только те, кто им управляет.",
  "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.": "Этот браузер не может хранить файлы в очереди при закрытой странице; не закрывайте её, пока они не отправлены.",
  "This browser cannot show notifications from this page.": "Этот браузер не может показывать уведомления с этой страницы.",
+ "This browser sends only while this page is open. Keep it open until everything is sent.": "Этот браузер отправляет только пока эта страница открыта. Не закрывайте её, пока всё не будет отправлено.",
  "This creates an API key named \"handoff: {name}\" in your Immich account that can read and download the photos you tag \"{tag}\" and also receive photos. Every photo you tag \"{tag}\" will be handed over to everyone else in this pool, and the photos they tag will come to you, each tagged with who took it. Your originals stay where they are. People you do not know may be in the pool if its owner lets anyone join. You can stop at any time with Leave: you keep what you received, and nothing more is shared with you.": "Это создаст в вашем Immich ключ API «handoff: {name}», который может читать и скачивать фото, помеченные вами «{tag}», а также получать фото. Каждое фото, помеченное вами «{tag}», будет передано всем остальным в этом пуле, а помеченные ими придут вам, каждое с пометкой, кто его снял. Ваши оригиналы остаются на месте. В пуле могут быть незнакомые вам люди, если владелец пускает всех. Вы можете остановиться в любой момент через «Выйти»: то, что вы получили, останется у вас, и больше с вами ничего не делится.",
  "This creates an API key named \"handoff: {name}\" in your Immich account. Immich Handoff uses it to read and download the photos you tag \"{tag}\" and to delete the originals after they have been handed over. Nobody else can see the key. You can stop at any time with Leave, or by deleting that key in Immich.": "Это создаёт в вашей учётной записи Immich ключ API с именем \"handoff: {name}\". Immich Handoff использует его, чтобы читать и скачивать фото, которые вы отмечаете \"{tag}\", и удалять оригиналы после передачи. Никто другой не видит ключ. Остановиться можно в любой момент кнопкой «Выйти» или удалив этот ключ в Immich.",
  "This creates an API key named \"handoff: {name}\" in your Immich account. Immich Handoff uses it to read and download the photos you tag \"{tag}\". Your originals are kept: the key has no permission to delete anything. Nobody else can see the key. You can stop at any time with Leave, or by deleting that key in Immich.": "Это создаёт в вашей учётной записи Immich ключ API с именем \"handoff: {name}\". Immich Handoff использует его, чтобы читать и скачивать фото, которые вы отмечаете \"{tag}\". Ваши оригиналы сохраняются: у ключа нет права что-либо удалять. Никто другой не видит ключ. Остановиться можно в любой момент кнопкой «Выйти» или удалив этот ключ в Immich.",
@@ -616,6 +622,7 @@
  "What was left out, and why": "Что отброшено и почему",
  "What you send is looked at before it is kept.": "То, что вы отправите, просмотрят, прежде чем сохранить.",
  "What you sent to {name}. You can take a photo back while the owner has not filed it in their library.": "Что вы отправили для «{name}». Фото можно забрать, пока владелец не разложил его в своей библиотеке.",
+ "When everything has arrived, or something went wrong": "Когда всё доставлено или что-то пошло не так",
  "Where should they go?": "Куда их отправить?",
  "Who can find it": "Кто может найти",
  "Who may send": "Кто может отправлять",
@@ -983,6 +990,18 @@
   "many": "Пришло от {name} в {service}: {n} фото",
   "other": "Пришло от {name} в {service}: {n} фото"
  },
+ "{n} photo arrived in your Immich": {
+  "one": "{n} фото поступило в ваш Immich",
+  "few": "{n} фото поступили в ваш Immich",
+  "many": "{n} фото поступили в ваш Immich",
+  "other": "{n} фото поступили в ваш Immich"
+ },
+ "{n} photo could not be sent": {
+  "one": "{n} фото не удалось отправить",
+  "few": "{n} фото не удалось отправить",
+  "many": "{n} фото не удалось отправить",
+  "other": "{n} фото не удалось отправить"
+ },
  "{n} photo from the album {album} handed over to {service}": {
   "few": "{n} фото из альбома {album} передано в {service}",
   "many": "{n} фото из альбома {album} передано в {service}",
@@ -1000,6 +1019,12 @@
   "many": "{n} фото передано {when}",
   "one": "{n} фото передано {when}",
   "other": "{n} фото передано {when}"
+ },
+ "{n} photo is waiting for you to sign in to Immich again": {
+  "one": "{n} фото ждёт, пока вы снова войдёте в Immich",
+  "few": "{n} фото ждут, пока вы снова войдёте в Immich",
+  "many": "{n} фото ждут, пока вы снова войдёте в Immich",
+  "other": "{n} фото ждут, пока вы снова войдёте в Immich"
  },
  "{n} photo of the week from {people} in the album {album}": {
   "one": "{n} фото недели от {people} в альбоме {album}",

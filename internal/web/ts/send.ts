@@ -1,7 +1,9 @@
 // The "Send photos" page: choose photos and videos, choose where they go, and watch them leave. The work of sending is the
 // queue's (send-queue.ts); this draws it and takes the person's choices.
 
-import { n, t } from "./i18n.ts";
+import { forms, language, n, t } from "./i18n.ts";
+import { announce, SYNC_TAG, withLock } from "./send-bg.ts";
+import { isTell, type Tell, type Texts } from "./send-notify.ts";
 import { ask } from "./ask.ts";
 import { finished, heldForWifi, isLargeVideo, looksLikeMedia, onMobileData, percent, sizeText, tally, type Connection, type Item } from "./send-core.ts";
 import { MemoryStore, Queue, type Env, type Store } from "./send-queue.ts";
@@ -66,7 +68,7 @@ function stateText(i: Item): string {
   }
 }
 
-function render(list: HTMLElement, queue: Queue): void {
+function render(list: HTMLElement, queue: Queue, run: () => void): void {
   list.replaceChildren();
   for (const item of queue.mine) {
     if (item.state === "cancelled") continue;
@@ -99,7 +101,7 @@ function render(list: HTMLElement, queue: Queue): void {
       again.type = "button";
       again.className = "link";
       again.textContent = item.state === "signin" ? t("Try again") : t("Send again");
-      again.addEventListener("click", () => void queue.retry(item.id).then(() => void queue.run()));
+      again.addEventListener("click", () => void queue.retry(item.id).then(run));
       actions.append(again);
     }
     if (!finished(item.state) || item.state === "failed") {
@@ -144,6 +146,7 @@ export function initSend(): void {
     base: document.baseURI,
     owner: form.dataset["user"] ?? "",
     held: () => heldForWifi(wifi.checked, connection()),
+    exclusive: withLock,
     now: () => Date.now(),
     newId: () => crypto.randomUUID(),
     pause: (ms) =>
@@ -168,7 +171,7 @@ export function initSend(): void {
   const clear = document.getElementById("send-clear");
   let picked: File[] = [];
   const redraw = (): void => {
-    render(list, queue);
+    render(list, queue, () => void go_());
     const c = tally(queue.mine);
     const shared = queue.shared.length;
     const held = env.held() && c.open > 0;
@@ -179,28 +182,52 @@ export function initSend(): void {
     go.textContent = count > 0 ? n("Send {n} file", "Send {n} files", count) : t("Send");
   };
   let store: Store = new MemoryStore();
-  const queue: Queue = new Queue(
-    {
-      put: (i, f) => store.put(i, f),
-      file: (id) => store.file(id),
-      all: () => store.all(),
-      release: (id) => store.release(id),
-      remove: (id) => store.remove(id),
-    },
-    env,
-    redraw,
-  );
+  const queueStore: Store = {
+    put: (i, f) => store.put(i, f),
+    file: (id) => store.file(id),
+    all: () => store.all(),
+    release: (id) => store.release(id),
+    remove: (id) => store.remove(id),
+  };
+  const queue: Queue = new Queue(queueStore, env, redraw);
 
+  const tellBox = document.getElementById("send-tell");
+  const note = document.getElementById("send-bg");
+  const syncs = "serviceWorker" in navigator && "SyncManager" in window;
+  /** Hands the line to the worker (with the screen off, where the browser has Background Sync), or just goes on here. */
+  const background = async (): Promise<void> => {
+    if (!syncs) return;
+    try {
+      const reg = (await register()) as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } };
+      await reg.sync?.register(SYNC_TAG);
+    } catch {
+      /* no background sending: the page sends while it is open */
+    }
+  };
+  /** Sends, then says how it went (quietly when the person is looking at the page). */
+  const go_ = async (): Promise<void> => {
+    await queue.run();
+    if (!queue.busy) {
+      try {
+        const reg = await register();
+        await announce(queueStore, reg, Date.now(), document.visibilityState === "visible");
+      } catch {
+        /* no worker: the page itself shows how it went */
+      }
+    }
+    if (note) note.hidden = syncs || !queue.mine.some((i) => i.state === "waiting" || i.state === "offline" || i.state === "sending");
+    if (queue.mine.some((i) => i.state === "waiting" || i.state === "offline")) void background();
+  };
   wifi.addEventListener("change", () => {
     void setPref(WIFI_ONLY, wifi.checked);
     redraw();
-    if (!env.held()) void queue.run();
+    if (!env.held()) void go_();
   });
   connection()?.addEventListener("change", () => {
     redraw();
-    if (!env.held()) void queue.run();
+    if (!env.held()) void go_();
   });
-  addEventListener("online", () => void queue.run());
+  addEventListener("online", () => void go_());
   clear?.addEventListener("click", () => void queue.clear());
 
   input.addEventListener("change", () => {
@@ -241,7 +268,8 @@ export function initSend(): void {
       const refused = files.length > 0 ? await queue.add(files, service) : [];
       await queue.assign(service);
       flash(refused.length > 0 ? n("{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} files could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", refused.length) : "");
-      void queue.run();
+      void background();
+      void go_();
     })();
   });
 
@@ -250,8 +278,45 @@ export function initSend(): void {
     if (await canStore()) store = new IdbStore();
     else flash(t("This browser cannot keep files waiting while the page is closed; keep this page open until they are sent."));
     await queue.load();
-    void queue.run();
+    void go_();
   })();
+  // what the person is told when it is all over, and the words for it (the worker cannot read the page's catalog)
+  void (async () => {
+    const texts: Texts = {
+      lang: language(),
+      title: t("Photos from this device"),
+      arrived: forms("{n} photo arrived in your Immich", "{n} photos arrived in your Immich"),
+      failed: forms("{n} photo could not be sent", "{n} photos could not be sent"),
+      signin: forms("{n} photo is waiting for you to sign in to Immich again", "{n} photos are waiting for you to sign in to Immich again"),
+    };
+    await setPref("sendTexts", texts);
+    if (tellBox instanceof HTMLSelectElement) {
+      const saved = await getPref<unknown>("sendTell", "all");
+      tellBox.value = isTell(saved) ? saved : "all";
+    }
+  })();
+  if (tellBox instanceof HTMLSelectElement) {
+    tellBox.addEventListener("change", () => {
+      const v: Tell = isTell(tellBox.value) ? tellBox.value : "all";
+      void setPref("sendTell", v);
+      if (v !== "none" && "Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+    });
+  }
+  // with the screen off the page is frozen and cannot send; where the browser has Background Sync the worker takes over, and
+  // when the person is back the page looks at what it did (and takes the line again if nobody has it)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      if (syncs) {
+        queue.halt();
+        void background();
+      }
+    } else {
+      void queue.refresh().then(() => go_());
+    }
+  });
+  setInterval(() => {
+    if (document.visibilityState === "visible" && !queue.busy && queue.mine.some((i) => i.state === "waiting" || i.state === "offline" || i.state === "sending")) void queue.refresh().then(() => go_());
+  }, 3000);
   initShare(form);
   redraw();
 }
