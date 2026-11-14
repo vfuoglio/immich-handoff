@@ -776,6 +776,33 @@ ul.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5
 .mod-mark button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 @media (max-width: 640px) { ul.mod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* sending photos from a device (ts/send.ts) */
+.send-form .dz-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.send-form .dz { cursor: pointer; }
+.send-form fieldset.targets { border: 0; padding: 0; margin: 1rem 0 .5rem; display: grid; gap: .5rem; }
+.send-form fieldset.targets legend { font-weight: 600; font-size: .9rem; margin-bottom: .35rem; padding: 0; }
+.send-form .target { display: flex; align-items: flex-start; gap: .65rem; padding: .7rem .85rem; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer; min-height: 2.75rem; }
+.send-form .target:has(input:checked) { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 10%, var(--surface)); }
+.send-form .target:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.send-form .target input { margin-top: .2rem; accent-color: var(--accent); }
+.send-form .target small { display: block; }
+.send-list { display: grid; gap: .6rem; margin: 1rem 0 .25rem; padding: 0; list-style: none; }
+.send-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n s" "b b" "t a"; gap: .2rem .8rem; align-items: center;
+  padding: .7rem .85rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.send-item .name { grid-area: n; font-weight: 600; overflow-wrap: anywhere; }
+.send-item small.meta { grid-area: s; justify-self: end; }
+.send-bar { grid-area: b; display: block; height: .4rem; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.send-bar i { display: block; height: 100%; background: var(--grad); transition: width .3s ease; }
+.send-item .state { grid-area: t; color: var(--muted); }
+.send-item .actions { grid-area: a; display: flex; gap: .75rem; justify-self: end; }
+.send-item.done .state { color: var(--ok); }
+.send-item.failed .state, .send-item.signin .state { color: var(--bad); }
+.send-item.offline .state { color: var(--warn, var(--muted)); }
+.send-summary { margin: 1rem 0 0; }
+.send-item .actions button { min-height: 2.75rem; padding-inline: .25rem; }
+@media (prefers-reduced-motion: reduce) { .send-bar i { transition: none; } }
+
 /* a host's logo in a corner of the wall: quiet, never in the way of a photo */
 .wall-logo { position: fixed; top: 1.2rem; left: 1.4rem; max-height: 4.2rem; max-width: 22vw; width: auto; object-fit: contain; opacity: .85; z-index: 6; pointer-events: none; }
 

@@ -103,6 +103,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
+	mux.HandleFunc("GET /send", w.sendPage)
 	mux.HandleFunc("POST /send/start", w.phoneStart)
 	mux.HandleFunc("GET /send/{id}", w.phoneStatus)
 	mux.HandleFunc("PUT /send/{id}/chunk", w.phoneChunk)

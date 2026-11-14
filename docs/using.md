@@ -68,6 +68,17 @@ What reaches the receiver is the photo's file, its name, its dates and the favou
 
 <p align="center"><img src="images/dashboard-mobile-dark.png" alt="The page on a phone in dark mode" width="280"></p>
 
+### Send photos from a phone
+
+Tagging in the Immich app is one way to send. The other is the **Send** tab of this page (or **Send photos from this device** in the command palette): choose photos and videos from the gallery or the files of the phone you are holding, choose **where they go**, and press **Send**.
+
+- **Where they go.** Every service you send to is listed, the one you chose last on top and selected; **My library only** keeps them in your own Immich and hands nothing over. A person who sends to no service has only that choice, and anyone signed in to Immich may use the page.
+- **Where they land.** In **your own Immich**, stored with your own sign-in (so Immich's rules for your account apply), exactly as they are: nothing is made smaller, and the place where a photo was taken goes with it. For a service they are then tagged with the service's tag, and from there everything is the same as for a photo you tagged yourself: the daily limit, quiet hours, what the service accepts, the expiry and taking back. A photo Immich already has is reported as **Already in your library**.
+- **A lost connection costs a piece, not a video.** Files go in pieces of at most 4 MB. The app keeps the pieces on its disk, in the data folder (`phone-uploads`, not in backups), until the file is whole; if the connection drops the page waits and carries on from where the server says it stands. Pieces nobody finished are deleted after 48 hours (`PHONE_UPLOAD_KEEP_HOURS`).
+- **Limits.** One file may be at most 2 GB (`PHONE_UPLOAD_FILE_MB`) and one person may have 4 GB waiting at a time (`PHONE_UPLOAD_WAITING_MB`); a file over a limit is refused before it starts, with the reason. Only photos and videos are accepted, by what the file really is, not by its name. This needs the app's data folder; without it the page says so.
+
+See [Settings](settings.md) for the three settings and [Security](security.md#drop-boxes) for what is kept and who can reach it.
+
 ### Joining a service
 
 Under **Services you can send to** you see the services you may join. Joining asks one question that is yours alone to answer, **what should happen to your originals?**

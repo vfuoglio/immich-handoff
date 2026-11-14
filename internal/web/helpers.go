@@ -653,6 +653,7 @@ func checked(b bool) string {
 // defaults). The page carries them, translated, for the scripts to read (see ts/i18n.ts). A test keeps this list equal
 // to what the scripts really ask for.
 var clientMessages = []string{
+	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
 	"A sender", "Activity", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
 	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",

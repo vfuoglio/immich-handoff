@@ -495,6 +495,7 @@ templ Layout(title, user string) {
 						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
 						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
 						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+						<a href="send" class="send-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg><span>{ t(ctx, "Send") }</span></a>
 					</nav>
 				}
 				<main>
@@ -3009,4 +3010,63 @@ func bridgeStateLabel(state string) string {
 		return "Cannot be reached"
 	}
 	return "Key revoked"
+}
+
+// SendPageView is the page for sending photos from this device.
+type SendPageView struct {
+	User      string
+	On        bool // the server has a data folder to keep the pieces in
+	Targets   []SendTarget
+	FileMB    int
+	WaitMB    int
+	KeepHours int
+}
+
+// SendTarget is a service the person sends to.
+type SendTarget struct{ Name, Hold string }
+
+// SendPage is "Send photos": pick photos and videos, pick where they go, and watch them leave (ts/send.ts).
+templ SendPage(d SendPageView) {
+	@Layout(t(ctx, "Send photos"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>
+			@templ.Raw(h(ctx, "Send <em>photos</em> from this device"))
+		</h1>
+		<p class="lead">{ t(ctx, "Photos and videos go to your own Immich exactly as they are, and then to the service you choose.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if !d.On {
+			<section class="card notice">
+				<header><span class="chip warn">{ t(ctx, "Not switched on") }</span></header>
+				<p class="meta">{ t(ctx, "Sending photos from a phone needs the app's data folder, which this install does not have. Ask whoever runs it.") }</p>
+			</section>
+		} else {
+			<form class="card send-form" id="send" data-file-mb={ fmt.Sprint(d.FileMB) } data-wait-mb={ fmt.Sprint(d.WaitMB) } data-keep-hours={ fmt.Sprint(d.KeepHours) }>
+				<div class="dz">
+					<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
+					<label class="dz-title" for="send-files">{ t(ctx, "Choose photos and videos") }</label>
+					<small class="meta dz-hint">{ t(ctx, "From this device's gallery or files.") }</small>
+					<input id="send-files" class="dz-input" type="file" multiple accept="image/*,video/*,.heic,.heif,.dng"/>
+				</div>
+				<fieldset class="targets">
+					<legend>{ t(ctx, "Where should they go?") }</legend>
+					for i, tg := range d.Targets {
+						<label class="target">
+							<input type="radio" name="service" value={ tg.Name } checked?={ i == 0 }/>
+							<span><b>{ tg.Name }</b>
+								if tg.Hold != "" {
+									<small class="meta">{ tg.Hold }</small>
+								}
+							</span>
+						</label>
+					}
+					<label class="target">
+						<input type="radio" name="service" value="" checked?={ len(d.Targets) == 0 }/>
+						<span><b>{ t(ctx, "My library only") }</b><small class="meta">{ t(ctx, "Keep them in your Immich; hand nothing over.") }</small></span>
+					</label>
+				</fieldset>
+				<p class="row form-actions"><button class="primary" type="submit" id="send-go" disabled>{ t(ctx, "Send") }</button></p>
+				<ul class="plain send-list" id="send-list" aria-live="polite"></ul>
+				<p class="meta">{ t(ctx, "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.", "mb", fmt.Sprint(d.FileMB)) }</p>
+			</form>
+		}
+	}
 }

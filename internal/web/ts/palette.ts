@@ -45,6 +45,8 @@ function collect(): Command[] {
   for (const [view, name] of views) {
     commands.push({ label: t("Go to {view}", { view: name }), hint: t("view"), run: () => goTo(view) });
   }
+  const send = document.querySelector<HTMLAnchorElement>("nav.tabs a.send-tab");
+  if (send) commands.push({ label: t("Send photos from this device"), hint: t("action"), run: () => { location.href = send.href; } });
   // what waits on the person: the buttons on the "Needs you" cards
   document.querySelectorAll<HTMLElement>("#v-overview .needs .card.need").forEach((card) => {
     const heading = card.querySelector("b")?.cloneNode(true) as HTMLElement | undefined;

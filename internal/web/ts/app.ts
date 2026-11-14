@@ -6,6 +6,7 @@ import { initCard, initDrop, initGuestBook, initSecure, initShare } from "./drop
 import { initFrame } from "./frame.ts";
 import { initGallery } from "./gallery.ts";
 import { initWall } from "./wall.ts";
+import { initSend } from "./send.ts";
 import { initBackup } from "./backup";
 import { initPush } from "./push";
 import { loadCatalog, t } from "./i18n";
@@ -98,6 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSecure();
   initShare();
   initWall();
+  initSend();
   initFrame();
   initPalette();
   initSound();

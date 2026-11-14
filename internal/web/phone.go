@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,6 +48,10 @@ func (w *Server) phoneError(rw http.ResponseWriter, r *http.Request, what string
 	var off *hub.PhoneOffsetError
 	if errors.As(err, &off) {
 		w.phoneJSON(rw, http.StatusConflict, map[string]any{"offset": off.At})
+		return
+	}
+	if errors.Is(err, hub.ErrPhoneChecksum) { // the server threw the pieces away: the phone starts the file again
+		w.phoneJSON(rw, http.StatusConflict, map[string]any{"offset": 0})
 		return
 	}
 	if errors.Is(err, hub.ErrPhoneNoUpload) {
@@ -206,4 +211,29 @@ func (w *Server) phoneWake(who string) {
 		w.waker.mu.Unlock()
 		w.S.Run(w.BackgroundCtx, "phone: "+who, false)
 	})
+}
+
+// sendPage is "Send photos". Anyone signed in to Immich may open it: with no service to send to, photos go to their own
+// library only.
+func (w *Server) sendPage(rw http.ResponseWriter, r *http.Request) {
+	me, code, _ := w.authenticate(r)
+	if me == nil {
+		rw.WriteHeader(code)
+		Notice(t(r.Context(), "Sign in to Immich first"),
+			t(r.Context(), "This page uses your Immich login. Sign in to Immich in this browser, then reload this page."), false).Render(r.Context(), rw)
+		return
+	}
+	d := SendPageView{User: me.user.Name, On: w.Hub != nil && w.Hub.PhoneOn()}
+	if d.On {
+		file, waiting, keep := w.Hub.PhoneLimits()
+		d.FileMB, d.WaitMB, d.KeepHours = int(file>>20), int(waiting>>20), int(keep/time.Hour)
+	}
+	for _, s := range w.servicesFor(r.Context(), me) {
+		if s.Role == "sender" {
+			d.Targets = append(d.Targets, SendTarget{Name: s.Name, Hold: s.Hold})
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	ctx := context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin)
+	SendPage(d).Render(ctx, rw)
 }

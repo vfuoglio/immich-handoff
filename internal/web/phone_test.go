@@ -235,3 +235,33 @@ func startPhone(t *testing.T, immichURL string, s *syncer.Syncer, h *hub.Hub) *h
 	t.Cleanup(app.Close)
 	return app
 }
+
+func TestTheSendPageListsWhereAPersonSendsAndAnyoneSignedInMayOpenIt(t *testing.T) {
+	app, _, h := newPhone(t)
+	if c, _ := phoneCall(t, "GET", app.URL+"/send", "", nil, nil); c != 401 {
+		t.Errorf("signed out: %d", c)
+	}
+	_, b := phoneCall(t, "GET", app.URL+"/send", "sess=alice", nil, nil)
+	page := string(b)
+	for _, want := range []string{`id="send"`, `value="family"`, "My library only", `id="send-files"`, `accept="image/*,video/*`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if !strings.Contains(page, `data-file-mb="2048"`) || !strings.Contains(page, `data-wait-mb="4096"`) {
+		t.Errorf("the limits are on the page for the script")
+	}
+	// someone who sends to no service has only the library
+	_, b = phoneCall(t, "GET", app.URL+"/send", "sess=other", nil, nil)
+	if strings.Contains(string(b), `value="family"`) || !strings.Contains(string(b), "My library only") {
+		t.Errorf("a person who sends to nothing sees only their library")
+	}
+	h.PhoneDir = ""
+	_, b = phoneCall(t, "GET", app.URL+"/send", "sess=alice", nil, nil)
+	if strings.Contains(string(b), `id="send-files"`) || !strings.Contains(string(b), "data folder") {
+		t.Errorf("without the data folder the page says so and offers nothing")
+	}
+	if c, b := phoneCall(t, "GET", app.URL+"/", "sess=alice", nil, nil); c != 200 || !strings.Contains(string(b), `class="send-tab"`) || !strings.Contains(string(b), `href="send"`) {
+		t.Errorf("the tab bar leads to it: %d", c)
+	}
+}
