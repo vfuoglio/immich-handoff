@@ -154,6 +154,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /peer/v1/album/leave", w.signed(w.peerAlbumAnswer((*hub.Hub).PeerLeftAlbum)))
 	mux.HandleFunc("POST /peer/v1/album/have", w.signed(w.peerAlbumHave))
 	mux.HandleFunc("POST /peer/v1/album/photo", w.peerAlbumPhoto)
+	mux.HandleFunc("POST /peer/v1/album/done", w.signed(w.peerAlbumDone))
 	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
 	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)
 	mux.HandleFunc("POST /peers/share", w.proposeAlbum)
@@ -723,6 +724,24 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		}
 	}
 	var done []NeedView
+	for _, p := range d.Peers {
+		if p.Problem != "" && p.State == "active" {
+			done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Not reachable"), Title: p.Name,
+				Text: t(ctx, "The other app could not be reached: {reason} Shared albums wait until it can.", "reason", p.Problem)})
+		}
+		for _, a := range p.Shared {
+			switch a.State {
+			case "invited":
+				done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Proposal"), Title: t(ctx, "{name} proposes to share {album}", "name", p.Name, "album", a.Name),
+					Text: t(ctx, "Open the Services tab to look at it and answer.")})
+			case "left":
+				done = append(done, NeedView{Tone: "bad", Chip: t(ctx, "Ended"), Title: a.Name, Text: t(ctx, "{name} ended the sharing of this album. Remove it on the Services tab to delete its key.", "name", p.Name)})
+			}
+			if a.State == "active" && a.Problem != "" {
+				done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Problem"), Title: a.Name, Text: a.Problem})
+			}
+		}
+	}
 	for _, r := range d.Rooms {
 		for _, sel := range r.Selections {
 			if sel.Done && !r.Ended {

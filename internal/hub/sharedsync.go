@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/peer"
 	"github.com/vfuoglio/immich-handoff/internal/store"
@@ -181,6 +182,18 @@ func (h *Hub) SyncShared(ctx context.Context, id string) error {
 	defer h.syncing.Delete(a.ID)
 	sent, problem := h.sendNew(ctx, a, p)
 	h.Store.MarkSharedPass(context.WithoutCancel(ctx), a.ID, h.now(), problem, sent, 0)
+	switch {
+	case problem != "" && a.Problem == "": // told once, not on every look
+		h.event(ctx, "", a.OwnerID, "sharing_problem", i18n.Pack("Sharing the album {album} with {other} ran into a problem: {reason}", "album", a.Name, "other", p.Name, "reason", problem))
+	case problem == "" && a.Problem != "":
+		h.event(ctx, "", a.OwnerID, "share", i18n.Pack("Sharing the album {album} with {other} works again", "album", a.Name, "other", p.Name))
+	}
+	if sent > 0 { // the other person is told that photos arrived, once for the whole pass
+		var reply struct{}
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+		peer.Call(cctx, h.peerClient(), p.Address, p.TheirID, p.Secret, "POST", "/peer/v1/album/done", DoneMsg{To: a.TheirID, N: sent}, &reply)
+		cancel()
+	}
 	if problem != "" {
 		return errors.New(problem)
 	}
@@ -337,4 +350,23 @@ func (h *Hub) SharedLoop(ctx context.Context) {
 			h.SharedMaintenance(ctx)
 		}
 	}
+}
+
+// DoneMsg tells the receiving app that a pass sent it N photos, so that its person is told once.
+type DoneMsg struct {
+	To string `json:"to"`
+	N  int    `json:"n"`
+}
+
+// PeerArrived is what a signed "done" does: a line for the person, that photos arrived.
+func (h *Hub) PeerArrived(ctx context.Context, p store.Peer, m DoneMsg) error {
+	a, err := h.sharedFor(ctx, p, m.To)
+	if err != nil {
+		return err
+	}
+	if m.N < 1 || m.N > 100000 {
+		return nil
+	}
+	h.event(ctx, "", a.OwnerID, "share", i18n.PackN("{n} photo arrived from {other} in {album}", "{n} photos arrived from {other} in {album}", m.N, "other", p.Name, "album", a.Name))
+	return nil
 }

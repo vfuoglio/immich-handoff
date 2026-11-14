@@ -621,7 +621,7 @@ func activityTone(kind string) string {
 	switch kind {
 	case "broken", "removed", "deleted", "left":
 		return "bad"
-	case "limit", "paused", "album":
+	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
 	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice":
 		return "ok"

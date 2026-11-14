@@ -301,7 +301,13 @@ func (h *Hub) helloPeer(ctx context.Context, p store.Peer) error {
 	}
 	if problem != "" {
 		h.Store.MarkPeerSeen(context.WithoutCancel(ctx), p.ID, time.Time{}, problem)
+		if p.Problem == "" && !p.SeenAt.IsZero() { // told once, when it stops working
+			h.event(ctx, "", p.OwnerID, "sharing_problem", i18n.Pack("The connection to {name} is not working: {reason}", "name", p.Name, "reason", problem))
+		}
 		return errors.New(problem)
+	}
+	if p.Problem != "" {
+		h.event(ctx, "", p.OwnerID, "peer", i18n.Pack("The connection to {name} works again", "name", p.Name))
 	}
 	h.Store.MarkPeerSeen(context.WithoutCancel(ctx), p.ID, h.now(), "")
 	h.Store.SetPeerTheyPaused(context.WithoutCancel(ctx), p.ID, reply.Paused)

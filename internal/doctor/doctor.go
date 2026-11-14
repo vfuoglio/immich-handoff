@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	}
 	settings(r, in)
 	notifications(r, in)
+	sharedAlbums(r, in)
 	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
@@ -617,4 +619,49 @@ func remote(ctx context.Context, r *Report, rm *bridge.Remote) {
 		r.add(Fail, who+": cannot reach the server ("+err.Error()+")",
 			"Photos wait, still tagged, and the app tries again with growing pauses. Check that the receiver's server is on and reachable from here.")
 	}
+}
+
+// sharedAlbums checks the settings of sharing albums with other servers (SHARED_ALBUMS_ENABLE), which needs the app's own
+// public address, because the other app is given it and calls it.
+func sharedAlbums(r *Report, in Input) {
+	switch strings.ToLower(strings.TrimSpace(firstOf(in.Env, "SHARED_ALBUMS_ENABLE"))) {
+	case "1", "true", "on", "yes":
+	default:
+		return
+	}
+	r.section("Shared albums")
+	u := firstOf(in.Env, "PUBLIC_APP_URL")
+	pu, err := url.Parse(u)
+	switch {
+	case u == "":
+		r.add(Fail, "SHARED_ALBUMS_ENABLE is on but PUBLIC_APP_URL is not set, so sharing stays off: the other app is given this app's address",
+			"Set PUBLIC_APP_URL to the address the other app reaches this one at, for example https://handoff.example.com")
+	case err != nil || pu.Host == "" || (pu.Scheme != "https" && pu.Scheme != "http"):
+		r.add(Fail, "PUBLIC_APP_URL is not a web address: "+u, "Use a full address such as https://handoff.example.com")
+	case pu.Scheme == "http" && !onSwitch(firstOf(in.Env, "BRIDGE_ALLOW_PRIVATE")):
+		r.add(Warn, "PUBLIC_APP_URL is "+u+": the other app only connects to https:// addresses, so it will refuse this one",
+			"Use an https address (a reverse proxy with a certificate), or, when both servers are yours behind a VPN, set BRIDGE_ALLOW_PRIVATE=true on both.")
+	case isLoopback(pu.Hostname()):
+		r.add(Warn, "PUBLIC_APP_URL points at "+pu.Hostname()+", which the other app cannot reach", "Use the address the other app reaches this one at.")
+	default:
+		r.add(OK, "sharing albums is on; the other app is told to reach this one at "+u, "")
+	}
+	if v := firstOf(in.Env, "SHARED_ALBUMS_EVERY_MINUTES"); v != "" {
+		if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.1 || m > 1440 {
+			r.add(Fail, "SHARED_ALBUMS_EVERY_MINUTES must be a number of minutes from 0.1 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 3).")
+		}
+	}
+	if v := firstOf(in.Env, "SHARED_ALBUMS_MAX_MB"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err != nil || n < 1 || n > 1<<20 {
+			r.add(Fail, "SHARED_ALBUMS_MAX_MB must be a number of megabytes, 1 or more, and the app will not start with "+v, "Fix it or remove it (the default is 2048).")
+		}
+	}
+}
+
+func onSwitch(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
 }

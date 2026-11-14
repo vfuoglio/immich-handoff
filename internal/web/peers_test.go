@@ -990,3 +990,72 @@ func TestSyncNowLooksAtOnceAndOnlyForTheOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestThePersonIsToldWhenPhotosArriveAndOnceWhenSharingStopsWorkingAndWhenItWorksAgain(t *testing.T) {
+	a, b, sa, sb := sharedPair(t, "all", "new", []byte("a photo"), []byte("another photo"))
+	ctx := context.Background()
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Fatal(err)
+	}
+	acts, _ := b.hub.Activity(ctx, uuid.MustParse(familyID), 10)
+	found := false
+	for _, x := range acts {
+		found = found || (x.Kind == "share" && strings.Contains(x.Text, "photos arrived from") && strings.Contains(x.Text, `"n":2`) && strings.Contains(x.Text, `"other":"Alice"`))
+	}
+	if !found {
+		t.Errorf("B's person is told, once for the whole pass: %+v", acts)
+	}
+	// B stops answering (its sharing is switched off): A says so once, not at every look
+	b.hub.Share = false
+	a.fake.addPhoto(aliceID, tripAlbum, "late.jpg", []byte("a late photo"))
+	if err := a.hub.SyncShared(ctx, sa.ID); err == nil {
+		t.Fatal("a problem")
+	}
+	a.hub.SyncShared(ctx, sa.ID)
+	count := func(kind, word string) int {
+		acts, _ := a.hub.Activity(ctx, uuid.MustParse(aliceID), 50)
+		n := 0
+		for _, x := range acts {
+			if x.Kind == kind && strings.Contains(x.Text, word) {
+				n++
+			}
+		}
+		return n
+	}
+	if n := count("sharing_problem", "ran into a problem"); n != 1 {
+		t.Errorf("told once: %d", n)
+	}
+	_, page := a.as(t, "GET", "/", "")
+	for _, want := range []string{"The last look found a problem", "Problem"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("A's page lacks %q", want)
+		}
+	}
+	b.hub.Share = true
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := count("share", "works again"); n != 1 {
+		t.Errorf("told when it works again: %d", n)
+	}
+	_ = sb
+}
+
+func TestAProposalAndAnUnreachableConnectionAreOnTheOverview(t *testing.T) {
+	a := startApp(t, "sess=alice", true, true)
+	b := startApp(t, "sess=family", true, true)
+	pairApps(t, a, b)
+	a.as(t, "POST", "/peers/share", "peer="+peersOf(t, a, aliceID)[0].ID+"&name=Summer&album=new&history=new")
+	_, page := b.as(t, "GET", "/", "")
+	for _, want := range []string{"Alice proposes to share Summer", "Open the Services tab to look at it and answer."} {
+		if !strings.Contains(page, want) {
+			t.Errorf("B's overview lacks %q", want)
+		}
+	}
+	b.srv.Close()
+	a.hub.PeerMaintenance(context.Background())
+	_, page = a.as(t, "GET", "/", "")
+	if !strings.Contains(page, "Shared albums wait until it can") {
+		t.Errorf("A's overview says the other app is not reachable")
+	}
+}

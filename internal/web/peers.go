@@ -391,3 +391,16 @@ func (w *Server) syncAlbumNow(rw http.ResponseWriter, r *http.Request) {
 		return w.Hub.SyncSharedNow(ctx, me.user.ID, r.PostFormValue("shared"))
 	})
 }
+
+func (w *Server) peerAlbumDone(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+	var m hub.DoneMsg
+	if json.Unmarshal(body, &m) != nil {
+		peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if err := w.Hub.PeerArrived(r.Context(), p, m); err != nil {
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
