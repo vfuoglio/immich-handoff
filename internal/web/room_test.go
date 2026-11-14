@@ -757,3 +757,75 @@ func TestANoteOnAPhotoIsKeptShownToTheClientAnsweredByThePhotographerAndLockedWi
 		t.Errorf("%d %s", code, body)
 	}
 }
+
+func TestInARoundAfterTheFirstAClientSeesOnlyWhatTheyChoseBeforeAndThePhotographerStartsIt(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("bc", 32)
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi", AlbumName: "Wedding", PickMode: store.RoomShared, MultiRound: true, PickLimit: 5}))
+	ctx := context.Background()
+	rooms, _ := st.RoomsOf(ctx, uuid.MustParse(familyID))
+	room := rooms[0]
+	c := newRoomClient(t, app.URL)
+	_, page, _ := c.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, page, token)
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	round := func(limit string) int {
+		req, _ := http.NewRequest("POST", app.URL+"/rooms/round", strings.NewReader("room="+room.ID+"&limit="+limit))
+		req.Header.Set("Cookie", "sess=family")
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	if code := round("1"); code != 409 {
+		t.Errorf("before a choice is sent: %d", code)
+	}
+	_, rev := do(t, "GET", app.URL+"/rooms/"+room.ID+"/review", "sess=family", nil)
+	if strings.Contains(rev, "Start round 2") {
+		t.Error("no next round before a choice is sent")
+	}
+	c.do("POST", "/room/"+token+"/pick/"+ids[0], "", true)
+	c.do("POST", "/room/"+token+"/done", "", false)
+	_, rev = do(t, "GET", app.URL+"/rooms/"+room.ID+"/review", "sess=family", nil)
+	if !strings.Contains(rev, "Start round 2") || !strings.Contains(rev, `hx-post="rooms/round"`) {
+		t.Errorf("the photographer can start the next round: %.200s", rev)
+	}
+	req, _ := http.NewRequest("POST", app.URL+"/rooms/round", strings.NewReader("room="+room.ID+"&limit=1"))
+	req.Header.Set("Cookie", "sess=other")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if res, err := http.DefaultClient.Do(req); err == nil {
+		res.Body.Close()
+		if res.StatusCode == 204 {
+			t.Error("another person started a round")
+		}
+	}
+	if code := round("1"); code != 204 {
+		t.Fatalf("start round 2: %d", code)
+	}
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if got := photoIDs(t, page, token); len(got) != 1 || got[0] != ids[0] {
+		t.Fatalf("only the photo chosen before is shown: %v", got)
+	}
+	for _, want := range []string{"Round 2", "Choose up to 1 of them", "0 of 1 chosen", `data-total="2"`, `data-n="1"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if code, _, _ := c.do("POST", "/room/"+token+"/pick/"+ids[1], "", true); code != 404 {
+		t.Errorf("a photo that is not in this round: %d", code)
+	}
+	if code, _, _ := c.do("POST", "/room/"+token+"/pick/"+ids[0], "", true); code != 200 {
+		t.Errorf("a pick in round 2: %d", code)
+	}
+	_, rev = do(t, "GET", app.URL+"/rooms/"+room.ID+"/review", "sess=family", nil)
+	if !strings.Contains(rev, "Round 1") || !strings.Contains(rev, "1 photos") {
+		t.Errorf("the history of round 1 is on the review page: %.300s", rev)
+	}
+}

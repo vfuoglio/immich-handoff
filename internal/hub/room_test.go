@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
@@ -787,5 +788,131 @@ func TestANoteBelongsToItsSelectionAndAReplyOnlyWhereRepliesAreAllowed(t *testin
 	_ = review
 	if e.h.RoomNoteCount(ctx, shared) != 1 {
 		t.Errorf("the photographer's count")
+	}
+}
+
+func TestARoomForSeveralRoundsShowsEachClientOnlyWhatTheyChoseBeforeAndKeepsEveryRound(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg", "c.jpg", "d.jpg")
+	single := makeRoom(t, e, album, nil)
+	if err := e.h.StartRoomRound(ctx, bob, single.ID, 5); err != hub.ErrSingleRound {
+		t.Errorf("a room for one round: %v", err)
+	}
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) {
+		p.MultiRound = true
+		p.PickLimit = 3
+		p.PickMode = store.RoomVisitor
+		p.NotesMode = store.RoomNotesNote
+	})
+	ids := pickIDs(t, e, r)
+	ann, luca := hub.RoomViewer{Who: "ann", Name: "Ann"}, hub.RoomViewer{Who: "luca", Name: "Luca"}
+	if err := e.h.StartRoomRound(ctx, bob, r.ID, 2); err != hub.ErrRoundNotReady {
+		t.Errorf("before anyone has sent a choice: %v", err)
+	}
+	for _, i := range []int{0, 1, 2} {
+		e.h.RoomPick(ctx, r, ann, ids[i])
+	}
+	e.h.RoomNote(ctx, r, ann, ids[0], "round one note")
+	e.h.RoomDone(ctx, r, ann)
+	e.h.RoomPick(ctx, r, luca, ids[3]) // Luca has not sent his
+	if err := e.h.StartRoomRound(ctx, ann2(), r.ID, 2); err != hub.ErrNoRoom {
+		t.Errorf("another person: %v", err)
+	}
+	if err := e.h.StartRoomRound(ctx, bob, r.ID, 9999); err != hub.ErrBadPickLim {
+		t.Errorf("%v", err)
+	}
+	if err := e.h.StartRoomRound(ctx, bob, r.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	if r.CurrentRound() != 2 || r.PickLimit != 2 {
+		t.Fatalf("%+v", r)
+	}
+	seen, _ := e.h.RoomVisibleTo(ctx, r, ann)
+	if len(seen) != 3 || seen[0].ID != ids[0] || seen[2].ID != ids[2] {
+		t.Fatalf("Ann sees what she chose, in the order of the shoot: %+v", seen)
+	}
+	if seen, _ := e.h.RoomVisibleTo(ctx, r, luca); len(seen) != 1 || seen[0].ID != ids[3] {
+		t.Errorf("Luca sees what he chose, though he had not sent it: %+v", seen)
+	}
+	if seen, _ := e.h.RoomVisibleTo(ctx, r, hub.RoomViewer{Who: "new"}); len(seen) != 0 {
+		t.Errorf("a visitor who chose nothing sees nothing in a later round: %+v", seen)
+	}
+	sel, _ := e.h.RoomSelectionOf(ctx, r, ann)
+	if sel.Count != 0 || sel.Done || !sel.CanPick || sel.Limit != 2 {
+		t.Errorf("a fresh selection with the new limit: %+v", sel)
+	}
+	if _, err := e.h.RoomPick(ctx, r, ann, ids[3]); err != hub.ErrDropGone {
+		t.Errorf("a photo she did not choose before: %v", err)
+	}
+	if _, err := e.h.RoomNote(ctx, r, ann, ids[3], "x"); err != hub.ErrDropGone {
+		t.Errorf("%v", err)
+	}
+	if n, _ := e.h.RoomNotesOf(ctx, r, ann); len(n) != 0 {
+		t.Errorf("notes do not carry over: %+v", n)
+	}
+	e.h.RoomPick(ctx, r, ann, ids[0])
+	e.h.RoomPick(ctx, r, ann, ids[2])
+	if _, err := e.h.RoomPick(ctx, r, ann, ids[1]); err != hub.ErrRoomLimit {
+		t.Errorf("the round's own limit: %v", err)
+	}
+	if _, err := e.h.RoomDone(ctx, r, ann); err != nil {
+		t.Fatal(err)
+	}
+	// every round is kept
+	rounds, _ := e.h.RoomRounds(ctx, r)
+	if len(rounds) != 1 || rounds[0].Round != 1 || len(rounds[0].Selections) != 2 {
+		t.Fatalf("the history: %+v", rounds)
+	}
+	var annFirst *store.SelectionSummary
+	for i := range rounds[0].Selections {
+		if rounds[0].Selections[i].Who == "ann" {
+			annFirst = &rounds[0].Selections[i]
+		}
+	}
+	if annFirst == nil || annFirst.Count != 3 || !annFirst.Done {
+		t.Errorf("round one as it was: %+v", rounds[0].Selections)
+	}
+	cur, _ := e.h.RoomSelections(ctx, r)
+	if len(cur) != 1 || cur[0].Count != 2 || !cur[0].Done {
+		t.Errorf("the room's row shows the current round: %+v", cur)
+	}
+	// what is delivered is the last round's
+	if err := e.h.ReleaseRoom(ctx, e.sess, bob, r.ID, 7); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	d, err := e.h.RoomDownloads(ctx, r, ann)
+	if err != nil || len(d.Photos) != 2 {
+		t.Fatalf("round two's two photos: %+v %v", d, err)
+	}
+	if err := e.h.StartRoomRound(ctx, bob, r.ID, 1); err != hub.ErrRoundReleased {
+		t.Errorf("no new round while released: %v", err)
+	}
+}
+
+func ann2() immich.User { return ann }
+
+func TestARoomHasAtMostFiveRounds(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg")
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.MultiRound = true })
+	ids := pickIDs(t, e, r)
+	v := hub.RoomViewer{Who: "v", Name: "V"}
+	for round := 1; round < 5; round++ {
+		r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+		if _, err := e.h.RoomPick(ctx, r, v, ids[0]); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		e.h.RoomDone(ctx, r, v)
+		if err := e.h.StartRoomRound(ctx, bob, r.ID, 0); err != nil {
+			t.Fatalf("starting round %d: %v", round+1, err)
+		}
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	e.h.RoomPick(ctx, r, v, ids[0])
+	e.h.RoomDone(ctx, r, v)
+	if err := e.h.StartRoomRound(ctx, bob, r.ID, 0); err != hub.ErrTooManyRounds {
+		t.Errorf("a sixth: %v", err)
 	}
 }

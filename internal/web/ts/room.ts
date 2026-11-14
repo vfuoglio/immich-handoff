@@ -46,7 +46,8 @@ export function initRoom(): void {
     at = step(i, 0, tiles.length);
     const tile = tiles[at]!;
     picture.src = tile.href;
-    caption.textContent = t("Photo {n} of {total}", { n: at + 1, total: tiles.length });
+    const total = Number(page.dataset["total"] ?? "0");
+    caption.textContent = t("Photo {n} of {total}", { n: Number(tile.dataset["n"] ?? at + 1), total: total > 0 ? total : tiles.length });
     refreshLightbox();
   };
   const go = (by: number): void => show(step(at, by, tiles.length));

@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -32,6 +33,8 @@ type RoomView struct {
 	Limit                         int
 	Released                      bool
 	Notes                         int
+	Round                         int
+	Several                       bool
 }
 
 // SelectionView is one selection of a room as the photographer sees it.
@@ -3171,6 +3174,13 @@ templ RoomSection(rooms []RoomView) {
 				<input id="rm-picklimit" name="picklimit" type="number" min="1" max="5000" inputmode="numeric" placeholder="30"/>
 			</div>
 			<div class="field">
+				<label for="rm-rounds">{ t(ctx, "Rounds") }</label>
+				<select id="rm-rounds" name="rounds">
+					<option value="one" selected>{ t(ctx, "One round") }</option>
+					<option value="several">{ t(ctx, "Several rounds: I start each next round, and it shows only what was chosen before") }</option>
+				</select>
+			</div>
+			<div class="field">
 				<label for="rm-notes">{ t(ctx, "Notes on photos") }</label>
 				<select id="rm-notes" name="notes">
 					<option value="none" selected>{ t(ctx, "None: clients only choose") }</option>
@@ -3327,6 +3337,7 @@ type RoomPageData struct {
 	Released     bool   // the originals of this client's sent choice can be downloaded
 	Until        string // until when, "" for as long as the room works
 	Notes        string // notes on photos: "", "note" or "replies"
+	Round, Total int    // the round the room is in, and how many photos the room has in all
 }
 
 // RoomPage is what the client sees: the room's title, the marked pictures in the order of the shoot, a way to choose and to send
@@ -3334,12 +3345,26 @@ type RoomPageData struct {
 // each picture opens larger.
 templ RoomPage(d RoomPageData) {
 	@Layout(d.Title, "") {
-		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick } data-notes={ d.Notes } data-note-label={ t(ctx, "Note for the photographer") } data-note-save={ t(ctx, "Save note") } data-note-saved={ t(ctx, "Note saved") } data-reply-label={ t(ctx, "The photographer wrote back:") } data-note-hint={ t(ctx, "For example: brighten this one, or crop here.") }>
+		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick } data-total={ fmt.Sprint(d.Total) } data-notes={ d.Notes } data-note-label={ t(ctx, "Note for the photographer") } data-note-save={ t(ctx, "Save note") } data-note-saved={ t(ctx, "Note saved") } data-reply-label={ t(ctx, "The photographer wrote back:") } data-note-hint={ t(ctx, "For example: brighten this one, or crop here.") }>
 			<section class="invite-hero">
 				<h1>{ d.Title }</h1>
 				<p class="lead">{ t(ctx, "Choose a photo to see it larger. The pictures carry the photographer's mark; the originals come later.") }</p>
 				<p class="meta">{ n(ctx, "{n} photo", "{n} photos", len(d.Tiles)) }</p>
 			</section>
+			if d.Round > 1 {
+				<section class="card notice">
+					<h2>{ t(ctx, "Round {n}", "n", d.Round) }</h2>
+					<p class="meta">
+						if len(d.Tiles) == 0 {
+							{ t(ctx, "There is nothing for you to choose from in this round.") }
+						} else if d.Limit > 0 {
+							{ t(ctx, "These are the photos you chose before. Choose up to {limit} of them.", "limit", d.Limit) }
+						} else {
+							{ t(ctx, "These are the photos you chose before. Choose again from them.") }
+						}
+					</p>
+				</section>
+			}
 			<p class="card notice bad-note" id="room-msg" role="alert" hidden?={ d.Message == "" }>{ d.Message }</p>
 			if d.Done {
 				<section class="card notice">
@@ -3394,7 +3419,7 @@ templ RoomPage(d RoomPageData) {
 			<ul class="plain room-grid">
 				for _, tile := range d.Tiles {
 					<li class={ "room-item", templ.KV("picked", tile.Picked), templ.KV("noted", tile.Note != "") } id={ fmt.Sprintf("p%d", tile.N) } data-id={ tile.ID } data-note={ tile.Note } data-reply={ tile.Reply }>
-						<a class="room-tile" href={ templ.SafeURL("room/" + d.Token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", len(d.Tiles)) }>
+						<a class="room-tile" href={ templ.SafeURL("room/" + d.Token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", d.Total) }>
 							<img src={ "room/" + d.Token + "/photo/" + tile.ID } alt="" loading="lazy"/>
 							<span class="room-n" aria-hidden="true">{ fmt.Sprint(tile.N) }</span>
 							if tile.Video {
@@ -3469,6 +3494,16 @@ type ReviewData struct {
 	Auto             bool
 	Limit            int
 	Replies          bool // the photographer may answer notes
+	Round            int
+	Several          bool // the room goes through several rounds
+	CanStart         bool // a next round may be started
+	History          []HistoryRound
+}
+
+// HistoryRound is a round that is over, for the review page.
+type HistoryRound struct {
+	Round int
+	Lines []string
 }
 
 // ReviewSel is one selection on the review page.
@@ -3497,6 +3532,24 @@ templ RoomReviewPage(d ReviewData) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
 		<h1>{ t(ctx, "Choice in {room}", "room", d.Name) }</h1>
 		<p class="lead">{ t(ctx, "What your client chose, as they saw it (marked). The file names are for finding the photos in your own library.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Several {
+			<section class="card">
+				<h2>{ t(ctx, "Round {n}", "n", d.Round) }</h2>
+				for _, h := range d.History {
+					<p class="meta"><b>{ t(ctx, "Round {n}", "n", h.Round) }</b>: { strings.Join(h.Lines, " \u00b7 ") }</p>
+				}
+				if d.CanStart {
+					<form class="row" hx-post="rooms/round" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Each client will then see only the photos they chose in this round, and can choose again. Continue?") } data-confirm-title={ t(ctx, "Start the next round?") } data-confirm-label={ t(ctx, "Start round") }>
+						<input type="hidden" name="room" value={ d.ID }/>
+						<label for="round-limit">{ t(ctx, "The most photos to choose in round {n} (empty: no limit)", "n", d.Round+1) }</label>
+						<input id="round-limit" name="limit" type="number" min="1" max="5000" inputmode="numeric" class="narrow"/>
+						<button type="submit">{ t(ctx, "Start round {n}", "n", d.Round+1) }</button>
+					</form>
+				} else if d.Released {
+					<p class="meta">{ t(ctx, "The originals are released, so this is the last round. Take the release back to start another.") }</p>
+				}
+			</section>
+		}
 		<section class="card">
 			<h2>{ t(ctx, "The originals") }</h2>
 			if d.Released {

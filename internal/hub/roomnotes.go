@@ -80,6 +80,11 @@ func (h *Hub) RoomNote(ctx context.Context, r store.Room, v RoomViewer, photo, t
 	if _, ok := s.by[photo]; !ok {
 		return 0, ErrDropGone
 	}
+	if set, restricted, err := h.roomVisible(ctx, r, v); err != nil {
+		return 0, err
+	} else if restricted && !set[photo] {
+		return 0, ErrDropGone
+	}
 	sel, err := h.roomSelection(ctx, r, v)
 	if err != nil {
 		return 0, err
@@ -94,7 +99,7 @@ func (h *Hub) RoomNote(ctx context.Context, r store.Room, v RoomViewer, photo, t
 	}
 	sc := scope(r, v)
 	if text != "" {
-		have, err := h.Store.Notes(ctx, r.ID, 1, &sc)
+		have, err := h.Store.Notes(ctx, r.ID, r.CurrentRound(), &sc)
 		if err != nil {
 			return 0, err
 		}
@@ -112,7 +117,7 @@ func (h *Hub) RoomNote(ctx context.Context, r store.Room, v RoomViewer, photo, t
 	if r.PickMode == store.RoomNamed {
 		name = r.ClaimName
 	}
-	return h.Store.SetNote(ctx, r.ID, 1, sc, photo, name, text)
+	return h.Store.SetNote(ctx, r.ID, r.CurrentRound(), sc, photo, name, text)
 }
 
 // RoomNotesOf lists the notes the viewer can see in a room, by photo: those of their own selection, with the answers.
@@ -122,7 +127,7 @@ func (h *Hub) RoomNotesOf(ctx context.Context, r store.Room, v RoomViewer) (map[
 		return out, nil
 	}
 	sc := scope(r, v)
-	list, err := h.Store.Notes(ctx, r.ID, 1, &sc)
+	list, err := h.Store.Notes(ctx, r.ID, r.CurrentRound(), &sc)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +153,7 @@ func (h *Hub) RoomReply(ctx context.Context, owner immich.User, roomID, who, pho
 	if utf8.RuneCountInString(text) > maxNoteChars {
 		return ErrBadReply
 	}
-	ok, err := h.Store.SetReply(ctx, r.ID, 1, who, photo, text)
+	ok, err := h.Store.SetReply(ctx, r.ID, r.CurrentRound(), who, photo, text)
 	if err != nil {
 		return err
 	}
@@ -160,7 +165,7 @@ func (h *Hub) RoomReply(ctx context.Context, owner immich.User, roomID, who, pho
 
 // RoomNoteCount is how many notes a room holds, for the photographer.
 func (h *Hub) RoomNoteCount(ctx context.Context, r store.Room) int {
-	list, err := h.Store.Notes(ctx, r.ID, 1, nil)
+	list, err := h.Store.Notes(ctx, r.ID, r.CurrentRound(), nil)
 	if err != nil {
 		return 0
 	}

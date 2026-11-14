@@ -562,6 +562,10 @@ var migrations = []string{
 	   replied_at TEXT NOT NULL DEFAULT '',
 	   PRIMARY KEY (room_id, round, who, photo)
 	 );`,
+	// Rounds in a client room: whether the room goes through several, and which round it is in. A round's picks, notes and sent
+	// choices are kept under its number, so earlier rounds stay as history.
+	`ALTER TABLE rooms ADD COLUMN multi_round INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN round INTEGER NOT NULL DEFAULT 1;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

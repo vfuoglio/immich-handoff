@@ -39,7 +39,7 @@ func (h *Hub) ReleaseRoom(ctx context.Context, sess *immich.API, owner immich.Us
 	if days < 0 || days > 730 {
 		return ErrBadReleaseDays
 	}
-	sels, err := h.Store.SelectionsOf(ctx, r.ID, 1)
+	sels, err := h.Store.SelectionsOf(ctx, r.ID, r.CurrentRound())
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ type ReviewSelection struct {
 // RoomReview lists each selection of a room with its photos in the order of the shoot, with the file names, so the photographer
 // can find them in their own library.
 func (h *Hub) RoomReview(ctx context.Context, r store.Room) ([]ReviewSelection, error) {
-	sels, err := h.Store.SelectionsOf(ctx, r.ID, 1)
+	sels, err := h.Store.SelectionsOf(ctx, r.ID, r.CurrentRound())
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (h *Hub) RoomReview(ctx context.Context, r store.Room) ([]ReviewSelection, 
 	var out []ReviewSelection
 	for _, sel := range sels {
 		who := sel.Who
-		picks, err := h.Store.Picks(ctx, r.ID, 1, &who)
+		picks, err := h.Store.Picks(ctx, r.ID, r.CurrentRound(), &who)
 		if err != nil {
 			return nil, err
 		}
@@ -283,7 +283,7 @@ func (h *Hub) RoomReview(ctx context.Context, r store.Room) ([]ReviewSelection, 
 			picked[p.Photo] = true
 		}
 		rs := ReviewSelection{SelectionSummary: sel, Notes: map[string]store.Note{}, Picked: picked}
-		if ns, err := h.Store.Notes(ctx, r.ID, 1, &who); err == nil {
+		if ns, err := h.Store.Notes(ctx, r.ID, r.CurrentRound(), &who); err == nil {
 			for _, n := range ns {
 				rs.Notes[n.Photo] = n
 			}

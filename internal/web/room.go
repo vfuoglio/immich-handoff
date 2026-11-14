@@ -38,6 +38,7 @@ func (w *Server) roomViews(ctx context.Context, me *member) []RoomView {
 			v.Ends = l.Stamp(r.EndsAt.Local())
 		}
 		v.Mode, v.Limit, v.Notes = r.PickMode, r.PickLimit, w.Hub.RoomNoteCount(ctx, r)
+		v.Round, v.Several = r.CurrentRound(), r.MultiRound
 		if sels, err := w.Hub.RoomSelections(ctx, r); err == nil {
 			for _, s := range sels {
 				sv := SelectionView{Who: s.Who, Name: s.Name, Count: s.Count, Done: s.Done}
@@ -95,7 +96,7 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 		_, err = w.Hub.CreateRoom(ctx, me.sess, me.user, hub.RoomParams{Name: r.PostFormValue("name"), Title: r.PostFormValue("title"),
 			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days,
 			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo, PickMode: r.PostFormValue("pickmode"), PickLimit: limit,
-			AutoRelease: r.PostFormValue("autorelease") == "1", ReleaseDays: relDays, NotesMode: r.PostFormValue("notes")})
+			AutoRelease: r.PostFormValue("autorelease") == "1", ReleaseDays: relDays, NotesMode: r.PostFormValue("notes"), MultiRound: r.PostFormValue("rounds") == "several"})
 		return err
 	})
 }
@@ -165,7 +166,16 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := w.roomViewer(rw, r, room)
-	photos, err := w.Hub.RoomPhotos(ctx, room)
+	all, err := w.Hub.RoomPhotos(ctx, room)
+	if err != nil {
+		http.Error(rw, "try again", http.StatusServiceUnavailable)
+		return
+	}
+	place := map[string]int{}
+	for i, p := range all {
+		place[p.ID] = i + 1
+	}
+	photos, err := w.Hub.RoomVisibleTo(ctx, room, v)
 	if err != nil {
 		http.Error(rw, "try again", http.StatusServiceUnavailable)
 		return
@@ -191,8 +201,9 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 			d.Until = loc(ctx).Stamp(dl.Until.Local())
 		}
 	}
-	for i, p := range photos {
-		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID], Mine: mine[p.ID], Note: notes[p.ID].Body, Reply: notes[p.ID].Reply})
+	d.Total, d.Round = len(all), room.CurrentRound()
+	for _, p := range photos {
+		d.Tiles = append(d.Tiles, RoomTile{N: place[p.ID], ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID], Mine: mine[p.ID], Note: notes[p.ID].Body, Reply: notes[p.ID].Reply})
 	}
 	RoomPage(d).Render(ctx, rw)
 }
@@ -446,6 +457,17 @@ func (w *Server) roomReview(rw http.ResponseWriter, r *http.Request) {
 		d.Until = l.Stamp(room.ReleaseUntil.Local())
 	}
 	d.Replies = room.NotesMode == store.RoomNotesReplies
+	d.Round, d.Several, d.Limit = room.CurrentRound(), room.MultiRound, room.PickLimit
+	d.CanStart = room.MultiRound && room.ReleasedAt.IsZero() && room.CurrentRound() < 5
+	if rounds, err := w.Hub.RoomRounds(ctx, room); err == nil {
+		for _, rs := range rounds {
+			hr := HistoryRound{Round: rs.Round}
+			for _, s := range rs.Selections {
+				hr.Lines = append(hr.Lines, t(ctx, "{name}: {n} photos", "name", selectionName(ctx, s.Name), "n", s.Count))
+			}
+			d.History = append(d.History, hr)
+		}
+	}
 	for _, sel := range review {
 		rs := ReviewSel{Name: sel.Name, Done: sel.Done}
 		if sel.Done {
@@ -462,6 +484,11 @@ func (w *Server) roomReview(rw http.ResponseWriter, r *http.Request) {
 		rs.Names = strings.Join(names, "\n")
 		d.Selections = append(d.Selections, rs)
 	}
+	anyDone := false
+	for _, sel := range d.Selections {
+		anyDone = anyDone || sel.Done
+	}
+	d.CanStart = d.CanStart && anyDone
 	rw.Header().Set("Cache-Control", "no-store")
 	ctx = context.WithValue(ctx, adminKey{}, me.user.IsAdmin)
 	RoomReviewPage(d).Render(ctx, rw)
@@ -631,5 +658,12 @@ func (w *Server) roomNote(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) replyToNote(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "note answered", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.RoomReply(ctx, me.user, r.PostFormValue("room"), r.PostFormValue("who"), r.PostFormValue("photo"), r.PostFormValue("text"))
+	})
+}
+
+func (w *Server) startRound(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "round started", func(ctx context.Context, me *member, _ string) error {
+		limit, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("limit")))
+		return w.Hub.StartRoomRound(ctx, me.user, r.PostFormValue("room"), limit)
 	})
 }

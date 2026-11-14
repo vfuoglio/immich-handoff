@@ -60,7 +60,7 @@ func scope(r store.Room, v RoomViewer) string {
 func (h *Hub) roomSelection(ctx context.Context, r store.Room, v RoomViewer) (RoomSelection, error) {
 	sc := scope(r, v)
 	sel := RoomSelection{Picked: map[string]bool{}, Limit: r.PickLimit, Mode: r.PickMode}
-	picks, err := h.Store.Picks(ctx, r.ID, 1, &sc)
+	picks, err := h.Store.Picks(ctx, r.ID, r.CurrentRound(), &sc)
 	if err != nil {
 		return sel, err
 	}
@@ -68,7 +68,7 @@ func (h *Hub) roomSelection(ctx context.Context, r store.Room, v RoomViewer) (Ro
 		sel.Picked[p.Photo] = true
 	}
 	sel.Count = len(sel.Picked)
-	if sel.Done, err = h.Store.SelectionDone(ctx, r.ID, 1, sc); err != nil {
+	if sel.Done, err = h.Store.SelectionDone(ctx, r.ID, r.CurrentRound(), sc); err != nil {
 		return sel, err
 	}
 	sel.CanPick = !sel.Done
@@ -119,6 +119,11 @@ func (h *Hub) RoomPick(ctx context.Context, r store.Room, v RoomViewer, photo st
 	if _, ok := s.by[photo]; !ok {
 		return RoomSelection{}, ErrDropGone
 	}
+	if set, restricted, err := h.roomVisible(ctx, r, v); err != nil {
+		return RoomSelection{}, err
+	} else if restricted && !set[photo] {
+		return RoomSelection{}, ErrDropGone
+	}
 	sel, err := h.roomSelection(ctx, r, v)
 	if err != nil {
 		return sel, err
@@ -135,7 +140,7 @@ func (h *Hub) RoomPick(ctx context.Context, r store.Room, v RoomViewer, photo st
 	if r.PickMode == store.RoomNamed {
 		name = r.ClaimName
 	}
-	_, _, err = h.Store.TogglePick(ctx, r.ID, 1, scope(r, v), photo, name, r.PickLimit)
+	_, _, err = h.Store.TogglePick(ctx, r.ID, r.CurrentRound(), scope(r, v), photo, name, r.PickLimit)
 	switch {
 	case errors.Is(err, store.ErrPickLimit):
 		err = ErrRoomLimit
@@ -168,7 +173,7 @@ func (h *Hub) RoomDone(ctx context.Context, r store.Room, v RoomViewer) (RoomSel
 	if r.PickMode == store.RoomNamed {
 		name = r.ClaimName
 	}
-	first, err := h.Store.FinishSelection(ctx, r.ID, 1, scope(r, v), name)
+	first, err := h.Store.FinishSelection(ctx, r.ID, r.CurrentRound(), scope(r, v), name)
 	if err != nil {
 		return sel, err
 	}
@@ -178,8 +183,12 @@ func (h *Hub) RoomDone(ctx context.Context, r store.Room, v RoomViewer) (RoomSel
 			who = "Your client"
 		}
 		sc := scope(r, v)
-		notes, _ := h.Store.Notes(ctx, r.ID, 1, &sc)
-		h.event(ctx, "", r.OwnerID, "choice", notesLine(whoText(who), r.Name, sel.Count, len(notes)))
+		notes, _ := h.Store.Notes(ctx, r.ID, r.CurrentRound(), &sc)
+		label := r.Name
+		if r.CurrentRound() > 1 {
+			label = fmt.Sprintf("%s (round %d)", r.Name, r.CurrentRound())
+		}
+		h.event(ctx, "", r.OwnerID, "choice", notesLine(whoText(who), label, sel.Count, len(notes)))
 		h.tell(notify.DropBox, fmt.Sprintf("%s finished choosing in the client room %q of %s: %d photos. Open the room on the Services tab to look at the choice.", who, r.Name, r.OwnerName, sel.Count))
 		h.Log.Info("a client finished choosing", "room", r.Name, "photos", sel.Count)
 	}
@@ -213,7 +222,7 @@ func whoText(name string) string {
 
 // RoomSelections lists the selections of a room for its owner: whose, how many photos, and whether sent.
 func (h *Hub) RoomSelections(ctx context.Context, r store.Room) ([]store.SelectionSummary, error) {
-	return h.Store.SelectionsOf(ctx, r.ID, 1)
+	return h.Store.SelectionsOf(ctx, r.ID, r.CurrentRound())
 }
 
 // ReopenRoomSelection lets the owner give a sent selection back to the client to change. who is the selection's mark.
@@ -222,7 +231,7 @@ func (h *Hub) ReopenRoomSelection(ctx context.Context, owner immich.User, roomID
 	if err != nil {
 		return ErrNoRoom
 	}
-	if err := h.Store.ReopenSelection(ctx, r.ID, 1, who); err != nil {
+	if err := h.Store.ReopenSelection(ctx, r.ID, r.CurrentRound(), who); err != nil {
 		return err
 	}
 	h.event(ctx, "", owner.ID, "choice", i18n.Pack("{name} gave a choice in {room} back to the client to change", "name", owner.Name, "room", r.Name))

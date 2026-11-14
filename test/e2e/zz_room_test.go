@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
@@ -266,4 +267,95 @@ func TestRoom(t *testing.T) {
 	if hasName(keyNames(t, alice), "handoff: room "+name) {
 		t.Error("ending the room deletes its key")
 	}
+}
+
+// TestRoomRounds: a room for two rounds: the client chooses two of three and sends them, the photographer starts round 2 with a
+// limit of one, the client sees only the two they chose, chooses one, and what is delivered is that one.
+func TestRoomRounds(t *testing.T) {
+	port, owner, alice, album, photos := roomFixture(t, 75)
+	name := fmt.Sprintf("rounds-%d", time.Now().UnixNano()%1_000_000)
+	if code, body := postBody(t, port, "/rooms", owner, url.Values{"name": {name}, "album": {album}, "mark": {"text"}, "pickmode": {"shared"}, "picklimit": {"2"}, "rounds": {"several"}}); code != 204 {
+		t.Fatalf("make a room: %d %s", code, body)
+	}
+	op := page(t, port, owner)
+	token := regexp.MustCompile(`data-link="room/([0-9a-f]{64})"`).FindStringSubmatch(op)[1]
+	roomID := regexp.MustCompile(`(?:&#34;|")room(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(op)[1]
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	do := func(method, path, body string) (int, string) {
+		req, _ := http.NewRequest(method, "http://localhost:"+port+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	_, p1 := do("GET", "/room/"+token, "")
+	ids := regexp.MustCompile(`room/`+token+`/pick/([0-9a-f]{16})`).FindAllStringSubmatch(p1, -1)
+	if len(ids) != 3 {
+		t.Fatalf("three photos: %d", len(ids))
+	}
+	for _, i := range []int{0, 2} {
+		if c, b := do("POST", "/room/"+token+"/pick/"+ids[i][1], ""); c != 200 {
+			t.Fatalf("pick: %d %s", c, b)
+		}
+	}
+	if c, _ := do("POST", "/room/"+token+"/done", ""); c != 303 && c != 200 {
+		t.Fatalf("done: %d", c)
+	}
+	if c, b := postBody(t, port, "/rooms/round", owner, url.Values{"room": {roomID}, "limit": {"1"}}); c != 204 {
+		t.Fatalf("start round 2: %d %s", c, b)
+	}
+	cookieHeader := ""
+	for _, c := range jar.Cookies(mustParseURL("http://localhost:" + port + "/")) {
+		cookieHeader += c.Name + "=" + c.Value + "; "
+	}
+	phone := browse(t, port, strings.TrimSuffix(cookieHeader, "; "), look{w: 390, h: 800, touch: true})
+	run(t, phone, chromedp.Navigate("http://localhost:"+port+"/room/"+token), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery))
+	if n := js[int](t, phone, `document.querySelectorAll('.room-tile').length`); n != 2 {
+		t.Fatalf("round 2 shows only the two photos chosen before: %d", n)
+	}
+	if got := js[string](t, phone, `[...document.querySelectorAll('.room-n')].map(e => e.textContent).join(',')`); got != "1,3" {
+		t.Errorf("the photos keep their numbers from the room: %q", got)
+	}
+	if !js[bool](t, phone, `/round 2/i.test(document.body.textContent) && document.querySelector('[data-room-count]').textContent === '0 of 1 chosen'`) {
+		t.Error("the page says it is round 2, with the new limit")
+	}
+	run(t, phone, chromedp.Click(`.room-grid li:nth-child(1) form.room-pick button`, chromedp.ByQuery))
+	until(t, phone, "one chosen", `document.querySelector('[data-room-count]').textContent === '1 of 1 chosen'`, 10*time.Second)
+	run(t, phone, chromedp.Click(`.room-grid li:nth-child(2) form.room-pick button`, chromedp.ByQuery))
+	until(t, phone, "the round's limit is told", `/most there can be/.test(document.getElementById('room-msg').textContent)`, 10*time.Second)
+	run(t, phone, chromedp.Click(`form.room-done button`, chromedp.ByQuery))
+	until(t, phone, "round two is sent", `/your choice has been sent/i.test(document.body.textContent)`, 15*time.Second)
+	if c, b := postBody(t, port, "/rooms/release", owner, url.Values{"room": {roomID}, "days": {"7"}}); c != 204 {
+		t.Fatalf("release: %d %s", c, b)
+	}
+	zreq, _ := http.NewRequest("GET", "http://localhost:"+port+"/room/"+token+"/zip", nil)
+	zreq.Header.Set("Cookie", strings.TrimSuffix(cookieHeader, "; "))
+	zres, err := http.DefaultClient.Do(zreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zdata, _ := io.ReadAll(zres.Body)
+	zres.Body.Close()
+	if entries := zipEntries(t, zdata); len(entries) != 1 {
+		t.Errorf("what is delivered is the last round's one photo: %v", entries)
+	}
+	if c, b := postBody(t, port, "/rooms/round", owner, url.Values{"room": {roomID}, "limit": {"1"}}); c == 204 {
+		t.Errorf("no new round while released: %s", b)
+	}
+	_ = alice
+	_ = photos
+}
+
+func mustParseURL(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

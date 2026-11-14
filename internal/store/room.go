@@ -53,10 +53,20 @@ type Room struct {
 	ReleasedAt   time.Time // when they were released (zero: not yet)
 	ReleaseUntil time.Time // until when they can be downloaded (zero: as long as the room works)
 	Downloads    int       // how many ZIPs of originals clients started
+	MultiRound   bool      // the photographer starts each next round: it shows only what was chosen before
+	Round        int       // the round the room is in (1 for the first)
 	NotesMode    string    // notes on photos: "none", "note" (to the photographer) or "replies" (the photographer may answer)
 	EndsAt       time.Time // zero: until the photographer ends it
 	State        string
 	CreatedAt    time.Time
+}
+
+// CurrentRound is the round the room is in, 1 for a room that has not started another.
+func (r Room) CurrentRound() int {
+	if r.Round < 1 {
+		return 1
+	}
+	return r.Round
 }
 
 // ClientTitle is the name the client sees.
@@ -67,13 +77,13 @@ func (r Room) ClientTitle() string {
 	return r.Name
 }
 
-const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name, auto_release, release_days, released_at, release_until, downloads, notes_mode`
+const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name, auto_release, release_days, released_at, release_until, downloads, notes_mode, multi_round, round`
 
 func (s *Store) scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	var r Room
 	var owner, album, key, ends, created, released, until string
 	var enc []byte
-	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName, &r.AutoRelease, &r.ReleaseDays, &released, &until, &r.Downloads, &r.NotesMode); err != nil {
+	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName, &r.AutoRelease, &r.ReleaseDays, &released, &until, &r.Downloads, &r.NotesMode, &r.MultiRound, &r.Round); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -111,8 +121,8 @@ func (s *Store) AddRoom(ctx context.Context, r Room) (Room, error) {
 	if err != nil {
 		return r, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName, b2i(r.AutoRelease), r.ReleaseDays, tstr(r.ReleasedAt), tstr(r.ReleaseUntil), r.Downloads, r.NotesMode)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName, b2i(r.AutoRelease), r.ReleaseDays, tstr(r.ReleasedAt), tstr(r.ReleaseUntil), r.Downloads, r.NotesMode, b2i(r.MultiRound), r.CurrentRound())
 	return r, err
 }
 
@@ -472,4 +482,28 @@ func (s *Store) SetReply(ctx context.Context, room string, round int, who, photo
 	}
 	n, _ := r.RowsAffected()
 	return n > 0, nil
+}
+
+// StartRound moves a room on to its next round, with the limit for it. It reports false when the room was no longer in the round
+// the caller saw.
+func (s *Store) StartRound(ctx context.Context, id string, from, limit int) (bool, error) {
+	r, err := s.db.ExecContext(ctx, `UPDATE rooms SET round = ?, pick_limit = ? WHERE id = ? AND round = ?`, from+1, limit, id, from)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
+}
+
+// PreviousPicks lists the photos a selection chose in a round (the set the next round shows).
+func (s *Store) PreviousPicks(ctx context.Context, room string, round int, who string) (map[string]bool, error) {
+	list, err := s.Picks(ctx, room, round, &who)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, p := range list {
+		out[p.Photo] = true
+	}
+	return out, nil
 }
