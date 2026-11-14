@@ -2,8 +2,17 @@
 // queue's (send-queue.ts); this draws it and takes the person's choices.
 
 import { n, t } from "./i18n.ts";
-import { finished, looksLikeMedia, percent, sizeText, tally, type Item } from "./send-core.ts";
-import { MemoryStore, Queue, type Env } from "./send-queue.ts";
+import { ask } from "./ask.ts";
+import { finished, heldForWifi, isLargeVideo, looksLikeMedia, onMobileData, percent, sizeText, tally, type Connection, type Item } from "./send-core.ts";
+import { MemoryStore, Queue, type Env, type Store } from "./send-queue.ts";
+import { canStore, getPref, IdbStore, setPref } from "./send-store.ts";
+
+interface NavigatorWithConnection extends Navigator {
+  connection?: Connection & EventTarget;
+}
+const connection = (): (Connection & EventTarget) | undefined => (navigator as NavigatorWithConnection).connection;
+const SEEN_LOCATION = "handoff-send-location";
+const WIFI_ONLY = "wifiOnly";
 
 const FAVOURITE = "handoff-send-service";
 
@@ -56,7 +65,7 @@ function stateText(i: Item): string {
 
 function render(list: HTMLElement, queue: Queue): void {
   list.replaceChildren();
-  for (const item of queue.items) {
+  for (const item of queue.mine) {
     if (item.state === "cancelled") continue;
     const li = document.createElement("li");
     li.className = `send-item ${item.state}`;
@@ -103,17 +112,35 @@ function render(list: HTMLElement, queue: Queue): void {
   }
 }
 
+function seen(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function markSeen(key: string): void {
+  try {
+    localStorage.setItem(key, "1");
+  } catch {
+    /* it will be asked again */
+  }
+}
+
 export function initSend(): void {
   const form = document.getElementById("send");
   const list = document.getElementById("send-list");
   const input = document.getElementById("send-files");
   const go = document.getElementById("send-go");
-  if (!(form instanceof HTMLFormElement) || !list || !(input instanceof HTMLInputElement) || !(go instanceof HTMLButtonElement)) return;
+  const wifi = document.getElementById("send-wifi");
+  if (!(form instanceof HTMLFormElement) || !list || !(input instanceof HTMLInputElement) || !(go instanceof HTMLButtonElement) || !(wifi instanceof HTMLInputElement)) return;
   const maxBytes = Number(form.dataset["fileMb"] ?? "0") * (1 << 20);
   favouriteFirst(form);
 
   const env: Env = {
     base: document.baseURI,
+    owner: form.dataset["user"] ?? "",
+    held: () => heldForWifi(wifi.checked, connection()),
     now: () => Date.now(),
     newId: () => crypto.randomUUID(),
     pause: (ms) =>
@@ -131,15 +158,45 @@ export function initSend(): void {
   summary.className = "meta send-summary";
   summary.setAttribute("role", "status");
   list.before(summary);
+  const flash = (text: string): void => {
+    const el = document.getElementById("flash");
+    if (el) el.textContent = text;
+  };
+  const clear = document.getElementById("send-clear");
+  let picked: File[] = [];
   const redraw = (): void => {
     render(list, queue);
-    const c = tally(queue.items);
-    summary.textContent = c.total === 0 ? "" : c.open > 0 ? n("{n} file left to send", "{n} files left to send", c.open) : n("{n} file sent", "{n} files sent", c.done);
+    const c = tally(queue.mine);
+    const held = env.held() && c.open > 0;
+    summary.textContent = held ? t("Waiting for Wi-Fi: this device is on mobile data") : c.total === 0 ? "" : c.open > 0 ? n("{n} file left to send", "{n} files left to send", c.open) : n("{n} file sent", "{n} files sent", c.done);
+    if (clear) clear.hidden = !queue.mine.some((i) => finished(i.state));
     go.disabled = picked.length === 0;
     go.textContent = picked.length > 0 ? n("Send {n} file", "Send {n} files", picked.length) : t("Send");
   };
-  const queue: Queue = new Queue(new MemoryStore(), env, redraw);
-  let picked: File[] = [];
+  let store: Store = new MemoryStore();
+  const queue: Queue = new Queue(
+    {
+      put: (i, f) => store.put(i, f),
+      file: (id) => store.file(id),
+      all: () => store.all(),
+      release: (id) => store.release(id),
+      remove: (id) => store.remove(id),
+    },
+    env,
+    redraw,
+  );
+
+  wifi.addEventListener("change", () => {
+    void setPref(WIFI_ONLY, wifi.checked);
+    redraw();
+    if (!env.held()) void queue.run();
+  });
+  connection()?.addEventListener("change", () => {
+    redraw();
+    if (!env.held()) void queue.run();
+  });
+  addEventListener("online", () => void queue.run());
+  clear?.addEventListener("click", () => void queue.clear());
 
   input.addEventListener("change", () => {
     const skipped: string[] = [];
@@ -148,21 +205,46 @@ export function initSend(): void {
       if (!ok) skipped.push(f.name);
       return ok;
     });
-    const flash = document.getElementById("flash");
-    if (flash) flash.textContent = skipped.length > 0 ? n("{n} file was left out: it is not a photo or video, or it is too large", "{n} files were left out: they are not photos or videos, or they are too large", skipped.length) : "";
+    flash(skipped.length > 0 ? n("{n} file was left out: it is not a photo or video, or it is too large", "{n} files were left out: they are not photos or videos, or they are too large", skipped.length) : "");
     redraw();
   });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     if (picked.length === 0) return;
+    const files = picked;
     const chosen = form.querySelector<HTMLInputElement>('input[name="service"]:checked');
     const service = chosen?.value ?? "";
-    remember(service);
-    const files = picked;
-    picked = [];
-    input.value = "";
-    void queue.add(files, service).then(() => queue.run());
+    void (async () => {
+      // photos carry the place they were taken: said once, before the first send
+      if (!seen(SEEN_LOCATION)) {
+        const yes = await ask(t("Locations go with your photos"), t("Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed."), t("Cancel"), t("Continue"));
+        if (!yes) return;
+        markSeen(SEEN_LOCATION);
+      }
+      // a large video over mobile data is asked about
+      const large = files.filter((f) => isLargeVideo(f.name, f.type, f.size)).length;
+      if (large > 0 && onMobileData(connection()) && !wifi.checked) {
+        const now = await ask(t("A large video on mobile data"), n("{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "{n} large videos are about to go over mobile data. Send them now, or wait until this device is on Wi-Fi?", large), t("Wait for Wi-Fi"), t("Send now"));
+        if (!now) {
+          wifi.checked = true;
+          void setPref(WIFI_ONLY, true);
+        }
+      }
+      remember(service);
+      picked = [];
+      input.value = "";
+      const refused = await queue.add(files, service);
+      flash(refused.length > 0 ? n("{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} files could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", refused.length) : "");
+      void queue.run();
+    })();
   });
-  void queue.load().then(() => queue.run());
+
+  void (async () => {
+    wifi.checked = await getPref<boolean>(WIFI_ONLY, false);
+    if (await canStore()) store = new IdbStore();
+    else flash(t("This browser cannot keep files waiting while the page is closed; keep this page open until they are sent."));
+    await queue.load();
+    void queue.run();
+  })();
   redraw();
 }

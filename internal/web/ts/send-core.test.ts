@@ -53,9 +53,25 @@ test("progress is a whole number between 0 and 100", () => {
 });
 
 test("the queue takes what waits, or waits for the network, in order, and tells how many are left", () => {
-  const mk = (state: string) => ({ ...newItem("x", "a.jpg", 10, 0, "", 0), state }) as ReturnType<typeof newItem>;
+  const mk = (state: string) => ({ ...newItem("x", "a.jpg", 10, 0, "", "me", 0), state }) as ReturnType<typeof newItem>;
   assert.equal(nextToSend([mk("done"), mk("failed"), mk("offline"), mk("waiting")]), 2);
   assert.equal(nextToSend([mk("sending"), mk("signin"), mk("cancelled")]), -1);
   assert.deepEqual(tally([mk("done"), mk("failed"), mk("waiting"), mk("sending"), mk("cancelled")]), { done: 1, failed: 1, open: 2, total: 4 });
   assert.ok(finished("done") && finished("failed") && finished("cancelled") && !finished("offline"));
+});
+
+test("the Wi-Fi switch holds files only when the browser says mobile data", async () => {
+  const { heldForWifi, onMobileData, isLargeVideo, LARGE_VIDEO } = await import("./send-core.ts");
+  assert.ok(onMobileData({ type: "cellular" }));
+  assert.ok(!onMobileData({ type: "wifi" }));
+  assert.ok(!onMobileData({}), "a browser that does not say is not believed to be on mobile data");
+  assert.ok(!onMobileData(undefined));
+  assert.ok(heldForWifi(true, { type: "cellular" }));
+  assert.ok(!heldForWifi(false, { type: "cellular" }));
+  assert.ok(!heldForWifi(true, { type: "wifi" }));
+  assert.ok(!heldForWifi(true, undefined));
+  assert.ok(isLargeVideo("a.mov", "", LARGE_VIDEO));
+  assert.ok(isLargeVideo("a.bin", "video/mp4", LARGE_VIDEO + 1));
+  assert.ok(!isLargeVideo("a.mov", "", LARGE_VIDEO - 1));
+  assert.ok(!isLargeVideo("a.jpg", "image/jpeg", 500 << 20), "only videos are asked about");
 });

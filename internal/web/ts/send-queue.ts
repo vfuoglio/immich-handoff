@@ -3,7 +3,7 @@
 // file stands. The page shows it; the service worker can run it with the screen off (sw.ts).
 
 import { backoff, finished, newItem, nextToSend, type Item } from "./send-core.ts";
-import { sendFile } from "./send-run.ts";
+import { sendFile as realSend } from "./send-run.ts";
 
 export interface Store {
   put(item: Item, file?: Blob): Promise<void>;
@@ -39,10 +39,16 @@ export class MemoryStore implements Store {
 
 export interface Env {
   base: string;
+  /** Whose files these are: the Immich user on this page (empty for the worker, which sends any and lets the server check). */
+  owner: string;
+  /** Whether nothing may be sent right now (the Wi-Fi only switch, on mobile data). */
+  held(): boolean;
   now(): number;
   /** Resolves after ms, or at once when the network comes back. */
   pause(ms: number): Promise<void>;
   newId(): string;
+  /** How a file is sent (the network; tests give their own). */
+  send?: typeof realSend;
 }
 
 export class Queue {
@@ -50,26 +56,42 @@ export class Queue {
   private running = false;
   private abort = new Set<string>();
 
-  constructor(
-    private store: Store,
-    private env: Env,
-    private changed: () => void,
-  ) {}
+  private store: Store;
+  private env: Env;
+  private changed: () => void;
 
-  /** Reads what the store holds (a file that was being sent when the page closed goes on again). */
+  constructor(store: Store, env: Env, changed: () => void) {
+    this.store = store;
+    this.env = env;
+    this.changed = changed;
+  }
+
+  /** What this person's page shows: their own files. (Another person's, left in this browser, are neither shown nor sent.) */
+  get mine(): Item[] {
+    return this.items.filter((i) => this.env.owner === "" || i.owner === this.env.owner);
+  }
+
+  /** Reads what the store holds. A file that was being sent when the page closed, or that waited for a sign-in, goes on again. */
   async load(): Promise<void> {
     this.items = (await this.store.all()).sort((a, b) => a.added - b.added);
-    for (const i of this.items) if (i.state === "sending") i.state = "offline";
+    for (const i of this.items) if (i.state === "sending" || i.state === "signin") i.state = "offline";
     this.changed();
   }
 
-  async add(files: File[], service: string): Promise<void> {
+  /** Puts files in the line. Those the browser has no room for are returned (by name), the rest are kept. */
+  async add(files: File[], service: string): Promise<string[]> {
+    const refused: string[] = [];
     for (const f of files) {
-      const item = newItem(this.env.newId(), f.name, f.size, f.lastModified, service, this.env.now());
-      this.items.push(item);
-      await this.store.put(item, f);
+      const item = newItem(this.env.newId(), f.name, f.size, f.lastModified, service, this.env.owner, this.env.now());
+      try {
+        await this.store.put(item, f);
+        this.items.push(item);
+      } catch {
+        refused.push(f.name);
+      }
     }
     this.changed();
+    return refused;
   }
 
   private async save(item: Item): Promise<void> {
@@ -78,7 +100,7 @@ export class Queue {
   }
 
   async cancel(id: string): Promise<void> {
-    const item = this.items.find((i) => i.id === id);
+    const item = this.mine.find((i) => i.id === id);
     if (!item || finished(item.state)) return;
     this.abort.add(id);
     item.state = "cancelled";
@@ -89,7 +111,7 @@ export class Queue {
 
   /** Puts a file that failed or waited for a sign-in back in the line. */
   async retry(id: string): Promise<void> {
-    const item = this.items.find((i) => i.id === id);
+    const item = this.mine.find((i) => i.id === id);
     if (!item || (item.state !== "failed" && item.state !== "signin" && item.state !== "offline")) return;
     if (item.state === "failed") {
       item.serverId = "";
@@ -103,8 +125,9 @@ export class Queue {
 
   /** Removes what is finished from the list and from the store. */
   async clear(): Promise<void> {
-    for (const i of this.items.filter((x) => finished(x.state))) await this.store.remove(i.id);
-    this.items = this.items.filter((i) => !finished(i.state));
+    const gone = this.mine.filter((x) => finished(x.state));
+    for (const i of gone) await this.store.remove(i.id);
+    this.items = this.items.filter((i) => !gone.includes(i));
     this.changed();
   }
 
@@ -114,7 +137,8 @@ export class Queue {
     this.running = true;
     try {
       for (;;) {
-        const at = nextToSend(this.items);
+        if (this.env.held()) return;
+        const at = nextToSend(this.items, this.env.owner);
         if (at < 0) return;
         const item = this.items[at]!;
         const file = await this.store.file(item.id);
@@ -126,7 +150,7 @@ export class Queue {
         }
         item.state = "sending";
         await this.save(item);
-        const out = await sendFile(this.env.base, file, item, {
+        const out = await (this.env.send ?? realSend)(this.env.base, file, item, {
           progress: (sent, serverId) => {
             item.sent = sent;
             item.serverId = serverId;
@@ -162,7 +186,6 @@ export class Queue {
             break;
         }
         await this.save(item);
-        if (item.state === "signin") return; // nothing else will go either
         if (item.state === "offline") await this.env.pause(backoff(item.tries));
       }
     } finally {

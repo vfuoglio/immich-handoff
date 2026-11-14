@@ -265,3 +265,20 @@ func TestTheSendPageListsWhereAPersonSendsAndAnyoneSignedInMayOpenIt(t *testing.
 		t.Errorf("the tab bar leads to it: %d", c)
 	}
 }
+
+func TestAFileChosenByAnotherPersonIsNotSentAsThisOne(t *testing.T) {
+	app, _, _ := newPhone(t)
+	start := func(owner string) int {
+		c, _ := phoneCall(t, "POST", app.URL+"/send/start", "sess=alice", []byte(`{"name":"a.jpg","size":100,"owner":"`+owner+`"}`), phoneHdr)
+		return c
+	}
+	if c := start(otherID); c != 403 {
+		t.Errorf("someone else's file: %d", c)
+	}
+	if c := start(aliceID); c != 201 {
+		t.Errorf("one's own: %d", c)
+	}
+	if c := start(""); c != 201 {
+		t.Errorf("no owner named (an older page): %d", c)
+	}
+}

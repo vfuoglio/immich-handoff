@@ -13,6 +13,8 @@ export interface Job {
   service: string;
   /** The server's upload, once it has been started. */
   serverId: string;
+  /** The Immich user who chose the file; the server refuses it for anyone else. */
+  owner: string;
 }
 
 export type Outcome =
@@ -64,7 +66,7 @@ export async function sendFile(base: string, file: Blob, job: Job, hooks: Hooks,
     const r = await ask(new URL("send/start", base).href, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: job.name, size: job.size, service: job.service, taken: job.taken }),
+      body: JSON.stringify({ name: job.name, size: job.size, service: job.service, taken: job.taken, owner: job.owner }),
     });
     if (!r) return { kind: "offline", serverId: "", sent: 0 };
     const v = verdict(r.status, r.body);

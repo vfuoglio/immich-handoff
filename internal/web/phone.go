@@ -91,9 +91,14 @@ func (w *Server) phoneStart(rw http.ResponseWriter, r *http.Request) {
 		Size    int64  `json:"size"`
 		Service string `json:"service"`
 		Taken   int64  `json:"taken"` // when the photo was taken, in milliseconds since 1970
+		Owner   string `json:"owner"` // who chose the file, if the phone says: a file waiting in a browser is only ever sent as that person
 	}
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		http.Error(rw, "bad request", http.StatusBadRequest)
+		return
+	}
+	if in.Owner != "" && in.Owner != me.user.ID.String() {
+		http.Error(rw, t(r.Context(), "These files were chosen by someone else; sign in as that person to send them."), http.StatusForbidden)
 		return
 	}
 	if _, err := w.phoneService(me, in.Service); err != nil {
@@ -223,7 +228,7 @@ func (w *Server) sendPage(rw http.ResponseWriter, r *http.Request) {
 			t(r.Context(), "This page uses your Immich login. Sign in to Immich in this browser, then reload this page."), false).Render(r.Context(), rw)
 		return
 	}
-	d := SendPageView{User: me.user.Name, On: w.Hub != nil && w.Hub.PhoneOn()}
+	d := SendPageView{User: me.user.Name, ID: me.user.ID.String(), On: w.Hub != nil && w.Hub.PhoneOn()}
 	if d.On {
 		file, waiting, keep := w.Hub.PhoneLimits()
 		d.FileMB, d.WaitMB, d.KeepHours = int(file>>20), int(waiting>>20), int(keep/time.Hour)

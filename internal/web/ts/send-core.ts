@@ -71,6 +71,8 @@ export interface Item {
   service: string;
   /** The server's upload, once it has begun. */
   serverId: string;
+  /** Whose file it is: the Immich user who chose it. A file is only ever sent as that person. */
+  owner: string;
   sent: number;
   state: State;
   /** Why it failed, in words. */
@@ -82,9 +84,10 @@ export interface Item {
   added: number;
 }
 
-/** The next file to send: the first that is waiting for its turn or for the network. -1 when there is none. */
-export function nextToSend(items: readonly Pick<Item, "state">[]): number {
-  return items.findIndex((i) => i.state === "waiting" || i.state === "offline");
+/** The next file to send: the first that is waiting for its turn or for the network, and is the person's own (an empty
+ *  owner means anyone's, for the worker, which cannot tell who is signed in; the server checks). -1 when there is none. */
+export function nextToSend(items: readonly Pick<Item, "state" | "owner">[], owner = ""): number {
+  return items.findIndex((i) => (i.state === "waiting" || i.state === "offline") && (owner === "" || i.owner === owner));
 }
 
 /** Whether a file is finished one way or another, so it needs nothing more. */
@@ -106,6 +109,32 @@ export function tally(items: readonly Pick<Item, "state">[]): { done: number; fa
 }
 
 /** A fresh item for a file. */
-export function newItem(id: string, name: string, size: number, taken: number, service: string, now: number): Item {
-  return { id, name, size, taken, service, serverId: "", sent: 0, state: "waiting", text: "", tries: 0, photo: "", duplicate: false, added: now };
+export function newItem(id: string, name: string, size: number, taken: number, service: string, owner: string, now: number): Item {
+  return { id, name, size, taken, service, serverId: "", owner, sent: 0, state: "waiting", text: "", tries: 0, photo: "", duplicate: false, added: now };
+}
+
+/** What the browser says about the connection (the Network Information API; Chrome on Android has it, Safari does not). */
+export interface Connection {
+  type?: string;
+  effectiveType?: string;
+  saveData?: boolean;
+}
+
+/** Whether the phone is on mobile data, as far as the browser can tell: only a browser that says "cellular" is believed. */
+export function onMobileData(c: Connection | undefined): boolean {
+  return c?.type === "cellular";
+}
+
+/** Whether the "Wi-Fi only" switch holds files back now. It is a hint: a browser that does not say what the connection is
+ *  never holds anything back. */
+export function heldForWifi(wifiOnly: boolean, c: Connection | undefined): boolean {
+  return wifiOnly && onMobileData(c);
+}
+
+/** About 100 MB: the size from which a video is asked about on mobile data. */
+export const LARGE_VIDEO = 100 << 20;
+
+export function isLargeVideo(name: string, type: string, size: number): boolean {
+  const video = type.startsWith("video/") || /\.(mp4|m4v|mov|3gp|webm|mkv)$/i.test(name);
+  return video && size >= LARGE_VIDEO;
 }

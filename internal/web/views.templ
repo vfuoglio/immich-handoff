@@ -3014,7 +3014,7 @@ func bridgeStateLabel(state string) string {
 
 // SendPageView is the page for sending photos from this device.
 type SendPageView struct {
-	User      string
+	User, ID  string
 	On        bool // the server has a data folder to keep the pieces in
 	Targets   []SendTarget
 	FileMB    int
@@ -3039,7 +3039,7 @@ templ SendPage(d SendPageView) {
 				<p class="meta">{ t(ctx, "Sending photos from a phone needs the app's data folder, which this install does not have. Ask whoever runs it.") }</p>
 			</section>
 		} else {
-			<form class="card send-form" id="send" data-file-mb={ fmt.Sprint(d.FileMB) } data-wait-mb={ fmt.Sprint(d.WaitMB) } data-keep-hours={ fmt.Sprint(d.KeepHours) }>
+			<form class="card send-form" id="send" data-file-mb={ fmt.Sprint(d.FileMB) } data-wait-mb={ fmt.Sprint(d.WaitMB) } data-keep-hours={ fmt.Sprint(d.KeepHours) } data-user={ d.ID }>
 				<div class="dz">
 					<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
 					<label class="dz-title" for="send-files">{ t(ctx, "Choose photos and videos") }</label>
@@ -3063,8 +3063,14 @@ templ SendPage(d SendPageView) {
 						<span><b>{ t(ctx, "My library only") }</b><small class="meta">{ t(ctx, "Keep them in your Immich; hand nothing over.") }</small></span>
 					</label>
 				</fieldset>
+				<label class="target wifi">
+					<input type="checkbox" id="send-wifi"/>
+					<span><b>{ t(ctx, "Only on Wi-Fi") }</b><small class="meta">{ t(ctx, "Files wait until the device is off mobile data. This goes by what the browser says: some browsers do not tell, and then everything is sent.") }</small></span>
+				</label>
 				<p class="row form-actions"><button class="primary" type="submit" id="send-go" disabled>{ t(ctx, "Send") }</button></p>
 				<ul class="plain send-list" id="send-list" aria-live="polite"></ul>
+				<p class="row"><button type="button" class="link" id="send-clear" hidden>{ t(ctx, "Clear the finished ones") }</button></p>
+				<p class="meta">{ t(ctx, "A file you chose waits in this browser until it is sent, also after the page is closed or the phone is switched off, and goes on by itself where it stopped. It is only ever sent as the person who chose it: after someone else signs in here, your files wait for you.") }</p>
 				<p class="meta">{ t(ctx, "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.", "mb", fmt.Sprint(d.FileMB)) }</p>
 			</form>
 		}
