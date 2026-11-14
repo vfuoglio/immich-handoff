@@ -592,6 +592,37 @@ var migrations = []string{
 	   expires_at TEXT NOT NULL,
 	   used_by    TEXT NOT NULL DEFAULT ''
 	 );`,
+	// A shared album: an album of this person's that is kept the same as an album of the person on the other server (a peer).
+	// It starts as a proposal (from either side), becomes active when the other accepts. The app's key for this person's Immich is
+	// sealed like every key. history is what this side agreed to share when joining ("all" what is in the album, or "new" only
+	// what is added from now on), deletion is the rule both agreed ("nothing" travels, or "follow": removal from the album). The
+	// ledger remembers, by checksum, what is in the album and where it came from, so nothing is sent twice or sent back.
+	`CREATE TABLE shared_albums (
+	   id          TEXT PRIMARY KEY,
+	   owner_id    TEXT NOT NULL,
+	   peer_id     TEXT NOT NULL,
+	   their_id    TEXT NOT NULL DEFAULT '',
+	   name        TEXT NOT NULL,
+	   album_id    TEXT NOT NULL DEFAULT '',
+	   album_name  TEXT NOT NULL DEFAULT '',
+	   key_id      TEXT NOT NULL DEFAULT '',
+	   key_enc     BLOB,
+	   state       TEXT NOT NULL,
+	   proposer    INTEGER NOT NULL DEFAULT 0,
+	   history     TEXT NOT NULL DEFAULT 'new',
+	   their_history TEXT NOT NULL DEFAULT 'new',
+	   deletion    TEXT NOT NULL DEFAULT 'nothing',
+	   created_at  TEXT NOT NULL
+	 );
+	 CREATE TABLE shared_ledger (
+	   album_id TEXT NOT NULL,
+	   checksum TEXT NOT NULL,
+	   asset_id TEXT NOT NULL DEFAULT '',
+	   origin   TEXT NOT NULL,
+	   sent     INTEGER NOT NULL DEFAULT 0,
+	   at       TEXT NOT NULL,
+	   PRIMARY KEY (album_id, checksum)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -3703,6 +3703,26 @@ templ PeerRow(p PeerView, id string, open bool) {
 			if p.TheyPause {
 				<p class="meta">{ t(ctx, "{name} has paused sharing.", "name", p.Name) }</p>
 			}
+			for i, a := range p.Shared {
+				@SharedRow(a, fmt.Sprintf("%s-%d", id, i))
+			}
+			if p.State == "active" && !p.IPaused {
+				<details class="offer">
+					<summary>{ t(ctx, "Share an album with {name}", "name", p.Name) }</summary>
+					<form class="card offer-form" hx-post="peers/share" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="peer" value={ p.ID }/>
+						<div class="field">
+							<label for={ "sh-name-" + id }>{ t(ctx, "What the shared album is called") }</label>
+							<input id={ "sh-name-" + id } name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
+						</div>
+						<div class="field" hx-get="fragments/share-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+							<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+						</div>
+						@ShareChoices(id, true)
+						<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Propose it") }</button></p>
+					</form>
+				</details>
+			}
 			<p class="row">
 				if p.State != "left" {
 					<button hx-post="peers/pause" hx-vals={ vals2("peer", p.ID, "paused", pausedValue(p.IPaused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
@@ -3744,4 +3764,80 @@ templ PeerInviteGone() {
 			<p class="lead">{ t(ctx, "It has expired or was already used. Ask for a new one.") }</p>
 		</section>
 	}
+}
+
+// ShareAlbumSelect is the list of albums in the forms that propose or accept a shared album, with a new album first.
+templ ShareAlbumSelect(albums []AlbumOption, key string) {
+	<label for={ "sh-album-" + key }>{ t(ctx, "Which of your albums") }</label>
+	<select id={ "sh-album-" + key } name="album">
+		<option value="new" selected>{ t(ctx, "A new album, named like the shared album") }</option>
+		for _, a := range albums {
+			<option value={ a.ID }>{ a.Label }</option>
+		}
+	</select>
+}
+
+// ShareChoices are the choices that go with sharing an album: what to share at the start, and (when proposing) what removing does.
+templ ShareChoices(id string, proposing bool) {
+	<fieldset class="targets">
+		<legend>{ t(ctx, "What do you share at the start?") }</legend>
+		<label class="target"><input type="radio" name="history" value="new" checked/><span><b>{ t(ctx, "Only what I add from now on") }</b><small class="meta">{ t(ctx, "Photos already in the album stay yours alone.") }</small></span></label>
+		<label class="target"><input type="radio" name="history" value="all"/><span><b>{ t(ctx, "Everything in the album now, and what I add") }</b><small class="meta">{ t(ctx, "Every photo that is in the album is copied to the other person's library, as they arrive in theirs.") }</small></span></label>
+	</fieldset>
+	if proposing {
+		<fieldset class="targets">
+			<legend>{ t(ctx, "When someone takes a photo out of the album") }</legend>
+			<label class="target"><input type="radio" name="deletion" value="nothing" checked/><span><b>{ t(ctx, "Nothing happens on the other side") }</b><small class="meta">{ t(ctx, "Each of you keeps what you have. Deleting a photo never travels.") }</small></span></label>
+			<label class="target"><input type="radio" name="deletion" value="follow"/><span><b>{ t(ctx, "It is taken out of the other album too") }</b><small class="meta">{ t(ctx, "The photo itself stays in their library; only the album changes.") }</small></span></label>
+		</fieldset>
+	}
+	<p class="meta">{ t(ctx, "Photos leave your library only into the other person's library, only from this album, and only through the other person's own Handoff. You can end the sharing at any time; photos already copied stay where they are.") }</p>
+}
+
+// SharedRow is one shared album with a connection: what it is, in what state, and what can be done.
+templ SharedRow(a SharedView, id string) {
+	<div class="card shared">
+		<p><b>{ a.Name }</b>
+			switch a.State {
+				case "active":
+					<span class="chip ok">{ t(ctx, "Agreed") }</span>
+				case "proposed":
+					<span class="chip warn">{ t(ctx, "Waiting for {name}", "name", a.Peer) }</span>
+				case "invited":
+					<span class="chip warn">{ t(ctx, "Waiting for your answer") }</span>
+				case "left":
+					<span class="chip bad">{ t(ctx, "Ended by {name}", "name", a.Peer) }</span>
+				case "declined":
+					<span class="chip bad">{ t(ctx, "Declined") }</span>
+			}
+		</p>
+		switch a.State {
+			case "invited":
+				<p class="meta">{ t(ctx, "{name} proposes to share this album with you. {name} shares: {what}.", "name", a.Peer, "what", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				<form class="offer-form" hx-post="shared/accept" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<input type="hidden" name="shared" value={ a.ID }/>
+					<div class="field" hx-get={ "fragments/share-albums?for=" + id } hx-trigger="load" hx-swap="innerHTML">
+						<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+					</div>
+					@ShareChoices(id, false)
+					<p class="row form-actions">
+						<button class="primary" type="submit">{ t(ctx, "Accept and share") }</button>
+						<button type="button" hx-post="shared/decline" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Decline") }</button>
+					</p>
+				</form>
+			case "active":
+				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}. {name} shares: {theirs}.", "album", a.Album, "mine", historyText(ctx, a.History), "name", a.Peer, "theirs", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+			case "proposed":
+				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}.", "album", a.Album, "mine", historyText(ctx, a.History)) } { deletionText(ctx, a.Deletion) }</p>
+		}
+		if a.State != "invited" {
+			<p class="row"><button hx-post="shared/leave" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The sharing of this album ends and the other app is told. Photos already in either library stay where they are. Continue?") } data-confirm-title={ t(ctx, "End the sharing?") } data-confirm-label={ t(ctx, "End sharing") } data-danger="true">
+				if a.State == "left" || a.State == "declined" {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End sharing of this album") }
+				}
+			</button></p>
+		}
+	</div>
 }

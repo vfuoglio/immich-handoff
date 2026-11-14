@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
@@ -129,6 +131,7 @@ func (w *Server) peerInvitePage(rw http.ResponseWriter, r *http.Request) {
 type PeerView struct {
 	ID, Name, Host     string
 	Role, State        string
+	Shared             []SharedView
 	IPaused, TheyPause bool
 	Seen, Problem      string
 }
@@ -149,9 +152,22 @@ func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
 		if !p.SeenAt.IsZero() {
 			v.Seen = l.Stamp(p.SeenAt.Local())
 		}
+		if shared, err := w.Hub.Store.SharedAlbumsWith(ctx, p.ID); err == nil {
+			for _, a := range shared {
+				v.Shared = append(v.Shared, SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name})
+			}
+		}
 		out = append(out, v)
 	}
 	return out
+}
+
+// SharedView is one shared album on the Services tab.
+type SharedView struct {
+	ID, Name, Album, State, Peer string
+	Proposer                     bool
+	History, TheirHistory        string
+	Deletion                     string
 }
 
 func (w *Server) newPeerInvite(rw http.ResponseWriter, r *http.Request) {
@@ -216,6 +232,104 @@ func (w *Server) pausePeer(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) removePeer(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "connection removed", func(ctx context.Context, me *member, _ string) error {
-		return w.Hub.RemovePeer(ctx, me.user, r.PostFormValue("peer"))
+		return w.Hub.RemovePeer(ctx, me.sess, me.user, r.PostFormValue("peer"))
+	})
+}
+
+// --- signed messages about a shared album ---
+
+func (w *Server) peerAlbumPropose(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+	var m hub.ProposeMsg
+	if json.Unmarshal(body, &m) != nil {
+		peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if err := w.Hub.PeerPropose(r.Context(), p, m); err != nil {
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *Server) peerAlbumAccept(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+	var m hub.AcceptMsg
+	if json.Unmarshal(body, &m) != nil {
+		peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if err := w.Hub.PeerAccepted(r.Context(), p, m); err != nil {
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *Server) peerAlbumAnswer(f func(*hub.Hub, context.Context, store.Peer, hub.AnswerMsg) error) func(http.ResponseWriter, *http.Request, store.Peer, []byte) {
+	return func(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+		var m hub.AnswerMsg
+		if json.Unmarshal(body, &m) != nil {
+			peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+			return
+		}
+		if err := f(w.Hub, r.Context(), p, m); err != nil {
+			w.peerFail(rw, err)
+			return
+		}
+		peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+	}
+}
+
+// --- the person's side ---
+
+// shareAlbums lists the person's own albums for the forms that propose or accept a shared album, with "a new album" first.
+func (w *Server) shareAlbums(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	albums, err := me.sess.OwnedAlbums(r.Context())
+	if err != nil {
+		http.Error(rw, "could not list your albums: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	opts := make([]AlbumOption, 0, len(albums))
+	for _, a := range albums {
+		opts = append(opts, AlbumOption{ID: a.ID.String(), Label: albumLabel(r.Context(), a.Name, a.Count)})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	ShareAlbumSelect(opts, r.URL.Query().Get("for")).Render(r.Context(), rw)
+}
+
+func shareParams(r *http.Request) hub.ShareParams {
+	p := hub.ShareParams{PeerID: r.PostFormValue("peer"), Name: r.PostFormValue("name"), History: r.PostFormValue("history"), Deletion: r.PostFormValue("deletion")}
+	if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
+		p.AlbumID = id
+	}
+	return p
+}
+
+func (w *Server) proposeAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album proposed", func(ctx context.Context, me *member, _ string) error {
+		_, err := w.Hub.ProposeAlbum(ctx, me.sess, me.user, shareParams(r))
+		return err
+	})
+}
+
+func (w *Server) acceptAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album accepted", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.AcceptAlbum(ctx, me.sess, me.user, r.PostFormValue("shared"), shareParams(r))
+	})
+}
+
+func (w *Server) declineAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album declined", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.DeclineAlbum(ctx, me.user, r.PostFormValue("shared"))
+	})
+}
+
+func (w *Server) leaveAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album sharing ended", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.LeaveSharedAlbum(ctx, me.sess, me.user, r.PostFormValue("shared"))
 	})
 }

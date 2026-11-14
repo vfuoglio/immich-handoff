@@ -340,6 +340,7 @@ func (h *Hub) PeerHello(ctx context.Context, p store.Peer, req HelloRequest) Hel
 // it, so they can see what happened.
 func (h *Hub) PeerLeft(ctx context.Context, p store.Peer) {
 	h.Store.SetPeerState(ctx, p.ID, store.PeerLeft)
+	h.Store.SetSharedStateWith(ctx, p.ID, store.ShareLeft)
 	h.event(ctx, "", p.OwnerID, "peer", i18n.Pack("{name} ended the connection between your servers", "name", p.Name))
 }
 
@@ -376,7 +377,7 @@ func (h *Hub) SetPeerPaused(ctx context.Context, owner immich.User, id string, p
 }
 
 // RemovePeer ends a connection: the other app is told (if it can be reached) and the record, with its secret, is forgotten.
-func (h *Hub) RemovePeer(ctx context.Context, owner immich.User, id string) error {
+func (h *Hub) RemovePeer(ctx context.Context, sess *immich.API, owner immich.User, id string) error {
 	p, err := h.peerOf(ctx, owner.ID, id)
 	if err != nil {
 		return err
@@ -385,6 +386,16 @@ func (h *Hub) RemovePeer(ctx context.Context, owner immich.User, id string) erro
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		peer.Call(cctx, h.peerClient(), p.Address, p.TheirID, p.Secret, "POST", "/peer/v1/leave", struct{}{}, nil) //nolint:errcheck
 		cancel()
+	}
+	if shared, err := h.Store.SharedAlbumsWith(ctx, p.ID); err == nil {
+		for _, a := range shared {
+			if a.KeyID != uuid.Nil && sess != nil {
+				if err := sess.DeleteAPIKey(ctx, a.KeyID); err != nil {
+					h.Log.Warn("ending a connection: could not delete a shared album's key (it may already be gone)", "err", err)
+				}
+			}
+		}
+		h.Store.DeleteSharedWith(ctx, p.ID)
 	}
 	if err := h.Store.DeletePeer(ctx, p.ID); err != nil {
 		return err

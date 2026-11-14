@@ -21,6 +21,11 @@ var RoomPermissions = perms("asset.view", "asset.read")
 // is sent.
 var RoomPermissionsAuto = perms("asset.view", "asset.read", "asset.download")
 
+// SharedAlbumPermissions is what an app's key is given for an album it shares with someone on another server: reading the
+// album and the originals in it, putting photos in it (and making it), and taking photos out of it. Nothing that deletes a photo,
+// nothing that shares or changes anything else. Immich cannot limit a key to one album, so the app does.
+var SharedAlbumPermissions = perms("user.read", "asset.read", "asset.download", "asset.upload", "album.read", "album.create", "albumAsset.create", "albumAsset.delete")
+
 // DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
 // filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
 // own session.

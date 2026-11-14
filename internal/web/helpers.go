@@ -916,3 +916,17 @@ func peerChips(ctx context.Context, p PeerView) []Chip {
 	}
 	return []Chip{{Text: t(ctx, "Connected"), Tone: "ok"}}
 }
+
+func historyText(ctx context.Context, h string) string {
+	if h == "all" {
+		return t(ctx, "everything in the album now, and what is added")
+	}
+	return t(ctx, "only what is added from now on")
+}
+
+func deletionText(ctx context.Context, d string) string {
+	if d == "follow" {
+		return t(ctx, "Taking a photo out of the album takes it out of the other album too (the photo stays in the library).")
+	}
+	return t(ctx, "Taking a photo out of the album changes nothing on the other side.")
+}

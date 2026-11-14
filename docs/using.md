@@ -491,8 +491,6 @@ On the Services tab, **Make a client room** asks for a name (yours), a title for
 
 For people whose Immich is on **another server** than yours (a relative who runs their own, say), Handoff can keep an album the same in both libraries: what either of you adds appears at the other, as a real copy in each library. Each person runs a Handoff next to their own Immich and the two apps talk to each other; **each app only ever touches its own Immich**, and no Immich key goes to the other server. The administrator switches it on with `SHARED_ALBUMS_ENABLE` (see [Settings](settings.md)); it also needs `PUBLIC_APP_URL`, and the two apps must be able to reach each other over https.
 
-*(This section grows as the parts arrive: the connection comes first, then the shared album itself.)*
-
 ### Connecting with someone
 
 1. **Invite someone** (Services tab, *Albums shared with other servers*) makes an **invitation link**, with a QR code. Give it to the other person; it works once, for a week.
@@ -500,6 +498,19 @@ For people whose Immich is on **another server** than yours (a relative who runs
 3. Opening the link in a browser only explains what it is for and joins nothing.
 
 From then on each app shows the connection with its state (**Connected**, **Paused**, **Not reachable**, **Ended**). Either person can **Pause sharing** (the other app shows it) or **End connection**, which tells the other app; photos already in either library stay where they are. A connection is not made unless the inviter's app can call the other app back, so an app that cannot be reached from the internet cannot join.
+
+### Agreeing on an album
+
+On a connection, **Share an album with {name}** proposes one: you give it a name (what it is called between the two of you), choose **which of your albums** (one you have, or a new one) and choose two things:
+
+- **What do you share at the start?** *Only what I add from now on* (the photos already in the album stay yours alone) or *everything in the album now, and what I add*. Each side makes this choice for itself when it joins.
+- **When someone takes a photo out of the album:** *nothing happens on the other side* (the default; each of you keeps what you have) or *it is taken out of the other album too* (the photo itself stays in the library). Deleting a photo never travels. This one is the proposer's to set and the other person agrees to it by accepting.
+
+The other person sees the proposal on their own page, with what you share and what removing does, chooses their own album (or a new one) and what they share, and **Accepts** or **Declines**. Either side can **End sharing of this album** at any time (the other app is told; photos already copied stay), and ending the connection ends all its albums.
+
+For each shared album the app makes a **key in your own Immich** (named "handoff: shared album ..."), through your own sign-in, which can read the album and the originals in it, put photos in it, make it and take photos out of it, and nothing that deletes a photo or shares anything (`user.read`, `asset.read`, `asset.download`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`). Immich cannot limit a key to one album, so the app does; the key is deleted when you end the sharing. What you choose to share at the start is remembered by the app (as a list of what the album held), so "only what I add from now on" really sends nothing that was there.
+
+*(The photos themselves move in the next release; until then an agreed album only waits.)*
 
 ## Frames: an album on a screen
 
