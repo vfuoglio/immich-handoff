@@ -61,6 +61,7 @@ type Server struct {
 	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
 
 	limiter  limiter
+	waker    phoneWaker // the hand-over pass that follows photos sent from a phone
 	gate     downloadGate
 	testGate downloadGate // one test of the notification destinations at a time, and not too often
 }
@@ -102,6 +103,11 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
+	mux.HandleFunc("POST /send/start", w.phoneStart)
+	mux.HandleFunc("GET /send/{id}", w.phoneStatus)
+	mux.HandleFunc("PUT /send/{id}/chunk", w.phoneChunk)
+	mux.HandleFunc("POST /send/{id}/done", w.phoneDone)
+	mux.HandleFunc("POST /send/{id}/cancel", w.phoneCancel)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
 	mux.HandleFunc("POST /services/bridge/remove", w.removeBridge)

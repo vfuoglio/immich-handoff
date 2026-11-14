@@ -19,6 +19,9 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `WEBHOOK_HEADER` | `X-Webhook-Secret` | The name of the header in which Immich's workflow sends `WEBHOOK_SECRET`. Change it only if a proxy in front of the app needs another name. |
 | `NOTIFY_URL` | | ntfy topic URL that receives every message the app has for you (title, priority, tag and a link). See [Notifications](operations.md#notifications). |
 | `FRAME_REFRESH` | `2m` | How often a frame ([Frames](using.md#frames-an-album-on-a-screen)) looks at its album again, from `5s` to `1h`. It is also how long the app keeps what it read, so it is how soon a photo added to or taken out of the album shows on the screen. |
+| `PHONE_UPLOAD_WAITING_MB` | `4096` | The most one person may have waiting at a time when they [send photos from a phone](using.md#send-photos-from-a-phone). It counts what each unfinished file will weigh once whole, so a person is refused when they start a file, not half way. Needs the data folder. |
+| `PHONE_UPLOAD_FILE_MB` | `2048` | The largest single file a phone may send. |
+| `PHONE_UPLOAD_KEEP_HOURS` | `48` | How long the pieces of a file that was never finished are kept before they are deleted (1 to 720). |
 | `MAIL_IN_HOST` | | A mail server (IMAP) the app reads, so a drop box can have an address that guests mail photos to. Off unless set. See [Photos by email](operations.md#photos-by-email). Needs `HANDOFF_STORE_KEY`. |
 | `MAIL_IN_PORT` | `993` (`143` for starttls) | The mail server's port. |
 | `MAIL_IN_TLS` | `tls` | `tls` (encrypted from the first byte), `starttls` (the upgrade must succeed or nothing is sent) or `none` (only for a mail server on this machine). |

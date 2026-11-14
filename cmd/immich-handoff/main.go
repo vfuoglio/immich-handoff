@@ -215,12 +215,36 @@ func run(log *slog.Logger) error {
 			go h.MailIn.Run(ctx)
 			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
 		}
+		h.PhoneDir = dir + "/phone-uploads" // pieces of photos on their way from a phone; not part of a backup
+		for _, f := range []struct {
+			name string
+			to   *int64
+			unit int64
+		}{{"PHONE_UPLOAD_WAITING_MB", &h.PhoneCap, 1 << 20}, {"PHONE_UPLOAD_FILE_MB", &h.PhoneMaxFile, 1 << 20}} {
+			if v := env(f.name, ""); v != "" {
+				n, err := strconv.ParseInt(v, 10, 64)
+				if err != nil || n < 1 || n > 1<<20 {
+					return fmt.Errorf("%s must be a number of megabytes, 1 or more", f.name)
+				}
+				*f.to = n * f.unit
+			}
+		}
+		if v := env("PHONE_UPLOAD_KEEP_HOURS", ""); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 1 || n > 24*30 {
+				return errors.New("PHONE_UPLOAD_KEEP_HOURS must be a number of hours, from 1 to 720")
+			}
+			h.PhoneKeep = time.Duration(n) * time.Hour
+		}
 		h.StageDir = dir + "/dropbox-pending" // files in a drop box that waits for approval; not part of a backup
 		go func() {                           // drop boxes: reminders, closing summaries, and files nobody decided on
 			t := time.NewTicker(10 * time.Minute)
 			defer t.Stop()
 			for {
 				h.DropMaintenance(ctx)
+				if n := h.PhoneMaintenance(); n > 0 {
+					log.Info("photos from a phone that were never finished were deleted", "files", n)
+				}
 				h.DigestMaintenance(ctx)
 				h.FrameMaintenance(ctx)
 				select {
