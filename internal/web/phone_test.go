@@ -282,3 +282,53 @@ func TestAFileChosenByAnotherPersonIsNotSentAsThisOne(t *testing.T) {
 		t.Errorf("no owner named (an older page): %d", c)
 	}
 }
+
+func TestThePhonesShareMenuCanHandPhotosToTheInstalledApp(t *testing.T) {
+	app, _, _ := newPhone(t)
+	c, b := phoneCall(t, "GET", app.URL+"/static/manifest.webmanifest", "", nil, nil)
+	var m struct {
+		Scope       string `json:"scope"`
+		ShareTarget struct {
+			Action, Method, Enctype string
+			Params                  struct {
+				Files []struct {
+					Name   string   `json:"name"`
+					Accept []string `json:"accept"`
+				} `json:"files"`
+			} `json:"params"`
+		} `json:"share_target"`
+	}
+	if c != 200 || json.Unmarshal(b, &m) != nil {
+		t.Fatalf("manifest: %d %s", c, b)
+	}
+	st := m.ShareTarget
+	if st.Method != "POST" || st.Enctype != "multipart/form-data" || len(st.Params.Files) != 1 || st.Params.Files[0].Name != "media" {
+		t.Errorf("a share target that takes photos and videos by POST: %+v", st)
+	}
+	var kinds string
+	for _, a := range st.Params.Files[0].Accept {
+		kinds += a + " "
+	}
+	if !strings.Contains(kinds, "image/*") || !strings.Contains(kinds, "video/*") {
+		t.Errorf("photos and videos: %q", kinds)
+	}
+	// the action is inside the manifest's scope, so a browser accepts it, and inside the worker's (the static folder)
+	if st.Action != "share" {
+		t.Errorf("the action is the worker's share address, next to the manifest: %q", st.Action)
+	}
+	// without the worker the share lands on the server, which sends the person to the page to choose the photos there
+	req, _ := http.NewRequest("POST", app.URL+"/static/share", strings.NewReader("x"))
+	res, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 303 || res.Header.Get("Location") != "../send?share=none" {
+		t.Errorf("the fallback: %d %q", res.StatusCode, res.Header.Get("Location"))
+	}
+	// the page says what to do about it, and has the install card (which the script shows only where the browser offers)
+	_, b = phoneCall(t, "GET", app.URL+"/send?share=none", "sess=alice", nil, nil)
+	if !strings.Contains(string(b), `id="send-install"`) || !strings.Contains(string(b), "Install Handoff") {
+		t.Errorf("the page explains and offers the install")
+	}
+}

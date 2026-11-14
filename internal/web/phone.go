@@ -242,3 +242,11 @@ func (w *Server) sendPage(rw http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin)
 	SendPage(d).Render(ctx, rw)
 }
+
+// shareFallback is where the phone's Share menu lands when the service worker did not take the share (it is not running,
+// or this is not the installed app): there is nothing to receive the files, so the person is sent to the page to choose
+// them there.
+func (w *Server) shareFallback(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Location", "../send?share=none") // relative, so it also works behind a path prefix
+	rw.WriteHeader(http.StatusSeeOther)
+}

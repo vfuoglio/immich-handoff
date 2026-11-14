@@ -3039,6 +3039,11 @@ templ SendPage(d SendPageView) {
 				<p class="meta">{ t(ctx, "Sending photos from a phone needs the app's data folder, which this install does not have. Ask whoever runs it.") }</p>
 			</section>
 		} else {
+			<section class="card notice" id="send-install" hidden>
+				<h3>{ t(ctx, "Share photos to Handoff from your gallery") }</h3>
+				<p class="meta">{ t(ctx, "Install Handoff on this phone and it appears in the Share menu of your gallery: choose photos, tap Share, then Handoff, and pick where they go.") }</p>
+				<p class="row"><button type="button" class="primary" id="send-install-go">{ t(ctx, "Install Handoff") }</button></p>
+			</section>
 			<form class="card send-form" id="send" data-file-mb={ fmt.Sprint(d.FileMB) } data-wait-mb={ fmt.Sprint(d.WaitMB) } data-keep-hours={ fmt.Sprint(d.KeepHours) } data-user={ d.ID }>
 				<div class="dz">
 					<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>

@@ -58,8 +58,9 @@ export function percent(sent: number, size: number): number {
   return size <= 0 ? 0 : Math.max(0, Math.min(100, Math.floor((sent / size) * 100)));
 }
 
-/** Where a file is in its life. "offline" and "signin" wait for the network or for a sign-in, and are tried again. */
-export type State = "waiting" | "sending" | "offline" | "signin" | "done" | "failed" | "cancelled";
+/** Where a file is in its life. "pick" is a file shared to the app from the gallery that is waiting for its person to choose
+ *  where it goes (nothing is sent until then). "offline" and "signin" wait for the network or for a sign-in, and are tried again. */
+export type State = "pick" | "waiting" | "sending" | "offline" | "signin" | "done" | "failed" | "cancelled";
 
 export interface Item {
   id: string;
@@ -137,4 +138,9 @@ export const LARGE_VIDEO = 100 << 20;
 export function isLargeVideo(name: string, type: string, size: number): boolean {
   const video = type.startsWith("video/") || /\.(mp4|m4v|mov|3gp|webm|mkv)$/i.test(name);
   return video && size >= LARGE_VIDEO;
+}
+
+/** The photos and videos in what the share sheet handed over (a form's entries), in order. */
+export function sharedMedia(entries: readonly (FormDataEntryValue | null)[]): File[] {
+  return entries.filter((v): v is File => typeof v === "object" && v !== null && "size" in v && "name" in v && looksLikeMedia((v as File).name, (v as File).type) && (v as File).size > 0);
 }

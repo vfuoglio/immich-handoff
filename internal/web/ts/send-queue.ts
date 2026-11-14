@@ -68,7 +68,7 @@ export class Queue {
 
   /** What this person's page shows: their own files. (Another person's, left in this browser, are neither shown nor sent.) */
   get mine(): Item[] {
-    return this.items.filter((i) => this.env.owner === "" || i.owner === this.env.owner);
+    return this.items.filter((i) => this.env.owner === "" || i.owner === "" || i.owner === this.env.owner);
   }
 
   /** Reads what the store holds. A file that was being sent when the page closed, or that waited for a sign-in, goes on again. */
@@ -106,6 +106,22 @@ export class Queue {
     item.state = "cancelled";
     if (item.serverId !== "") void fetch(new URL(`send/${item.serverId}/cancel`, this.env.base).href, { method: "POST", headers: { "X-Requested-With": "immich-handoff" } }).catch(() => undefined);
     await this.store.remove(id);
+    this.changed();
+  }
+
+  /** Files shared from the gallery that wait for their person to say where they go. */
+  get shared(): Item[] {
+    return this.mine.filter((i) => i.state === "pick");
+  }
+
+  /** Sends the shared files where the person chose: they become the person's own and take their turn in the line. */
+  async assign(service: string): Promise<void> {
+    for (const item of this.shared) {
+      item.service = service;
+      item.owner = this.env.owner;
+      item.state = "waiting";
+      await this.store.put(item);
+    }
     this.changed();
   }
 

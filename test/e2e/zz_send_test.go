@@ -238,6 +238,49 @@ func TestSend(t *testing.T) {
 		arrived(t, name, path)
 	})
 
+	t.Run("photos shared from the gallery are kept until their person says where they go, then sent", func(t *testing.T) {
+		open()
+		until(t, phone, "the worker is running", `(navigator.serviceWorker.getRegistration('static/').then(r => { window.__sw = !!(r && r.active) }), window.__sw === true)`, 30*time.Second)
+		name := fmt.Sprintf("shared-%s.jpg", stamp)
+		path := phoneFile(t, name, seed+5, 0)
+		data, _ := os.ReadFile(path)
+		// what the phone's Share menu does: a POST of the files, as a form, to the address in the manifest
+		run(t, phone, chromedp.Evaluate(fmt.Sprintf(`(() => {
+			const bytes = Uint8Array.from(atob(%q), c => c.charCodeAt(0));
+			const dt = new DataTransfer();
+			dt.items.add(new File([bytes], %q, { type: 'image/jpeg' }));
+			const form = document.createElement('form');
+			form.method = 'POST'; form.action = 'static/share'; form.enctype = 'multipart/form-data';
+			const input = document.createElement('input');
+			input.type = 'file'; input.name = 'media'; input.files = dt.files;
+			form.append(input); document.body.append(form); form.submit();
+		})()`, base64.StdEncoding.EncodeToString(data), name), nil))
+		until(t, phone, "the page opens with the shared file waiting for a choice", `location.search.includes('shared=1') && `+row(name)+`?.classList.contains('pick')`, 30*time.Second)
+		if !strings.Contains(js[string](t, phone, `document.querySelector('.send-summary').textContent`), "waiting for you to choose") {
+			t.Error("the page says the shared file waits for a choice")
+		}
+		if !js[bool](t, phone, `document.getElementById('send-go').disabled === false`) {
+			t.Error("the button is ready")
+		}
+		run(t, phone, chromedp.Evaluate(`[...document.querySelectorAll('input[name=service]')].find(r => r.value === 'phone-open').click()`, nil), chromedp.Click(`#send-go`, chromedp.ByQuery))
+		until(t, phone, "it is sent", isDone(name), 60*time.Second)
+		var id string
+		eventually(t, "it is in bob's Immich", 30*time.Second, func() bool {
+			if ids := byName(t, bob, name); len(ids) == 1 {
+				id = ids[0]
+			}
+			return id != ""
+		})
+		eventually(t, "it is tagged and handed over", 120*time.Second, func() bool {
+			x, _ := getAsset(t, bob, id)
+			tagged := false
+			for _, tg := range x.Tags {
+				tagged = tagged || tg.Name == "send-me"
+			}
+			return tagged && x.IsTrashed
+		})
+	})
+
 	t.Run("files chosen by one person are not sent as another", func(t *testing.T) {
 		start := func(owner string) int {
 			req, _ := http.NewRequest("POST", "http://localhost:"+port+"/send/start", strings.NewReader(`{"name":"x.jpg","size":10,"owner":"`+owner+`"}`))

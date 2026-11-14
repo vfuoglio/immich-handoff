@@ -1,8 +1,12 @@
-// The service worker. It exists for one thing: to show a notification when the server sends a push, and to open the page
-// when the notification is clicked. It has no fetch handler and keeps no cache, so it changes nothing about how the page
-// loads. Built into static/sw.js by `go generate ./...` (esbuild).
+// The service worker. It shows a notification when the server sends a push and opens the page when it is clicked; it receives
+// the photos and videos that the phone's Share menu hands to the installed app (a POST to static/share), keeping them in the
+// browser's database for the Send page to pick up; and (see below) it finishes the queue with the screen off. Its only fetch
+// handler is for that one address: it keeps no cache and changes nothing about how the page loads. Built into static/sw.js by
+// `go generate ./...` (esbuild).
 
 import { appRoot, readPush, targetUrl } from "./pushmsg.ts";
+import { newItem, sharedMedia } from "./send-core.ts";
+import { IdbStore } from "./send-store.ts";
 
 // The few parts of the worker's scope this file uses, so the page's type check (which has the browser's types, not the
 // worker's) can still check it.
@@ -18,6 +22,10 @@ interface ClickEventLike {
   action: string;
   notification: { close(): void; data: unknown };
   waitUntil(work: Promise<unknown>): void;
+}
+interface FetchEventLike {
+  request: Request;
+  respondWith(response: Promise<Response>): void;
 }
 interface WorkerScope {
   registration: { scope: string; showNotification(title: string, options: Record<string, unknown>): Promise<void> };
@@ -71,4 +79,30 @@ worker.addEventListener("notificationclick", ((event: ClickEventLike) => {
       return mine ? mine.focus() : worker.clients.openWindow(target);
     }),
   );
+}) as (event: never) => void);
+
+/** The photos and videos of a share: kept (not yet sent: their person has to choose where they go), then the Send page. */
+async function receiveShare(request: Request): Promise<Response> {
+  const root = appRoot(worker.registration.scope);
+  try {
+    const form = await request.formData();
+    const store = new IdbStore();
+    for (const f of sharedMedia(form.getAll("media"))) {
+      const item = newItem(crypto.randomUUID(), f.name || "shared", f.size, f.lastModified, "", "", Date.now());
+      item.state = "pick";
+      try {
+        await store.put(item, f);
+      } catch {
+        /* no room: the page says so when it opens (it will find fewer files than were shared) */
+      }
+    }
+  } catch {
+    /* a share that cannot be read opens the page with nothing in it */
+  }
+  return Response.redirect(new URL("send?shared=1", root).href, 303);
+}
+
+worker.addEventListener("fetch", ((event: FetchEventLike) => {
+  const shareAt = new URL("share", worker.registration.scope).href;
+  if (event.request.method === "POST" && event.request.url === shareAt) event.respondWith(receiveShare(event.request));
 }) as (event: never) => void);

@@ -5,6 +5,7 @@ import { n, t } from "./i18n.ts";
 import { ask } from "./ask.ts";
 import { finished, heldForWifi, isLargeVideo, looksLikeMedia, onMobileData, percent, sizeText, tally, type Connection, type Item } from "./send-core.ts";
 import { MemoryStore, Queue, type Env, type Store } from "./send-queue.ts";
+import { register } from "./push.ts";
 import { canStore, getPref, IdbStore, setPref } from "./send-store.ts";
 
 interface NavigatorWithConnection extends Navigator {
@@ -46,6 +47,8 @@ function favouriteFirst(form: HTMLFormElement): void {
 
 function stateText(i: Item): string {
   switch (i.state) {
+    case "pick":
+      return t("Choose where it goes, then press Send");
     case "waiting":
       return t("Waiting");
     case "sending":
@@ -167,11 +170,13 @@ export function initSend(): void {
   const redraw = (): void => {
     render(list, queue);
     const c = tally(queue.mine);
+    const shared = queue.shared.length;
     const held = env.held() && c.open > 0;
-    summary.textContent = held ? t("Waiting for Wi-Fi: this device is on mobile data") : c.total === 0 ? "" : c.open > 0 ? n("{n} file left to send", "{n} files left to send", c.open) : n("{n} file sent", "{n} files sent", c.done);
+    summary.textContent = shared > 0 ? n("{n} file shared with Handoff is waiting for you to choose where it goes", "{n} files shared with Handoff are waiting for you to choose where they go", shared) : held ? t("Waiting for Wi-Fi: this device is on mobile data") : c.total === 0 ? "" : c.open > 0 ? n("{n} file left to send", "{n} files left to send", c.open) : n("{n} file sent", "{n} files sent", c.done);
     if (clear) clear.hidden = !queue.mine.some((i) => finished(i.state));
-    go.disabled = picked.length === 0;
-    go.textContent = picked.length > 0 ? n("Send {n} file", "Send {n} files", picked.length) : t("Send");
+    const count = picked.length + queue.shared.length;
+    go.disabled = count === 0;
+    go.textContent = count > 0 ? n("Send {n} file", "Send {n} files", count) : t("Send");
   };
   let store: Store = new MemoryStore();
   const queue: Queue = new Queue(
@@ -210,7 +215,7 @@ export function initSend(): void {
   });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (picked.length === 0) return;
+    if (picked.length === 0 && queue.shared.length === 0) return;
     const files = picked;
     const chosen = form.querySelector<HTMLInputElement>('input[name="service"]:checked');
     const service = chosen?.value ?? "";
@@ -233,7 +238,8 @@ export function initSend(): void {
       remember(service);
       picked = [];
       input.value = "";
-      const refused = await queue.add(files, service);
+      const refused = files.length > 0 ? await queue.add(files, service) : [];
+      await queue.assign(service);
       flash(refused.length > 0 ? n("{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} files could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", refused.length) : "");
       void queue.run();
     })();
@@ -246,5 +252,37 @@ export function initSend(): void {
     await queue.load();
     void queue.run();
   })();
+  initShare(form);
   redraw();
+}
+
+/** Sharing from the gallery needs the app installed (Android Chrome offers the entry then) and the worker running, which is what
+ *  receives the files. The page registers the worker and, where the browser offers to install, explains and offers. */
+function initShare(form: HTMLFormElement): void {
+  if ("serviceWorker" in navigator) void register().catch(() => undefined);
+  const card = document.getElementById("send-install");
+  const button = document.getElementById("send-install-go");
+  if (!card || !(button instanceof HTMLButtonElement)) return;
+  let offered: (Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }) | null = null;
+  addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    if (matchMedia("(display-mode: standalone)").matches) return;
+    offered = e as typeof offered;
+    card.hidden = false;
+  });
+  addEventListener("appinstalled", () => {
+    card.hidden = true;
+  });
+  button.addEventListener("click", () => {
+    if (!offered) return;
+    void offered.prompt().then(() => {
+      offered = null;
+      card.hidden = true;
+    });
+  });
+  if (new URLSearchParams(location.search).get("share") === "none") {
+    const flash = document.getElementById("flash");
+    if (flash) flash.textContent = t("Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.");
+  }
+  void form;
 }

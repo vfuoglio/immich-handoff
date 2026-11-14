@@ -66,6 +66,7 @@
  "Choose photos first": "Choisissez d’abord des photos",
  "Choose the colour scheme": "Choisir la palette de couleurs",
  "Choose what the photo is for": "Choisissez à quoi sert la photo",
+ "Choose where it goes, then press Send": "Choisissez où il va, puis appuyez sur Envoyer",
  "Choose your photos": "Choisissez vos photos",
  "Choose your photos and videos": "Choisissez vos photos et vidéos",
  "Clean up": "Nettoyer",
@@ -188,6 +189,8 @@
  "Immich rejected the API key (it was deleted or revoked) on {date}.": "Immich a rejeté la clé d’API (elle a été supprimée ou révoquée) le {date}.",
  "In your Immich, open Account settings, API keys, New API key. Give it exactly these permissions and no others:": "Dans votre Immich, ouvrez Paramètres du compte, Clés API, Nouvelle clé API. Donnez-lui exactement ces autorisations et aucune autre :",
  "In your inbox": "Dans votre boîte de réception",
+ "Install Handoff": "Installer Handoff",
+ "Install Handoff on this phone and it appears in the Share menu of your gallery: choose photos, tap Share, then Handoff, and pick where they go.": "Installez Handoff sur ce téléphone et il apparaît dans le menu Partager de votre galerie : choisissez des photos, touchez Partager, puis Handoff, et choisissez où elles vont.",
  "Invitation": "Invitation",
  "Invitation link (only people with it can find this service)": "Lien d’invitation (seules les personnes qui l’ont peuvent trouver ce service)",
  "Invitation only": "Sur invitation uniquement",
@@ -436,7 +439,9 @@
  "Sent already": "Déjà envoyé",
  "Service name": "Nom du service",
  "Services": "Services",
+ "Share photos to Handoff from your gallery": "Partager des photos vers Handoff depuis votre galerie",
  "Share this page": "Partager cette page",
+ "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.": "Partager vers Handoff nécessite l'application installée sur ce téléphone. Choisissez plutôt les photos ici.",
  "Shot list and message to the host": "Liste de photos et message à l’hôte",
  "Show each photo for": "Montrer chaque photo pendant",
  "Show more": "Afficher plus",
@@ -888,6 +893,10 @@
  "{n} file sent. Thank you!": {
   "one": "{n} fichier envoyé. Merci !",
   "other": "{n} fichiers envoyés. Merci !"
+ },
+ "{n} file shared with Handoff is waiting for you to choose where it goes": {
+  "one": "{n} fichier partagé avec Handoff attend que vous choisissiez où il va",
+  "other": "{n} fichiers partagés avec Handoff attendent que vous choisissiez où ils vont"
  },
  "{n} file was left out: it is not a photo or video, or it is too large": {
   "one": "{n} fichier a été écarté : ce n'est pas une photo ni une vidéo, ou il est trop volumineux",

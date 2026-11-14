@@ -66,6 +66,7 @@
  "Choose photos first": "Escolha primeiro as fotos",
  "Choose the colour scheme": "Escolher o esquema de cores",
  "Choose what the photo is for": "Escolha para que é a foto",
+ "Choose where it goes, then press Send": "Escolha para onde vai e toque em Enviar",
  "Choose your photos": "Escolha as suas fotos",
  "Choose your photos and videos": "Escolha as suas fotos e vídeos",
  "Clean up": "Limpar",
@@ -188,6 +189,8 @@
  "Immich rejected the API key (it was deleted or revoked) on {date}.": "O Immich recusou a chave de API (ela foi excluída ou revogada) em {date}.",
  "In your Immich, open Account settings, API keys, New API key. Give it exactly these permissions and no others:": "No teu Immich, abre Definições da conta, Chaves API, Nova chave API. Dá-lhe exatamente estas permissões e nenhuma outra:",
  "In your inbox": "Na sua caixa de entrada",
+ "Install Handoff": "Instalar o Handoff",
+ "Install Handoff on this phone and it appears in the Share menu of your gallery: choose photos, tap Share, then Handoff, and pick where they go.": "Instale o Handoff neste celular e ele aparece no menu Compartilhar da galeria: escolha fotos, toque em Compartilhar, depois em Handoff, e escolha para onde vão.",
  "Invitation": "Convite",
  "Invitation link (only people with it can find this service)": "Link de convite (só quem o tem pode encontrar este serviço)",
  "Invitation only": "Somente por convite",
@@ -436,7 +439,9 @@
  "Sent already": "Já enviado",
  "Service name": "Nome do serviço",
  "Services": "Serviços",
+ "Share photos to Handoff from your gallery": "Compartilhe fotos com o Handoff a partir da galeria",
  "Share this page": "Compartilhar esta página",
+ "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.": "Compartilhar com o Handoff exige o app instalado neste celular. Escolha as fotos aqui.",
  "Shot list and message to the host": "Lista de fotos e mensagem para o anfitrião",
  "Show each photo for": "Mostrar cada foto por",
  "Show more": "Mostrar mais",
@@ -888,6 +893,10 @@
  "{n} file sent. Thank you!": {
   "one": "{n} ficheiro enviado. Obrigado!",
   "other": "{n} ficheiros enviados. Obrigado!"
+ },
+ "{n} file shared with Handoff is waiting for you to choose where it goes": {
+  "one": "{n} arquivo compartilhado com o Handoff espera você escolher para onde vai",
+  "other": "{n} arquivos compartilhados com o Handoff esperam você escolher para onde vão"
  },
  "{n} file was left out: it is not a photo or video, or it is too large": {
   "one": "{n} arquivo foi deixado de fora: não é foto nem vídeo, ou é grande demais",

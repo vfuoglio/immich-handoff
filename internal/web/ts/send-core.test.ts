@@ -75,3 +75,10 @@ test("the Wi-Fi switch holds files only when the browser says mobile data", asyn
   assert.ok(!isLargeVideo("a.mov", "", LARGE_VIDEO - 1));
   assert.ok(!isLargeVideo("a.jpg", "image/jpeg", 500 << 20), "only videos are asked about");
 });
+
+test("what the share menu hands over is kept only if it is a photo or a video with something in it", async () => {
+  const { sharedMedia } = await import("./send-core.ts");
+  const f = (name: string, type: string, size: number) => new File([new Uint8Array(size)], name, { type });
+  const got = sharedMedia([f("a.jpg", "image/jpeg", 3), "just text", null, f("empty.jpg", "image/jpeg", 0), f("n.pdf", "application/pdf", 9), f("c.heic", "", 5)]);
+  assert.deepEqual(got.map((x) => x.name), ["a.jpg", "c.heic"]);
+});

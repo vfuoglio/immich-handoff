@@ -66,6 +66,7 @@
  "Choose photos first": "Сначала выберите фото",
  "Choose the colour scheme": "Выбрать цветовую схему",
  "Choose what the photo is for": "Выберите, для чего фото",
+ "Choose where it goes, then press Send": "Выберите, куда отправить, и нажмите «Отправить»",
  "Choose your photos": "Выберите фото",
  "Choose your photos and videos": "Выберите фото и видео",
  "Clean up": "Очистить",
@@ -188,6 +189,8 @@
  "Immich rejected the API key (it was deleted or revoked) on {date}.": "Immich отклонил ключ API (он был удалён или отозван) {date}.",
  "In your Immich, open Account settings, API keys, New API key. Give it exactly these permissions and no others:": "В вашем Immich откройте Настройки аккаунта, API-ключи, Новый API-ключ. Дайте ему ровно эти разрешения и никаких других:",
  "In your inbox": "В ваших входящих",
+ "Install Handoff": "Установить Handoff",
+ "Install Handoff on this phone and it appears in the Share menu of your gallery: choose photos, tap Share, then Handoff, and pick where they go.": "Установите Handoff на этот телефон, и он появится в меню «Поделиться» галереи: выберите фото, нажмите «Поделиться», затем Handoff и укажите, куда их отправить.",
  "Invitation": "Приглашение",
  "Invitation link (only people with it can find this service)": "Ссылка-приглашение (только те, у кого она есть, найдут этот сервис)",
  "Invitation only": "Только по приглашению",
@@ -442,7 +445,9 @@
  "Sent already": "Уже отправлено",
  "Service name": "Название сервиса",
  "Services": "Сервисы",
+ "Share photos to Handoff from your gallery": "Отправляйте фото в Handoff из галереи",
  "Share this page": "Поделиться этой страницей",
+ "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.": "Для отправки в Handoff из галереи приложение должно быть установлено на этом телефоне. Выберите фото здесь.",
  "Shot list and message to the host": "Список снимков и сообщение хозяину",
  "Show each photo for": "Показывать каждое фото",
  "Show more": "Показать ещё",
@@ -934,6 +939,12 @@
   "few": "Отправлено {n} файла. Спасибо!",
   "many": "Отправлено {n} файлов. Спасибо!",
   "other": "Отправлено {n} файла. Спасибо!"
+ },
+ "{n} file shared with Handoff is waiting for you to choose where it goes": {
+  "one": "{n} файл, отправленный в Handoff, ждёт, пока вы выберете, куда его отправить",
+  "few": "{n} файла, отправленные в Handoff, ждут, пока вы выберете, куда их отправить",
+  "many": "{n} файлов, отправленных в Handoff, ждут, пока вы выберете, куда их отправить",
+  "other": "{n} файла, отправленных в Handoff, ждут, пока вы выберете, куда их отправить"
  },
  "{n} file was left out: it is not a photo or video, or it is too large": {
   "one": "{n} файл пропущен: это не фото и не видео, либо он слишком большой",
