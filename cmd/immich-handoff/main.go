@@ -247,6 +247,7 @@ func run(log *slog.Logger) error {
 				}
 				h.DigestMaintenance(ctx)
 				h.FrameMaintenance(ctx)
+				h.RoomMaintenance(ctx)
 				select {
 				case <-ctx.Done():
 					return

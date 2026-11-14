@@ -93,6 +93,7 @@ type Hub struct {
 	hlRun        map[string]bool         // boxes whose best-of is being made now
 	digestRun    map[string]bool         // services whose digest is being made now
 	frames       frameCache              // the albums frames last read
+	rooms        roomCache               // the albums client rooms last read
 	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
 	retries      map[string]*time.Timer  // when each unreachable receiver on another server is tried again
 	bridgeTries  bridgeGuard             // what the invitation pages know about who tried

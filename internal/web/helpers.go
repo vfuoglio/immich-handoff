@@ -850,3 +850,21 @@ func frameChips(ctx context.Context, f FrameView) []Chip {
 	}
 	return []Chip{{Text: t(ctx, "Showing"), Tone: "ok"}}
 }
+
+func roomChips(ctx context.Context, r RoomView) []Chip {
+	switch {
+	case r.Ended:
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	case r.Paused:
+		return []Chip{{Text: t(ctx, "Paused"), Tone: "warn"}}
+	}
+	return []Chip{{Text: t(ctx, "Open"), Tone: "ok"}}
+}
+
+// pausedValue is what the pause button sends: the state the room should be in after the press.
+func pausedValue(nowPaused bool) string {
+	if nowPaused {
+		return "0"
+	}
+	return "1"
+}

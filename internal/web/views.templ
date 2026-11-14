@@ -21,6 +21,13 @@ type PushDeviceView struct {
 }
 
 // FrameView is one of the person's frames.
+// RoomView is one of the person's client rooms on the Services tab.
+type RoomView struct {
+	ID, Name, Title, Album, Token string
+	Ends                          string // when the link stops, "" for never
+	Ended, Paused, PIN            bool
+}
+
 type FrameView struct {
 	ID, Name, Album, Token string
 	Seconds                int
@@ -239,6 +246,7 @@ type DashboardData struct {
 	Push       PushView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
+	Rooms      []RoomView
 	Templates  []TemplateView
 }
 
@@ -622,6 +630,7 @@ templ Dashboard(d DashboardData) {
 					@OfferForm(d.DeleteOK)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
+				@RoomSection(d.Rooms)
 				@FrameSection(d.Frames)
 			}
 		</section>
@@ -3095,4 +3104,110 @@ templ SendPage(d SendPageView) {
 			</form>
 		}
 	}
+}
+
+// RoomSection is where a photographer makes client rooms: links where a client looks at an album through marked pictures,
+// chooses some and, when the photographer says so, takes the originals.
+templ RoomSection(rooms []RoomView) {
+	<h2>{ t(ctx, "Client rooms") }</h2>
+	<p class="meta">{ t(ctx, "A client room is a link where your client looks at one of your albums through pictures marked with your name, chooses their favourites and, when you release them, takes the originals. Anyone who has the link (and the PIN, if you set one) can see the marked pictures, so end the room when you no longer want that.") }</p>
+	for i, r := range rooms {
+		@RoomRow(r, fmt.Sprintf("room-%d", i), len(rooms) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Make a client room") }</summary>
+		<form class="card offer-form" hx-post="rooms" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="rm-name">{ t(ctx, "Name") }</label>
+				<input id="rm-name" name="name" required maxlength="60" placeholder={ t(ctx, "Rossi wedding") }/>
+			</div>
+			<div class="field">
+				<label for="rm-title">{ t(ctx, "Title the client sees (optional)") }</label>
+				<input id="rm-title" name="title" maxlength="60" placeholder={ t(ctx, "Chiara and Luca, 14 June") }/>
+			</div>
+			<div class="field" hx-get="fragments/room-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			<div class="field">
+				<label for="rm-pin">{ t(ctx, "PIN (optional)") }</label>
+				<input id="rm-pin" name="pin" maxlength="40" autocomplete="off" placeholder={ t(ctx, "4 to 40 characters") }/>
+			</div>
+			<div class="field">
+				<label for="rm-ends">{ t(ctx, "The link works") }</label>
+				<select id="rm-ends" name="ends">
+					<option value="0" selected>{ t(ctx, "until I end it") }</option>
+					<option value="14">{ t(ctx, "for 14 days") }</option>
+					<option value="30">{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="365">{ t(ctx, "for a year") }</option>
+				</select>
+			</div>
+			<p class="meta">{ t(ctx, "This makes a key in your Immich account that can only look at pictures and list an album's photos. It cannot download an original: that permission is added only when you release the photos. The key is deleted when you end the room.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make room") }</button></p>
+		</form>
+	</details>
+}
+
+// RoomAlbumSelect is the list of albums in the form that makes a room.
+templ RoomAlbumSelect(albums []AlbumOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "You have no albums of your own yet. Make one in Immich, then come back.") }</p>
+	} else {
+		<label for="rm-album">{ t(ctx, "Album to show") }</label>
+		<select id="rm-album" name="album">
+			for _, a := range albums {
+				<option value={ a.ID }>{ a.Label }</option>
+			}
+		</select>
+	}
+}
+
+// RoomRow is one client room: its link, when it ends and the buttons to pause and end it.
+templ RoomRow(r RoomView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(r.Name, t(ctx, "room of {album}", "album", r.Album), roomChips(ctx, r), "sum-"+id)
+		<div class="body">
+			if r.Ended {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "This room's link stopped on {when}. Remove it to delete its key from your Immich account.", "when", r.Ends) }</p>
+			} else {
+				<div class="field">
+					<label for={ "rm-link-" + id }>{ t(ctx, "Link for your client") }</label>
+					<div class="row">
+						<input id={ "rm-link-" + id } class="invite" readonly data-link={ "room/" + r.Token }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="show-qr" data-for={ "rm-link-" + id } data-alt={ t(ctx, "QR code of the room's link") }>{ t(ctx, "QR code") }</button>
+					</div>
+					<div class="qr" id={ "qr-rm-link-" + id } hidden></div>
+				</div>
+				<p class="meta">
+					if r.PIN {
+						{ t(ctx, "The client needs the PIN.") }
+					} else {
+						{ t(ctx, "There is no PIN.") }
+					}
+					if r.Ends != "" {
+						{ t(ctx, "The link works until {when}.", "when", r.Ends) }
+					} else {
+						{ t(ctx, "The link works until you end it.") }
+					}
+				</p>
+				<p class="row">
+					<button hx-post="rooms/pause" hx-vals={ vals2("room", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Open the room again") }
+						} else {
+							{ t(ctx, "Pause the room") }
+						}
+					</button>
+				</p>
+			}
+			<p class="row"><button hx-post="rooms/end" hx-vals={ vals("room", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The link will stop working at once and the room's key will be deleted. Continue?") } data-confirm-title={ t(ctx, "End the room?") } data-confirm-label={ t(ctx, "End room") } data-danger="true">
+				if r.Ended {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End room") }
+				}
+			</button></p>
+		</div>
+	</details>
 }

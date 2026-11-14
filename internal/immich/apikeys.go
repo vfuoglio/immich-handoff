@@ -11,6 +11,11 @@ import (
 // lists them with a search, which needs asset.read), nothing more: no downloading originals, no changes.
 var FramePermissions = perms("asset.view", "asset.read")
 
+// RoomPermissions is what a client room's key gets: looking at pictures and listing which photos are in an album, and nothing
+// else. It cannot download an original: that permission (asset.download) is added by the photographer's own session when
+// they release the originals, and never before.
+var RoomPermissions = perms("asset.view", "asset.read")
+
 // DigestPermissions is what a service's receiver key is given for the weekly digest: looking at pictures, making and
 // filling an album, and making, reading and ending a shared link. The owner adds them (and takes them off) with their
 // own session.

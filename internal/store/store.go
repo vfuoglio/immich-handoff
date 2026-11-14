@@ -491,6 +491,25 @@ var migrations = []string{
 	   kind   TEXT NOT NULL,
 	   data   BLOB NOT NULL
 	 );`,
+	// A client room: a link for a client to look at a photographer's album through marked pictures, choose some and, once the
+	// photographer releases them, take the originals. Its key is sealed like every other. Which photos are in it is not kept: it is
+	// the album as it is read (see internal/hub/room.go), like a frame.
+	`CREATE TABLE rooms (
+	   id         TEXT PRIMARY KEY,
+	   token      TEXT NOT NULL UNIQUE,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   title      TEXT NOT NULL DEFAULT '',
+	   album_id   TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   password   TEXT NOT NULL DEFAULT '',
+	   ends_at    TEXT NOT NULL DEFAULT '',
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
