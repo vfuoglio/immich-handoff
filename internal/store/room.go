@@ -298,3 +298,79 @@ func (s *Store) ClaimRoom(ctx context.Context, id, who, name string) (bool, erro
 	n, _ := r.RowsAffected()
 	return n > 0, nil
 }
+
+// SelectionSummary is one selection of a room as the photographer sees it: whose it is, how many photos it holds, and whether
+// it was sent. Who is empty for the shared selection and the named client's.
+type SelectionSummary struct {
+	Who, Name string
+	Count     int
+	Done      bool
+	DoneAt    time.Time
+}
+
+// SelectionsOf lists the selections of one round of a room that hold a pick or were sent, those sent first.
+func (s *Store) SelectionsOf(ctx context.Context, room string, round int) ([]SelectionSummary, error) {
+	picks, err := s.Picks(ctx, room, round, nil)
+	if err != nil {
+		return nil, err
+	}
+	by := map[string]*SelectionSummary{}
+	var order []string
+	add := func(who string) *SelectionSummary {
+		if x, ok := by[who]; ok {
+			return x
+		}
+		x := &SelectionSummary{Who: who}
+		by[who] = x
+		order = append(order, who)
+		return x
+	}
+	for _, p := range picks {
+		x := add(p.Who)
+		x.Count++
+		if p.Name != "" {
+			x.Name = p.Name
+		}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT who, name, at FROM room_done WHERE room_id = ? AND round = ? ORDER BY at`, room, round)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var who, name, at string
+		if err := rows.Scan(&who, &name, &at); err != nil {
+			return nil, err
+		}
+		x := add(who)
+		x.Done = true
+		x.DoneAt, _ = time.Parse(time.RFC3339Nano, at)
+		if name != "" {
+			x.Name = name
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var out []SelectionSummary
+	for _, who := range order {
+		out = append(out, *by[who])
+	}
+	sortSelections(out)
+	return out, nil
+}
+
+func sortSelections(l []SelectionSummary) {
+	for i := 1; i < len(l); i++ {
+		for j := i; j > 0 && less(l[j], l[j-1]); j-- {
+			l[j], l[j-1] = l[j-1], l[j]
+		}
+	}
+}
+
+func less(a, b SelectionSummary) bool {
+	if a.Done != b.Done {
+		return a.Done
+	}
+	return a.DoneAt.Before(b.DoneAt)
+}

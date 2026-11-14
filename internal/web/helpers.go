@@ -623,7 +623,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice":
 		return "ok"
 	}
 	return ""
@@ -895,4 +895,12 @@ func pickCounter(ctx context.Context, count, limit int) string {
 		return t(ctx, "{n} of {limit} chosen", "n", count, "limit", limit)
 	}
 	return n(ctx, "{n} photo chosen", "{n} photos chosen", count)
+}
+
+// selectionName is how a selection is named for the photographer: the name the client gave, or "A client".
+func selectionName(ctx context.Context, name string) string {
+	if name == "" {
+		return t(ctx, "A client")
+	}
+	return name
 }

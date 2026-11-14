@@ -153,6 +153,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rooms", w.createRoom)
 	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)
 	mux.HandleFunc("POST /rooms/end", w.endRoom)
+	mux.HandleFunc("POST /rooms/reopen", w.reopenRoomChoice)
 	mux.HandleFunc("GET /frame/{token}", w.framePage)
 	mux.HandleFunc("GET /frame/{token}/feed", w.frameFeed)
 	mux.HandleFunc("GET /frame/{token}/photo/{id}", w.framePhoto)
@@ -684,7 +685,16 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Limit"), Title: s.Name, Text: s.Waiting})
 		}
 	}
-	return append(append(lost, ask...), held...)
+	var done []NeedView
+	for _, r := range d.Rooms {
+		for _, sel := range r.Selections {
+			if sel.Done && !r.Ended {
+				done = append(done, NeedView{Tone: "ok", Chip: t(ctx, "Choice sent"), Title: r.Name,
+					Text: n(ctx, "{name} finished choosing: {n} photo.", "{name} finished choosing: {n} photos.", sel.Count, "name", selectionName(ctx, sel.Name))})
+			}
+		}
+	}
+	return append(append(append(lost, ask...), done...), held...)
 }
 
 func (w *Server) dismissGuide(rw http.ResponseWriter, r *http.Request) {

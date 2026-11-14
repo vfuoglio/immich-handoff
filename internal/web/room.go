@@ -37,6 +37,16 @@ func (w *Server) roomViews(ctx context.Context, me *member) []RoomView {
 		if !r.EndsAt.IsZero() {
 			v.Ends = l.Stamp(r.EndsAt.Local())
 		}
+		v.Mode, v.Limit = r.PickMode, r.PickLimit
+		if sels, err := w.Hub.RoomSelections(ctx, r); err == nil {
+			for _, s := range sels {
+				sv := SelectionView{Who: s.Who, Name: s.Name, Count: s.Count, Done: s.Done}
+				if s.Done {
+					sv.When = l.Stamp(s.DoneAt.Local())
+				}
+				v.Selections = append(v.Selections, sv)
+			}
+		}
 		out = append(out, v)
 	}
 	return out
@@ -377,4 +387,10 @@ func markSummary(r store.Room) string {
 		return "both:" + r.MarkText
 	}
 	return "text:" + r.MarkText
+}
+
+func (w *Server) reopenRoomChoice(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "choice reopened", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.ReopenRoomSelection(ctx, me.user, r.PostFormValue("room"), r.PostFormValue("who"))
+	})
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
@@ -175,6 +177,7 @@ func (h *Hub) RoomDone(ctx context.Context, r store.Room, v RoomViewer) (RoomSel
 		if who == "" {
 			who = "Your client"
 		}
+		h.event(ctx, "", r.OwnerID, "choice", i18n.PackN("{who} finished choosing in {room}: {n} photo", "{who} finished choosing in {room}: {n} photos", sel.Count, "who", whoText(who), "room", r.Name))
 		h.tell(notify.DropBox, fmt.Sprintf("%s finished choosing in the client room %q of %s: %d photos. Open the room on the Services tab to look at the choice.", who, r.Name, r.OwnerName, sel.Count))
 		h.Log.Info("a client finished choosing", "room", r.Name, "photos", sel.Count)
 	}
@@ -195,4 +198,30 @@ func checkRoomPicks(p RoomParams) (mode string, limit int, err error) {
 		return "", 0, ErrBadPickLim
 	}
 	return mode, p.PickLimit, nil
+}
+
+// whoText is how a client is named in the photographer's log: the name they gave, or "A client".
+func whoText(name string) string {
+	if name == "" || name == "Your client" {
+		return "A client"
+	}
+	return name
+}
+
+// RoomSelections lists the selections of a room for its owner: whose, how many photos, and whether sent.
+func (h *Hub) RoomSelections(ctx context.Context, r store.Room) ([]store.SelectionSummary, error) {
+	return h.Store.SelectionsOf(ctx, r.ID, 1)
+}
+
+// ReopenRoomSelection lets the owner give a sent selection back to the client to change. who is the selection's mark.
+func (h *Hub) ReopenRoomSelection(ctx context.Context, owner immich.User, roomID, who string) error {
+	r, err := h.Store.RoomByID(ctx, owner.ID, roomID)
+	if err != nil {
+		return ErrNoRoom
+	}
+	if err := h.Store.ReopenSelection(ctx, r.ID, 1, who); err != nil {
+		return err
+	}
+	h.event(ctx, "", owner.ID, "choice", i18n.Pack("{name} gave a choice in {room} back to the client to change", "name", owner.Name, "room", r.Name))
+	return nil
 }

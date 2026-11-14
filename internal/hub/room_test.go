@@ -458,3 +458,36 @@ func TestThePickSettingsAreChecked(t *testing.T) {
 		t.Errorf("shared and no limit by default: %+v", r)
 	}
 }
+
+func TestWhenAClientFinishesThePhotographerGetsALineInTheirActivityAndCanGiveTheChoiceBack(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg")
+	r := makeRoom(t, e, album, nil)
+	ids := pickIDs(t, e, r)
+	v := hub.RoomViewer{Who: "v1", Name: "Chiara"}
+	e.h.RoomPick(ctx, r, v, ids[0])
+	e.h.RoomPick(ctx, r, v, ids[1])
+	if _, err := e.h.RoomDone(ctx, r, v); err != nil {
+		t.Fatal(err)
+	}
+	acts, _ := e.h.Activity(ctx, bobID, 10)
+	if len(acts) == 0 || acts[0].Kind != "choice" || !strings.Contains(acts[0].Text, "Chiara") {
+		t.Fatalf("a line for the photographer: %+v", acts)
+	}
+	if got, _ := e.h.Activity(ctx, annID, 10); len(got) != 0 {
+		t.Errorf("nobody else is told: %+v", got)
+	}
+	sels, _ := e.h.RoomSelections(ctx, r)
+	if len(sels) != 1 || !sels[0].Done || sels[0].Count != 2 || sels[0].Name != "Chiara" {
+		t.Fatalf("%+v", sels)
+	}
+	if err := e.h.ReopenRoomSelection(ctx, ann, r.ID, ""); err != hub.ErrNoRoom {
+		t.Errorf("another person: %v", err)
+	}
+	if err := e.h.ReopenRoomSelection(ctx, bob, r.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.RoomPick(ctx, r, v, ids[0]); err != nil {
+		t.Errorf("the client can change it again: %v", err)
+	}
+}

@@ -160,6 +160,21 @@ func TestRoom(t *testing.T) {
 		t.Error("the picks stay shown, read-only")
 	}
 
+	// the photographer sees it on the Overview and in the room's row, and can give the choice back
+	op = page(t, port, owner)
+	for _, want := range []string{"Choice sent", "finished choosing: 2 photos.", "2 photos chosen", "Let them change it"} {
+		if !strings.Contains(op, want) {
+			t.Errorf("the photographer's page lacks %q", want)
+		}
+	}
+	if code, b := postBody(t, port, "/rooms/reopen", owner, url.Values{"room": {roomID}, "who": {""}}); code != 204 {
+		t.Fatalf("give the choice back: %d %s", code, b)
+	}
+	run(t, phone, chromedp.Reload(), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery))
+	if js[int](t, phone, `document.querySelectorAll('form.room-pick').length`) != 3 {
+		t.Error("the client can choose again")
+	}
+
 	// paused: the link says closed for now and gives no picture; resumed: it opens again; ended: gone, and the key with it
 	if c, _ := postBody(t, port, "/rooms/pause", owner, url.Values{"room": {roomID}, "paused": {"1"}}); c != 204 {
 		t.Fatalf("pause: %d", c)

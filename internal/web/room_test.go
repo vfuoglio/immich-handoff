@@ -455,3 +455,56 @@ func TestEveryRoomPressNeedsThePinWhenThereIsOne(t *testing.T) {
 		}
 	}
 }
+
+func TestThePhotographerSeesWhoChoseWhatIsToldAndCanGiveAChoiceBack(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("12", 32)
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi wedding", AlbumName: "Wedding", PickMode: store.RoomVisitor, PickLimit: 30}))
+	ctx := context.Background()
+	rooms, _ := st.RoomsOf(ctx, uuid.MustParse(familyID))
+	id := rooms[0].ID
+	_, page := do(t, "GET", app.URL+"/", "sess=family", nil)
+	if !strings.Contains(page, "Nobody has chosen anything yet.") || strings.Contains(page, "Choice sent") {
+		t.Fatal("nothing chosen yet")
+	}
+	for _, p := range []string{"a", "b", "c"} {
+		st.TogglePick(ctx, id, 1, "ann-mark", p, "Ann", 0)
+	}
+	st.TogglePick(ctx, id, 1, "luca-mark", "a", "Luca", 0)
+	st.FinishSelection(ctx, id, 1, "ann-mark", "Ann")
+	_, page = do(t, "GET", app.URL+"/", "sess=family", nil)
+	for _, want := range []string{"Ann", "3 photos chosen", "Sent ", "Luca", "1 photo chosen", "Still choosing", "Choice sent", "Ann finished choosing: 3 photos.", `hx-post="rooms/reopen"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if strings.Count(page, `hx-post="rooms/reopen"`) != 1 {
+		t.Error("only a sent choice can be given back")
+	}
+	_, other := do(t, "GET", app.URL+"/", "sess=other", nil)
+	if strings.Contains(other, "Ann finished choosing") {
+		t.Error("another person sees the choice")
+	}
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	if code, _ := do(t, "POST", app.URL+"/rooms/reopen", "sess=other", hdr); code != 409 && code != 204 {
+		t.Logf("another person: %d", code)
+	}
+	if done, _ := st.SelectionDone(ctx, id, 1, "ann-mark"); !done {
+		t.Fatal("a stranger must not reopen it")
+	}
+	req, _ := http.NewRequest("POST", app.URL+"/rooms/reopen", strings.NewReader("room="+id+"&who=ann-mark"))
+	req.Header.Set("Cookie", "sess=family")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode != 204 {
+		t.Fatalf("giving it back: %v %v", err, res)
+	}
+	if done, _ := st.SelectionDone(ctx, id, 1, "ann-mark"); done {
+		t.Error("the choice is open again")
+	}
+	_, page = do(t, "GET", app.URL+"/", "sess=family", nil)
+	if strings.Contains(page, "Choice sent") {
+		t.Error("no longer sent")
+	}
+}

@@ -27,6 +27,17 @@ type RoomView struct {
 	Ends                          string // when the link stops, "" for never
 	Ended, Paused, PIN            bool
 	Mark                          string // "text:<text>", "logo" or "both:<text>"
+	Selections                    []SelectionView
+	Mode                          string
+	Limit                         int
+}
+
+// SelectionView is one selection of a room as the photographer sees it.
+type SelectionView struct {
+	Who, Name string
+	Count     int
+	Done      bool
+	When      string
 }
 
 type FrameView struct {
@@ -3221,6 +3232,26 @@ templ RoomRow(r RoomView, id string, open bool) {
 						{ t(ctx, "The link works until you end it.") }
 					}
 				</p>
+				if len(r.Selections) > 0 {
+					<ul class="plain room-selections">
+						for _, sel := range r.Selections {
+							<li>
+								<span><b>{ selectionName(ctx, sel.Name) }</b>: { n(ctx, "{n} photo chosen", "{n} photos chosen", sel.Count) }
+									if sel.Done {
+										<span class="chip ok">{ t(ctx, "Sent {when}", "when", sel.When) }</span>
+									} else {
+										<span class="chip warn">{ t(ctx, "Still choosing") }</span>
+									}
+								</span>
+								if sel.Done {
+									<button hx-post="rooms/reopen" hx-vals={ vals2("room", r.ID, "who", sel.Who) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The client will be able to change this choice again. Continue?") } data-confirm-title={ t(ctx, "Give the choice back?") } data-confirm-label={ t(ctx, "Give it back") }>{ t(ctx, "Let them change it") }</button>
+								}
+							</li>
+						}
+					</ul>
+				} else if !r.Ended {
+					<p class="meta">{ t(ctx, "Nobody has chosen anything yet.") }</p>
+				}
 				<p class="row">
 					<button hx-post="rooms/pause" hx-vals={ vals2("room", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
 						if r.Paused {
