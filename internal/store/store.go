@@ -510,6 +510,11 @@ var migrations = []string{
 	   state      TEXT NOT NULL DEFAULT 'active',
 	   created_at TEXT NOT NULL
 	 );`,
+	// How a room marks its pictures: text repeated over them, the logo in a corner, or both; and the logo itself.
+	`ALTER TABLE rooms ADD COLUMN wm_mode TEXT NOT NULL DEFAULT 'text';
+	 ALTER TABLE rooms ADD COLUMN mark_text TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN logo_kind TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN logo BLOB;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

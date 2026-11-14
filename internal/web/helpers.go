@@ -868,3 +868,15 @@ func pausedValue(nowPaused bool) string {
 	}
 	return "1"
 }
+
+// markText says in words how a room's pictures are marked (see markSummary).
+func markText(ctx context.Context, summary string) string {
+	kind, text, _ := strings.Cut(summary, ":")
+	switch kind {
+	case "logo":
+		return t(ctx, "The pictures carry your logo in a corner.")
+	case "both":
+		return t(ctx, "The pictures carry \"{text}\" across them and your logo in a corner.", "text", text)
+	}
+	return t(ctx, "The pictures carry \"{text}\" across them.", "text", text)
+}

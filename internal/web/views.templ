@@ -26,6 +26,7 @@ type RoomView struct {
 	ID, Name, Title, Album, Token string
 	Ends                          string // when the link stops, "" for never
 	Ended, Paused, PIN            bool
+	Mark                          string // "text:<text>", "logo" or "both:<text>"
 }
 
 type FrameView struct {
@@ -3116,7 +3117,7 @@ templ RoomSection(rooms []RoomView) {
 	}
 	<details class="offer">
 		<summary>{ t(ctx, "Make a client room") }</summary>
-		<form class="card offer-form" hx-post="rooms" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<form class="card offer-form" hx-post="rooms" hx-encoding="multipart/form-data" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 			<div class="field">
 				<label for="rm-name">{ t(ctx, "Name") }</label>
 				<input id="rm-name" name="name" required maxlength="60" placeholder={ t(ctx, "Rossi wedding") }/>
@@ -3127,6 +3128,22 @@ templ RoomSection(rooms []RoomView) {
 			</div>
 			<div class="field" hx-get="fragments/room-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			<div class="field">
+				<label for="rm-mark">{ t(ctx, "Mark the pictures with") }</label>
+				<select id="rm-mark" name="mark">
+					<option value="text" selected>{ t(ctx, "Text repeated across the picture") }</option>
+					<option value="logo">{ t(ctx, "My logo in the corner") }</option>
+					<option value="both">{ t(ctx, "Both") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-marktext">{ t(ctx, "Text on the pictures (your name if empty)") }</label>
+				<input id="rm-marktext" name="marktext" maxlength="60" placeholder={ t(ctx, "Chiara Bianchi Photography") }/>
+			</div>
+			<div class="field">
+				<label for="rm-logo">{ t(ctx, "Logo (for the logo choices; JPEG, PNG or WebP, up to 300 KB)") }</label>
+				<input id="rm-logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp"/>
 			</div>
 			<div class="field">
 				<label for="rm-pin">{ t(ctx, "PIN (optional)") }</label>
@@ -3180,6 +3197,7 @@ templ RoomRow(r RoomView, id string, open bool) {
 					<div class="qr" id={ "qr-rm-link-" + id } hidden></div>
 				</div>
 				<p class="meta">
+					{ markText(ctx, r.Mark) }
 					if r.PIN {
 						{ t(ctx, "The client needs the PIN.") }
 					} else {
@@ -3210,4 +3228,17 @@ templ RoomRow(r RoomView, id string, open bool) {
 			</button></p>
 		</div>
 	</details>
+}
+
+// RoomStub is the client's page until it is built properly (#134): the marked pictures, nothing else.
+templ RoomStub(title, token string, ids []string) {
+	@Layout(title, "") {
+		<h1>{ title }</h1>
+		<p class="meta">{ n(ctx, "{n} photo is ready", "{n} photos are ready", len(ids)) }</p>
+		<div class="room-stub">
+			for _, id := range ids {
+				<img src={ "room/" + token + "/photo/" + id } alt="" loading="lazy" width="320"/>
+			}
+		</div>
+	}
 }

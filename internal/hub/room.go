@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/mark"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -31,6 +33,10 @@ var (
 	ErrBadRoomPIN    = errors.New("a PIN is 4 to 40 characters")
 	ErrRoomTooBig    = errors.New("that album has more photos than a room can show")
 	ErrRoomNotActive = errors.New("that room has ended")
+	ErrBadRoomMark   = errors.New("choose how the pictures are marked: text, a logo, or both")
+	ErrRoomMarkText  = errors.New("give the text to put on the pictures (up to 60 characters)")
+	ErrRoomLogo      = errors.New("a logo is needed for that, as a JPEG, PNG or WebP of at most 300 KB")
+	ErrRoomMarking   = errors.New("this picture could not be marked, so it is not shown")
 )
 
 const (
@@ -46,6 +52,9 @@ type RoomParams struct {
 	AlbumID     uuid.UUID
 	PIN         string // empty: none
 	EndsInDays  int    // 0: never
+	Mark        string // how the pictures are marked: "text", "logo" or "both" (empty: text)
+	MarkText    string // the text; empty: the photographer's name
+	Logo        []byte // the logo, for "logo" and "both"
 }
 
 // CreateRoom makes a room of one of the photographer's own albums. It has a key of its own, made with their session, that can
@@ -68,6 +77,10 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		if n := utf8.RuneCountInString(p.PIN); n < roomMinPINChars || n > 40 {
 			return store.Room{}, ErrBadRoomPIN
 		}
+	}
+	markMode, markText, logoKind, err := checkRoomMark(p, owner)
+	if err != nil {
+		return store.Room{}, err
 	}
 	if n, err := h.Store.CountRooms(ctx, owner.ID); err != nil {
 		return store.Room{}, err
@@ -111,7 +124,7 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		return store.Room{}, ErrRoomTooBig
 	}
 	r := store.Room{Token: newToken() + newToken(), OwnerID: owner.ID, OwnerName: owner.Name, Name: name, Title: title,
-		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret}
+		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText}
 	if p.PIN != "" {
 		if r.Password, err = HashDropPassword(p.PIN); err != nil {
 			undo()
@@ -124,6 +137,13 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 	if r, err = h.Store.AddRoom(ctx, r); err != nil {
 		undo()
 		return store.Room{}, err
+	}
+	if logoKind != "" {
+		if err := h.Store.SetRoomLogo(ctx, r.ID, logoKind, p.Logo); err != nil {
+			h.Store.DeleteRoom(ctx, r.ID)
+			undo()
+			return store.Room{}, err
+		}
 	}
 	h.Log.Info("room made", "owner", owner.Email, "album", album.Name)
 	return r, nil
@@ -281,4 +301,89 @@ func (h *Hub) RoomPhotos(ctx context.Context, r store.Room) ([]RoomPhoto, error)
 		return nil, err
 	}
 	return s.photos, nil
+}
+
+// checkRoomMark checks how the photographer wants the pictures marked and says what to keep: the mode, the text (their name if
+// they gave none) and the logo's content type.
+func checkRoomMark(p RoomParams, owner immich.User) (mode, text, logoKind string, err error) {
+	mode = p.Mark
+	if mode == "" {
+		mode = mark.Text
+	}
+	if mode != mark.Text && mode != mark.Logo && mode != mark.Both {
+		return "", "", "", ErrBadRoomMark
+	}
+	if mode != mark.Logo {
+		text = strings.TrimSpace(p.MarkText)
+		if text == "" {
+			text = strings.TrimSpace(owner.Name)
+		}
+		if n := utf8.RuneCountInString(text); n < 1 || n > 60 || strings.ContainsAny(text, "\r\n\x00") {
+			return "", "", "", ErrRoomMarkText
+		}
+	}
+	if mode != mark.Text {
+		if len(p.Logo) == 0 || len(p.Logo) > maxLogo {
+			return "", "", "", ErrRoomLogo
+		}
+		switch ct := http.DetectContentType(p.Logo); ct {
+		case "image/jpeg", "image/png", "image/webp":
+			logoKind = ct
+		default:
+			return "", "", "", ErrRoomLogo
+		}
+	}
+	return mode, text, logoKind, nil
+}
+
+// markSig says what marks a room's pictures, so a changed mark is not served from the cache of an old one.
+func markSig(r store.Room, logo []byte) string {
+	m := sha256.New()
+	m.Write([]byte(r.Mark + "\x00" + r.MarkText + "\x00"))
+	m.Write(logo)
+	return hex.EncodeToString(m.Sum(nil))[:12]
+}
+
+// RoomImage is the picture of one photo of a room as a client sees it: Immich's preview, fetched with the room's key, marked
+// and encoded as a JPEG. It is the only way a picture leaves a room, and a picture that cannot be marked is an error, never
+// the plain preview; the cache holds marked pictures only.
+func (h *Hub) RoomImage(ctx context.Context, r store.Room, id string) ([]byte, string, error) {
+	s, err := h.roomSnapshot(ctx, r)
+	if err != nil {
+		return nil, "", err
+	}
+	asset, ok := s.by[id]
+	if !ok {
+		return nil, "", ErrDropGone
+	}
+	var logo []byte
+	if r.Mark != mark.Text {
+		if _, logo, err = h.Store.RoomLogo(ctx, r.ID); err != nil {
+			return nil, "", err
+		}
+	}
+	key := "room/" + r.ID + "/" + asset.String() + "/" + markSig(r, logo)
+	if p, ok := h.wall.get(key); ok {
+		return p.data, p.kind, nil
+	}
+	api, err := h.Connect(r.Key)
+	if err != nil {
+		return nil, "", err
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	plain, _, err := api.Thumbnail(cctx, asset, true)
+	if err != nil {
+		if immich.IsNotFound(err) {
+			return nil, "", ErrDropGone
+		}
+		return nil, "", err
+	}
+	marked, err := mark.Preview(plain, mark.Options{Mode: r.Mark, Text: r.MarkText, Logo: logo})
+	if err != nil {
+		h.Log.Warn("a room's picture could not be marked, so it is not shown", "room", r.ID, "err", err)
+		return nil, "", ErrRoomMarking
+	}
+	h.wall.put(key, wallPic{marked, "image/jpeg"})
+	return marked, "image/jpeg", nil
 }

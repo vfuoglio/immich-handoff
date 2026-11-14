@@ -28,6 +28,8 @@ type Room struct {
 	KeyID     uuid.UUID // the room's key in Immich
 	Key       string    // decrypted
 	Password  string    // salted hash of the PIN; empty: none
+	Mark      string    // how the pictures are marked: "text", "logo" or "both"
+	MarkText  string    // the text repeated over the pictures
 	EndsAt    time.Time // zero: until the photographer ends it
 	State     string
 	CreatedAt time.Time
@@ -41,13 +43,13 @@ func (r Room) ClientTitle() string {
 	return r.Name
 }
 
-const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at`
+const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text`
 
 func (s *Store) scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	var r Room
 	var owner, album, key, ends, created string
 	var enc []byte
-	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created); err != nil {
+	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -69,13 +71,16 @@ func (s *Store) AddRoom(ctx context.Context, r Room) (Room, error) {
 	if r.State == "" {
 		r.State = RoomActive
 	}
+	if r.Mark == "" {
+		r.Mark = "text"
+	}
 	r.CreatedAt = time.Now().UTC()
 	enc, err := s.vault.Seal([]byte(r.Key), r.ID)
 	if err != nil {
 		return r, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText)
 	return r, err
 }
 
@@ -151,4 +156,19 @@ func (s *Store) CountRooms(ctx context.Context, owner uuid.UUID) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM rooms WHERE owner_id = ?`, owner.String()).Scan(&n)
 	return n, err
+}
+
+// SetRoomLogo keeps the logo a room puts on its pictures (kind is its content type; empty data removes it).
+func (s *Store) SetRoomLogo(ctx context.Context, id, kind string, data []byte) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rooms SET logo_kind = ?, logo = ? WHERE id = ?`, kind, data, id)
+	return err
+}
+
+// RoomLogo is the room's logo (empty when it has none).
+func (s *Store) RoomLogo(ctx context.Context, id string) (kind string, data []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT logo_kind, logo FROM rooms WHERE id = ?`, id).Scan(&kind, &data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil, ErrNotFound
+	}
+	return kind, data, err
 }

@@ -447,10 +447,11 @@ For a trip or a party, make the service an **Event pool** (a checkbox when you o
 A **client room** is for photographers: a link where your client looks at one of your albums through pictures marked with your name, and, as the next releases arrive, chooses favourites and takes the originals when you release them. It is a kind of its own next to drop boxes: on the Services tab, **Make a client room** asks for a name (yours), a title for the client (optional), the album, a PIN (optional, 4 to 40 characters) and how long the link works.
 
 - **The photos are the album's.** Photos you add to the album appear in the room within a couple of minutes, and photos you take out disappear. Photos and videos are shown in the order they were taken; archived and trashed ones never are. A room shows at most 2000 photos.
+- **The pictures are marked.** The client never sees a plain picture: the app fetches Immich's preview (about 1440 pixels on the long side), draws your mark on it and sends that. You choose how when you make the room: **text repeated across the picture** (diagonally, white with a soft shadow so it reads on light and dark photos; your name if you give no text), **your logo in the bottom right corner** (JPEG, PNG or WebP up to 300 KB), or **both**. The text is repeated over the whole picture, so it cannot be cropped out. A picture that cannot be marked is not shown at all, never shown plain. Immich can make previews as JPEG or WebP; both are read. A video is shown as its marked poster picture; the video itself comes with the release. A mark that is photographed off a screen is still a copy of a marked picture, which is what it is for.
 - **The key cannot download.** The room has a key of its own in your Immich account that can only look at pictures and list an album's photos. It has no permission to download an original: that is added by your own session when you release the photos, and never before.
 - **The link** has a QR code and is as private as its length; with a PIN the client needs both. **Pause the room** to make the link show nothing for a while; **End room** deletes the link and the key at once. You can have 20 rooms.
 
-(This page grows as the room's parts arrive: the marked pictures, choosing, notes, rounds and release.)
+(This page grows as the room's parts arrive: the client's page, choosing, notes, rounds and release.)
 
 ## Frames: an album on a screen
 

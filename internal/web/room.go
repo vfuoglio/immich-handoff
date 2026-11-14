@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,7 +29,7 @@ func (w *Server) roomViews(ctx context.Context, me *member) []RoomView {
 	var out []RoomView
 	for _, r := range rooms {
 		v := RoomView{ID: r.ID, Name: r.Name, Title: r.Title, Album: r.AlbumName, Token: r.Token, PIN: r.Password != "",
-			Ended: r.State == store.RoomEnded || (!r.EndsAt.IsZero() && !r.EndsAt.After(time.Now())), Paused: r.State == store.RoomPaused}
+			Mark: markSummary(r), Ended: r.State == store.RoomEnded || (!r.EndsAt.IsZero() && !r.EndsAt.After(time.Now())), Paused: r.State == store.RoomPaused}
 		if !r.EndsAt.IsZero() {
 			v.Ends = l.Stamp(r.EndsAt.Local())
 		}
@@ -64,8 +66,16 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 			return hub.ErrNoAlbum
 		}
 		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("ends")))
+		var logo []byte
+		if f, _, err := r.FormFile("logo"); err == nil {
+			defer f.Close()
+			if logo, err = io.ReadAll(io.LimitReader(f, 300<<10+1)); err != nil {
+				return hub.ErrRoomLogo
+			}
+		}
 		_, err = w.Hub.CreateRoom(ctx, me.sess, me.user, hub.RoomParams{Name: r.PostFormValue("name"), Title: r.PostFormValue("title"),
-			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days})
+			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days,
+			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo})
 		return err
 	})
 }
@@ -111,5 +121,42 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "try again", http.StatusServiceUnavailable)
 		return
 	}
-	Notice(room.ClientTitle(), n(r.Context(), "{n} photo is ready", "{n} photos are ready", len(photos)), false).Render(r.Context(), rw)
+	ids := make([]string, 0, len(photos))
+	for _, p := range photos {
+		ids = append(ids, p.ID)
+	}
+	RoomStub(room.ClientTitle(), room.Token, ids).Render(r.Context(), rw)
+}
+
+// roomPhoto gives a client the picture of one photo: marked, never the plain preview.
+func (w *Server) roomPhoto(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomFor(rw, r)
+	if !ok {
+		return
+	}
+	data, kind, err := w.Hub.RoomImage(r.Context(), room, r.PathValue("id"))
+	if err != nil {
+		if errors.Is(err, hub.ErrDropGone) {
+			http.NotFound(rw, r)
+		} else {
+			http.Error(rw, "try again", http.StatusBadGateway)
+		}
+		return
+	}
+	rw.Header().Set("Content-Type", kind)
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	rw.Header().Set("X-Robots-Tag", "noindex")
+	rw.Write(data)
+}
+
+// markSummary says how a room's pictures are marked, for the photographer.
+func markSummary(r store.Room) string {
+	switch r.Mark {
+	case "logo":
+		return "logo"
+	case "both":
+		return "both:" + r.MarkText
+	}
+	return "text:" + r.MarkText
 }

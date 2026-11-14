@@ -1,8 +1,17 @@
 package web_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -111,5 +120,104 @@ func TestThePhotographerSeesTheirRoomsAndMakesThemOnlyWhenSignedInWithTheHeader(
 	}
 	if code, _ := do(t, "GET", app.URL+"/fragments/room-albums", "", nil); code != 401 {
 		t.Errorf("the album list needs a sign-in: %d", code)
+	}
+}
+
+// roomPictures is a tiny Immich: two photos in any album, and a real JPEG as the preview of each.
+func roomPictures(t *testing.T, plain []byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/search/metadata":
+			item := func(id, created string) map[string]any {
+				return map[string]any{"id": id, "originalFileName": id + ".jpg", "fileCreatedAt": created, "fileModifiedAt": created, "type": "IMAGE", "isTrashed": false, "isArchived": false}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"assets": map[string]any{"items": []any{
+				item("11111111-1111-4111-8111-111111111111", "2026-07-01T10:00:00.000Z"),
+				item("22222222-2222-4222-8222-222222222222", "2026-07-02T10:00:00.000Z"),
+			}, "count": 2, "total": 2, "facets": []any{}}})
+		case strings.HasSuffix(r.URL.Path, "/thumbnail"):
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write(plain)
+		case strings.HasSuffix(r.URL.Path, "/original"):
+			t.Errorf("a room asked Immich for an original: %s", r.URL.Path)
+			w.Write(plain)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestNoRoomRouteEverReturnsTheUnmarkedPreview(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 800, 500))
+	for y := 0; y < 500; y++ {
+		for x := 0; x < 800; x++ {
+			img.Set(x, y, color.RGBA{uint8(50 + x*120/800), uint8(70 + y*120/500), 130, 255})
+		}
+	}
+	var buf bytes.Buffer
+	jpeg.Encode(&buf, img, &jpeg.Options{Quality: 92})
+	plain := buf.Bytes()
+	im := roomPictures(t, plain)
+	var st *store.Store
+	token := strings.Repeat("ab", 32)
+	app, _ := setup(t, func(srv *web.Server) {
+		withRoom(t, &st, store.Room{Token: token, Name: "Rossi", Title: "Chiara and Luca", AlbumName: "Wedding", Mark: "text", MarkText: "Chiara Bianchi"})(srv)
+		srv.Hub.Connect = func(key string) (*immich.API, error) { return immich.New(im.URL, immich.Auth{APIKey: key}, nil) }
+	})
+	_, page := do(t, "GET", app.URL+"/room/"+token, "", nil)
+	ids := regexp.MustCompile(`room/`+token+`/photo/([0-9a-f]{16})`).FindAllStringSubmatch(page, -1)
+	if len(ids) != 2 {
+		t.Fatalf("the page shows two pictures: %.300s", page)
+	}
+	paths := []string{"/room/" + token, "/room/" + token + "/photo/" + ids[0][1], "/room/" + token + "/photo/" + ids[1][1], "/room/" + token + "/photo/0000000000000000",
+		"/room/" + token + "/original/" + ids[0][1], "/room/" + token + "/zip", "/room/" + token + "/preview", "/room/" + token + "/thumb/" + ids[0][1]}
+	for _, p := range paths {
+		for _, method := range []string{"GET", "POST"} {
+			code, body := do(t, method, app.URL+p, "", map[string]string{"X-Requested-With": "immich-handoff"})
+			if strings.Contains(body, string(plain[:2000])) || bytes.Contains([]byte(body), plain[100:600]) {
+				t.Errorf("%s %s returned the unmarked preview (%d)", method, p, code)
+			}
+		}
+	}
+	res, err := http.Get(app.URL + "/room/" + token + "/photo/" + ids[0][1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/jpeg" || bytes.Equal(got, plain) || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("the picture is marked and sandboxed: %d %v", res.StatusCode, res.Header)
+	}
+	if m, err := jpeg.Decode(bytes.NewReader(got)); err != nil || m.Bounds() != img.Bounds() {
+		t.Errorf("a JPEG of the same size: %v", err)
+	}
+}
+
+// The guarantee is also kept by the shape of the code: pictures reach a client only through RoomImage, which marks them, and
+// that is the one place in a room's files that asks Immich for a picture.
+func TestOnlyRoomImageAsksImmichForAPictureAndMarksIt(t *testing.T) {
+	for _, f := range []string{"room.go", "../hub/room.go"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := string(b)
+		for _, forbidden := range []string{"WallImage", "assetImage", "GalleryImage", "FrameImage", "GalleryOriginal", ".Original("} {
+			if strings.Contains(src, forbidden) {
+				t.Errorf("%s uses %s: a room's picture must come from RoomImage, marked", f, forbidden)
+			}
+		}
+		if strings.HasSuffix(f, "hub/room.go") {
+			if n := strings.Count(src, ".Thumbnail("); n != 1 {
+				t.Errorf("%s asks Immich for a picture %d times, it must be once, in RoomImage", f, n)
+			}
+			if !strings.Contains(src[strings.Index(src, ".Thumbnail("):], "mark.Preview(") {
+				t.Error("the preview is marked right after it is fetched")
+			}
+		}
 	}
 }

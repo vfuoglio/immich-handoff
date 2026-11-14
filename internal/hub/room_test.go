@@ -1,7 +1,12 @@
 package hub_test
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	imgjpeg "image/jpeg"
+	"image/png"
 	"strings"
 	"testing"
 	"time"
@@ -168,5 +173,129 @@ func TestARoomLinkOnlyOpensForALiveRoomAndEndingItDeletesTheKey(t *testing.T) {
 	}
 	if list, _ := e.h.Rooms(ctx, bobID); len(list) != 0 {
 		t.Errorf("%+v", list)
+	}
+}
+
+// realJPEG is a picture that can be decoded (the fake Immich's other previews are only words).
+func realJPEG(w, h int) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{uint8(40 + x*150/w), uint8(60 + y*150/h), 120, 255})
+		}
+	}
+	var b bytes.Buffer
+	imgjpeg.Encode(&b, img, &imgjpeg.Options{Quality: 92})
+	return b.Bytes()
+}
+
+func realLogo() []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 60, 30))
+	for y := 0; y < 30; y++ {
+		for x := 0; x < 60; x++ {
+			img.Set(x, y, color.RGBA{255, 30, 30, 255})
+		}
+	}
+	var b bytes.Buffer
+	png.Encode(&b, img)
+	return b.Bytes()
+}
+
+func TestAClientOnlyEverGetsAMarkedPictureAndTheCacheHoldsNothingElse(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "one.jpg", "two.jpg")
+	plain := realJPEG(900, 600)
+	e.f.thumbs["one.jpg"], e.f.thumbs["two.jpg"] = plain, plain
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.MarkText = "Chiara Bianchi" })
+	if r.Mark != "text" || r.MarkText != "Chiara Bianchi" {
+		t.Fatalf("%+v", r)
+	}
+	photos, _ := e.h.RoomPhotos(ctx, r)
+	data, kind, err := e.h.RoomImage(ctx, r, photos[0].ID)
+	if err != nil || kind != "image/jpeg" {
+		t.Fatal(kind, err)
+	}
+	if bytes.Equal(data, plain) {
+		t.Fatal("the plain preview went out")
+	}
+	in, _ := imgjpeg.Decode(bytes.NewReader(plain))
+	out, err := imgjpeg.Decode(bytes.NewReader(data))
+	if err != nil || out.Bounds() != in.Bounds() {
+		t.Fatalf("a JPEG of the same size: %v", err)
+	}
+	// asked again it comes from the cache, and it is the marked one
+	again, _, _ := e.h.RoomImage(ctx, r, photos[0].ID)
+	if !bytes.Equal(again, data) {
+		t.Error("the cache gives the marked picture")
+	}
+	if _, _, err := e.h.RoomImage(ctx, r, "0000000000000000"); err != hub.ErrDropGone {
+		t.Errorf("an id that is not in the album: %v", err)
+	}
+	other := makeRoom(t, e, album, nil)
+	if _, _, err := e.h.RoomImage(ctx, other, photos[0].ID); err != hub.ErrDropGone {
+		t.Errorf("an id from another room: %v", err)
+	}
+	if got, _, _ := e.h.RoomImage(ctx, r, photos[1].ID); bytes.Equal(got, plain) {
+		t.Error("the second photo is marked too")
+	}
+}
+
+func TestAPreviewThatCannotBeMarkedIsNotShownAtAll(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "bad.jpg")
+	// the fake's default preview is only words: it cannot be read as a picture
+	r := makeRoom(t, e, album, nil)
+	photos, _ := e.h.RoomPhotos(ctx, r)
+	data, _, err := e.h.RoomImage(ctx, r, photos[0].ID)
+	if err != hub.ErrRoomMarking || data != nil {
+		t.Fatalf("an unreadable preview is an error and no bytes: %v %q", err, data)
+	}
+	if string(e.f.thumbs["bad.jpg"]) == "" {
+		t.Fatal("setup")
+	}
+	if data != nil {
+		t.Error("nothing went out")
+	}
+}
+
+func TestTheWayAPictureIsMarkedIsCheckedAndTheLogoIsKept(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "one.jpg")
+	e.f.thumbs["one.jpg"] = realJPEG(900, 600)
+	bad := func(mod func(*hub.RoomParams), want error) {
+		t.Helper()
+		p := hub.RoomParams{Name: "x", AlbumID: uuid.MustParse(album)}
+		mod(&p)
+		if _, err := e.h.CreateRoom(ctx, e.sess, bob, p); err != want {
+			t.Errorf("got %v, want %v", err, want)
+		}
+	}
+	bad(func(p *hub.RoomParams) { p.Mark = "stripes" }, hub.ErrBadRoomMark)
+	bad(func(p *hub.RoomParams) { p.Mark = "logo" }, hub.ErrRoomLogo)
+	bad(func(p *hub.RoomParams) { p.Mark = "both"; p.Logo = []byte("<html>") }, hub.ErrRoomLogo)
+	bad(func(p *hub.RoomParams) { p.Mark = "logo"; p.Logo = make([]byte, 400<<10) }, hub.ErrRoomLogo)
+	bad(func(p *hub.RoomParams) { p.MarkText = strings.Repeat("x", 61) }, hub.ErrRoomMarkText)
+	// no text: the photographer's name
+	r := makeRoom(t, e, album, nil)
+	if r.MarkText != "Bob" {
+		t.Errorf("the photographer's name by default: %q", r.MarkText)
+	}
+	both := makeRoom(t, e, album, func(p *hub.RoomParams) { p.Mark = "both"; p.Logo = realLogo() })
+	if kind, data, err := e.h.Store.RoomLogo(ctx, both.ID); err != nil || kind != "image/png" || !bytes.Equal(data, realLogo()) {
+		t.Fatalf("the logo is kept: %q %v", kind, err)
+	}
+	photos, _ := e.h.RoomPhotos(ctx, both)
+	out, _, err := e.h.RoomImage(ctx, both, photos[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, _ := imgjpeg.Decode(bytes.NewReader(out))
+	rd, g, b, _ := img.At(800, 540).RGBA() // inside the corner logo, which is red
+	if rd>>8 < 150 || g>>8 > 140 || b>>8 > 140 {
+		t.Errorf("the logo is in the corner: %d %d %d", rd>>8, g>>8, b>>8)
+	}
+	logoOnly := makeRoom(t, e, album, func(p *hub.RoomParams) { p.Mark = "logo"; p.Logo = realLogo() })
+	if logoOnly.MarkText != "" {
+		t.Errorf("a logo-only room has no text: %q", logoOnly.MarkText)
 	}
 }
