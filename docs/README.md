@@ -16,6 +16,6 @@ Start with the page that matches what you are doing.
 | Understand or change the code | [How it works inside](architecture.md) |
 | Publish a new version | [Releasing](releasing.md) |
 
-Also here: [notes on the Immich behaviour this project relies on](immich-api-notes.md), and the [changelog](../CHANGELOG.md). The design for handing photos to another Immich server is in [bridges-design.md](bridges-design.md).
+Also here: [notes on the Immich behaviour this project relies on](immich-api-notes.md), and the [changelog](../CHANGELOG.md). The design for handing photos to another Immich server is in [bridges-design.md](bridges-design.md), and the design for albums shared across servers (not built yet) is in [shared-albums-design.md](shared-albums-design.md).
 
 New to the idea? The [project page](../README.md) shows what it does in a minute.

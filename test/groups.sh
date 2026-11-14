@@ -7,4 +7,4 @@ E2E_GROUP_browser='^(TestBrowser|TestDropBoxGuests|TestDropBoxGuestPage|TestDrop
 E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents|TestDropBox|TestDropBoxTools|TestEventPool)$'
 E2E_GROUP_hub='^(TestAlbumWatch|TestSelfService|TestLinkHealth|TestCopyMode|TestBackupAndRestore|TestPauseAndLimits|TestTakeBackAndExpiry|TestReceiverDeleteSwitch|TestMailToPeople|TestPushDevices|TestWeeklyDigest|TestPhotosByEmail)$'
 # starts a second Immich of its own (the receiver's server) next to the one every group has, so it has a group to itself
-E2E_GROUP_bridge='^(TestBridge)$'
+E2E_GROUP_bridge='^(TestBridge|TestSharedAlbumImmichRules)$'
