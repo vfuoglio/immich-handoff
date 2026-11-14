@@ -17,6 +17,8 @@ go run . shots owner ../../docs/images && go run . shots immich ../../docs/image
 go run . shots lost ../../docs/images
 ```
 
+The phone upload page has its own set: `FIRST=2040 go run . send ../../docs/images $DEMO/photos` signs in as Alice on a 390 px phone and sends three sample photos through the page, slowly (it needs the app running with a data folder, as `seed.sh` does it, and three photos that are not yet in Alice's library: `FIRST` is the number of the first, `IMG_2040` by default).
+
 The sample photos are generated landscapes (`go run . gen <dir>`), so no real pictures or people appear.
 
 Every picture is taken in English: the tool sends `Accept-Language: en` and sets the page's language cookie to English, whatever language the machine uses. The pictures belong to the English documentation.
