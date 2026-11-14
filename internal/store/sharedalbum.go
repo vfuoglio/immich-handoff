@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -45,15 +46,16 @@ type SharedAlbum struct {
 	LastSync            time.Time // the last pass that ran to its end
 	Problem             string    // what stopped the last pass or a photo (empty: nothing)
 	Sent, Received      int       // photos that went each way
+	Pending             []string  // checksums of a large removal that waits for the person's yes
 }
 
-const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received`
+const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received, pending`
 
 func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, error) {
 	var a SharedAlbum
-	var owner, album, key, created, last string
+	var owner, album, key, created, last, pending string
 	var enc []byte
-	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received); err != nil {
+	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received, &pending); err != nil {
 		return a, err
 	}
 	a.OwnerID, _ = uuid.Parse(owner)
@@ -61,6 +63,9 @@ func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, err
 	a.KeyID, _ = uuid.Parse(key)
 	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	a.LastSync, _ = time.Parse(time.RFC3339Nano, last)
+	if pending != "" {
+		_ = json.Unmarshal([]byte(pending), &a.Pending)
+	}
 	if len(enc) > 0 {
 		plain, err := s.vault.Open(enc, a.ID)
 		if err != nil {
@@ -84,8 +89,8 @@ func (s *Store) AddSharedAlbum(ctx context.Context, a SharedAlbum) (SharedAlbum,
 			return a, err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received, pendingJSON(a.Pending))
 	return a, err
 }
 
@@ -291,4 +296,69 @@ func (s *Store) AddSharedReceived(ctx context.Context, id string, n int) error {
 // ActiveSharedAlbums lists every active shared album, for the app's own upkeep.
 func (s *Store) ActiveSharedAlbums(ctx context.Context) ([]SharedAlbum, error) {
 	return s.sharedQuery(ctx, `SELECT `+sharedCols+` FROM shared_albums WHERE state = ? ORDER BY created_at, id`, ShareActive)
+}
+
+func pendingJSON(l []string) string {
+	if len(l) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(l)
+	return string(b)
+}
+
+// SetSharedPending keeps (or, with none, clears) the large removal that waits for the person's yes.
+func (s *Store) SetSharedPending(ctx context.Context, id string, checksums []string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET pending = ? WHERE id = ?`, pendingJSON(checksums), id)
+	return err
+}
+
+// Ledger origin of a photo that was taken out of the album (here, or by the other side).
+const OriginRemoved = "removed"
+
+// LedgerRow is one photo the ledger tracks.
+type LedgerRow struct {
+	Checksum, AssetID, Origin string
+	Sent, Present             bool
+}
+
+// LedgerTracked lists the photos of an album that were shared (sent, or arrived) and are not known to be gone.
+func (s *Store) LedgerTracked(ctx context.Context, album string) ([]LedgerRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT checksum, asset_id, origin, sent, present FROM shared_ledger WHERE album_id = ? AND ((origin = ? AND sent = 1) OR origin = ?) ORDER BY at, checksum`, album, OriginMine, OriginArrived)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LedgerRow
+	for rows.Next() {
+		var r LedgerRow
+		var sent, present int
+		if err := rows.Scan(&r.Checksum, &r.AssetID, &r.Origin, &sent, &present); err != nil {
+			return nil, err
+		}
+		r.Sent, r.Present = sent > 0, present > 0
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// LedgerSetPresent notes whether a photo is in the album now.
+func (s *Store) LedgerSetPresent(ctx context.Context, album, checksum string, present bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET present = ? WHERE album_id = ? AND checksum = ?`, b2i(present), album, checksum)
+	return err
+}
+
+// LedgerGone remembers photos as taken out of the album: they are not tracked, and not sent, until they are put back.
+func (s *Store) LedgerGone(ctx context.Context, album string, checksums []string) error {
+	for _, c := range checksums {
+		if _, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET origin = ?, present = 0 WHERE album_id = ? AND checksum = ?`, OriginRemoved, album, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LedgerRestore gives a photo that was taken out and is back in the album a new origin, as if it were new (or as arrived).
+func (s *Store) LedgerRestore(ctx context.Context, album, checksum, asset, origin string, sent bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET origin = ?, asset_id = ?, sent = ?, present = 1 WHERE album_id = ? AND checksum = ?`, origin, asset, b2i(sent), album, checksum)
+	return err
 }

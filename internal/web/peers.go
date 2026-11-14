@@ -156,7 +156,7 @@ func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
 		}
 		if shared, err := w.Hub.Store.SharedAlbumsWith(ctx, p.ID); err == nil {
 			for _, a := range shared {
-				sv := SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name, Problem: a.Problem, Sent: a.Sent, Received: a.Received}
+				sv := SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name, Problem: a.Problem, Sent: a.Sent, Received: a.Received, Pending: len(a.Pending)}
 				if !a.LastSync.IsZero() {
 					sv.Last = l.Stamp(a.LastSync.Local())
 				}
@@ -176,6 +176,7 @@ type SharedView struct {
 	Deletion                     string
 	Last, Problem                string
 	Sent, Received               int
+	Pending                      int // photos taken out that wait for the person's yes
 }
 
 func (w *Server) newPeerInvite(rw http.ResponseWriter, r *http.Request) {
@@ -403,4 +404,23 @@ func (w *Server) peerAlbumDone(rw http.ResponseWriter, r *http.Request, p store.
 		return
 	}
 	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *Server) peerAlbumRemoved(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+	var m hub.RemovedMsg
+	if json.Unmarshal(body, &m) != nil {
+		peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if err := w.Hub.PeerRemoved(r.Context(), p, m); err != nil {
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *Server) answerRemoval(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "removal answered", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.AnswerRemoval(ctx, me.user, r.PostFormValue("shared"), r.PostFormValue("do") == "follow")
+	})
 }

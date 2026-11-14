@@ -75,9 +75,9 @@ func (h *Hub) PeerHave(ctx context.Context, p store.Peer, m HaveMsg) (HaveReply,
 	}
 	out := HaveReply{Missing: []string{}}
 	for _, c := range m.Checksums {
-		if _, _, known, err := h.Store.LedgerHas(ctx, a.ID, c); err != nil {
+		if origin, _, known, err := h.Store.LedgerHas(ctx, a.ID, c); err != nil {
 			return HaveReply{}, err
-		} else if !known {
+		} else if !known || origin == store.OriginRemoved {
 			out.Missing = append(out.Missing, c)
 		}
 	}
@@ -129,7 +129,11 @@ func (h *Hub) PeerPhoto(ctx context.Context, p store.Peer, in PhotoIn) error {
 			return err
 		}
 	}
-	h.Store.LedgerPut(ctx, a.ID, in.Checksum, id.String(), store.OriginArrived, true)
+	if origin, _, known, _ := h.Store.LedgerHas(ctx, a.ID, in.Checksum); known && origin == store.OriginRemoved {
+		h.Store.LedgerRestore(ctx, a.ID, in.Checksum, id.String(), store.OriginArrived, true) // it was taken out and has come back
+	} else {
+		h.Store.LedgerPut(ctx, a.ID, in.Checksum, id.String(), store.OriginArrived, true)
+	}
 	if !dup || !asset.IsTrashed {
 		h.Store.AddSharedReceived(ctx, a.ID, 1)
 	}
@@ -215,13 +219,18 @@ func (h *Hub) sendNew(ctx context.Context, a store.SharedAlbum, p store.Peer) (s
 			continue
 		}
 		by[x.Checksum] = x
-		// a photo the ledger has not seen is this person's own new photo
-		if _, _, known, err := h.Store.LedgerHas(ctx, a.ID, x.Checksum); err != nil {
+		// a photo the ledger has not seen is this person's own new photo; one that was taken out and is back is new again
+		origin, _, known, err := h.Store.LedgerHas(ctx, a.ID, x.Checksum)
+		switch {
+		case err != nil:
 			return 0, err.Error()
-		} else if !known {
+		case !known:
 			h.Store.LedgerPut(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
+		case origin == store.OriginRemoved:
+			h.Store.LedgerRestore(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
 		}
 	}
+	h.followRemovals(ctx, a, p, api, by)
 	_, order, err := h.Store.LedgerUnsent(ctx, a.ID)
 	if err != nil {
 		return 0, err.Error()

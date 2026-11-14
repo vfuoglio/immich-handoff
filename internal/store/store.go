@@ -628,6 +628,10 @@ var migrations = []string{
 	 ALTER TABLE shared_albums ADD COLUMN problem TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE shared_albums ADD COLUMN sent INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE shared_albums ADD COLUMN received INTEGER NOT NULL DEFAULT 0;`,
+	// Taking photos out of a shared album (the "follow" rule): the ledger notes whether a photo is in the album now, and a large
+	// removal waits for the person to say yes (pending holds its checksums).
+	`ALTER TABLE shared_ledger ADD COLUMN present INTEGER NOT NULL DEFAULT 1;
+	 ALTER TABLE shared_albums ADD COLUMN pending TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

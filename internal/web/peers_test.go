@@ -266,8 +266,52 @@ func (f *sharing) handler(base http.Handler) http.Handler {
 		}
 		j(w, 200, out)
 	})
+	mux.HandleFunc("DELETE /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids []string `json:"ids"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := []any{}
+		for _, id := range body.Ids {
+			keep := f.members[r.PathValue("id")][:0:0]
+			for _, m := range f.members[r.PathValue("id")] {
+				if m != id {
+					keep = append(keep, m)
+				}
+			}
+			f.members[r.PathValue("id")] = keep
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		j(w, 200, out)
+	})
 	mux.Handle("/", base)
 	return mux
+}
+
+// takeOut removes a photo from an album without deleting it, as a person does in Immich.
+func (f *sharing) takeOut(album, sum string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	keep := []string{}
+	for _, id := range f.members[album] {
+		if f.photos[id].sum != sum {
+			keep = append(keep, id)
+		}
+	}
+	f.members[album] = keep
+}
+
+// trash puts every copy of a photo in an owner's trash.
+func (f *sharing) trash(album, sum string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, id := range f.members[album] {
+		if f.photos[id].sum == sum {
+			f.photos[id].trashed = true
+		}
+	}
 }
 
 // anApp is one running Handoff, with its own data file, for tests of two apps that talk to each other.
@@ -755,6 +799,11 @@ const tripAlbum = "99999999-9999-4999-8999-999999999992"
 // sharedPair makes two paired apps with one agreed album (A's Trip, B's new one) and the photos given to A's Trip.
 func sharedPair(t *testing.T, aHistory, bHistory string, photos ...[]byte) (a, b *anApp, sa, sb store.SharedAlbum) {
 	t.Helper()
+	return sharedPairRule(t, "nothing", aHistory, bHistory, photos...)
+}
+
+func sharedPairRule(t *testing.T, deletion, aHistory, bHistory string, photos ...[]byte) (a, b *anApp, sa, sb store.SharedAlbum) {
+	t.Helper()
 	a = startApp(t, "sess=alice", true, true)
 	b = startApp(t, "sess=family", true, true)
 	pairApps(t, a, b)
@@ -762,7 +811,7 @@ func sharedPair(t *testing.T, aHistory, bHistory string, photos ...[]byte) (a, b
 		a.fake.addPhoto(aliceID, tripAlbum, "a"+strconv.Itoa(i)+".jpg", p)
 	}
 	pa := peersOf(t, a, aliceID)[0]
-	if code, body := a.as(t, "POST", "/peers/share", "peer="+pa.ID+"&name=Trip&album="+tripAlbum+"&history="+aHistory+"&deletion=nothing"); code != 204 {
+	if code, body := a.as(t, "POST", "/peers/share", "peer="+pa.ID+"&name=Trip&album="+tripAlbum+"&history="+aHistory+"&deletion="+deletion); code != 204 {
 		t.Fatalf("propose: %d %s", code, body)
 	}
 	if code, body := b.as(t, "POST", "/shared/accept", "shared="+sharedOf(t, b, familyID)[0].ID+"&album=new&history="+bHistory); code != 204 {
@@ -1057,5 +1106,81 @@ func TestAProposalAndAnUnreachableConnectionAreOnTheOverview(t *testing.T) {
 	_, page = a.as(t, "GET", "/", "")
 	if !strings.Contains(page, "Shared albums wait until it can") {
 		t.Errorf("A's overview says the other app is not reachable")
+	}
+}
+
+func TestTakingAPhotoOutFollowsOnlyUnderTheRuleAndNeverComesBack(t *testing.T) {
+	one, two := []byte("keep this one"), []byte("take this one out")
+	ctx := context.Background()
+	for _, rule := range []string{"nothing", "follow"} {
+		a, b, sa, sb := sharedPairRule(t, rule, "all", "new", one, two)
+		a.hub.SyncShared(ctx, sa.ID)
+		a.fake.takeOut(tripAlbum, sumOf(two))
+		a.hub.SyncShared(ctx, sa.ID)
+		b.hub.SyncShared(ctx, sb.ID)
+		a.hub.SyncShared(ctx, sa.ID)
+		inB := b.fake.inAlbum(sb.AlbumID.String())
+		if rule == "nothing" && len(inB) != 2 {
+			t.Errorf("nothing travels: B keeps both (%d)", len(inB))
+		}
+		if rule == "follow" {
+			if len(inB) != 1 || inB[0].sum != sumOf(one) {
+				t.Fatalf("it followed: %+v", inB)
+			}
+			if b.fake.countByChecksum(familyID, sumOf(two)) != 1 {
+				t.Error("the photo stays in B's library")
+			}
+			if len(a.fake.inAlbum(tripAlbum)) != 1 {
+				t.Error("it did not come back to A")
+			}
+			if o, _, _, _ := b.st.LedgerHas(ctx, sb.ID, sumOf(two)); o != store.OriginRemoved {
+				t.Errorf("B remembers it as removed: %q", o)
+			}
+		}
+	}
+}
+
+func TestADeletedPhotoNeverTravelsAndALargeRemovalAsksFirst(t *testing.T) {
+	ctx := context.Background()
+	gone := []byte("deleted on A")
+	a, b, sa, sb := sharedPairRule(t, "follow", "all", "new", gone, []byte("x1"))
+	a.hub.SyncShared(ctx, sa.ID)
+	a.fake.trash(tripAlbum, sumOf(gone))
+	a.hub.SyncShared(ctx, sa.ID)
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 2 {
+		t.Error("a deleted photo is not a removal")
+	}
+	// a large removal waits
+	var all [][]byte
+	for i := 0; i < 8; i++ {
+		all = append(all, []byte("many "+strconv.Itoa(i)))
+	}
+	a2, b2, sa2, sb2 := sharedPairRule(t, "follow", "all", "new", all...)
+	a2.hub.SyncShared(ctx, sa2.ID)
+	for _, p := range all[:7] {
+		a2.fake.takeOut(tripAlbum, sumOf(p))
+	}
+	a2.hub.SyncShared(ctx, sa2.ID)
+	if len(b2.fake.inAlbum(sb2.AlbumID.String())) != 8 {
+		t.Fatal("B still has all eight")
+	}
+	if x, _ := a2.st.SharedAlbumByID(ctx, sa2.ID); len(x.Pending) != 7 {
+		t.Fatalf("seven wait for the person: %+v", x.Pending)
+	}
+	if _, page := a2.as(t, "GET", "/", ""); !strings.Contains(page, "Take them out of") {
+		t.Error("the page asks")
+	}
+	// only the owner can answer, and "no" leaves them there
+	if code, _ := a2.as(t, "POST", "/shared/removal", "shared="+sa2.ID+"&do=follow"); code != 204 && code != 200 {
+		t.Fatalf("answer: %d", code)
+	}
+	if got := len(b2.fake.inAlbum(sb2.AlbumID.String())); got != 1 {
+		t.Errorf("after yes B has %d", got)
+	}
+	// a photo put back travels again
+	a2.fake.addPhoto(aliceID, tripAlbum, "back.jpg", all[0])
+	a2.hub.SyncShared(ctx, sa2.ID)
+	if got := len(b2.fake.inAlbum(sb2.AlbumID.String())); got != 2 {
+		t.Errorf("the photo put back came again: %d", got)
 	}
 }

@@ -3838,6 +3838,16 @@ templ SharedRow(a SharedView, id string) {
 				if a.Problem != "" {
 					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", a.Problem) }</p>
 				}
+				if a.Pending > 0 {
+					<div class="card notice">
+						<p>{ n(ctx, "You took {n} photo out of this album. Take it out of {name}'s album too?", "You took {n} photos out of this album. Take them out of {name}'s album too?", a.Pending, "name", a.Peer) }</p>
+						<p class="meta">{ t(ctx, "Only the album changes there; the photos stay in their library.") }</p>
+						<p class="row">
+							<button class="primary" hx-post="shared/removal" hx-vals={ vals2("shared", a.ID, "do", "follow") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Yes, take them out there too") }</button>
+							<button hx-post="shared/removal" hx-vals={ vals2("shared", a.ID, "do", "keep") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No, leave them there") }</button>
+						</p>
+					</div>
+				}
 				<p class="row"><button hx-post="shared/sync" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Sync now") }</button></p>
 			case "proposed":
 				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}.", "album", a.Album, "mine", historyText(ctx, a.History)) } { deletionText(ctx, a.Deletion) }</p>
