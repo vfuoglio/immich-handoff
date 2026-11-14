@@ -94,6 +94,7 @@ type Hub struct {
 	digestRun    map[string]bool         // services whose digest is being made now
 	frames       frameCache              // the albums frames last read
 	rooms        roomCache               // the albums client rooms last read
+	pins         pinGuard                // wrong PINs given to client rooms
 	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
 	retries      map[string]*time.Timer  // when each unreachable receiver on another server is tried again
 	bridgeTries  bridgeGuard             // what the invitation pages know about who tried

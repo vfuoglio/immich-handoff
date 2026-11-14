@@ -451,7 +451,10 @@ A **client room** is for photographers: a link where your client looks at one of
 - **The key cannot download.** The room has a key of its own in your Immich account that can only look at pictures and list an album's photos. It has no permission to download an original: that is added by your own session when you release the photos, and never before.
 - **The link** has a QR code and is as private as its length; with a PIN the client needs both. **Pause the room** to make the link show nothing for a while; **End room** deletes the link and the key at once. You can have 20 rooms.
 
-(This page grows as the room's parts arrive: the client's page, choosing, notes, rounds and release.)
+- **What the client sees.** The link opens a page with the room's title and the marked pictures as a grid, in the order they were taken, numbered (a video has a small play mark and shows its marked poster picture). A tap opens a picture larger, and the arrow keys, the buttons or a swipe move to the next one. Nothing on the page says whose Immich it is, which album it is, or where the originals are: a client sees the title you gave, the pictures and numbers, and nothing else. The page is in the client's language (the six the app speaks), works on a phone first and in both colour schemes, is never indexed or cached, and sends no referrer.
+- **The PIN.** With a PIN the page shows nothing, not even the title, until it is given; it is then remembered in that browser for a week. Five wrong tries from one connection in ten minutes silence it for ten minutes more. While you have paused the room the page says it is closed for now; once it has ended, or for a link that never existed, the answer is the same "not found".
+
+(This page grows as the room's parts arrive: choosing, notes, rounds and release.)
 
 ## Frames: an album on a screen
 

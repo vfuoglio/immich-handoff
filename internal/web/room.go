@@ -92,14 +92,27 @@ func (w *Server) endRoom(rw http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// roomFor finds the room a link opens; unknown, ended and paused rooms look the same.
-func (w *Server) roomFor(rw http.ResponseWriter, r *http.Request) (store.Room, bool) {
+// roomUnlockCookie is the cookie in which a client's browser keeps that it gave the right PIN to a room.
+func roomUnlockCookie(r store.Room) string { return "handoff-room-" + r.ID[:8] }
+
+// roomLocked is whether this client is kept out of the room: it has a PIN and the client has not given it.
+func roomLocked(r *http.Request, room store.Room) bool {
+	v := ""
+	if c, err := r.Cookie(roomUnlockCookie(room)); err == nil {
+		v = c.Value
+	}
+	return hub.RoomLocked(room, v)
+}
+
+// roomOpen finds the room a link opens and checks that the client may see its pictures: unknown, ended, paused, and locked
+// rooms all answer "not found" to everything but the room's own page.
+func (w *Server) roomOpen(rw http.ResponseWriter, r *http.Request) (store.Room, bool) {
 	if w.Hub == nil {
 		http.NotFound(rw, r)
 		return store.Room{}, false
 	}
 	room, err := w.Hub.RoomFor(r.Context(), r.PathValue("token"))
-	if err != nil || room.State != store.RoomActive {
+	if err != nil || room.State != store.RoomActive || roomLocked(r, room) {
 		http.NotFound(rw, r)
 		return room, false
 	}
@@ -109,28 +122,75 @@ func (w *Server) roomFor(rw http.ResponseWriter, r *http.Request) (store.Room, b
 // roomPage is the client's page. It is public (the long link, and the PIN if there is one, is the only protection), is never
 // indexed or cached, and sends no referrer.
 func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
-	room, ok := w.roomFor(rw, r)
-	if !ok {
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	room, err := w.Hub.RoomFor(r.Context(), r.PathValue("token"))
+	if err != nil {
+		http.NotFound(rw, r)
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.Header().Set("Referrer-Policy", "no-referrer")
 	rw.Header().Set("X-Robots-Tag", "noindex")
-	photos, err := w.Hub.RoomPhotos(r.Context(), room)
+	ctx := r.Context()
+	switch {
+	case room.State == store.RoomPaused:
+		RoomPaused().Render(ctx, rw)
+		return
+	case roomLocked(r, room):
+		rw.WriteHeader(http.StatusUnauthorized)
+		RoomLocked(room.Token, false, false).Render(ctx, rw)
+		return
+	}
+	photos, err := w.Hub.RoomPhotos(ctx, room)
 	if err != nil {
 		http.Error(rw, "try again", http.StatusServiceUnavailable)
 		return
 	}
-	ids := make([]string, 0, len(photos))
-	for _, p := range photos {
-		ids = append(ids, p.ID)
+	tiles := make([]RoomTile, 0, len(photos))
+	for i, p := range photos {
+		tiles = append(tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video})
 	}
-	RoomStub(room.ClientTitle(), room.Token, ids).Render(r.Context(), rw)
+	RoomPage(room.ClientTitle(), room.Token, tiles).Render(ctx, rw)
+}
+
+// roomUnlock takes the PIN of a room and, if it is right, remembers that in the client's browser.
+func (w *Server) roomUnlock(rw http.ResponseWriter, r *http.Request) {
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	room, err := w.Hub.RoomFor(r.Context(), r.PathValue("token"))
+	if err != nil || room.State != store.RoomActive || room.Password == "" {
+		http.NotFound(rw, r)
+		return
+	}
+	r.ParseForm()
+	ok, err := w.Hub.TryRoomPIN(room, hub.DropWho(room.Token, w.clientAddr(r)), r.PostFormValue("pin"))
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Referrer-Policy", "no-referrer")
+	if err != nil {
+		rw.Header().Set("Retry-After", "600")
+		rw.WriteHeader(http.StatusTooManyRequests)
+		RoomLocked(room.Token, false, true).Render(r.Context(), rw)
+		return
+	}
+	if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		RoomLocked(room.Token, true, false).Render(r.Context(), rw)
+		return
+	}
+	http.SetCookie(rw, &http.Cookie{Name: roomUnlockCookie(room), Value: hub.RoomUnlockToken(room), Path: "/", MaxAge: 7 * 24 * 3600, HttpOnly: true,
+		SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
+	rw.Header().Set("Location", "../"+room.Token) // relative, so it works under a path prefix
+	rw.WriteHeader(http.StatusSeeOther)
 }
 
 // roomPhoto gives a client the picture of one photo: marked, never the plain preview.
 func (w *Server) roomPhoto(rw http.ResponseWriter, r *http.Request) {
-	room, ok := w.roomFor(rw, r)
+	room, ok := w.roomOpen(rw, r)
 	if !ok {
 		return
 	}

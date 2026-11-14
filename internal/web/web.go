@@ -145,6 +145,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
 	mux.HandleFunc("GET /room/{token}", w.roomPage)
 	mux.HandleFunc("GET /room/{token}/photo/{id}", w.roomPhoto)
+	mux.HandleFunc("POST /room/{token}/unlock", w.roomUnlock)
 	mux.HandleFunc("GET /fragments/room-albums", w.roomAlbums)
 	mux.HandleFunc("POST /rooms", w.createRoom)
 	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)

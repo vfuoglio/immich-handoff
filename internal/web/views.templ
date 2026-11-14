@@ -434,7 +434,7 @@ templ Layout(title, user string) {
 				if g.Accent {
 					<link rel="stylesheet" href={ "drop/" + g.Token + "/theme.css" }/>
 				}
-			} else {
+			} else if guestOf(ctx) == nil {
 				<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials"/>
 			}
 			<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
@@ -3230,15 +3230,72 @@ templ RoomRow(r RoomView, id string, open bool) {
 	</details>
 }
 
-// RoomStub is the client's page until it is built properly (#134): the marked pictures, nothing else.
-templ RoomStub(title, token string, ids []string) {
+// RoomTile is one picture on the client's page.
+type RoomTile struct {
+	N     int
+	ID    string
+	Video bool
+}
+
+// RoomPage is what the client sees: the room's title and the marked pictures, in the order of the shoot (ts/room.ts opens them
+// larger; without it each is a link to the marked picture).
+templ RoomPage(title, token string, tiles []RoomTile) {
 	@Layout(title, "") {
-		<h1>{ title }</h1>
-		<p class="meta">{ n(ctx, "{n} photo is ready", "{n} photos are ready", len(ids)) }</p>
-		<div class="room-stub">
-			for _, id := range ids {
-				<img src={ "room/" + token + "/photo/" + id } alt="" loading="lazy" width="320"/>
+		<main class="room" data-room data-close={ t(ctx, "Close") }>
+			<section class="invite-hero">
+				<h1>{ title }</h1>
+				<p class="lead">{ t(ctx, "Choose a photo to see it larger. The pictures carry the photographer's mark; the originals come later.") }</p>
+				<p class="meta">{ n(ctx, "{n} photo", "{n} photos", len(tiles)) }</p>
+			</section>
+			if len(tiles) == 0 {
+				<p class="meta">{ t(ctx, "There are no photos here yet.") }</p>
 			}
-		</div>
+			<ul class="plain room-grid">
+				for _, tile := range tiles {
+					<li>
+						<a class="room-tile" href={ templ.SafeURL("room/" + token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", len(tiles)) }>
+							<img src={ "room/" + token + "/photo/" + tile.ID } alt="" loading="lazy"/>
+							<span class="room-n" aria-hidden="true">{ fmt.Sprint(tile.N) }</span>
+							if tile.Video {
+								<span class="room-video" aria-hidden="true">&#9654;</span>
+							}
+						</a>
+					</li>
+				}
+			</ul>
+		</main>
+	}
+}
+
+// RoomLocked asks for the PIN of a room. It shows nothing of the room, not even its title.
+templ RoomLocked(token string, wrong, wait bool) {
+	@Layout(t(ctx, "PIN needed"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This page needs a PIN") }</h1>
+			<p class="lead">{ t(ctx, "Ask the person who sent you the link for the PIN.") }</p>
+		</section>
+		<form class="card offer-form" method="post" action={ "room/" + token + "/unlock" }>
+			if wrong {
+				<p class="meta bad-note" role="alert">{ t(ctx, "The PIN is not right. Try again.") }</p>
+			}
+			if wait {
+				<p class="meta bad-note" role="alert">{ t(ctx, "Too many wrong tries. Try again in ten minutes.") }</p>
+			}
+			<div class="field">
+				<label for="room-pin">{ t(ctx, "PIN") }</label>
+				<input id="room-pin" name="pin" type="password" required autofocus autocomplete="off"/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Open") }</button></p>
+		</form>
+	}
+}
+
+// RoomPaused is what a client sees while the photographer has paused the room.
+templ RoomPaused() {
+	@Layout(t(ctx, "Closed for now"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This room is closed for now") }</h1>
+			<p class="lead">{ t(ctx, "The photographer has paused it. Try again later.") }</p>
+		</section>
 	}
 }

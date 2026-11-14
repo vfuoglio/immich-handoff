@@ -74,7 +74,7 @@ func TestAClientRoomPageNeedsNoSignInAndAnUnknownPausedOrEndedLinkLooksTheSame(t
 	}
 	res.Body.Close()
 	page := b.String()
-	if res.StatusCode != 200 || !strings.Contains(page, "Chiara and Luca") || !strings.Contains(page, "2 photos are ready") {
+	if res.StatusCode != 200 || !strings.Contains(page, "Chiara and Luca") || !strings.Contains(page, "2 photos") {
 		t.Errorf("%d %.200s", res.StatusCode, page)
 	}
 	if res.Header.Get("Cache-Control") != "no-store" || res.Header.Get("Referrer-Policy") != "no-referrer" || res.Header.Get("X-Robots-Tag") != "noindex" {
@@ -83,8 +83,9 @@ func TestAClientRoomPageNeedsNoSignInAndAnUnknownPausedOrEndedLinkLooksTheSame(t
 	if strings.Contains(page, "Wedding") || strings.Contains(page, "Rossi") {
 		t.Error("the page carries nothing of the photographer's album or the room's private name")
 	}
+	// unknown, ended and malformed links all answer the same; a paused room tells a client who has the link that it is closed for now
 	var answers []string
-	for _, token := range []string{strings.Repeat("0", 64), paused, ended, "short"} {
+	for _, token := range []string{strings.Repeat("0", 64), ended, "short"} {
 		code, body := do(t, "GET", app.URL+"/room/"+token, "", nil)
 		answers = append(answers, strings.TrimSpace(body))
 		if code != 404 {
@@ -95,6 +96,12 @@ func TestAClientRoomPageNeedsNoSignInAndAnUnknownPausedOrEndedLinkLooksTheSame(t
 		if a != answers[0] {
 			t.Errorf("a link says nothing about why it does not work: %q vs %q", a, answers[0])
 		}
+	}
+	if code, body := do(t, "GET", app.URL+"/room/"+paused, "", nil); code != 200 || !strings.Contains(body, "closed for now") || strings.Contains(body, `room-grid`) {
+		t.Errorf("a paused room: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/room/"+paused+"/photo/0000000000000000", "", nil); code != 404 {
+		t.Errorf("a paused room gives no picture: %d", code)
 	}
 }
 
@@ -169,7 +176,15 @@ func TestNoRoomRouteEverReturnsTheUnmarkedPreview(t *testing.T) {
 		srv.Hub.Connect = func(key string) (*immich.API, error) { return immich.New(im.URL, immich.Auth{APIKey: key}, nil) }
 	})
 	_, page := do(t, "GET", app.URL+"/room/"+token, "", nil)
-	ids := regexp.MustCompile(`room/`+token+`/photo/([0-9a-f]{16})`).FindAllStringSubmatch(page, -1)
+	found := regexp.MustCompile(`room/`+token+`/photo/([0-9a-f]{16})`).FindAllStringSubmatch(page, -1)
+	var ids [][]string
+	seen := map[string]bool{}
+	for _, f := range found {
+		if !seen[f[1]] {
+			seen[f[1]] = true
+			ids = append(ids, f)
+		}
+	}
 	if len(ids) != 2 {
 		t.Fatalf("the page shows two pictures: %.300s", page)
 	}
@@ -219,5 +234,52 @@ func TestOnlyRoomImageAsksImmichForAPictureAndMarksIt(t *testing.T) {
 				t.Error("the preview is marked right after it is fetched")
 			}
 		}
+	}
+}
+
+func TestAPinGuardsEverythingAClientCanReachAndIsKeptInTheirBrowser(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("ab", 32)
+	hash, _ := hub.HashDropPassword("4711")
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi", Title: "Chiara and Luca", AlbumName: "Wedding", Password: hash}))
+
+	code, body := do(t, "GET", app.URL+"/room/"+token, "", nil)
+	if code != 401 || !strings.Contains(body, "This page needs a PIN") || strings.Contains(body, "Chiara") || strings.Contains(body, "room-grid") {
+		t.Fatalf("the page shows nothing of the room, not even its title: %d %.200s", code, body)
+	}
+	if code, _ := do(t, "GET", app.URL+"/room/"+token+"/photo/0000000000000000", "", nil); code != 404 {
+		t.Errorf("no picture without the PIN: %d", code)
+	}
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	post := func(pin string) *http.Response {
+		req, _ := http.NewRequest("POST", app.URL+"/room/"+token+"/unlock", strings.NewReader("pin="+pin))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := noFollow.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	if res := post("0000"); res.StatusCode != 401 || len(res.Cookies()) != 0 {
+		t.Errorf("a wrong PIN: %d %v", res.StatusCode, res.Cookies())
+	}
+	res := post("4711")
+	if res.StatusCode != 303 || res.Header.Get("Location") != "../"+token || len(res.Cookies()) != 1 || !res.Cookies()[0].HttpOnly {
+		t.Fatalf("the right PIN: %d %v %v", res.StatusCode, res.Header, res.Cookies())
+	}
+	cookie := res.Cookies()[0].Name + "=" + res.Cookies()[0].Value
+	if code, body := do(t, "GET", app.URL+"/room/"+token, cookie, nil); code != 200 || !strings.Contains(body, "Chiara and Luca") || !strings.Contains(body, "room-grid") {
+		t.Errorf("with the PIN remembered: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/room/"+token, res.Cookies()[0].Name+"=forged", nil); code != 401 {
+		t.Errorf("a made-up cookie: %d", code)
+	}
+	// five wrong tries silence that connection for ten minutes, even for the right PIN
+	for i := 0; i < 5; i++ {
+		post("1111")
+	}
+	if res := post("4711"); res.StatusCode != 429 {
+		t.Errorf("after five wrong tries: %d", res.StatusCode)
 	}
 }
