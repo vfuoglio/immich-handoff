@@ -149,6 +149,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /room/{token}/pick/{id}", w.roomPick)
 	mux.HandleFunc("POST /room/{token}/done", w.roomDone)
 	mux.HandleFunc("POST /room/{token}/name", w.roomName)
+	mux.HandleFunc("POST /room/{token}/note/{id}", w.roomNote)
+	mux.HandleFunc("POST /rooms/reply", w.replyToNote)
 	mux.HandleFunc("GET /fragments/room-albums", w.roomAlbums)
 	mux.HandleFunc("POST /rooms", w.createRoom)
 	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)

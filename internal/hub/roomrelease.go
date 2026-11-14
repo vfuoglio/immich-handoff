@@ -256,6 +256,8 @@ func (h *Hub) RoomOf(ctx context.Context, owner uuid.UUID, id string) (store.Roo
 type ReviewSelection struct {
 	store.SelectionSummary
 	Photos []RoomPhoto
+	Notes  map[string]store.Note // by photo
+	Picked map[string]bool       // the photos in the choice (the others only have a note)
 }
 
 // RoomReview lists each selection of a room with its photos in the order of the shoot, with the file names, so the photographer
@@ -280,9 +282,14 @@ func (h *Hub) RoomReview(ctx context.Context, r store.Room) ([]ReviewSelection, 
 		for _, p := range picks {
 			picked[p.Photo] = true
 		}
-		rs := ReviewSelection{SelectionSummary: sel}
+		rs := ReviewSelection{SelectionSummary: sel, Notes: map[string]store.Note{}, Picked: picked}
+		if ns, err := h.Store.Notes(ctx, r.ID, 1, &who); err == nil {
+			for _, n := range ns {
+				rs.Notes[n.Photo] = n
+			}
+		}
 		for _, p := range s.photos {
-			if picked[p.ID] {
+			if picked[p.ID] || rs.Notes[p.ID].Body != "" {
 				rs.Photos = append(rs.Photos, p)
 			}
 		}

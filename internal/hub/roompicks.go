@@ -177,7 +177,9 @@ func (h *Hub) RoomDone(ctx context.Context, r store.Room, v RoomViewer) (RoomSel
 		if who == "" {
 			who = "Your client"
 		}
-		h.event(ctx, "", r.OwnerID, "choice", i18n.PackN("{who} finished choosing in {room}: {n} photo", "{who} finished choosing in {room}: {n} photos", sel.Count, "who", whoText(who), "room", r.Name))
+		sc := scope(r, v)
+		notes, _ := h.Store.Notes(ctx, r.ID, 1, &sc)
+		h.event(ctx, "", r.OwnerID, "choice", notesLine(whoText(who), r.Name, sel.Count, len(notes)))
 		h.tell(notify.DropBox, fmt.Sprintf("%s finished choosing in the client room %q of %s: %d photos. Open the room on the Services tab to look at the choice.", who, r.Name, r.OwnerName, sel.Count))
 		h.Log.Info("a client finished choosing", "room", r.Name, "photos", sel.Count)
 	}

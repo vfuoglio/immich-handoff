@@ -37,7 +37,7 @@ func (w *Server) roomViews(ctx context.Context, me *member) []RoomView {
 		if !r.EndsAt.IsZero() {
 			v.Ends = l.Stamp(r.EndsAt.Local())
 		}
-		v.Mode, v.Limit = r.PickMode, r.PickLimit
+		v.Mode, v.Limit, v.Notes = r.PickMode, r.PickLimit, w.Hub.RoomNoteCount(ctx, r)
 		if sels, err := w.Hub.RoomSelections(ctx, r); err == nil {
 			for _, s := range sels {
 				sv := SelectionView{Who: s.Who, Name: s.Name, Count: s.Count, Done: s.Done}
@@ -95,7 +95,7 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 		_, err = w.Hub.CreateRoom(ctx, me.sess, me.user, hub.RoomParams{Name: r.PostFormValue("name"), Title: r.PostFormValue("title"),
 			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days,
 			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo, PickMode: r.PostFormValue("pickmode"), PickLimit: limit,
-			AutoRelease: r.PostFormValue("autorelease") == "1", ReleaseDays: relDays})
+			AutoRelease: r.PostFormValue("autorelease") == "1", ReleaseDays: relDays, NotesMode: r.PostFormValue("notes")})
 		return err
 	})
 }
@@ -177,6 +177,10 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	d := RoomPageData{Title: room.ClientTitle(), Token: room.Token, Name: v.Name, Count: sel.Count, Limit: sel.Limit, Done: sel.Done, CanPick: sel.CanPick,
 		NeedsName: sel.NeedsName, Chooser: sel.Chooser, Mode: sel.Mode, CounterText: pickCounter(ctx, sel.Count, sel.Limit), Message: roomMessage(ctx, r.URL.Query().Get("e"))}
+	notes, _ := w.Hub.RoomNotesOf(ctx, room, v)
+	if room.NotesMode != store.RoomNotesNone {
+		d.Notes = room.NotesMode
+	}
 	mine := map[string]bool{}
 	if dl, err := w.Hub.RoomDownloads(ctx, room, v); err == nil {
 		d.Released = true
@@ -188,7 +192,7 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for i, p := range photos {
-		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID], Mine: mine[p.ID]})
+		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID], Mine: mine[p.ID], Note: notes[p.ID].Body, Reply: notes[p.ID].Reply})
 	}
 	RoomPage(d).Render(ctx, rw)
 }
@@ -441,6 +445,7 @@ func (w *Server) roomReview(rw http.ResponseWriter, r *http.Request) {
 	if !room.ReleaseUntil.IsZero() {
 		d.Until = l.Stamp(room.ReleaseUntil.Local())
 	}
+	d.Replies = room.NotesMode == store.RoomNotesReplies
 	for _, sel := range review {
 		rs := ReviewSel{Name: sel.Name, Done: sel.Done}
 		if sel.Done {
@@ -448,9 +453,12 @@ func (w *Server) roomReview(rw http.ResponseWriter, r *http.Request) {
 		}
 		var names []string
 		for _, p := range sel.Photos {
-			rs.Photos = append(rs.Photos, ReviewPhoto{N: place[p.ID], ID: p.ID, File: p.Name})
-			names = append(names, p.Name)
+			rs.Photos = append(rs.Photos, ReviewPhoto{N: place[p.ID], ID: p.ID, File: p.Name, Who: sel.Who, Note: sel.Notes[p.ID].Body, Reply: sel.Notes[p.ID].Reply, Chosen: sel.Picked[p.ID]})
+			if sel.Picked[p.ID] {
+				names = append(names, p.Name)
+			}
 		}
+		rs.Chosen = len(names)
 		rs.Names = strings.Join(names, "\n")
 		d.Selections = append(d.Selections, rs)
 	}
@@ -590,4 +598,38 @@ func (h headerOnce) Write(p []byte) (int, error) {
 		h.rw.Header().Set("X-Content-Type-Options", "nosniff")
 	}
 	return h.countWriter.Write(p)
+}
+
+// roomNote keeps the client's note on a photo (an empty text takes it away).
+func (w *Server) roomNote(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	v := w.roomViewer(rw, r, room)
+	r.ParseForm()
+	n, err := w.Hub.RoomNote(r.Context(), room, v, r.PathValue("id"), r.PostFormValue("text"))
+	rw.Header().Set("Cache-Control", "no-store")
+	rw.Header().Set("Content-Type", "application/json")
+	if errors.Is(err, hub.ErrDropGone) {
+		http.NotFound(rw, r)
+		return
+	}
+	if err != nil {
+		if hub.IsUserError(err) {
+			rw.WriteHeader(http.StatusConflict)
+			json.NewEncoder(rw).Encode(map[string]any{"error": t(r.Context(), err.Error())})
+			return
+		}
+		w.Log.Warn("a note failed", "err", err)
+		http.Error(rw, "try again", http.StatusBadGateway)
+		return
+	}
+	json.NewEncoder(rw).Encode(map[string]any{"count": n})
+}
+
+func (w *Server) replyToNote(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "note answered", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.RoomReply(ctx, me.user, r.PostFormValue("room"), r.PostFormValue("who"), r.PostFormValue("photo"), r.PostFormValue("text"))
+	})
 }

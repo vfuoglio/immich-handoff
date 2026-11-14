@@ -831,6 +831,13 @@ span.room-heart.on { position: absolute; right: .3rem; top: .3rem; width: 2.2rem
 .room-heart-big { min-height: 2.75rem; }
 .room-dl { position: absolute; left: .3rem; bottom: .3rem; width: 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); text-decoration: none; font-size: 1.2rem; }
 .room-file { display: block; padding: .2rem .1rem 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-note { position: absolute; right: .4rem; top: 3.4rem; width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border-radius: 50%; background: #000a; color: #fff; font-size: .85rem; }
+.room-noteform { display: grid; gap: .35rem; max-width: 30rem; margin: .6rem auto 0; padding: .6rem .8rem; border-radius: var(--radius-sm); background: var(--surface); }
+.room-noteform textarea { width: 100%; }
+.room-reply-text { margin: 0; font-style: italic; }
+.room-note-text { margin: .3rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.room-reply { display: grid; gap: .25rem; margin-top: .4rem; }
+.room-reply textarea { width: 100%; }
 dialog.room-lightbox { max-width: 100vw; }
 .room-caption { text-align: center; color: #fff; margin: .5rem 0 0; }
 .room-bar { justify-content: center; margin: .4rem 0 0; }

@@ -31,6 +31,7 @@ type RoomView struct {
 	Mode                          string
 	Limit                         int
 	Released                      bool
+	Notes                         int
 }
 
 // SelectionView is one selection of a room as the photographer sees it.
@@ -3170,6 +3171,14 @@ templ RoomSection(rooms []RoomView) {
 				<input id="rm-picklimit" name="picklimit" type="number" min="1" max="5000" inputmode="numeric" placeholder="30"/>
 			</div>
 			<div class="field">
+				<label for="rm-notes">{ t(ctx, "Notes on photos") }</label>
+				<select id="rm-notes" name="notes">
+					<option value="none" selected>{ t(ctx, "None: clients only choose") }</option>
+					<option value="note">{ t(ctx, "A short note to me on each photo") }</option>
+					<option value="replies">{ t(ctx, "Notes, and I can answer each one") }</option>
+				</select>
+			</div>
+			<div class="field">
 				<label><input type="checkbox" name="autorelease" value="1"/> { t(ctx, "Release the originals as soon as the client sends their choice") }</label>
 				<small class="meta">{ t(ctx, "Leave this off to look at the choice first, for example until you have been paid, and release it yourself. If you switch it on, the room's key may download from the start (nothing is given out before a choice is sent).") }</small>
 			</div>
@@ -3247,6 +3256,9 @@ templ RoomRow(r RoomView, id string, open bool) {
 					}
 				</p>
 				if len(r.Selections) > 0 {
+					if r.Notes > 0 {
+						<p class="meta">{ n(ctx, "{n} note from clients", "{n} notes from clients", r.Notes) }</p>
+					}
 					<p class="row"><a class="button" href={ templ.SafeURL("rooms/" + r.ID + "/review") }>{ t(ctx, "Look at the choice and release the originals") }</a></p>
 					<ul class="plain room-selections">
 						for _, sel := range r.Selections {
@@ -3295,6 +3307,8 @@ type RoomTile struct {
 	Video  bool
 	Picked bool
 	Mine   bool // the original can be downloaded
+	Note   string // the client's note on this photo
+	Reply  string // and the photographer's answer
 }
 
 // RoomPageData is what the client's page shows.
@@ -3312,6 +3326,7 @@ type RoomPageData struct {
 	Message      string // what went wrong with the last press, in words
 	Released     bool   // the originals of this client's sent choice can be downloaded
 	Until        string // until when, "" for as long as the room works
+	Notes        string // notes on photos: "", "note" or "replies"
 }
 
 // RoomPage is what the client sees: the room's title, the marked pictures in the order of the shoot, a way to choose and to send
@@ -3319,7 +3334,7 @@ type RoomPageData struct {
 // each picture opens larger.
 templ RoomPage(d RoomPageData) {
 	@Layout(d.Title, "") {
-		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick }>
+		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick } data-notes={ d.Notes } data-note-label={ t(ctx, "Note for the photographer") } data-note-save={ t(ctx, "Save note") } data-note-saved={ t(ctx, "Note saved") } data-reply-label={ t(ctx, "The photographer wrote back:") } data-note-hint={ t(ctx, "For example: brighten this one, or crop here.") }>
 			<section class="invite-hero">
 				<h1>{ d.Title }</h1>
 				<p class="lead">{ t(ctx, "Choose a photo to see it larger. The pictures carry the photographer's mark; the originals come later.") }</p>
@@ -3378,12 +3393,15 @@ templ RoomPage(d RoomPageData) {
 			}
 			<ul class="plain room-grid">
 				for _, tile := range d.Tiles {
-					<li class={ "room-item", templ.KV("picked", tile.Picked) } id={ fmt.Sprintf("p%d", tile.N) }>
+					<li class={ "room-item", templ.KV("picked", tile.Picked), templ.KV("noted", tile.Note != "") } id={ fmt.Sprintf("p%d", tile.N) } data-id={ tile.ID } data-note={ tile.Note } data-reply={ tile.Reply }>
 						<a class="room-tile" href={ templ.SafeURL("room/" + d.Token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", len(d.Tiles)) }>
 							<img src={ "room/" + d.Token + "/photo/" + tile.ID } alt="" loading="lazy"/>
 							<span class="room-n" aria-hidden="true">{ fmt.Sprint(tile.N) }</span>
 							if tile.Video {
 								<span class="room-video" aria-hidden="true">&#9654;</span>
+							}
+							if tile.Note != "" {
+								<span class="room-note" aria-hidden="true">&#9998;</span>
 							}
 						</a>
 						if tile.Mine {
@@ -3450,6 +3468,7 @@ type ReviewData struct {
 	Downloads        int
 	Auto             bool
 	Limit            int
+	Replies          bool // the photographer may answer notes
 }
 
 // ReviewSel is one selection on the review page.
@@ -3458,13 +3477,18 @@ type ReviewSel struct {
 	Done       bool
 	Photos     []ReviewPhoto
 	Names      string // the file names, one on each line
+	Chosen     int
 }
 
 // ReviewPhoto is one chosen photo on the review page.
 type ReviewPhoto struct {
-	N    int
-	ID   string
-	File string
+	N     int
+	ID    string
+	File  string
+	Who   string // the selection's mark, for answering
+	Chosen bool  // in the choice (not only noted)
+	Note  string
+	Reply string
 }
 
 // RoomReviewPage is where the photographer looks at what clients chose, and releases the originals.
@@ -3510,7 +3534,7 @@ templ RoomReviewPage(d ReviewData) {
 		for _, sel := range d.Selections {
 			<section class="card">
 				<h2>{ selectionName(ctx, sel.Name) }</h2>
-				<p class="meta">{ n(ctx, "{n} photo chosen", "{n} photos chosen", len(sel.Photos)) }
+				<p class="meta">{ n(ctx, "{n} photo chosen", "{n} photos chosen", sel.Chosen) }
 					if sel.Done {
 						<span class="chip ok">{ t(ctx, "Sent {when}", "when", sel.When) }</span>
 					} else {
@@ -3524,7 +3548,24 @@ templ RoomReviewPage(d ReviewData) {
 								<img src={ "rooms/" + d.ID + "/photo/" + p.ID } alt="" loading="lazy"/>
 								<span class="room-n" aria-hidden="true">{ fmt.Sprint(p.N) }</span>
 							</a>
-							<small class="meta room-file">{ p.File }</small>
+							<small class="meta room-file">{ p.File }
+								if !p.Chosen {
+									<span class="chip">{ t(ctx, "only a note") }</span>
+								}
+							</small>
+							if p.Note != "" {
+								<p class="room-note-text">{ p.Note }</p>
+								if d.Replies {
+									<form class="room-reply" hx-post="rooms/reply" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+										<input type="hidden" name="room" value={ d.ID }/>
+										<input type="hidden" name="who" value={ p.Who }/>
+										<input type="hidden" name="photo" value={ p.ID }/>
+										<label class="meta" for={ "reply-" + p.ID + p.Who }>{ t(ctx, "Your answer") }</label>
+										<textarea id={ "reply-" + p.ID + p.Who } name="text" rows="2" maxlength="280">{ p.Reply }</textarea>
+										<button type="submit">{ t(ctx, "Send answer") }</button>
+									</form>
+								}
+							}
 						</li>
 					}
 				</ul>

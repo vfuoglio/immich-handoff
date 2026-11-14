@@ -689,3 +689,103 @@ func TestARoomThatReleasesByItselfHasAKeyThatCanDownloadFromTheStartButGivesNoth
 		t.Errorf("withdrawing also ends the release by itself: %+v", r)
 	}
 }
+
+func TestNotesAreOffUnlessTheRoomTakesThemAndAreCleanedAndLimited(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg")
+	off := makeRoom(t, e, album, nil)
+	ids := pickIDs(t, e, off)
+	v := hub.RoomViewer{Who: "v", Name: "Chiara"}
+	if _, err := e.h.RoomNote(ctx, off, v, ids[0], "hello"); err != hub.ErrRoomNotesOff {
+		t.Errorf("a room with no notes: %v", err)
+	}
+	if _, err := e.h.CreateRoom(ctx, e.sess, bob, hub.RoomParams{Name: "x", AlbumID: uuid.MustParse(album), NotesMode: "everything"}); err != hub.ErrBadNotesMode {
+		t.Errorf("%v", err)
+	}
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.NotesMode = store.RoomNotesNote })
+	ids = pickIDs(t, e, r)
+	n, err := e.h.RoomNote(ctx, r, v, ids[0], "  Brighten this one\x00 please‮ \n\n\n\nthank you  ")
+	if err != nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
+	}
+	notes, _ := e.h.RoomNotesOf(ctx, r, v)
+	if got := notes[ids[0]].Body; got != "Brighten this one please\n\nthank you" || notes[ids[0]].Name != "Chiara" {
+		t.Errorf("cleaned, with the name: %q %q", got, notes[ids[0]].Body)
+	}
+	if _, err := e.h.RoomNote(ctx, r, v, ids[0], strings.Repeat("é", 281)); err != hub.ErrRoomNoteLong {
+		t.Errorf("%v", err)
+	}
+	if _, err := e.h.RoomNote(ctx, r, v, ids[0], strings.Repeat("é", 280)); err != nil {
+		t.Errorf("280 letters: %v", err)
+	}
+	if _, err := e.h.RoomNote(ctx, r, v, "0000000000000000", "x"); err != hub.ErrDropGone {
+		t.Errorf("a photo that is not in the room: %v", err)
+	}
+	if n, err := e.h.RoomNote(ctx, r, v, ids[0], "   "); err != nil || n != 0 {
+		t.Errorf("an empty note takes the note away: %d %v", n, err)
+	}
+	// written before the choice is sent, not after
+	e.h.RoomNote(ctx, r, v, ids[1], "crop here")
+	e.h.RoomPick(ctx, r, v, ids[1])
+	if _, err := e.h.RoomDone(ctx, r, v); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.h.RoomNote(ctx, r, v, ids[0], "late"); err != hub.ErrRoomLocked {
+		t.Errorf("after Done: %v", err)
+	}
+	acts, _ := e.h.Activity(ctx, bobID, 5)
+	if len(acts) == 0 || !strings.Contains(acts[0].Text, "with notes") {
+		t.Errorf("the photographer is told there are notes: %+v", acts)
+	}
+}
+
+func TestANoteBelongsToItsSelectionAndAReplyOnlyWhereRepliesAreAllowed(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg")
+	shared := makeRoom(t, e, album, func(p *hub.RoomParams) { p.NotesMode = store.RoomNotesReplies })
+	each := makeRoom(t, e, album, func(p *hub.RoomParams) { p.NotesMode = store.RoomNotesReplies; p.PickMode = store.RoomVisitor })
+	plain := makeRoom(t, e, album, func(p *hub.RoomParams) { p.NotesMode = store.RoomNotesNote })
+	va, vl := hub.RoomViewer{Who: "ann", Name: "Ann"}, hub.RoomViewer{Who: "luca", Name: "Luca"}
+
+	sids := pickIDs(t, e, shared)
+	e.h.RoomNote(ctx, shared, va, sids[0], "note by Ann")
+	if n, _ := e.h.RoomNotesOf(ctx, shared, vl); n[sids[0]].Body != "note by Ann" {
+		t.Errorf("in a shared room the note is the group's: %+v", n)
+	}
+	eids := pickIDs(t, e, each)
+	e.h.RoomNote(ctx, each, va, eids[0], "only Ann's")
+	if n, _ := e.h.RoomNotesOf(ctx, each, vl); len(n) != 0 {
+		t.Errorf("each visitor has their own notes: %+v", n)
+	}
+
+	if err := e.h.RoomReply(ctx, ann, shared.ID, "", sids[0], "ok"); err != hub.ErrNoRoom {
+		t.Errorf("another person answers: %v", err)
+	}
+	if err := e.h.RoomReply(ctx, bob, shared.ID, "", sids[0], strings.Repeat("x", 281)); err != hub.ErrBadReply {
+		t.Errorf("%v", err)
+	}
+	if err := e.h.RoomReply(ctx, bob, shared.ID, "", sids[1], "no note there"); err != hub.ErrNoNote {
+		t.Errorf("%v", err)
+	}
+	if err := e.h.RoomReply(ctx, bob, shared.ID, "", sids[0], "Done, thank you"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := e.h.RoomNotesOf(ctx, shared, vl); n[sids[0]].Reply != "Done, thank you" {
+		t.Errorf("the client sees the answer: %+v", n)
+	}
+	e.h.RoomNote(ctx, shared, va, sids[0], "a new note")
+	if n, _ := e.h.RoomNotesOf(ctx, shared, va); n[sids[0]].Reply != "" {
+		t.Errorf("a note written again is a new note: %+v", n)
+	}
+	// a room that only takes notes cannot be answered, and hides any reply
+	pids := pickIDs(t, e, plain)
+	e.h.RoomNote(ctx, plain, va, pids[0], "hello")
+	if err := e.h.RoomReply(ctx, bob, plain.ID, "", pids[0], "hi"); err != hub.ErrRoomNotesOff {
+		t.Errorf("%v", err)
+	}
+	review, _ := e.h.RoomReview(ctx, shared)
+	_ = review
+	if e.h.RoomNoteCount(ctx, shared) != 1 {
+		t.Errorf("the photographer's count")
+	}
+}

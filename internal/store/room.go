@@ -16,6 +16,13 @@ const (
 	RoomEnded  = "ended"  // the end date came; the photographer removes it, which deletes its key
 )
 
+// Notes on photos in a room.
+const (
+	RoomNotesNone    = "none"
+	RoomNotesNote    = "note"    // a note to the photographer
+	RoomNotesReplies = "replies" // and the photographer may answer
+)
+
 // Who chooses in a room.
 const (
 	RoomShared  = "shared"  // one selection for everyone who has the link
@@ -46,6 +53,7 @@ type Room struct {
 	ReleasedAt   time.Time // when they were released (zero: not yet)
 	ReleaseUntil time.Time // until when they can be downloaded (zero: as long as the room works)
 	Downloads    int       // how many ZIPs of originals clients started
+	NotesMode    string    // notes on photos: "none", "note" (to the photographer) or "replies" (the photographer may answer)
 	EndsAt       time.Time // zero: until the photographer ends it
 	State        string
 	CreatedAt    time.Time
@@ -59,13 +67,13 @@ func (r Room) ClientTitle() string {
 	return r.Name
 }
 
-const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name, auto_release, release_days, released_at, release_until, downloads`
+const roomCols = `id, token, owner_id, owner_name, name, title, album_id, album_name, key_id, key_enc, password, ends_at, state, created_at, wm_mode, mark_text, pick_mode, pick_limit, claim_who, claim_name, auto_release, release_days, released_at, release_until, downloads, notes_mode`
 
 func (s *Store) scanRoom(sc interface{ Scan(...any) error }) (Room, error) {
 	var r Room
 	var owner, album, key, ends, created, released, until string
 	var enc []byte
-	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName, &r.AutoRelease, &r.ReleaseDays, &released, &until, &r.Downloads); err != nil {
+	if err := sc.Scan(&r.ID, &r.Token, &owner, &r.OwnerName, &r.Name, &r.Title, &album, &r.AlbumName, &key, &enc, &r.Password, &ends, &r.State, &created, &r.Mark, &r.MarkText, &r.PickMode, &r.PickLimit, &r.ClaimWho, &r.ClaimName, &r.AutoRelease, &r.ReleaseDays, &released, &until, &r.Downloads, &r.NotesMode); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -95,13 +103,16 @@ func (s *Store) AddRoom(ctx context.Context, r Room) (Room, error) {
 	if r.PickMode == "" {
 		r.PickMode = RoomShared
 	}
+	if r.NotesMode == "" {
+		r.NotesMode = RoomNotesNone
+	}
 	r.CreatedAt = time.Now().UTC()
 	enc, err := s.vault.Seal([]byte(r.Key), r.ID)
 	if err != nil {
 		return r, err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName, b2i(r.AutoRelease), r.ReleaseDays, tstr(r.ReleasedAt), tstr(r.ReleaseUntil), r.Downloads)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO rooms (`+roomCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.Token, r.OwnerID.String(), r.OwnerName, r.Name, r.Title, r.AlbumID.String(), r.AlbumName, r.KeyID.String(), enc, r.Password, tstr(r.EndsAt), r.State, r.CreatedAt.Format(time.RFC3339Nano), r.Mark, r.MarkText, r.PickMode, r.PickLimit, r.ClaimWho, r.ClaimName, b2i(r.AutoRelease), r.ReleaseDays, tstr(r.ReleasedAt), tstr(r.ReleaseUntil), r.Downloads, r.NotesMode)
 	return r, err
 }
 
@@ -158,7 +169,7 @@ func (s *Store) SetRoomState(ctx context.Context, id, state string) error {
 
 // DeleteRoom forgets a room.
 func (s *Store) DeleteRoom(ctx context.Context, id string) error {
-	for _, q := range []string{`DELETE FROM room_picks WHERE room_id = ?`, `DELETE FROM room_done WHERE room_id = ?`, `DELETE FROM rooms WHERE id = ?`} {
+	for _, q := range []string{`DELETE FROM room_notes WHERE room_id = ?`, `DELETE FROM room_picks WHERE room_id = ?`, `DELETE FROM room_done WHERE room_id = ?`, `DELETE FROM rooms WHERE id = ?`} {
 		if _, err := s.db.ExecContext(ctx, q, id); err != nil {
 			return err
 		}
@@ -398,4 +409,67 @@ func (s *Store) SetRoomAutoRelease(ctx context.Context, id string, on bool) erro
 func (s *Store) AddRoomDownload(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE rooms SET downloads = downloads + 1 WHERE id = ?`, id)
 	return err
+}
+
+// Note is what a client wrote about a photo, and the photographer's answer.
+type Note struct {
+	Photo, Who, Name, Body, Reply string
+	At, RepliedAt                 time.Time
+}
+
+// SetNote writes (or, with an empty body, takes away) the note of a selection on a photo, and returns how many notes the
+// selection has. A note that is written again keeps no reply: it is a new note.
+func (s *Store) SetNote(ctx context.Context, room string, round int, who, photo, name, body string) (int, error) {
+	if body == "" {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM room_notes WHERE room_id = ? AND round = ? AND who = ? AND photo = ?`, room, round, who, photo); err != nil {
+			return 0, err
+		}
+	} else if _, err := s.db.ExecContext(ctx, `INSERT INTO room_notes (room_id, round, who, photo, name, body, at) VALUES (?,?,?,?,?,?,?)
+	   ON CONFLICT(room_id, round, who, photo) DO UPDATE SET name = excluded.name, body = excluded.body, at = excluded.at, reply = '', replied_at = ''`,
+		room, round, who, photo, name, body, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return 0, err
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM room_notes WHERE room_id = ? AND round = ? AND who = ?`, room, round, who).Scan(&n)
+	return n, err
+}
+
+// Notes lists the notes of one selection (who set) or of all (nil), oldest first.
+func (s *Store) Notes(ctx context.Context, room string, round int, who *string) ([]Note, error) {
+	q, args := `SELECT photo, who, name, body, reply, at, replied_at FROM room_notes WHERE room_id = ? AND round = ?`, []any{room, round}
+	if who != nil {
+		q += ` AND who = ?`
+		args = append(args, *who)
+	}
+	rows, err := s.db.QueryContext(ctx, q+` ORDER BY at, photo`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Note
+	for rows.Next() {
+		var n Note
+		var at, rat string
+		if err := rows.Scan(&n.Photo, &n.Who, &n.Name, &n.Body, &n.Reply, &at, &rat); err != nil {
+			return nil, err
+		}
+		n.At, _ = time.Parse(time.RFC3339Nano, at)
+		n.RepliedAt, _ = time.Parse(time.RFC3339Nano, rat)
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// SetReply writes the photographer's answer to a note (empty: takes it away). It reports false when there is no such note.
+func (s *Store) SetReply(ctx context.Context, room string, round int, who, photo, reply string) (bool, error) {
+	at := ""
+	if reply != "" {
+		at = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	r, err := s.db.ExecContext(ctx, `UPDATE room_notes SET reply = ?, replied_at = ? WHERE room_id = ? AND round = ? AND who = ? AND photo = ?`, reply, at, room, round, who, photo)
+	if err != nil {
+		return false, err
+	}
+	n, _ := r.RowsAffected()
+	return n > 0, nil
 }

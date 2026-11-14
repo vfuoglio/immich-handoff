@@ -44,7 +44,7 @@ func roomFixture(t *testing.T, offset int) (port, owner string, alice user, albu
 func TestRoom(t *testing.T) {
 	port, owner, alice, album, photos := roomFixture(t, 74)
 	name := fmt.Sprintf("rossi-%d", time.Now().UnixNano()%1_000_000)
-	code, body := postBody(t, port, "/rooms", owner, url.Values{"name": {name}, "title": {"Chiara and Luca"}, "album": {album}, "pin": {"2468"}, "mark": {"text"}, "marktext": {"Chiara Bianchi"}, "ends": {"0"}, "pickmode": {"shared"}, "picklimit": {"2"}})
+	code, body := postBody(t, port, "/rooms", owner, url.Values{"name": {name}, "title": {"Chiara and Luca"}, "album": {album}, "pin": {"2468"}, "mark": {"text"}, "marktext": {"Chiara Bianchi"}, "ends": {"0"}, "pickmode": {"shared"}, "picklimit": {"2"}, "notes": {"replies"}})
 	if code != 204 {
 		t.Fatalf("make a room: %d %s", code, body)
 	}
@@ -134,6 +134,12 @@ func TestRoom(t *testing.T) {
 	run(t, phone, chromedp.Evaluate(`document.querySelector('dialog.room-lightbox').dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}))`, nil))
 	until(t, phone, "the next picture", `document.querySelector('.room-caption').textContent === 'Photo 2 of 3'`, 5*time.Second)
 
+	// a note on the photo shown, kept with it
+	run(t, phone, chromedp.SendKeys(`#room-note-area`, "Brighten this one please", chromedp.ByQuery))
+	run(t, phone, chromedp.Click(`.room-noteform button`, chromedp.ByQuery))
+	until(t, phone, "the note is saved", `document.querySelector('.room-note-status').textContent === 'Note saved' && document.querySelector('.room-grid li:nth-child(2) a .room-note') !== null`, 10*time.Second)
+	photoID := js[string](t, phone, `document.querySelector('.room-grid li:nth-child(2)').dataset.id`)
+
 	// choosing: up to the limit, a refusal in words beyond it, and Done locks the choice
 	run(t, phone, chromedp.Evaluate(`document.querySelector('dialog.room-lightbox').close()`, nil))
 	heart := func(n int) string {
@@ -154,6 +160,14 @@ func TestRoom(t *testing.T) {
 	if got := js[string](t, phone, counter); got != "2 of 2 chosen" {
 		t.Errorf("after a reload: %q", got)
 	}
+	// the photographer answers the note and the client sees the answer in the large view
+	if c, b := postBody(t, port, "/rooms/reply", owner, url.Values{"room": {roomID}, "who": {""}, "photo": {photoID}, "text": {"Done, thank you"}}); c != 204 {
+		t.Fatalf("answer: %d %s", c, b)
+	}
+	run(t, phone, chromedp.Reload(), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery))
+	run(t, phone, chromedp.Click(`.room-grid li:nth-child(2) a.room-tile`, chromedp.ByQuery))
+	until(t, phone, "the answer is shown", `document.querySelector('.room-reply-text').textContent.includes('Done, thank you') && document.querySelector('.room-noteform textarea').value === 'Brighten this one please'`, 10*time.Second)
+	run(t, phone, chromedp.Evaluate(`document.querySelector('dialog.room-lightbox').close()`, nil))
 	run(t, phone, chromedp.Click(`form.room-done button`, chromedp.ByQuery))
 	until(t, phone, "the choice is sent", `/your choice has been sent/i.test(document.body.textContent) && document.querySelectorAll('form.room-pick').length === 0`, 15*time.Second)
 	if js[int](t, phone, `document.querySelectorAll('li.picked').length`) != 2 {

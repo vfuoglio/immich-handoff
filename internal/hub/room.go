@@ -59,6 +59,7 @@ type RoomParams struct {
 	PickMode    string // who chooses: "shared", "visitor" or "named" (empty: shared)
 	PickLimit   int    // the most photos a selection may hold; 0: no limit
 	AutoRelease bool   // release the originals the moment a client sends a choice
+	NotesMode   string // notes on photos: "none", "note" or "replies" (empty: none)
 	ReleaseDays int    // how many days the originals can be downloaded after a release (0: as long as the room works; empty form: 30)
 }
 
@@ -91,6 +92,10 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		return store.Room{}, err
 	}
 	pickMode, pickLimit, err := checkRoomPicks(p)
+	if err != nil {
+		return store.Room{}, err
+	}
+	notesMode, err := checkNotesMode(p)
 	if err != nil {
 		return store.Room{}, err
 	}
@@ -140,7 +145,7 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		return store.Room{}, ErrRoomTooBig
 	}
 	r := store.Room{Token: newToken() + newToken(), OwnerID: owner.ID, OwnerName: owner.Name, Name: name, Title: title,
-		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText, PickMode: pickMode, PickLimit: pickLimit, AutoRelease: p.AutoRelease, ReleaseDays: p.ReleaseDays}
+		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText, PickMode: pickMode, PickLimit: pickLimit, AutoRelease: p.AutoRelease, ReleaseDays: p.ReleaseDays, NotesMode: notesMode}
 	if p.PIN != "" {
 		if r.Password, err = HashDropPassword(p.PIN); err != nil {
 			undo()

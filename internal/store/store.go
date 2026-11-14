@@ -547,6 +547,21 @@ var migrations = []string{
 	 ALTER TABLE rooms ADD COLUMN released_at TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE rooms ADD COLUMN release_until TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE rooms ADD COLUMN downloads INTEGER NOT NULL DEFAULT 0;`,
+	// Notes on the photos of a client room: what a client writes to the photographer about a photo (one for each photo in a
+	// selection) and, in a room that allows replies, the photographer's answer.
+	`ALTER TABLE rooms ADD COLUMN notes_mode TEXT NOT NULL DEFAULT 'none';
+	 CREATE TABLE room_notes (
+	   room_id    TEXT NOT NULL,
+	   round      INTEGER NOT NULL,
+	   who        TEXT NOT NULL,
+	   photo      TEXT NOT NULL,
+	   name       TEXT NOT NULL DEFAULT '',
+	   body       TEXT NOT NULL,
+	   reply      TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL,
+	   replied_at TEXT NOT NULL DEFAULT '',
+	   PRIMARY KEY (room_id, round, who, photo)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

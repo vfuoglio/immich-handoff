@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -660,5 +661,99 @@ func TestOriginalsLeaveARoomOnlyBehindTheReleaseCheck(t *testing.T) {
 		if strings.Contains(string(b), "Original(") && f != "room.go" {
 			t.Errorf("%s opens an original", f)
 		}
+	}
+}
+
+func TestANoteOnAPhotoIsKeptShownToTheClientAnsweredByThePhotographerAndLockedWithTheChoice(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("78", 32)
+	app, _ := setup(t, withRoom(t, &st,
+		store.Room{Token: token, Name: "Rossi wedding", AlbumName: "Wedding", PickMode: store.RoomShared, NotesMode: store.RoomNotesReplies},
+		store.Room{Token: strings.Repeat("9a", 32), Name: "No notes", AlbumName: "Wedding", PickMode: store.RoomShared}))
+	ctx := context.Background()
+	c := newRoomClient(t, app.URL)
+	_, page, _ := c.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, page, token)
+	for _, want := range []string{`data-notes="replies"`, `data-note-label="Note for the photographer"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %s", want)
+		}
+	}
+	note := func(id, text string) (int, map[string]any) {
+		code, body, _ := c.do("POST", "/room/"+token+"/note/"+id, "text="+url.QueryEscape(text), true)
+		var out map[string]any
+		json.Unmarshal([]byte(body), &out)
+		return code, out
+	}
+	if code, out := note(ids[0], "Brighten this one"); code != 200 || out["count"] != float64(1) {
+		t.Fatalf("%d %v", code, out)
+	}
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, `data-note="Brighten this one"`) || !strings.Contains(page, `class="room-note"`) {
+		t.Errorf("the note is on the page: %.200s", page)
+	}
+	if code, out := note(ids[0], strings.Repeat("x", 300)); code != 409 || !strings.Contains(out["error"].(string), "280") {
+		t.Errorf("too long: %d %v", code, out)
+	}
+	if code, _ := note("0000000000000000", "x"); code != 404 {
+		t.Errorf("a photo that is not in the room: %d", code)
+	}
+	rooms, _ := st.RoomsOf(ctx, uuid.MustParse(familyID))
+	var room store.Room
+	for _, r := range rooms {
+		if r.Token == token {
+			room = r
+		}
+	}
+	// the photographer sees the note, with a form to answer it, and the client sees the answer
+	_, rev := do(t, "GET", app.URL+"/rooms/"+room.ID+"/review", "sess=family", nil)
+	c.do("POST", "/room/"+token+"/pick/"+ids[1], "", true)
+	c.do("POST", "/room/"+token+"/done", "", false)
+	_, rev = do(t, "GET", app.URL+"/rooms/"+room.ID+"/review", "sess=family", nil)
+	for _, want := range []string{"Brighten this one", `hx-post="rooms/reply"`, "only a note", "1 photo chosen"} {
+		if !strings.Contains(rev, want) {
+			t.Errorf("the review lacks %q", want)
+		}
+	}
+	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
+	post := func(cookie, body string) int {
+		req, _ := http.NewRequest("POST", app.URL+"/rooms/reply", strings.NewReader(body))
+		req.Header.Set("Cookie", cookie)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+	form := "room=" + room.ID + "&who=&photo=" + ids[0] + "&text=Done%2C+thanks"
+	if code := post("sess=other", form); code == 204 {
+		t.Error("another person answered")
+	}
+	if code := post("sess=family", form); code != 204 {
+		t.Fatalf("the photographer answers: %d", code)
+	}
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, `data-reply="Done, thanks"`) {
+		t.Errorf("the client sees the answer: %.300s", page)
+	}
+	// after the choice is sent a note cannot change
+	if code, out := note(ids[0], "late"); code != 409 || !strings.Contains(out["error"].(string), "cannot change") {
+		t.Errorf("%d %v", code, out)
+	}
+	// a room with no notes takes none
+	c2 := newRoomClient(t, app.URL)
+	other := strings.Repeat("9a", 32)
+	_, p2, _ := c2.do("GET", "/room/"+other, "", false)
+	id2 := photoIDs(t, p2, other)[0]
+	if strings.Contains(p2, `data-notes="note"`) || strings.Contains(p2, `data-notes="replies"`) {
+		t.Error("no notes in this room")
+	}
+	if code, body, _ := c2.do("POST", "/room/"+other+"/note/"+id2, "text=hi", true); code != 409 || !strings.Contains(body, "does not take notes") {
+		t.Errorf("%d %s", code, body)
 	}
 }
