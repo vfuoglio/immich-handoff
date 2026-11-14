@@ -446,6 +446,11 @@ templ Layout(title, user string) {
 						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
+					if hasTabs(ctx) {
+						<a href="send" class="icon-btn send-btn" aria-label={ t(ctx, "Send photos from this device") } title={ t(ctx, "Send photos from this device") }>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
+						</a>
+					}
 					<details class="lang">
 						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>

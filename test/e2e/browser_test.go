@@ -221,8 +221,8 @@ func TestBrowser(t *testing.T) {
 		if got := js[string](t, ctx, `getComputedStyle(document.querySelector('header.bar')).backdropFilter`); !strings.Contains(got, "blur") {
 			t.Errorf("the bar is glass, backdrop-filter is %q", got)
 		}
-		// three views in tabs, the first current
-		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity" {
+		// three views and the Send page in the bar, the first view current
+		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity,Send" {
 			t.Errorf("tabs: %v", got)
 		}
 		// the speaker icon sits right beside the theme icon, and both have a title for the pointer

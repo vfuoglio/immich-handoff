@@ -141,6 +141,11 @@ nav.tabs .blob {
   position: absolute; z-index: 0; top: 5px; bottom: 5px; left: var(--bx, 5px); width: var(--bw, 0); border-radius: 99px;
   background: var(--grad); box-shadow: 0 8px 24px -8px var(--accent); transition: left .55s var(--spring), width .55s var(--spring);
 }
+/* the Send page is the fourth stop of the tab bar on a phone; on a desktop the centred pill keeps its three views (a fourth would
+   reach the buttons on the right in some languages) and Send is an icon in the bar beside them */
+@media (min-width: 901px) { nav.tabs a.send-tab { display: none; } }
+@media (max-width: 900px) { header.bar a.send-btn { display: none; } }
+
 @media (max-width: 900px) {
   nav.tabs { top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; right: 12px; translate: none; padding: 6px; border-radius: 28px;
     box-shadow: 0 24px 50px -14px rgb(0 0 0 / .5); }
