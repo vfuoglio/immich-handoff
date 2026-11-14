@@ -218,6 +218,23 @@ func run(log *slog.Logger) error {
 		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
 		case "1", "true", "on", "yes":
 			h.Share = true
+			if v := env("SHARED_ALBUMS_EVERY_MINUTES", ""); v != "" {
+				m, err := strconv.ParseFloat(v, 64)
+				if err != nil || m < 0.1 || m > 1440 {
+					return errors.New("SHARED_ALBUMS_EVERY_MINUTES must be a number of minutes, from 0.1 to 1440")
+				}
+				h.SharedEvery = time.Duration(m * float64(time.Minute))
+			}
+			if v := env("SHARED_ALBUMS_MAX_MB", ""); v != "" {
+				n, err := strconv.ParseInt(v, 10, 64)
+				if err != nil || n < 1 || n > 1<<20 {
+					return errors.New("SHARED_ALBUMS_MAX_MB must be a number of megabytes, 1 or more")
+				}
+				h.SharedMaxFile = n << 20
+			}
+			if appURL != "" {
+				go h.SharedLoop(ctx)
+			}
 			if appURL == "" {
 				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing albums with other servers stays off, because the other app needs this app's address")
 			}

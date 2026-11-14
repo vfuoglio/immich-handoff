@@ -510,7 +510,15 @@ The other person sees the proposal on their own page, with what you share and wh
 
 For each shared album the app makes a **key in your own Immich** (named "handoff: shared album ..."), through your own sign-in, which can read the album and the originals in it, put photos in it, make it and take photos out of it, and nothing that deletes a photo or shares anything (`user.read`, `asset.read`, `asset.download`, `asset.upload`, `album.read`, `album.create`, `albumAsset.create`, `albumAsset.delete`). Immich cannot limit a key to one album, so the app does; the key is deleted when you end the sharing. What you choose to share at the start is remembered by the app (as a list of what the album held), so "only what I add from now on" really sends nothing that was there.
 
-*(The photos themselves move in the next release; until then an agreed album only waits.)*
+### How the photos move
+
+Each app looks at its own copy of the album **every few minutes** (`SHARED_ALBUMS_EVERY_MINUTES`, three by default; Immich sends no event when a photo is added to an album) and sends what is **new** to the other app, which stores it in its own Immich and puts it in its own album. Both ways is the same thing done on both sides, so a photo added on either side appears on the other within a few minutes. **Sync now** on the album's row looks at once.
+
+- **Nothing comes back.** What arrived is remembered, by the photo's checksum (the same file has the same checksum on both servers), as arrived and is never sent back. If the same photo is already in the other person's library it is not stored again, only put in the album; if both of you have the same photo it is not copied at all.
+- **Their deleting is respected.** A photo the other person has put in their trash is left in the trash and is not put in the album, whether or not it is sent again.
+- **Originals, whole.** Photos and videos are streamed from one app to the other as the original file, without being kept on either server's disk, with their name and the date they were taken. A file larger than `SHARED_ALBUMS_MAX_MB` (2048 by default) is left out, with a reason on the album's row, and is not tried again.
+- **Pausing and problems.** While either side has paused the connection nothing moves. The row shows when the album was last looked at, how many photos went each way and, if the last look found a problem (the other app could not be reached, a file was too large), what it was; the next look tries again.
+- **What is sent is only the photos of that album** that are new on your side: what arrived, and, if you chose "only what I add from now on", what was there when you began, are never sent.
 
 ## Frames: an album on a screen
 

@@ -75,6 +75,10 @@ type Hub struct {
 	// Share: albums may be shared with people on other servers, through other Handoff apps (SHARED_ALBUMS_ENABLE, off by default;
 	// it needs the app's own public address, AppURL, to give to the other app).
 	Share bool
+	// SharedEvery is how often each shared album is looked at (SHARED_ALBUMS_EVERY_MINUTES; zero: three minutes) and SharedMaxFile the
+	// largest file one may carry, in bytes (SHARED_ALBUMS_MAX_MB; zero: 2 GB).
+	SharedEvery   time.Duration
+	SharedMaxFile int64
 
 	PhoneDir     string
 	PhoneCap     int64
@@ -100,6 +104,7 @@ type Hub struct {
 	frames       frameCache      // the albums frames last read
 	rooms        roomCache       // the albums client rooms last read
 	pins         pinGuard
+	syncing      sync.Map                // the shared albums being looked at now
 	peerVerify   peer.Verifier           // the signed requests other apps have sent                // wrong PINs given to client rooms
 	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
 	retries      map[string]*time.Timer  // when each unreachable receiver on another server is tried again

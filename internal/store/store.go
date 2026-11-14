@@ -623,6 +623,11 @@ var migrations = []string{
 	   at       TEXT NOT NULL,
 	   PRIMARY KEY (album_id, checksum)
 	 );`,
+	// How a shared album is doing: when it was last looked at, what went wrong, and how many photos went each way.
+	`ALTER TABLE shared_albums ADD COLUMN last_sync TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE shared_albums ADD COLUMN problem TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE shared_albums ADD COLUMN sent INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE shared_albums ADD COLUMN received INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

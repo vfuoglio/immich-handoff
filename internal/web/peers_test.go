@@ -2,11 +2,14 @@ package web_test
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,6 +36,54 @@ type sharing struct {
 	keys    map[string]sharedKey // by secret
 	deleted []string
 	albums  map[string][]map[string]any // by owner id
+	photos  map[string]*fakePhoto       // by asset id
+	members map[string][]string         // album id -> asset ids
+	uploads int                         // photos uploaded with a key (what a peer sent)
+}
+
+type fakePhoto struct {
+	owner, name, sum string
+	data             []byte
+	trashed          bool
+}
+
+func sumOf(data []byte) string {
+	s := sha1.Sum(data)
+	return base64.StdEncoding.EncodeToString(s[:])
+}
+
+// addPhoto puts a photo in an owner's library and, if album is not empty, in that album.
+func (f *sharing) addPhoto(owner, album, name string, data []byte) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	id := uuid.NewString()
+	f.photos[id] = &fakePhoto{owner: owner, name: name, data: data, sum: sumOf(data)}
+	if album != "" {
+		f.members[album] = append(f.members[album], id)
+	}
+	return id
+}
+
+func (f *sharing) inAlbum(album string) []*fakePhoto {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []*fakePhoto
+	for _, id := range f.members[album] {
+		out = append(out, f.photos[id])
+	}
+	return out
+}
+
+func (f *sharing) countByChecksum(owner, sum string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, p := range f.photos {
+		if p.owner == owner && p.sum == sum {
+			n++
+		}
+	}
+	return n
 }
 
 type sharedKey struct {
@@ -117,11 +168,103 @@ func (f *sharing) handler(base http.Handler) http.Handler {
 		j(w, 201, map[string]any{"id": id, "albumName": body.AlbumName, "assetCount": 0, "createdAt": ts, "updatedAt": ts, "ownerId": who, "owner": map[string]any{"id": who, "name": "x", "email": "x@x.test", "avatarColor": "primary", "profileImagePath": "", "profileChangedAt": ts},
 			"albumUsers": []any{}, "hasSharedLink": false, "shared": false, "isActivityEnabled": true, "order": "desc", "assets": []any{}, "albumThumbnailAssetId": nil, "description": ""})
 	})
+	dto := func(id string, p *fakePhoto) map[string]any {
+		return map[string]any{"id": id, "originalFileName": p.name, "fileCreatedAt": ts, "fileModifiedAt": ts, "type": "IMAGE", "checksum": p.sum, "isTrashed": p.trashed, "isArchived": false}
+	}
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
-		a := func(id, sum string) map[string]any {
-			return map[string]any{"id": id, "originalFileName": id + ".jpg", "fileCreatedAt": ts, "fileModifiedAt": ts, "type": "IMAGE", "checksum": sum, "isTrashed": false, "isArchived": false}
+		var body struct {
+			AlbumIds []string `json:"albumIds"`
 		}
-		j(w, 200, map[string]any{"assets": map[string]any{"items": []any{a("11111111-1111-4111-8111-111111111111", "sum-one"), a("22222222-2222-4222-8222-222222222222", "sum-two")}, "count": 2, "total": 2, "facets": []any{}}})
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		items := []any{}
+		for _, album := range body.AlbumIds {
+			for _, id := range f.members[album] {
+				if p := f.photos[id]; p != nil && !p.trashed {
+					items = append(items, dto(id, p))
+				}
+			}
+		}
+		j(w, 200, map[string]any{"assets": map[string]any{"items": items, "count": len(items), "total": len(items), "facets": []any{}}})
+	})
+	mux.HandleFunc("GET /api/assets/{id}/original", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		p := f.photos[r.PathValue("id")]
+		who := owner(r)
+		f.mu.Unlock()
+		if p == nil || p.owner != who {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+p.name+`"`)
+		w.Header().Set("Content-Length", strconv.Itoa(len(p.data)))
+		w.Write(p.data)
+	})
+	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		p := f.photos[r.PathValue("id")]
+		who := owner(r)
+		f.mu.Unlock()
+		if p == nil || p.owner != who {
+			http.Error(w, "no", 404)
+			return
+		}
+		j(w, 200, dto(r.PathValue("id"), p))
+	})
+	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		mr, err := r.MultipartReader()
+		if err != nil {
+			http.Error(w, "no", 400)
+			return
+		}
+		var name string
+		var data []byte
+		for {
+			part, err := mr.NextPart()
+			if err != nil {
+				break
+			}
+			if part.FormName() == "assetData" {
+				name = part.FileName()
+				data, _ = io.ReadAll(part)
+			}
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		who := owner(r)
+		sum := sumOf(data)
+		for id, p := range f.photos {
+			if p.owner == who && p.sum == sum {
+				j(w, 200, map[string]any{"id": id, "status": "duplicate"})
+				return
+			}
+		}
+		id := uuid.NewString()
+		f.photos[id] = &fakePhoto{owner: who, name: name, data: data, sum: sum}
+		f.uploads++
+		j(w, 201, map[string]any{"id": id, "status": "created"})
+	})
+	mux.HandleFunc("PUT /api/albums/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Ids []string `json:"ids"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := []any{}
+		for _, id := range body.Ids {
+			have := false
+			for _, m := range f.members[r.PathValue("id")] {
+				have = have || m == id
+			}
+			if !have {
+				f.members[r.PathValue("id")] = append(f.members[r.PathValue("id")], id)
+			}
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		j(w, 200, out)
 	})
 	mux.Handle("/", base)
 	return mux
@@ -139,7 +282,7 @@ type anApp struct {
 
 func startApp(t *testing.T, user string, share bool, allowPrivate bool) *anApp {
 	t.Helper()
-	fake := &sharing{keys: map[string]sharedKey{}, albums: map[string][]map[string]any{}}
+	fake := &sharing{keys: map[string]sharedKey{}, albums: map[string][]map[string]any{}, photos: map[string]*fakePhoto{}, members: map[string][]string{}}
 	im := httptest.NewServer(fake.handler(fakeImmich()))
 	t.Cleanup(im.Close)
 	v, _ := vault.New("0123456789abcdef0123")
@@ -441,7 +584,10 @@ func TestAnAlbumIsProposedAnsweredAndSharedWithTheChoicesOfBothSides(t *testing.
 	b := startApp(t, "sess=family", true, true)
 	pairApps(t, a, b)
 	pa, pb := peersOf(t, a, aliceID)[0], peersOf(t, b, familyID)[0]
-	code, body := a.as(t, "POST", "/peers/share", "peer="+pa.ID+"&name=Summer+2026&album=new&history=new&deletion=follow")
+	p1, p2 := []byte("photo one bytes"), []byte("photo two bytes")
+	a.fake.addPhoto(aliceID, tripAlbum, "one.jpg", p1)
+	a.fake.addPhoto(aliceID, tripAlbum, "two.jpg", p2)
+	code, body := a.as(t, "POST", "/peers/share", "peer="+pa.ID+"&name=Summer+2026&album="+tripAlbum+"&history=new&deletion=follow")
 	if code != 204 {
 		t.Fatalf("propose: %d %s", code, body)
 	}
@@ -450,7 +596,7 @@ func TestAnAlbumIsProposedAnsweredAndSharedWithTheChoicesOfBothSides(t *testing.
 	if len(sa) != 1 || len(sb) != 1 {
 		t.Fatalf("a proposal on each side: %d %d", len(sa), len(sb))
 	}
-	if x := sa[0]; x.State != store.ShareProposed || !x.Proposer || x.Name != "Summer 2026" || x.AlbumName != "Summer 2026" || x.AlbumID == uuid.Nil || x.History != store.HistoryNew || x.Deletion != store.DeleteFollow || x.Key == "" {
+	if x := sa[0]; x.State != store.ShareProposed || !x.Proposer || x.Name != "Summer 2026" || x.AlbumName != "Trip" || x.AlbumID == uuid.Nil || x.History != store.HistoryNew || x.Deletion != store.DeleteFollow || x.Key == "" {
 		t.Errorf("the proposer's record: %+v", x)
 	}
 	if x := sb[0]; x.State != store.ShareInvited || x.Proposer || x.TheirID != sa[0].ID || x.TheirHistory != store.HistoryNew || x.Deletion != store.DeleteFollow || x.Key != "" {
@@ -463,7 +609,7 @@ func TestAnAlbumIsProposedAnsweredAndSharedWithTheChoicesOfBothSides(t *testing.
 	if n, _ := a.st.LedgerCount(context.Background(), sa[0].ID); n != 2 {
 		t.Errorf("the baseline of the proposer's album: %d", n)
 	}
-	if o, sent, ok, _ := a.st.LedgerHas(context.Background(), sa[0].ID, "sum-one"); !ok || o != store.OriginBaseline || sent {
+	if o, sent, ok, _ := a.st.LedgerHas(context.Background(), sa[0].ID, sumOf(p1)); !ok || o != store.OriginBaseline || sent {
 		t.Errorf("a baseline photo: %q %v %v", o, sent, ok)
 	}
 	_, page := b.as(t, "GET", "/", "")
@@ -601,5 +747,246 @@ func TestEndingAConnectionEndsItsSharedAlbumsAndDeletesTheirKeys(t *testing.T) {
 	got := sharedOf(t, b, familyID)
 	if len(got) != 1 || got[0].State != store.ShareLeft {
 		t.Errorf("B sees the sharing ended: %+v", got)
+	}
+}
+
+const tripAlbum = "99999999-9999-4999-8999-999999999992"
+
+// sharedPair makes two paired apps with one agreed album (A's Trip, B's new one) and the photos given to A's Trip.
+func sharedPair(t *testing.T, aHistory, bHistory string, photos ...[]byte) (a, b *anApp, sa, sb store.SharedAlbum) {
+	t.Helper()
+	a = startApp(t, "sess=alice", true, true)
+	b = startApp(t, "sess=family", true, true)
+	pairApps(t, a, b)
+	for i, p := range photos {
+		a.fake.addPhoto(aliceID, tripAlbum, "a"+strconv.Itoa(i)+".jpg", p)
+	}
+	pa := peersOf(t, a, aliceID)[0]
+	if code, body := a.as(t, "POST", "/peers/share", "peer="+pa.ID+"&name=Trip&album="+tripAlbum+"&history="+aHistory+"&deletion=nothing"); code != 204 {
+		t.Fatalf("propose: %d %s", code, body)
+	}
+	if code, body := b.as(t, "POST", "/shared/accept", "shared="+sharedOf(t, b, familyID)[0].ID+"&album=new&history="+bHistory); code != 204 {
+		t.Fatalf("accept: %d %s", code, body)
+	}
+	return a, b, sharedOf(t, a, aliceID)[0], sharedOf(t, b, familyID)[0]
+}
+
+func TestPhotosCrossInBothDirectionsOnceAndNeverComeBack(t *testing.T) {
+	one, two := []byte("the first photo"), []byte("the second photo")
+	a, b, sa, sb := sharedPair(t, "all", "new", one, two)
+	ctx := context.Background()
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := b.fake.inAlbum(sb.AlbumID.String())
+	if len(got) != 2 || got[0].sum != sumOf(one) || got[1].sum != sumOf(two) || string(got[0].data) != "the first photo" {
+		t.Fatalf("both photos reached B's album, whole: %+v", got)
+	}
+	if got[0].name != "a0.jpg" {
+		t.Errorf("with their names: %q", got[0].name)
+	}
+	if x, _ := a.st.SharedAlbumByID(ctx, sa.ID); x.Sent != 2 || x.LastSync.IsZero() || x.Problem != "" {
+		t.Errorf("A counts what it sent: %+v", x)
+	}
+	if x, _ := b.st.SharedAlbumByID(ctx, sb.ID); x.Received != 2 {
+		t.Errorf("B counts what it received: %+v", x)
+	}
+	// B's pass finds the two photos in its album, knows they arrived and sends nothing back
+	before := a.fake.uploads
+	if err := b.hub.SyncShared(ctx, sb.ID); err != nil {
+		t.Fatal(err)
+	}
+	if a.fake.uploads != before {
+		t.Errorf("nothing came back to A: %d uploads", a.fake.uploads-before)
+	}
+	if x, _ := b.st.SharedAlbumByID(ctx, sb.ID); x.Sent != 0 {
+		t.Errorf("B sent %d", x.Sent)
+	}
+	// a photo B adds goes to A
+	three := []byte("a photo from the other server")
+	b.fake.addPhoto(familyID, sb.AlbumID.String(), "b0.jpg", three)
+	if err := b.hub.SyncShared(ctx, sb.ID); err != nil {
+		t.Fatal(err)
+	}
+	inA := a.fake.inAlbum(tripAlbum)
+	if len(inA) != 3 || inA[2].sum != sumOf(three) {
+		t.Fatalf("A's album has the photo from B: %d", len(inA))
+	}
+	// and a pass again changes nothing, on either side
+	a.hub.SyncShared(ctx, sa.ID)
+	b.hub.SyncShared(ctx, sb.ID)
+	if len(a.fake.inAlbum(tripAlbum)) != 3 || len(b.fake.inAlbum(sb.AlbumID.String())) != 3 || a.fake.countByChecksum(aliceID, sumOf(three)) != 1 || b.fake.countByChecksum(familyID, sumOf(one)) != 1 {
+		t.Error("the albums stay equal, with no duplicates")
+	}
+	_, page := a.as(t, "GET", "/", "")
+	for _, want := range []string{"2 photos sent", "1 photo received", "Last looked at", "Sync now"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("A's page lacks %q", want)
+		}
+	}
+}
+
+func TestOnlyWhatIsNewIsSentWhenTheSideChoseThat(t *testing.T) {
+	old := []byte("an old photo")
+	a, b, sa, sb := sharedPair(t, "new", "new", old)
+	ctx := context.Background()
+	a.hub.SyncShared(ctx, sa.ID)
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 0 {
+		t.Fatal("what was there before sharing is not sent")
+	}
+	fresh := []byte("a new photo")
+	a.fake.addPhoto(aliceID, tripAlbum, "new.jpg", fresh)
+	a.hub.SyncShared(ctx, sa.ID)
+	got := b.fake.inAlbum(sb.AlbumID.String())
+	if len(got) != 1 || got[0].sum != sumOf(fresh) {
+		t.Errorf("only the new photo: %+v", got)
+	}
+}
+
+func TestTheSamePhotoOnBothSidesIsNotDuplicatedAndATrashedCopyStaysInTheTrash(t *testing.T) {
+	same, gone := []byte("a photo both have"), []byte("a photo B deleted")
+	a, b, sa, sb := sharedPair(t, "all", "new", same, gone)
+	ctx := context.Background()
+	// B already has `same` in its library (not in the album) and has put `gone` in its trash
+	b.fake.addPhoto(familyID, "", "mine.jpg", same)
+	id := b.fake.addPhoto(familyID, "", "deleted.jpg", gone)
+	b.fake.mu.Lock()
+	b.fake.photos[id].trashed = true
+	b.fake.mu.Unlock()
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := b.fake.countByChecksum(familyID, sumOf(same)); n != 1 {
+		t.Errorf("the photo B already had is not stored again: %d", n)
+	}
+	inB := b.fake.inAlbum(sb.AlbumID.String())
+	if len(inB) != 1 || inB[0].sum != sumOf(same) {
+		t.Errorf("it is in B's album, and the one B deleted is not: %+v", inB)
+	}
+	b.fake.mu.Lock()
+	still := b.fake.photos[id].trashed
+	b.fake.mu.Unlock()
+	if !still {
+		t.Error("the copy B deleted is still in the trash")
+	}
+	if o, sent, ok, _ := b.st.LedgerHas(ctx, sb.ID, sumOf(gone)); !ok || o != store.OriginArrived || !sent {
+		t.Errorf("it is remembered so it is not sent back: %q %v %v", o, sent, ok)
+	}
+}
+
+func TestNothingMovesWhileEitherSideHasPausedOrForAFileThatIsTooLarge(t *testing.T) {
+	a, b, sa, sb := sharedPair(t, "all", "new", []byte("one photo"))
+	ctx := context.Background()
+	pb := peersOf(t, b, familyID)[0]
+	b.as(t, "POST", "/peers/pause", "peer="+pb.ID+"&paused=1")
+	a.hub.SyncShared(ctx, sa.ID)
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 0 {
+		t.Fatal("B paused: nothing is sent to it")
+	}
+	b.as(t, "POST", "/peers/pause", "peer="+pb.ID+"&paused=0")
+	pa := peersOf(t, a, aliceID)[0]
+	a.as(t, "POST", "/peers/pause", "peer="+pa.ID+"&paused=1")
+	a.hub.SyncShared(ctx, sa.ID)
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 0 {
+		t.Fatal("A paused: nothing is sent")
+	}
+	a.as(t, "POST", "/peers/pause", "peer="+pa.ID+"&paused=0")
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 1 {
+		t.Error("resumed: it goes")
+	}
+}
+
+func TestAFileLargerThanTheLimitIsLeftOutWithAReasonAndNotTriedAgain(t *testing.T) {
+	small, big := []byte("small"), []byte(strings.Repeat("big!", 1000))
+	a, b, sa, sb := sharedPair(t, "all", "new", small, big)
+	a.hub.SharedMaxFile = 2000
+	ctx := context.Background()
+	err := a.hub.SyncShared(ctx, sa.ID)
+	if err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("a reason: %v", err)
+	}
+	got := b.fake.inAlbum(sb.AlbumID.String())
+	if len(got) != 1 || got[0].sum != sumOf(small) {
+		t.Errorf("the small one went: %+v", got)
+	}
+	if o, sent, _, _ := a.st.LedgerHas(ctx, sa.ID, sumOf(big)); o != store.OriginSkipped || !sent {
+		t.Errorf("remembered as left out: %q %v", o, sent)
+	}
+	if err := a.hub.SyncShared(ctx, sa.ID); err != nil {
+		t.Errorf("not tried again: %v", err)
+	}
+}
+
+func TestThePhotoEndpointNeedsASignatureAndTheRightChecksum(t *testing.T) {
+	a, b, _, sb := sharedPair(t, "all", "new")
+	ctx := context.Background()
+	pa := peersOf(t, a, aliceID)[0]
+	data := []byte("some bytes of a photo")
+	q := func(sum string) string {
+		return "/peer/v1/album/photo?to=" + sb.ID + "&checksum=" + url.QueryEscape(sum) + "&name=x.jpg&taken=2026-06-14T10:00:00Z&size=" + strconv.Itoa(len(data))
+	}
+	// unsigned
+	res, err := http.Post(b.url+q(sumOf(data)), "application/octet-stream", strings.NewReader(string(data)))
+	if err != nil || res.StatusCode != 401 {
+		t.Fatalf("unsigned: %v %v", res, err)
+	}
+	res.Body.Close()
+	stream := func(path string, secret string) int {
+		code, _, err := peer.Stream(ctx, http.DefaultClient, b.url, pa.TheirID, secret, "POST", path, strings.NewReader(string(data)), int64(len(data)), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return code
+	}
+	if code := stream(q(sumOf(data)), "wrong-secret-wrong-secret-wrong-secret-wrong"); code != 401 {
+		t.Errorf("wrong secret: %d", code)
+	}
+	if code := stream(q("not-the-checksum"), pa.Secret); code != 400 {
+		t.Errorf("a checksum that is not the photo's: %d", code)
+	}
+	if n := len(b.fake.inAlbum(sb.AlbumID.String())); n != 0 {
+		t.Errorf("a photo with the wrong checksum is not put in the album: %d", n)
+	}
+	if code := stream(strings.Replace(q(sumOf(data)), sb.ID, uuid.NewString(), 1), pa.Secret); code != 404 {
+		t.Errorf("an album that does not exist: %d", code)
+	}
+	if code := stream(q(sumOf(data)), pa.Secret); code != 200 {
+		t.Errorf("a right one: %d", code)
+	}
+	if n := len(b.fake.inAlbum(sb.AlbumID.String())); n != 1 {
+		t.Errorf("it is in the album: %d", n)
+	}
+	// big bodies pass the general size limit of a page
+	big := strings.NewReader(strings.Repeat("x", 3<<20))
+	code, _, err := peer.Stream(ctx, http.DefaultClient, b.url, pa.TheirID, pa.Secret, "POST", "/peer/v1/album/photo?to="+sb.ID+"&checksum=zzz&name=big.jpg&size=3145728", big, 3<<20, nil)
+	if err != nil || code == 413 {
+		t.Errorf("a 3 MB photo is not cut by the page's limit: %d %v", code, err)
+	}
+}
+
+func TestSyncNowLooksAtOnceAndOnlyForTheOwner(t *testing.T) {
+	a, b, sa, sb := sharedPair(t, "all", "new", []byte("a photo to send now"))
+	if code, _ := a.as(t, "POST", "/shared/sync", "shared="+sa.ID); code != 204 {
+		t.Fatalf("sync now: %d", code)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for len(b.fake.inAlbum(sb.AlbumID.String())) == 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(b.fake.inAlbum(sb.AlbumID.String())) != 1 {
+		t.Error("it went")
+	}
+	req, _ := http.NewRequest("POST", a.url+"/shared/sync", strings.NewReader("shared="+sa.ID))
+	req.Header.Set("Cookie", "sess=other")
+	req.Header.Set("X-Requested-With", "immich-handoff")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if res, err := http.DefaultClient.Do(req); err == nil {
+		res.Body.Close()
+		if res.StatusCode == 204 {
+			t.Error("another person looked")
+		}
 	}
 }

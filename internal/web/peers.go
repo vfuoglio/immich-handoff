@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -30,7 +32,7 @@ func peerJSON(rw http.ResponseWriter, status int, v any) {
 func (w *Server) peerFail(rw http.ResponseWriter, err error) {
 	status := http.StatusBadRequest
 	switch {
-	case errors.Is(err, hub.ErrPeerInviteGone), errors.Is(err, hub.ErrSharingOff):
+	case errors.Is(err, hub.ErrPeerInviteGone), errors.Is(err, hub.ErrSharingOff), errors.Is(err, hub.ErrNoSharedAlbum):
 		status = http.StatusNotFound
 	case errors.Is(err, hub.ErrPeerAuth):
 		status = http.StatusUnauthorized
@@ -154,7 +156,11 @@ func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
 		}
 		if shared, err := w.Hub.Store.SharedAlbumsWith(ctx, p.ID); err == nil {
 			for _, a := range shared {
-				v.Shared = append(v.Shared, SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name})
+				sv := SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name, Problem: a.Problem, Sent: a.Sent, Received: a.Received}
+				if !a.LastSync.IsZero() {
+					sv.Last = l.Stamp(a.LastSync.Local())
+				}
+				v.Shared = append(v.Shared, sv)
 			}
 		}
 		out = append(out, v)
@@ -168,6 +174,8 @@ type SharedView struct {
 	Proposer                     bool
 	History, TheirHistory        string
 	Deletion                     string
+	Last, Problem                string
+	Sent, Received               int
 }
 
 func (w *Server) newPeerInvite(rw http.ResponseWriter, r *http.Request) {
@@ -331,5 +339,55 @@ func (w *Server) declineAlbum(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) leaveAlbum(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "album sharing ended", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.LeaveSharedAlbum(ctx, me.sess, me.user, r.PostFormValue("shared"))
+	})
+}
+
+func (w *Server) peerAlbumHave(rw http.ResponseWriter, r *http.Request, p store.Peer, body []byte) {
+	var m hub.HaveMsg
+	if json.Unmarshal(body, &m) != nil {
+		peerJSON(rw, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	reply, err := w.Hub.PeerHave(r.Context(), p, m)
+	if err != nil {
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, reply)
+}
+
+// peerAlbumPhoto takes a photo the other app streams: the request is signed (the path and the query, which carry the checksum),
+// the body is the photo itself and goes straight on to Immich.
+func (w *Server) peerAlbumPhoto(rw http.ResponseWriter, r *http.Request) {
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	p, err := w.Hub.PeerAuth(r.Context(), r.Header.Get("X-Handoff-Peer"), r.Header, r.Method, r.URL.RequestURI(), nil)
+	if err != nil {
+		w.peerFail(rw, hub.ErrPeerAuth)
+		return
+	}
+	q := r.URL.Query()
+	taken, _ := time.Parse(time.RFC3339Nano, q.Get("taken"))
+	if taken.IsZero() || taken.After(time.Now().Add(24*time.Hour)) {
+		taken = time.Now()
+	}
+	size, _ := strconv.ParseInt(q.Get("size"), 10, 64)
+	err = w.Hub.PeerPhoto(r.Context(), p, hub.PhotoIn{To: q.Get("to"), Checksum: q.Get("checksum"), Name: q.Get("name"), Taken: taken, Size: size, Body: r.Body})
+	if err != nil {
+		if errors.Is(err, hub.ErrSharedTooBig) {
+			peerJSON(rw, http.StatusRequestEntityTooLarge, map[string]string{"error": err.Error()})
+			return
+		}
+		w.peerFail(rw, err)
+		return
+	}
+	peerJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *Server) syncAlbumNow(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album looked at", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.SyncSharedNow(ctx, me.user.ID, r.PostFormValue("shared"))
 	})
 }

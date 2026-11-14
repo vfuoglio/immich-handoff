@@ -42,21 +42,25 @@ type SharedAlbum struct {
 	TheirHistory        string // what the other side shares
 	Deletion            string
 	CreatedAt           time.Time
+	LastSync            time.Time // the last pass that ran to its end
+	Problem             string    // what stopped the last pass or a photo (empty: nothing)
+	Sent, Received      int       // photos that went each way
 }
 
-const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at`
+const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received`
 
 func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, error) {
 	var a SharedAlbum
-	var owner, album, key, created string
+	var owner, album, key, created, last string
 	var enc []byte
-	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created); err != nil {
+	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received); err != nil {
 		return a, err
 	}
 	a.OwnerID, _ = uuid.Parse(owner)
 	a.AlbumID, _ = uuid.Parse(album)
 	a.KeyID, _ = uuid.Parse(key)
 	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	a.LastSync, _ = time.Parse(time.RFC3339Nano, last)
 	if len(enc) > 0 {
 		plain, err := s.vault.Open(enc, a.ID)
 		if err != nil {
@@ -80,8 +84,8 @@ func (s *Store) AddSharedAlbum(ctx context.Context, a SharedAlbum) (SharedAlbum,
 			return a, err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received)
 	return a, err
 }
 
@@ -190,6 +194,7 @@ const (
 	OriginMine     = "mine"     // the photo was in this person's album and is (to be) sent
 	OriginArrived  = "arrived"  // it came from the other side: never sent back
 	OriginBaseline = "baseline" // it was there when sharing began and this side chose to share only what is new: never sent
+	OriginSkipped  = "skipped"  // it was too large to send (or could not be): not tried again
 )
 
 // LedgerPut remembers a photo of a shared album by its checksum. A photo already remembered keeps its first origin.
@@ -232,4 +237,58 @@ func (s *Store) ClearLedger(ctx context.Context, album string) error {
 func (s *Store) SetSharedStateWith(ctx context.Context, peer, state string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET state = ? WHERE peer_id = ? AND state <> ? AND state <> ?`, state, peer, ShareDeclined, ShareLeft)
 	return err
+}
+
+// LedgerMarkSent records that a photo of this side reached the other.
+func (s *Store) LedgerMarkSent(ctx context.Context, album, checksum string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET sent = 1 WHERE album_id = ? AND checksum = ?`, album, checksum)
+	return err
+}
+
+// LedgerSkip records that a photo will not be sent.
+func (s *Store) LedgerSkip(ctx context.Context, album, checksum string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET origin = ?, sent = 1 WHERE album_id = ? AND checksum = ?`, OriginSkipped, album, checksum)
+	return err
+}
+
+// LedgerUnsent lists the checksums of this side's photos that have not reached the other, oldest first, with their asset ids.
+func (s *Store) LedgerUnsent(ctx context.Context, album string) (map[string]string, []string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT checksum, asset_id FROM shared_ledger WHERE album_id = ? AND origin = ? AND sent = 0 ORDER BY at, checksum`, album, OriginMine)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	by := map[string]string{}
+	var order []string
+	for rows.Next() {
+		var c, a string
+		if err := rows.Scan(&c, &a); err != nil {
+			return nil, nil, err
+		}
+		by[c] = a
+		order = append(order, c)
+	}
+	return by, order, rows.Err()
+}
+
+// MarkSharedPass records how a pass of a shared album went: when it ended, what stopped it (empty: nothing), and the photos
+// that went each way during it.
+func (s *Store) MarkSharedPass(ctx context.Context, id string, at time.Time, problem string, sent, received int) error {
+	last := ""
+	if problem == "" {
+		last = tstr(at)
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET last_sync = CASE WHEN ? <> '' THEN ? ELSE last_sync END, problem = ?, sent = sent + ?, received = received + ? WHERE id = ?`, last, last, problem, sent, received, id)
+	return err
+}
+
+// AddSharedReceived counts photos that arrived through a shared album.
+func (s *Store) AddSharedReceived(ctx context.Context, id string, n int) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET received = received + ? WHERE id = ?`, n, id)
+	return err
+}
+
+// ActiveSharedAlbums lists every active shared album, for the app's own upkeep.
+func (s *Store) ActiveSharedAlbums(ctx context.Context) ([]SharedAlbum, error) {
+	return s.sharedQuery(ctx, `SELECT `+sharedCols+` FROM shared_albums WHERE state = ? ORDER BY created_at, id`, ShareActive)
 }

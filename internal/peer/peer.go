@@ -147,6 +147,27 @@ func Call(ctx context.Context, hc *http.Client, base, peerID, secret, method, pa
 	return do(hc, req, out)
 }
 
+// Stream sends a signed request whose body is a stream (a photo) and reads the JSON answer. The body is not part of the
+// signature (it cannot be hashed before it is sent without keeping it); the path and query are, and the query carries what the
+// receiver needs to check the photo afterwards (its checksum and size). The transport is https, which protects the bytes.
+func Stream(ctx context.Context, hc *http.Client, base, peerID, secret, method, pathQuery string, body io.Reader, length int64, out any) (int, string, error) {
+	u := strings.TrimSuffix(base, "/") + pathQuery
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	if err != nil {
+		return 0, "", err
+	}
+	if length >= 0 {
+		req.ContentLength = length
+	}
+	at, nonce := time.Now().Unix(), NewNonce()
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set(HeaderPeer, peerID)
+	req.Header.Set(HeaderTime, strconv.FormatInt(at, 10))
+	req.Header.Set(HeaderNonce, nonce)
+	req.Header.Set(HeaderSignature, Sign(secret, method, SignedPath(req.URL.RequestURI()), at, nonce, nil))
+	return do(hc, req, out)
+}
+
 // Plain sends an unsigned JSON request (the first steps of an invitation, before there is a secret).
 func Plain(ctx context.Context, hc *http.Client, method, u string, in, out any) (int, string, error) {
 	var body []byte

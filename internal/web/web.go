@@ -152,6 +152,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /peer/v1/album/accept", w.signed(w.peerAlbumAccept))
 	mux.HandleFunc("POST /peer/v1/album/decline", w.signed(w.peerAlbumAnswer((*hub.Hub).PeerDeclined)))
 	mux.HandleFunc("POST /peer/v1/album/leave", w.signed(w.peerAlbumAnswer((*hub.Hub).PeerLeftAlbum)))
+	mux.HandleFunc("POST /peer/v1/album/have", w.signed(w.peerAlbumHave))
+	mux.HandleFunc("POST /peer/v1/album/photo", w.peerAlbumPhoto)
+	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
 	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)
 	mux.HandleFunc("POST /peers/share", w.proposeAlbum)
 	mux.HandleFunc("POST /shared/accept", w.acceptAlbum)
@@ -275,7 +278,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
 		upload := dropRoute(r.URL.Path) && (strings.HasSuffix(r.URL.Path, "/upload") || strings.HasSuffix(r.URL.Path, "/message"))
-		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") { // a guest's upload is bounded by its drop box instead
+		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") && !strings.HasSuffix(r.URL.Path, "/peer/v1/album/photo") { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
 		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English

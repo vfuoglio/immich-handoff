@@ -3827,6 +3827,18 @@ templ SharedRow(a SharedView, id string) {
 				</form>
 			case "active":
 				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}. {name} shares: {theirs}.", "album", a.Album, "mine", historyText(ctx, a.History), "name", a.Peer, "theirs", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				<p class="meta">
+					if a.Last != "" {
+						{ t(ctx, "Last looked at {when}.", "when", a.Last) }
+					} else {
+						{ t(ctx, "Not looked at yet.") }
+					}
+					{ n(ctx, "{n} photo sent", "{n} photos sent", a.Sent) } &middot; { n(ctx, "{n} photo received", "{n} photos received", a.Received) }
+				</p>
+				if a.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", a.Problem) }</p>
+				}
+				<p class="row"><button hx-post="shared/sync" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Sync now") }</button></p>
 			case "proposed":
 				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}.", "album", a.Album, "mine", historyText(ctx, a.History)) } { deletionText(ctx, a.Deletion) }</p>
 		}
