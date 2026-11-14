@@ -15,7 +15,7 @@ import (
 // would show English in another language, or the page would carry messages nobody reads.
 func TestThePageCarriesExactlyTheMessagesTheScriptsAskFor(t *testing.T) {
 	files, _ := filepath.Glob("ts/*.ts")
-	call := regexp.MustCompile("\\b[tn]\\(\\s*(\"(?:[^\"\\\\]|\\\\.)*\")")
+	call := regexp.MustCompile("\\b(?:[tn]|forms)\\(\\s*(\"(?:[^\"\\\\]|\\\\.)*\")")
 	found := map[string]bool{}
 	for _, f := range files {
 		if filepath.Base(f) == "i18n.ts" || filepath.Ext(f) != ".ts" {

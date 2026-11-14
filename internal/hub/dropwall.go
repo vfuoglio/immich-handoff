@@ -48,8 +48,10 @@ func (h *Hub) StopWall(ctx context.Context, sess *immich.API, owner immich.User,
 	if err := h.Store.SetDropWall(ctx, b.ID, ""); err != nil {
 		return err
 	}
-	if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
-		h.Log.Warn("stop the wall: could not take asset.view off the key", "err", err)
+	if !b.Gallery { // the guests' gallery needs it too
+		if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
+			h.Log.Warn("stop the wall: could not take asset.view off the key", "err", err)
+		}
 	}
 	h.dropEvent(ctx, b.ID, store.DropRevokedK, i18n.Pack("{name} stopped the wall", "name", owner.Name), "")
 	return nil
@@ -67,10 +69,12 @@ func (h *Hub) WallBox(ctx context.Context, token string) (store.DropBox, error) 
 	return b, nil
 }
 
-// WallItem is a photo on the wall: its place in the box's list and, if the guest named a prompt, what it is for.
+// WallItem is a photo on the wall: its place in the box's list, what it is for if the guest named a prompt, and who sent
+// it if the box shows names.
 type WallItem struct {
 	ID      int64
 	Caption string
+	By      string // the name the guest gave, when the box shows names
 }
 
 // WallFeed is what a wall page asks for: the photos after the last one it has (or the latest ones, for a page that has
@@ -94,7 +98,11 @@ func (h *Hub) WallFeed(ctx context.Context, b store.DropBox, after int64) ([]Wal
 	}
 	items := make([]WallItem, 0, len(list))
 	for _, a := range list {
-		items = append(items, WallItem{ID: a.ID, Caption: text[a.Prompt]})
+		it := WallItem{ID: a.ID, Caption: text[a.Prompt]}
+		if b.GalleryNames {
+			it.By = a.GuestName
+		}
+		items = append(items, it)
 	}
 	msgs, _ := h.Store.WallMessages(ctx, b.ID, 20)
 	return items, msgs, nil
@@ -146,9 +154,15 @@ func (c *wallCache) put(k string, p wallPic) {
 // the box kept (and that was not taken back) can be asked for, by its place in the box's list, never by its id in Immich.
 func (h *Hub) WallImage(ctx context.Context, b store.DropBox, id int64) ([]byte, string, error) {
 	a, err := h.Store.DropAssetByID(ctx, b.ID, id)
-	if err != nil {
+	if err != nil || a.Hidden { // a photo the host hid is not shown
 		return nil, "", ErrDropGone
 	}
+	return h.assetImage(ctx, b, a)
+}
+
+// assetImage fetches the picture of a photo of a box with the box's own key, through a cache shared by everything that
+// shows pictures.
+func (h *Hub) assetImage(ctx context.Context, b store.DropBox, a store.DropAsset) ([]byte, string, error) {
 	key := b.ID + "/" + a.AssetID
 	if p, ok := h.wall.get(key); ok {
 		return p.data, p.kind, nil

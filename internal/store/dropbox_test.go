@@ -330,9 +330,9 @@ func TestDropBoxAssetsWallHighlightsAndOnward(t *testing.T) {
 
 	// the photos a box kept: once each, in order, found by their place, and forgotten when taken back
 	for _, a := range []string{"a1", "a2", "a3", "a2"} {
-		s.AddDropAsset(ctx, b.ID, a, "p1")
+		s.AddDropAsset(ctx, b.ID, a, "p1", "Ann")
 	}
-	s.AddDropAsset(ctx, other.ID, "o1", "")
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
 	list, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
 	if len(list) != 3 || list[0].AssetID != "a1" || list[2].AssetID != "a3" || list[0].ID >= list[1].ID {
 		t.Fatalf("assets: %+v", list)
@@ -428,5 +428,183 @@ func TestDropBoxAssetsWallHighlightsAndOnward(t *testing.T) {
 	}
 	if log, _ := s.DropOnwardLog(ctx, b.ID, 10); len(log) != 0 {
 		t.Error("a pruned box keeps no log")
+	}
+}
+
+func TestHeartsAndNamesOfAGallery(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "gallery-token-123456", Name: "Gallery", Key: "k", Gallery: true, GalleryDownload: true, GalleryNames: true, KeepDays: 7})
+	other, _ := s.AddDropBox(ctx, DropBox{Token: "other-token-1234567", Name: "Other", Key: "k"})
+	if got, _ := s.DropBox(ctx, b.ID); !got.Gallery || !got.GalleryDownload || !got.GalleryNames || got.KeepDays != 7 {
+		t.Fatalf("the settings come back: %+v", got)
+	}
+	for _, a := range []string{"a1", "a2", "a3", "a4"} {
+		s.AddDropAsset(ctx, b.ID, a, "", "Name of "+a)
+	}
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
+	all, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
+	if all[2].GuestName != "Name of a3" {
+		t.Errorf("the name given comes back: %+v", all[2])
+	}
+
+	// a page of older photos, newest first
+	if older, _ := s.DropAssetsBefore(ctx, b.ID, all[3].ID, 2); len(older) != 2 || older[0].AssetID != "a3" || older[1].AssetID != "a2" {
+		t.Errorf("before the newest: %+v", older)
+	}
+	if first, _ := s.DropAssetsBefore(ctx, b.ID, 0, 10); len(first) != 4 || first[0].AssetID != "a4" {
+		t.Errorf("from the newest: %+v", first)
+	}
+
+	// a heart is one guest's, given once, taken back by the same tap, counted for everyone
+	h, n, err := s.ToggleHeart(ctx, b.ID, all[0].ID, "ann")
+	if err != nil || !h || n != 1 {
+		t.Fatalf("first heart: %v %d %v", h, n, err)
+	}
+	if h, n, _ = s.ToggleHeart(ctx, b.ID, all[0].ID, "bob"); !h || n != 2 {
+		t.Errorf("second guest: %v %d", h, n)
+	}
+	if h, n, _ = s.ToggleHeart(ctx, b.ID, all[0].ID, "ann"); h || n != 1 {
+		t.Errorf("taking it back: %v %d", h, n)
+	}
+	s.ToggleHeart(ctx, b.ID, all[1].ID, "bob")
+	counts, _ := s.HeartCounts(ctx, b.ID, all[0].ID, all[3].ID)
+	if counts[all[0].ID] != 1 || counts[all[1].ID] != 1 || len(counts) != 2 {
+		t.Errorf("counts: %v", counts)
+	}
+	if mine, _ := s.GuestHearts(ctx, b.ID, "bob", all[0].ID, all[3].ID); !mine[all[0].ID] || !mine[all[1].ID] || len(mine) != 2 {
+		t.Errorf("bob's hearts: %v", mine)
+	}
+	if mine, _ := s.GuestHearts(ctx, b.ID, "ann", all[0].ID, all[3].ID); len(mine) != 0 {
+		t.Errorf("ann took hers back: %v", mine)
+	}
+	// a photo of another box cannot be hearted through this one
+	oa, _ := s.DropAssetsAfter(ctx, other.ID, 0, 1)
+	if _, _, err := s.ToggleHeart(ctx, b.ID, oa[0].ID, "ann"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another box's photo: %v", err)
+	}
+	// a photo that goes takes its hearts with it
+	s.RemoveDropAsset(ctx, b.ID, all[0].AssetID)
+	if counts, _ = s.HeartCounts(ctx, b.ID, 0, 1<<40); len(counts) != 1 || counts[all[1].ID] != 1 {
+		t.Errorf("after the photo went: %v", counts)
+	}
+
+	// the settings are switched together: download and names need the gallery
+	s.SetDropGallery(ctx, b.ID, false, true, true)
+	if got, _ := s.DropBox(ctx, b.ID); got.Gallery || got.GalleryDownload || got.GalleryNames {
+		t.Errorf("no gallery, no download or names: %+v", got)
+	}
+}
+
+func TestAModeratorLinkAndOnceOnlyMessages(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "mod-box-token-123456", Name: "Mod", Key: "k"})
+	if _, err := s.DropBoxByMod(ctx, ""); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("an empty token finds nothing: %v", err)
+	}
+	if err := s.SetDropMod(ctx, b.ID, "the-moderator-token"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.DropBoxByMod(ctx, "the-moderator-token"); err != nil || got.ID != b.ID || got.Key != "k" || got.ModToken != "the-moderator-token" {
+		t.Errorf("by moderator token: %+v %v", got, err)
+	}
+	if _, err := s.DropBoxByMod(ctx, "mod-box-token-123456"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("the box's own token is not a moderator link: %v", err)
+	}
+	s.SetDropMod(ctx, b.ID, "")
+	if _, err := s.DropBoxByMod(ctx, "the-moderator-token"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("an ended link: %v", err)
+	}
+	s.SetDropMod(ctx, b.ID, "again")
+	s.SetDropBoxState(ctx, b.ID, DropRevoked, "")
+	if _, err := s.DropBoxByMod(ctx, "again"); !errors.Is(err, ErrDropBoxGone) {
+		t.Errorf("a revoked box: %v", err)
+	}
+
+	// of several callers, one claims a bit; clearing it lets the next claim
+	c, _ := s.AddDropBox(ctx, DropBox{Token: "claim-box-token-12345", Name: "Claim", Key: "k"})
+	first, _ := s.ClaimDropNotified(ctx, c.ID, 8)
+	second, _ := s.ClaimDropNotified(ctx, c.ID, 8)
+	if !first || second {
+		t.Errorf("claims: %v %v", first, second)
+	}
+	s.MarkDropNotified(ctx, c.ID, 1)
+	s.ClearDropNotified(ctx, c.ID, 8)
+	if got, _ := s.DropBox(ctx, c.ID); got.Notified != 1 {
+		t.Errorf("only the cleared bit goes: %d", got.Notified)
+	}
+	if again, _ := s.ClaimDropNotified(ctx, c.ID, 8); !again {
+		t.Error("after clearing, the bit can be claimed again")
+	}
+}
+
+func TestHidingAndPinningPhotosOfAGallery(t *testing.T) {
+	ctx := context.Background()
+	s, _ := open(t, t.TempDir(), "drop-secret-value-1234")
+	b, _ := s.AddDropBox(ctx, DropBox{Token: "pins-token-1234567890", Name: "Pins", Key: "k"})
+	other, _ := s.AddDropBox(ctx, DropBox{Token: "other-pins-token-12345", Name: "Other", Key: "k"})
+	for _, a := range []string{"a1", "a2", "a3", "a4"} {
+		s.AddDropAsset(ctx, b.ID, a, "", "")
+	}
+	s.AddDropAsset(ctx, other.ID, "o1", "", "")
+	all, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10)
+	if err := s.MarkAsset(ctx, b.ID, all[1].ID, "hidden", true); err != nil {
+		t.Fatal(err)
+	}
+	s.MarkAsset(ctx, b.ID, all[2].ID, "pinned", true)
+	if err := s.MarkAsset(ctx, b.ID, all[0].ID, "colour", true); err == nil {
+		t.Error("an unknown mark is refused")
+	}
+	oa, _ := s.DropAssetsAfter(ctx, other.ID, 0, 1)
+	if err := s.MarkAsset(ctx, b.ID, oa[0].ID, "hidden", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another box's photo: %v", err)
+	}
+
+	// guests' queries leave the hidden out; the host's do not
+	if got, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10); len(got) != 3 {
+		t.Errorf("after: %d", len(got))
+	}
+	if got, _ := s.DropAssetsBefore(ctx, b.ID, 0, 10); len(got) != 3 || got[0].AssetID != "a4" {
+		t.Errorf("before: %+v", got)
+	}
+	if got, _ := s.DropAssetsLatest(ctx, b.ID, 10); len(got) != 3 {
+		t.Errorf("latest: %d", len(got))
+	}
+	host, _ := s.DropAssetsAll(ctx, b.ID, 0, 10)
+	if len(host) != 4 || !host[2].Hidden || !host[1].Pinned || host[3].Hidden {
+		t.Errorf("all: %+v", host)
+	}
+	if ids, _ := s.DropVisibleAssetIDs(ctx, b.ID); len(ids) != 3 || ids[1] != "a3" {
+		t.Errorf("visible ids: %v", ids)
+	}
+	if ids, _ := s.DropAssetIDs(ctx, b.ID); len(ids) != 4 {
+		t.Errorf("all ids: %v", ids)
+	}
+	if _, _, err := s.ToggleHeart(ctx, b.ID, all[1].ID, "ann"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a heart on a hidden photo: %v", err)
+	}
+	hidden, pinned, _ := s.AssetMarks(ctx, b.ID)
+	if !hidden["a2"] || !pinned["a3"] || len(hidden) != 1 || len(pinned) != 1 {
+		t.Errorf("marks: %v %v", hidden, pinned)
+	}
+
+	// loved: the pinned first, then the most hearts, never a hidden one
+	s.ToggleHeart(ctx, b.ID, all[0].ID, "g1")
+	s.ToggleHeart(ctx, b.ID, all[0].ID, "g2")
+	s.ToggleHeart(ctx, b.ID, all[3].ID, "g1")
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 10); len(loved) != 3 || loved[0] != "a3" || loved[1] != "a1" || loved[2] != "a4" {
+		t.Errorf("loved: %v", loved)
+	}
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 2); len(loved) != 2 {
+		t.Errorf("the most: %v", loved)
+	}
+	s.MarkAsset(ctx, b.ID, all[0].ID, "hidden", true)
+	if loved, _ := s.LovedAssetIDs(ctx, b.ID, 10); len(loved) != 2 || loved[1] != "a4" {
+		t.Errorf("a hidden one is never loved: %v", loved)
+	}
+	s.MarkAsset(ctx, b.ID, all[1].ID, "hidden", false)
+	if got, _ := s.DropAssetsAfter(ctx, b.ID, 0, 10); len(got) != 3 {
+		t.Errorf("shown again: %d", len(got))
 	}
 }

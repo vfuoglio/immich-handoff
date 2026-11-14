@@ -17,6 +17,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/peer"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -68,18 +69,46 @@ type Hub struct {
 	// StageDir is where files wait for a host's approval in a drop box that asks for it (empty: no such drop boxes).
 	StageDir string
 
-	mu          sync.RWMutex
-	snapshot    []*syncer.Service
-	accounts    map[string]*syncer.Account // by link id, so pointers stay stable between reloads
-	granted     map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
-	drop        dropGuard                  // what the drop boxes' limits know about their guests
-	wall        wallCache                  // the pictures a wall fetched last
-	hlRun       map[string]bool            // boxes whose best-of is being made now
-	digestRun   map[string]bool            // services whose digest is being made now
-	frames      frameCache                 // the albums frames last read
-	remotes     map[string]*remoteEntry    // receivers on other servers, by service, kept between reloads
-	retries     map[string]*time.Timer     // when each unreachable receiver on another server is tried again
-	bridgeTries bridgeGuard                // what the invitation pages know about who tried
+	// PhoneDir is where the pieces of photos sent from a phone wait until the file is whole (empty: phones cannot send).
+	// PhoneCap is the most one person may have waiting, PhoneMaxFile the most for one file and PhoneKeep how long
+	// unfinished pieces are kept; zero means the defaults (4 GB, 2 GB, 48 hours).
+	// Share: albums may be shared with people on other servers, through other Handoff apps (SHARED_ALBUMS_ENABLE, off by default;
+	// it needs the app's own public address, AppURL, to give to the other app).
+	Share bool
+	// SharedEvery is how often each shared album is looked at (SHARED_ALBUMS_EVERY_MINUTES; zero: three minutes) and SharedMaxFile the
+	// largest file one may carry, in bytes (SHARED_ALBUMS_MAX_MB; zero: 2 GB).
+	SharedEvery   time.Duration
+	SharedMaxFile int64
+
+	PhoneDir     string
+	PhoneCap     int64
+	PhoneMaxFile int64
+	PhoneKeep    time.Duration
+
+	mu           sync.RWMutex
+	snapshot     []*syncer.Service
+	accounts     map[string]*syncer.Account // by link id, so pointers stay stable between reloads
+	granted      map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
+	drop         dropGuard                  // what the drop boxes' limits know about their guests
+	wall         wallCache                  // the pictures a wall fetched last
+	hearts       heartGuard                 // when each guest gave hearts in the last hour
+	slots        chan struct{}              // places for downloads of originals (see originals)
+	slotsOnce    sync.Once
+	phoneLocks   sync.Map   // one lock for each file being received, by its id
+	phoneStartMu sync.Mutex // starting a file checks what is waiting
+	zipping      sync.Map   // the boxes a ZIP is being made of
+	zipMu        sync.Mutex
+	zipCount     map[string]int  // how many ZIPs of a box guests are having made
+	hlRun        map[string]bool // boxes whose best-of is being made now
+	digestRun    map[string]bool // services whose digest is being made now
+	frames       frameCache      // the albums frames last read
+	rooms        roomCache       // the albums client rooms last read
+	pins         pinGuard
+	syncing      sync.Map                // the shared albums being looked at now
+	peerVerify   peer.Verifier           // the signed requests other apps have sent                // wrong PINs given to client rooms
+	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
+	retries      map[string]*time.Timer  // when each unreachable receiver on another server is tried again
+	bridgeTries  bridgeGuard             // what the invitation pages know about who tried
 }
 
 // SelfService reports whether people can join and leave from the web page.

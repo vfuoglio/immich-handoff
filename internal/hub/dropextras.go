@@ -82,6 +82,106 @@ func (h *Hub) SetDropLook(ctx context.Context, user immich.User, id, accent, lan
 	return nil
 }
 
+// maxLogo is the largest logo a box takes.
+const maxLogo = 300 << 10
+
+// SetDropBrand sets what makes a box's guest pages the host's own: the title guests see ("" for the box's name) and a
+// logo (nil keeps it; removeLogo takes it away). A logo is a JPEG, PNG or WebP (never an SVG, which can carry script) of at
+// most 300 KB. The owner and the co-hosts who manage may.
+func (h *Hub) SetDropBrand(ctx context.Context, user immich.User, id, title string, logo []byte, removeLogo bool) error {
+	b, _, err := h.dropBoxFor(ctx, user.ID, id, "manage")
+	if err != nil {
+		return err
+	}
+	title = strings.TrimSpace(title)
+	if utf8.RuneCountInString(title) > 60 || strings.ContainsAny(title, "\r\n\x00\t") {
+		return ErrBadDropName
+	}
+	var kind string
+	if len(logo) > 0 {
+		if len(logo) > maxLogo {
+			return ErrBadLogo
+		}
+		switch ct := http.DetectContentType(logo); ct {
+		case "image/jpeg", "image/png", "image/webp":
+			kind = ct
+		default:
+			return ErrBadLogo
+		}
+	}
+	if title != b.Title {
+		if err := h.Store.SetDropTitle(ctx, b.ID, title); err != nil {
+			return err
+		}
+	}
+	switch {
+	case kind != "":
+		return h.Store.SetDropLogo(ctx, b.ID, kind, logo)
+	case removeLogo:
+		return h.Store.SetDropLogo(ctx, b.ID, "", nil)
+	}
+	return nil
+}
+
+// EventSettings are the settings that make a drop box an event: what guests may do beyond sending, and how long what
+// they leave with the box is kept once it has ended.
+type EventSettings struct {
+	KeepDays int  // days after the box ends that names, hearts and the gallery are kept; 0: until the box is revoked
+	Gallery  bool // guests may look at the photos the box kept, and heart them
+	Download bool // and download them (needs Gallery)
+	Names    bool // and see the name the sender gave (needs Gallery)
+}
+
+// SetDropEvent changes a box's event settings. Only the owner may: they decide what is kept of other people and what
+// guests may see. A gallery needs the box's key to see pictures (and, for downloads, to download), which the owner's own
+// session gives it and takes away again.
+func (h *Hub) SetDropEvent(ctx context.Context, sess *immich.API, owner immich.User, id string, e EventSettings) error {
+	b, _, err := h.dropBoxFor(ctx, owner.ID, id, "owner")
+	if err != nil {
+		return err
+	}
+	if e.KeepDays < 0 || e.KeepDays > 3650 {
+		return ErrBadDropLimit
+	}
+	e.Download, e.Names = e.Download && e.Gallery, e.Names && e.Gallery
+	if e.Gallery && (!b.Gallery || e.Download != b.GalleryDownload) || e.Gallery != b.Gallery {
+		if e.Gallery {
+			if err := sess.AddKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
+				return fmt.Errorf("could not let the drop box's key show pictures: %w", err)
+			}
+		}
+		if e.Download {
+			if err := sess.AddKeyPermission(ctx, b.KeyID, "asset.download"); err != nil {
+				return fmt.Errorf("could not let the drop box's key download photos: %w", err)
+			}
+		} else if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.download"); err != nil {
+			h.Log.Warn("event settings: could not take asset.download off the key", "err", err)
+		}
+		if !e.Gallery && b.Wall == "" { // the wall needs it too
+			if err := sess.RemoveKeyPermission(ctx, b.KeyID, "asset.view"); err != nil {
+				h.Log.Warn("event settings: could not take asset.view off the key", "err", err)
+			}
+		}
+	}
+	if e.KeepDays != b.KeepDays {
+		if err := h.Store.SetDropKeep(ctx, b.ID, e.KeepDays); err != nil {
+			return err
+		}
+		h.dropEvent(ctx, b.ID, store.DropCreated, i18n.Pack("{name} changed what is kept after the event", "name", owner.Name), "")
+	}
+	if e.Gallery != b.Gallery || e.Download != b.GalleryDownload || e.Names != b.GalleryNames {
+		if err := h.Store.SetDropGallery(ctx, b.ID, e.Gallery, e.Download, e.Names); err != nil {
+			return err
+		}
+		text := "{name} switched the guests' gallery off"
+		if e.Gallery {
+			text = "{name} changed what guests may do with the photos"
+		}
+		h.dropEvent(ctx, b.ID, store.DropCreated, i18n.Pack(text, "name", owner.Name), "")
+	}
+	return nil
+}
+
 // --- more ways in ---
 
 const shortAlphabet = "abcdefghjkmnpqrstuvwxyz23456789" // no letters that look like digits or each other
@@ -159,13 +259,17 @@ type DropSettings struct {
 	Prompts         []string
 	PromptRequired  bool
 	GuestBook       bool
+	KeepDays        int
+	Gallery         bool
+	GalleryDownload bool
+	GalleryNames    bool
 }
 
 // SettingsOf reads a box's settings.
 func SettingsOf(b store.DropBox) DropSettings {
 	s := DropSettings{Message: b.Message, MaxFiles: b.MaxFiles, MaxMB: b.MaxMB, MaxFileMB: b.MaxFileMB, PhotosOnly: b.PhotosOnly,
 		Album: b.Album, ExtraTag: b.ExtraTag, Approve: b.Approve, Accent: b.Accent, Lang: b.Lang, MaxDim: b.MaxDim, GuestDelete: b.GuestDelete,
-		PromptRequired: b.PromptRequired, GuestBook: b.GuestBook}
+		PromptRequired: b.PromptRequired, GuestBook: b.GuestBook, KeepDays: b.KeepDays, Gallery: b.Gallery, GalleryDownload: b.GalleryDownload, GalleryNames: b.GalleryNames}
 	for _, pr := range b.Prompts {
 		s.Prompts = append(s.Prompts, pr.Text)
 	}
@@ -185,7 +289,7 @@ func SettingsOf(b store.DropBox) DropSettings {
 func (s DropSettings) Params(name string) DropParams {
 	return DropParams{Name: name, Message: s.Message, Days: s.Days, MaxFiles: s.MaxFiles, MaxMB: s.MaxMB, MaxFileMB: s.MaxFileMB,
 		PhotosOnly: s.PhotosOnly, Album: s.Album, ExtraTag: s.ExtraTag, Approve: s.Approve, Accent: s.Accent, Lang: s.Lang,
-		MaxDim: s.MaxDim, GuestDelete: s.GuestDelete, Prompts: s.Prompts, PromptRequired: s.PromptRequired, GuestBook: s.GuestBook}
+		MaxDim: s.MaxDim, GuestDelete: s.GuestDelete, Prompts: s.Prompts, PromptRequired: s.PromptRequired, GuestBook: s.GuestBook, KeepDays: s.KeepDays, Gallery: s.Gallery, GalleryDownload: s.GalleryDownload, GalleryNames: s.GalleryNames}
 }
 
 // TemplateInfo is a template as the page lists it.

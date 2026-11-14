@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -21,6 +22,29 @@ type PushDeviceView struct {
 }
 
 // FrameView is one of the person's frames.
+// RoomView is one of the person's client rooms on the Services tab.
+type RoomView struct {
+	ID, Name, Title, Album, Token string
+	Ends                          string // when the link stops, "" for never
+	Ended, Paused, PIN            bool
+	Mark                          string // "text:<text>", "logo" or "both:<text>"
+	Selections                    []SelectionView
+	Mode                          string
+	Limit                         int
+	Released                      bool
+	Notes                         int
+	Round                         int
+	Several                       bool
+}
+
+// SelectionView is one selection of a room as the photographer sees it.
+type SelectionView struct {
+	Who, Name string
+	Count     int
+	Done      bool
+	When      string
+}
+
 type FrameView struct {
 	ID, Name, Album, Token string
 	Seconds                int
@@ -239,6 +263,9 @@ type DashboardData struct {
 	Push       PushView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
+	Rooms      []RoomView
+	Peers      []PeerView
+	PeersOn    bool
 	Templates  []TemplateView
 }
 
@@ -290,6 +317,30 @@ type DropBoxView struct {
 	MaxDim      int
 	HasCover    bool
 	GuestDelete bool
+	Title       string // the name guests see, if the host gave one
+	HasLogo     bool
+	KeepDays    int    // days after the box ends that what guests left with it is kept (0: until it is revoked)
+	KeepUntil   string // when that goes, once the box has an end
+
+	Gallery, GalleryDownload, GalleryNames bool // guests may look at the photos and heart them; download them; see who sent them
+	ModToken                               string // the moderator link's token (the owner sees it), "" for none
+}
+
+// ModPageView is the moderator's page: what waits in the box, and how the last decision went.
+type ModPageView struct {
+	Token, Name, Message string
+	Total                int
+	Items                []PendingView
+	Looks                bool           // the key may look at pictures, so the photos the box kept can be shown
+	Photos               []ModPhotoView // the photos the box kept, newest first
+	More                 string         // the position to ask for the next page from ("" when there is none)
+}
+
+// ModPhotoView is a photo the box kept, with what the host picked for it.
+type ModPhotoView struct {
+	ID, By         string
+	Hearts         int
+	Hidden, Pinned bool
 }
 
 // HighlightView is a box's best-of as the owner reads it.
@@ -372,6 +423,10 @@ type DropPageView struct {
 	Prompts              []PromptView
 	PromptRequired       bool
 	GuestBook            bool
+	Logo                 bool // the box has a logo
+	Gallery              bool // guests may look at the photos the box kept, and heart them
+	GalleryDownload      bool // and download them
+	GalleryNames         bool // and the page asks for a name to show with the photos
 }
 
 // DropResultLine is what became of one file a guest sent.
@@ -397,7 +452,7 @@ templ Layout(title, user string) {
 				if g.Accent {
 					<link rel="stylesheet" href={ "drop/" + g.Token + "/theme.css" }/>
 				}
-			} else {
+			} else if guestOf(ctx) == nil {
 				<link rel="manifest" href="static/manifest.webmanifest" crossorigin="use-credentials"/>
 			}
 			<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
@@ -418,6 +473,11 @@ templ Layout(title, user string) {
 						<img src="static/favicon.svg" alt="" width="28" height="28"/>
 						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
+					if hasTabs(ctx) {
+						<a href="send" class="icon-btn send-btn" aria-label={ t(ctx, "Send photos from this device") } title={ t(ctx, "Send photos from this device") }>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
+						</a>
+					}
 					<details class="lang">
 						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>
@@ -467,6 +527,7 @@ templ Layout(title, user string) {
 						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
 						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
 						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+						<a href="send" class="send-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg><span>{ t(ctx, "Send") }</span></a>
 					</nav>
 				}
 				<main>
@@ -588,6 +649,10 @@ templ Dashboard(d DashboardData) {
 					@OfferForm(d.DeleteOK)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
+				@RoomSection(d.Rooms)
+				if d.PeersOn {
+					@PeerSection(d.Peers)
+				}
 				@FrameSection(d.Frames)
 			}
 		</section>
@@ -1950,6 +2015,11 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 									}
 								</select>
 							</label>
+							<label>{ t(ctx, "Title guests see (optional, otherwise the box's name)") } <input name="title" maxlength="60" value={ b.Title } placeholder={ b.Name }/></label>
+							<label>{ t(ctx, "Logo (JPEG, PNG or WebP, up to 300 KB)") } <input name="logo" type="file" accept="image/jpeg,image/png,image/webp"/></label>
+							if b.HasLogo {
+								<label><input name="nologo" type="checkbox" value="1"/> { t(ctx, "Remove the logo") }</label>
+							}
 							<label>{ t(ctx, "Cover photo (JPEG, PNG or WebP, up to 900 KB)") } <input name="cover" type="file" accept="image/jpeg,image/png,image/webp"/></label>
 							if b.HasCover {
 								<label><input name="nocover" type="checkbox" value="1"/> { t(ctx, "Remove the cover photo") }</label>
@@ -1960,6 +2030,25 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					</details>
 				}
 				if b.Owner {
+					<details class="more" data-event>
+						<summary>{ t(ctx, "The event: what is kept afterwards") }</summary>
+						<form class="limits" hx-post="dropbox/event" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+							<div class="field">
+								<label for={ "keep-" + b.ID }>{ t(ctx, "Keep what guests leave for (days after it ends)") }</label>
+								<input id={ "keep-" + b.ID } name="keepdays" type="number" min="0" max="3650" value={ fmt.Sprint(b.KeepDays) }/>
+							</div>
+							<label class="wide"><input name="gallery" type="checkbox" value="1" checked?={ b.Gallery }/> { t(ctx, "Guests may look at the photos and heart them") }</label>
+							<label class="wide"><input name="gallerydownload" type="checkbox" value="1" checked?={ b.GalleryDownload }/> { t(ctx, "and download them") }</label>
+							<label class="wide"><input name="gallerynames" type="checkbox" value="1" checked?={ b.GalleryNames }/> { t(ctx, "and see who sent each photo (the page asks guests for a name)") }</label>
+							<p class="row form-actions"><button type="submit">{ t(ctx, "Save") }</button></p>
+						</form>
+						<small class="meta">{ t(ctx, "Every guest with the link then sees every photo the box has kept, not only their own. Photos waiting for your approval are never shown. The box's key gets permission to view pictures, and to download if you allow it.") }</small>
+						if b.KeepUntil != "" {
+							<small class="meta">{ t(ctx, "What guests left with the box (their names, their hearts, the gallery) goes on {when}. The photos in your library stay.", "when", b.KeepUntil) }</small>
+						} else {
+							<small class="meta">{ t(ctx, "0 keeps it until you revoke the box. The photos in your library always stay.") }</small>
+						}
+					</details>
 					<details class="more">
 						<summary>{ t(ctx, "Templates and copies") }</summary>
 						<form class="limits" hx-post="dropbox/template" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -2098,6 +2187,9 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 						</button>
 						<small class="meta">{ t(ctx, "Looks at every photo in this box and leaves out the ones that are too dark, too bright or blurred, and all but the sharpest of shots of the same moment (within an hour). The rest go into an album of yours called \"{name} best of\". It never deletes or changes a photo, and running it again with another setting corrects the album, leaving anything else you put in it alone. Photos Immich keeps only as WebP previews cannot be looked at, so they are kept.", "name", b.Name) }</small>
 					</form>
+					<h3>{ t(ctx, "Loved by guests") }</h3>
+					<p class="meta">{ t(ctx, "Puts the photos guests gave hearts, and the ones a moderator pinned, in an album of yours called \"{box} loved by guests\": the pinned first, then the most hearts, at most a hundred, never a hidden one. Run it again to correct the album; what you added yourself stays.", "box", b.Name) }</p>
+					<p class="row"><button hx-post="dropbox/loved" hx-vals={ vals("service", b.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make the album of loved photos") }</button></p>
 					<h3>{ t(ctx, "Hand the photos on") }</h3>
 					if len(b.OnwardOptions) == 0 {
 						<p class="meta">{ t(ctx, "You do not send to any service yet. Join one on this page (under You can join) and you can hand this box's photos on to it, to a family member's library for instance.") }</p>
@@ -2132,6 +2224,10 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 							}
 						</ul>
 					}
+				}
+				if b.Owner && b.Files > 0 {
+					<p class="row"><a class="button" href={ templ.SafeURL("dropbox/zip/" + b.ID) } download>{ t(ctx, "Download every photo as a ZIP") }</a></p>
+					<small class="meta">{ t(ctx, "A ZIP of the originals of every photo this box kept, made while you download it, with your own sign-in. Large events take a while.") }</small>
 				}
 				if b.Owner {
 					<details class="more">
@@ -2198,6 +2294,26 @@ templ DropBoxRow(b DropBoxView, id string, open bool) {
 					}
 				}
 				if b.Owner {
+					<h3>{ t(ctx, "Moderator link") }</h3>
+					if b.ModToken != "" {
+						<div class="field">
+							<label for={ "mod-" + id }>{ t(ctx, "Link for a helper who looks at the files that wait (no account needed)") }</label>
+							<div class="row">
+								<input id={ "mod-" + id } class="invite" readonly data-link={ "mod/" + b.ModToken }/>
+								<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+								<button type="button" class="show-qr" data-for={ "mod-" + id } data-alt={ t(ctx, "QR code of the moderator link") }>{ t(ctx, "QR code") }</button>
+								<a class="button" href={ templ.SafeURL("mod/" + b.ModToken) } target="_blank" rel="noopener">{ t(ctx, "Open") }</a>
+							</div>
+							<div class="qr" id={ "qr-mod-" + id } hidden></div>
+						</div>
+						<p class="row">
+							<button hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The current moderator link stops working. Continue?") } data-confirm-title={ t(ctx, "Make a new moderator link?") } data-confirm-label={ t(ctx, "New moderator link") }>{ t(ctx, "New moderator link") }</button>
+							<button class="danger" hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The moderator link stops working at once.") } data-confirm-title={ t(ctx, "End the moderator link?") } data-confirm-label={ t(ctx, "End the link") } data-danger="true">{ t(ctx, "End the moderator link") }</button>
+						</p>
+					} else {
+						<p class="meta">{ t(ctx, "A moderator link opens a page where someone with no account, a friend at the party for example, approves or rejects the files that wait for you. It shows nothing of your library and none of the box's settings, and cannot pause or end the box. Anyone who has the link can decide on the files, so share it with people you trust.") }</p>
+						<p class="row"><button hx-post="dropbox/moderator" hx-vals={ vals2("service", b.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make a moderator link") }</button></p>
+					}
 					<h3>{ t(ctx, "Co-hosts") }</h3>
 					<p class="meta">{ t(ctx, "People on this Immich server who help you look after the box. They see it on their own page. They never see your library, and only you can end the box.") }</p>
 					for _, h := range b.Hosts {
@@ -2275,6 +2391,10 @@ templ DropBoxForm() {
 				<input id="drop-files" name="files" type="number" min="0" max="1000000" value="2000"/>
 			</div>
 			<div class="field">
+				<label for="drop-keep">{ t(ctx, "Keep what guests leave for (days after it ends)") }</label>
+				<input id="drop-keep" name="keepdays" type="number" min="0" max="3650" value="30"/>
+			</div>
+			<div class="field">
 				<label for="drop-secure">{ t(ctx, "Secure with a password...") }</label>
 				<select id="drop-secure" name="secure">
 					<option value="none" selected>{ t(ctx, "No") }</option>
@@ -2303,6 +2423,10 @@ templ DropBoxForm() {
 			</div>
 			<label class="wide"><input name="required" type="checkbox" value="1"/> { t(ctx, "Every photo must say which one it is for") }</label>
 			<label class="wide"><input name="guestbook" type="checkbox" value="1"/> { t(ctx, "Message to the host: guests may leave a message, with their name, and a voice note") }</label>
+			<label class="wide"><input name="gallery" type="checkbox" value="1"/> { t(ctx, "Guests may look at the photos and heart them") }</label>
+			<label class="wide"><input name="gallerydownload" type="checkbox" value="1"/> { t(ctx, "and download them") }</label>
+			<label class="wide"><input name="gallerynames" type="checkbox" value="1"/> { t(ctx, "and see who sent each photo (the page asks guests for a name)") }</label>
+			<small class="meta wide">{ t(ctx, "Every guest with the link then sees every photo the box has kept, not only their own. Photos waiting for your approval are never shown. The box's key gets permission to view pictures, and to download if you allow it.") }</small>
 			<label class="wide"><input name="guestdelete" type="checkbox" value="1"/> { t(ctx, "Guests may take back what they sent, while it is still in the inbox") }</label>
 			<small class="meta wide">{ t(ctx, "For that the box's key also gets permission to read photos and move them to your trash (never to delete them for good). Guests keep a secret in their browser, so only they can take back their own files.") }</small>
 			<small class="meta wide">{ t(ctx, "An album gives the key permission to find, make and add to albums, nothing more. Files that wait for you are kept on this server's disk until you decide, and deleted after two weeks.") }</small>
@@ -2319,6 +2443,9 @@ templ DropPage(d DropPageView) {
 			<img class="drop-cover" src={ "drop/" + d.Token + "/cover" } alt="" width="640" height="240"/>
 		}
 		<section class="invite-hero">
+			if d.Logo {
+				<img class="drop-logo" src={ "drop/" + d.Token + "/logo" } alt={ d.Name } height="64"/>
+			}
 			<h1>{ d.Name }</h1>
 			if d.Message != "" {
 				<p class="lead">{ d.Message }</p>
@@ -2353,6 +2480,12 @@ templ DropPage(d DropPageView) {
 					}
 				</ul>
 			}
+			if d.GalleryNames {
+				<div class="field">
+					<label for="drop-guest">{ t(ctx, "Your name (shown with your photos)") }</label>
+					<input id="drop-guest" name="guest" maxlength="40" autocomplete="name" data-remember="guest"/>
+				</div>
+			}
 			<div class="dz" data-photos-only?={ d.PhotosOnly }>
 				<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
 				<label class="dz-title" for="drop-files">{ dropChoose(ctx, d.PhotosOnly) }</label>
@@ -2370,7 +2503,11 @@ templ DropPage(d DropPageView) {
 			<ul class="plain drop-list" aria-live="polite" hidden></ul>
 			<div class="drop-result" role="status" aria-live="polite" hidden></div>
 			<p class="meta">{ d.Limits }</p>
-			<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			if d.Gallery {
+				<p class="meta">{ t(ctx, "Everyone who has this link can see the photos that were kept, below.") }</p>
+			} else {
+				<p class="meta">{ t(ctx, "Only the person who made this link can see what you send. You will not see anyone else's photos.") }</p>
+			}
 			if d.Approve {
 				<p class="meta">{ t(ctx, "What you send is looked at before it is kept.") }</p>
 			}
@@ -2379,6 +2516,9 @@ templ DropPage(d DropPageView) {
 			}
 			<p class="row form-actions"><button class="primary drop-send" type="submit" data-label={ t(ctx, "Send") }>{ t(ctx, "Send") }</button></p>
 		</form>
+		if d.Gallery {
+			@Gallery(d.Token, d.GalleryDownload)
+		}
 		if d.GuestBook {
 			<form class="card offer-form guestbook-form" method="post" enctype="multipart/form-data" action={ "drop/" + d.Token + "/message" }>
 				<h2>{ t(ctx, "Message to the host") }</h2>
@@ -2398,6 +2538,129 @@ templ DropPage(d DropPageView) {
 				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Send the message") }</button></p>
 				<p class="meta guestbook-status" role="status" aria-live="polite"></p>
 			</form>
+		}
+	}
+}
+
+// Gallery is the photos a box has kept, as a guest sees them: a grid that fills in by itself (ts/gallery.ts), a heart on
+// each and, when the box allows, a way to download the original.
+templ Gallery(token string, download bool) {
+	<section class="gallery" data-gallery data-feed={ "drop/" + token + "/gallery" } data-photo={ "drop/" + token + "/photo/" } data-original={ "drop/" + token + "/original/" } data-heart={ "drop/" + token + "/heart/" } data-download?={ download } data-love={ t(ctx, "Heart") } data-unlove={ t(ctx, "Take the heart back") } data-save={ t(ctx, "Download") } data-by={ t(ctx, "by {name}") } data-open={ t(ctx, "Look at the photo") } data-close={ t(ctx, "Close") }>
+		<h2>{ t(ctx, "The photos so far") }</h2>
+		if download {
+			<p class="row gallery-zip"><a class="button" href={ templ.SafeURL("drop/" + token + "/zip") } download>{ t(ctx, "Download all as a ZIP") }</a> <small class="meta">{ t(ctx, "The originals of all the photos, made while you download, so it can take a while.") }</small></p>
+		}
+		<p class="meta gallery-empty">{ t(ctx, "No photos yet. They appear here by themselves as they are kept.") }</p>
+		<ul class="plain gal" aria-live="polite"></ul>
+		<p class="row"><button type="button" class="gallery-more" hidden>{ t(ctx, "Show more") }</button></p>
+	</section>
+}
+
+// DropAlbum is what a guest opens after the box has closed, for as long as what guests left with it is kept: the photos,
+// to look at and heart (and download, if the box allows), and the owner's thanks. Nothing can be sent any more.
+templ DropAlbum(d DropPageView, share *ShareView) {
+	@Layout(d.Name, "") {
+		if d.Cover {
+			<img class="drop-cover" src={ "drop/" + d.Token + "/cover" } alt="" width="640" height="240"/>
+		}
+		<section class="invite-hero">
+			if d.Logo {
+				<img class="drop-logo" src={ "drop/" + d.Token + "/logo" } alt={ d.Name } height="64"/>
+			}
+			<h1>{ d.Name }</h1>
+			<p class="lead">{ t(ctx, "This event is over. Thank you for being part of it!") }</p>
+		</section>
+		if share != nil {
+			<p class="row">
+				<a class="button primary share-link" data-share-key={ share.Key } data-share-url={ share.URL } href={ templ.SafeURL(shareHref(*share)) }>{ t(ctx, "See all the photos") }</a>
+			</p>
+			if share.Expires != "" {
+				<p class="meta">{ t(ctx, "Open until {when}.", "when", share.Expires) }</p>
+			}
+		}
+		@Gallery(d.Token, d.GalleryDownload)
+	}
+}
+
+// ModPage is the moderator's page: the files that wait, to approve or reject.
+templ ModPage(d ModPageView) {
+	@Layout(d.Name, "") {
+		<section class="invite-hero">
+			<h1>{ d.Name }</h1>
+			<p class="lead">{ t(ctx, "You are helping to look after this box. Approve the photos that may stay, reject the others.") }</p>
+		</section>
+		if d.Message != "" {
+			<p class="card mod-message" role="status">{ d.Message }</p>
+		}
+		if d.Total == 0 {
+			<p class="meta">{ t(ctx, "Nothing is waiting. This page does not refresh by itself: reload it to look again.") }</p>
+		} else {
+			<form class="card pending mod-form" method="post" action={ "mod/" + d.Token + "/approve" }>
+				<h2>{ t(ctx, "Waiting for approval") } <span class="count-badge">{ fmt.Sprint(d.Total) }</span></h2>
+				<ul class="plain thumbs">
+					for _, p := range d.Items {
+						<li>
+							if p.Image {
+								<img src={ "mod/" + d.Token + "/pending/" + p.ID } alt={ p.Name } loading="lazy" width="96" height="96"/>
+							} else {
+								<span class="thumb-video">{ t(ctx, "video") }</span>
+							}
+							<label><input type="checkbox" name="item" value={ p.ID }/> <span class="meta">{ p.Name } · { p.Size }</span></label>
+						</li>
+					}
+				</ul>
+				if d.Total > len(d.Items) {
+					<p class="meta">{ t(ctx, "Showing the first {n}; decide on these and the rest appear.", "n", len(d.Items)) }</p>
+				}
+				<p class="row">
+					<button type="button" class="select-all" hidden>{ t(ctx, "Choose all") }</button>
+					<button class="primary" type="submit">{ t(ctx, "Approve chosen") }</button>
+					<button type="submit" formaction={ "mod/" + d.Token + "/reject" } data-act="reject">{ t(ctx, "Reject chosen") }</button>
+				</p>
+				<p class="row">
+					<button type="submit" name="all" value="1">{ t(ctx, "Approve all") }</button>
+				</p>
+			</form>
+		}
+		if d.Looks {
+			<section class="mod-photos" id="photos">
+				<h2>{ t(ctx, "The photos kept") }</h2>
+				<p class="meta">{ t(ctx, "Pin a photo so it is always in the best-of. Hide one and guests no longer see it (the gallery, the wall and the ZIP); it stays in the owner's library.") }</p>
+				if len(d.Photos) == 0 {
+					<p class="meta">{ t(ctx, "No photo has been kept yet.") }</p>
+				}
+				<ul class="plain mod-grid">
+					for _, p := range d.Photos {
+						<li id={ "photo-" + p.ID } class={ "mod-photo", templ.KV("is-hidden", p.Hidden), templ.KV("is-pinned", p.Pinned) }>
+							<img src={ "mod/" + d.Token + "/photo/" + p.ID } alt="" loading="lazy" width="160" height="160"/>
+							<span class="meta">
+								if p.Hearts > 0 {
+									{ fmt.Sprint(p.Hearts) } ♥
+								}
+								if p.By != "" {
+									{ p.By }
+								}
+							</span>
+							<form class="mod-mark" method="post" action={ "mod/" + d.Token + "/mark" }>
+								<input type="hidden" name="item" value={ p.ID }/>
+								if p.Pinned {
+									<button type="submit" name="do" value="unpin" aria-pressed="true">{ t(ctx, "Pinned") }</button>
+								} else {
+									<button type="submit" name="do" value="pin" aria-pressed="false">{ t(ctx, "Pin") }</button>
+								}
+								if p.Hidden {
+									<button type="submit" name="do" value="show" aria-pressed="true">{ t(ctx, "Hidden") }</button>
+								} else {
+									<button type="submit" name="do" value="hide" aria-pressed="false">{ t(ctx, "Hide") }</button>
+								}
+							</form>
+						</li>
+					}
+				</ul>
+				if d.More != "" {
+					<p class="row"><a class="button" href={ templ.SafeURL("mod/" + d.Token + "?before=" + d.More + "#photos") }>{ t(ctx, "Older photos") }</a></p>
+				}
+			</section>
 		}
 	}
 }
@@ -2552,7 +2815,7 @@ templ WallControls(modes bool, mode string) {
 }
 
 // WallPage is the slideshow a screen opens: no sign-in, no bar, only the photos and a few controls that fade away.
-templ WallPage(name, token, mode string) {
+templ WallPage(name, token, mode string, logo bool) {
 	<!DOCTYPE html>
 	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
 		<head>
@@ -2573,6 +2836,9 @@ templ WallPage(name, token, mode string) {
 				<div class="wall-stage" aria-live="polite"></div>
 				<p class="wall-wait">{ t(ctx, "Waiting for the first photo") }</p>
 				<div class="wall-note" hidden></div>
+				if logo {
+					<img class="wall-logo" src={ "wall/" + token + "/logo" } alt=""/>
+				}
 				@WallControls(true, mode)
 			</main>
 		</body>
@@ -2780,4 +3046,820 @@ func bridgeStateLabel(state string) string {
 		return "Cannot be reached"
 	}
 	return "Key revoked"
+}
+
+// SendPageView is the page for sending photos from this device.
+type SendPageView struct {
+	User, ID  string
+	On        bool // the server has a data folder to keep the pieces in
+	Targets   []SendTarget
+	FileMB    int
+	WaitMB    int
+	KeepHours int
+}
+
+// SendTarget is a service the person sends to.
+type SendTarget struct{ Name, Hold string }
+
+// SendPage is "Send photos": pick photos and videos, pick where they go, and watch them leave (ts/send.ts).
+templ SendPage(d SendPageView) {
+	@Layout(t(ctx, "Send photos"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>
+			@templ.Raw(h(ctx, "Send <em>photos</em> from this device"))
+		</h1>
+		<p class="lead">{ t(ctx, "Photos and videos go to your own Immich exactly as they are, and then to the service you choose.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if !d.On {
+			<section class="card notice">
+				<header><span class="chip warn">{ t(ctx, "Not switched on") }</span></header>
+				<p class="meta">{ t(ctx, "Sending photos from a phone needs the app's data folder, which this install does not have. Ask whoever runs it.") }</p>
+			</section>
+		} else {
+			<section class="card notice" id="send-install" hidden>
+				<h3>{ t(ctx, "Share photos to Handoff from your gallery") }</h3>
+				<p class="meta">{ t(ctx, "Install Handoff on this phone and it appears in the Share menu of your gallery: choose photos, tap Share, then Handoff, and pick where they go.") }</p>
+				<p class="row"><button type="button" class="primary" id="send-install-go">{ t(ctx, "Install Handoff") }</button></p>
+			</section>
+			<form class="card send-form" id="send" data-file-mb={ fmt.Sprint(d.FileMB) } data-wait-mb={ fmt.Sprint(d.WaitMB) } data-keep-hours={ fmt.Sprint(d.KeepHours) } data-user={ d.ID }>
+				<div class="dz">
+					<svg class="dz-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 33h-1a8 8 0 0 1-1.2-15.9A12 12 0 0 1 35 14.5 9.5 9.5 0 0 1 35 33h-1"></path><path d="M24 40V23"></path><path d="m18 28 6-6 6 6"></path></svg>
+					<label class="dz-title" for="send-files">{ t(ctx, "Choose photos and videos") }</label>
+					<small class="meta dz-hint">{ t(ctx, "From this device's gallery or files.") }</small>
+					<input id="send-files" class="dz-input" type="file" multiple accept="image/*,video/*,.heic,.heif,.dng"/>
+				</div>
+				<fieldset class="targets">
+					<legend>{ t(ctx, "Where should they go?") }</legend>
+					for i, tg := range d.Targets {
+						<label class="target">
+							<input type="radio" name="service" value={ tg.Name } checked?={ i == 0 }/>
+							<span><b>{ tg.Name }</b>
+								if tg.Hold != "" {
+									<small class="meta">{ tg.Hold }</small>
+								}
+							</span>
+						</label>
+					}
+					<label class="target">
+						<input type="radio" name="service" value="" checked?={ len(d.Targets) == 0 }/>
+						<span><b>{ t(ctx, "My library only") }</b><small class="meta">{ t(ctx, "Keep them in your Immich; hand nothing over.") }</small></span>
+					</label>
+				</fieldset>
+				<label class="target wifi">
+					<input type="checkbox" id="send-wifi"/>
+					<span><b>{ t(ctx, "Only on Wi-Fi") }</b><small class="meta">{ t(ctx, "Files wait until the device is off mobile data. This goes by what the browser says: some browsers do not tell, and then everything is sent.") }</small></span>
+				</label>
+				<div class="field">
+					<label for="send-tell">{ t(ctx, "Tell me when it is done") }</label>
+					<select id="send-tell">
+						<option value="all">{ t(ctx, "When everything has arrived, or something went wrong") }</option>
+						<option value="problems">{ t(ctx, "Only when something went wrong") }</option>
+						<option value="none">{ t(ctx, "Never") }</option>
+					</select>
+					<small class="meta">{ t(ctx, "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open.") }</small>
+				</div>
+				<p class="row form-actions"><button class="primary" type="submit" id="send-go" disabled>{ t(ctx, "Send") }</button></p>
+				<p class="meta" id="send-bg" role="status" hidden>{ t(ctx, "This browser sends only while this page is open. Keep it open until everything is sent.") }</p>
+				<ul class="plain send-list" id="send-list" aria-live="polite"></ul>
+				<p class="row"><button type="button" class="link" id="send-clear" hidden>{ t(ctx, "Clear the finished ones") }</button></p>
+				<p class="meta">{ t(ctx, "A file you chose waits in this browser until it is sent, also after the page is closed or the phone is switched off, and goes on by itself where it stopped. It is only ever sent as the person who chose it: after someone else signs in here, your files wait for you.") }</p>
+				<p class="meta">{ t(ctx, "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.", "mb", fmt.Sprint(d.FileMB)) }</p>
+			</form>
+		}
+	}
+}
+
+// RoomSection is where a photographer makes client rooms: links where a client looks at an album through marked pictures,
+// chooses some and, when the photographer says so, takes the originals.
+templ RoomSection(rooms []RoomView) {
+	<h2>{ t(ctx, "Client rooms") }</h2>
+	<p class="meta">{ t(ctx, "A client room is a link where your client looks at one of your albums through pictures marked with your name, chooses their favourites and, when you release them, takes the originals. Anyone who has the link (and the PIN, if you set one) can see the marked pictures, so end the room when you no longer want that.") }</p>
+	for i, r := range rooms {
+		@RoomRow(r, fmt.Sprintf("room-%d", i), len(rooms) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Make a client room") }</summary>
+		<form class="card offer-form" hx-post="rooms" hx-encoding="multipart/form-data" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="rm-name">{ t(ctx, "Name") }</label>
+				<input id="rm-name" name="name" required maxlength="60" placeholder={ t(ctx, "Rossi wedding") }/>
+			</div>
+			<div class="field">
+				<label for="rm-title">{ t(ctx, "Title the client sees (optional)") }</label>
+				<input id="rm-title" name="title" maxlength="60" placeholder={ t(ctx, "Chiara and Luca, 14 June") }/>
+			</div>
+			<div class="field" hx-get="fragments/room-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			<div class="field">
+				<label for="rm-mark">{ t(ctx, "Mark the pictures with") }</label>
+				<select id="rm-mark" name="mark">
+					<option value="text" selected>{ t(ctx, "Text repeated across the picture") }</option>
+					<option value="logo">{ t(ctx, "My logo in the corner") }</option>
+					<option value="both">{ t(ctx, "Both") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-marktext">{ t(ctx, "Text on the pictures (your name if empty)") }</label>
+				<input id="rm-marktext" name="marktext" maxlength="60" placeholder={ t(ctx, "Chiara Bianchi Photography") }/>
+			</div>
+			<div class="field">
+				<label for="rm-logo">{ t(ctx, "Logo (for the logo choices; JPEG, PNG or WebP, up to 300 KB)") }</label>
+				<input id="rm-logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp"/>
+			</div>
+			<div class="field">
+				<label for="rm-pickmode">{ t(ctx, "Who chooses") }</label>
+				<select id="rm-pickmode" name="pickmode">
+					<option value="shared" selected>{ t(ctx, "Everyone with the link, together (one choice)") }</option>
+					<option value="visitor">{ t(ctx, "Each person on their own") }</option>
+					<option value="named">{ t(ctx, "One named client (the first to give a name)") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-picklimit">{ t(ctx, "The most photos to choose (empty: no limit)") }</label>
+				<input id="rm-picklimit" name="picklimit" type="number" min="1" max="5000" inputmode="numeric" placeholder="30"/>
+			</div>
+			<div class="field">
+				<label for="rm-rounds">{ t(ctx, "Rounds") }</label>
+				<select id="rm-rounds" name="rounds">
+					<option value="one" selected>{ t(ctx, "One round") }</option>
+					<option value="several">{ t(ctx, "Several rounds: I start each next round, and it shows only what was chosen before") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-notes">{ t(ctx, "Notes on photos") }</label>
+				<select id="rm-notes" name="notes">
+					<option value="none" selected>{ t(ctx, "None: clients only choose") }</option>
+					<option value="note">{ t(ctx, "A short note to me on each photo") }</option>
+					<option value="replies">{ t(ctx, "Notes, and I can answer each one") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label><input type="checkbox" name="autorelease" value="1"/> { t(ctx, "Release the originals as soon as the client sends their choice") }</label>
+				<small class="meta">{ t(ctx, "Leave this off to look at the choice first, for example until you have been paid, and release it yourself. If you switch it on, the room's key may download from the start (nothing is given out before a choice is sent).") }</small>
+			</div>
+			<div class="field">
+				<label for="rm-days">{ t(ctx, "After a release the originals can be downloaded") }</label>
+				<select id="rm-days" name="releasedays">
+					<option value="7">{ t(ctx, "for 7 days") }</option>
+					<option value="30" selected>{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="0">{ t(ctx, "as long as the room works") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-pin">{ t(ctx, "PIN (optional)") }</label>
+				<input id="rm-pin" name="pin" maxlength="40" autocomplete="off" placeholder={ t(ctx, "4 to 40 characters") }/>
+			</div>
+			<div class="field">
+				<label for="rm-ends">{ t(ctx, "The link works") }</label>
+				<select id="rm-ends" name="ends">
+					<option value="0" selected>{ t(ctx, "until I end it") }</option>
+					<option value="14">{ t(ctx, "for 14 days") }</option>
+					<option value="30">{ t(ctx, "for 30 days") }</option>
+					<option value="90">{ t(ctx, "for 90 days") }</option>
+					<option value="365">{ t(ctx, "for a year") }</option>
+				</select>
+			</div>
+			<p class="meta">{ t(ctx, "This makes a key in your Immich account that can only look at pictures and list an album's photos. It cannot download an original: that permission is added only when you release the photos. The key is deleted when you end the room.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make room") }</button></p>
+		</form>
+	</details>
+}
+
+// RoomAlbumSelect is the list of albums in the form that makes a room.
+templ RoomAlbumSelect(albums []AlbumOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "You have no albums of your own yet. Make one in Immich, then come back.") }</p>
+	} else {
+		<label for="rm-album">{ t(ctx, "Album to show") }</label>
+		<select id="rm-album" name="album">
+			for _, a := range albums {
+				<option value={ a.ID }>{ a.Label }</option>
+			}
+		</select>
+	}
+}
+
+// RoomRow is one client room: its link, when it ends and the buttons to pause and end it.
+templ RoomRow(r RoomView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(r.Name, t(ctx, "room of {album}", "album", r.Album), roomChips(ctx, r), "sum-"+id)
+		<div class="body">
+			if r.Ended {
+				<p class="meta"><span class="chip bad">{ t(ctx, "Ended") }</span> { t(ctx, "This room's link stopped on {when}. Remove it to delete its key from your Immich account.", "when", r.Ends) }</p>
+			} else {
+				<div class="field">
+					<label for={ "rm-link-" + id }>{ t(ctx, "Link for your client") }</label>
+					<div class="row">
+						<input id={ "rm-link-" + id } class="invite" readonly data-link={ "room/" + r.Token }/>
+						<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+						<button type="button" class="show-qr" data-for={ "rm-link-" + id } data-alt={ t(ctx, "QR code of the room's link") }>{ t(ctx, "QR code") }</button>
+					</div>
+					<div class="qr" id={ "qr-rm-link-" + id } hidden></div>
+				</div>
+				<p class="meta">
+					{ markText(ctx, r.Mark) }
+					if r.PIN {
+						{ t(ctx, "The client needs the PIN.") }
+					} else {
+						{ t(ctx, "There is no PIN.") }
+					}
+					if r.Ends != "" {
+						{ t(ctx, "The link works until {when}.", "when", r.Ends) }
+					} else {
+						{ t(ctx, "The link works until you end it.") }
+					}
+				</p>
+				if len(r.Selections) > 0 {
+					if r.Notes > 0 {
+						<p class="meta">{ n(ctx, "{n} note from clients", "{n} notes from clients", r.Notes) }</p>
+					}
+					<p class="row"><a class="button" href={ templ.SafeURL("rooms/" + r.ID + "/review") }>{ t(ctx, "Look at the choice and release the originals") }</a></p>
+					<ul class="plain room-selections">
+						for _, sel := range r.Selections {
+							<li>
+								<span><b>{ selectionName(ctx, sel.Name) }</b>: { n(ctx, "{n} photo chosen", "{n} photos chosen", sel.Count) }
+									if sel.Done {
+										<span class="chip ok">{ t(ctx, "Sent {when}", "when", sel.When) }</span>
+									} else {
+										<span class="chip warn">{ t(ctx, "Still choosing") }</span>
+									}
+								</span>
+								if sel.Done {
+									<button hx-post="rooms/reopen" hx-vals={ vals2("room", r.ID, "who", sel.Who) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The client will be able to change this choice again. Continue?") } data-confirm-title={ t(ctx, "Give the choice back?") } data-confirm-label={ t(ctx, "Give it back") }>{ t(ctx, "Let them change it") }</button>
+								}
+							</li>
+						}
+					</ul>
+				} else if !r.Ended {
+					<p class="meta">{ t(ctx, "Nobody has chosen anything yet.") }</p>
+				}
+				<p class="row">
+					<button hx-post="rooms/pause" hx-vals={ vals2("room", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Open the room again") }
+						} else {
+							{ t(ctx, "Pause the room") }
+						}
+					</button>
+				</p>
+			}
+			<p class="row"><button hx-post="rooms/end" hx-vals={ vals("room", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The link will stop working at once and the room's key will be deleted. Continue?") } data-confirm-title={ t(ctx, "End the room?") } data-confirm-label={ t(ctx, "End room") } data-danger="true">
+				if r.Ended {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End room") }
+				}
+			</button></p>
+		</div>
+	</details>
+}
+
+// RoomTile is one picture on the client's page.
+type RoomTile struct {
+	N      int
+	ID     string
+	Video  bool
+	Picked bool
+	Mine   bool // the original can be downloaded
+	Note   string // the client's note on this photo
+	Reply  string // and the photographer's answer
+}
+
+// RoomPageData is what the client's page shows.
+type RoomPageData struct {
+	Title, Token string
+	Tiles        []RoomTile
+	Name         string // the name the client gave, if any
+	Count, Limit int
+	CounterText  string
+	Done         bool
+	CanPick      bool
+	NeedsName    bool   // a named room nobody has claimed
+	Chooser      string // a named room somebody else has claimed: who
+	Mode         string
+	Message      string // what went wrong with the last press, in words
+	Released     bool   // the originals of this client's sent choice can be downloaded
+	Until        string // until when, "" for as long as the room works
+	Notes        string // notes on photos: "", "note" or "replies"
+	Round, Total int    // the round the room is in, and how many photos the room has in all
+}
+
+// RoomPage is what the client sees: the room's title, the marked pictures in the order of the shoot, a way to choose and to send
+// the choice (ts/room.ts does it without leaving the page; without it each press is a form that comes back to the page), and
+// each picture opens larger.
+templ RoomPage(d RoomPageData) {
+	@Layout(d.Title, "") {
+		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick } data-total={ fmt.Sprint(d.Total) } data-notes={ d.Notes } data-note-label={ t(ctx, "Note for the photographer") } data-note-save={ t(ctx, "Save note") } data-note-saved={ t(ctx, "Note saved") } data-reply-label={ t(ctx, "The photographer wrote back:") } data-note-hint={ t(ctx, "For example: brighten this one, or crop here.") }>
+			<section class="invite-hero">
+				<h1>{ d.Title }</h1>
+				<p class="lead">{ t(ctx, "Choose a photo to see it larger. The pictures carry the photographer's mark; the originals come later.") }</p>
+				<p class="meta">{ n(ctx, "{n} photo", "{n} photos", len(d.Tiles)) }</p>
+			</section>
+			if d.Round > 1 {
+				<section class="card notice">
+					<h2>{ t(ctx, "Round {n}", "n", d.Round) }</h2>
+					<p class="meta">
+						if len(d.Tiles) == 0 {
+							{ t(ctx, "There is nothing for you to choose from in this round.") }
+						} else if d.Limit > 0 {
+							{ t(ctx, "These are the photos you chose before. Choose up to {limit} of them.", "limit", d.Limit) }
+						} else {
+							{ t(ctx, "These are the photos you chose before. Choose again from them.") }
+						}
+					</p>
+				</section>
+			}
+			<p class="card notice bad-note" id="room-msg" role="alert" hidden?={ d.Message == "" }>{ d.Message }</p>
+			if d.Done {
+				<section class="card notice">
+					<h2>{ t(ctx, "Your choice has been sent") }</h2>
+					<p class="meta">{ t(ctx, "The photographer has been told which photos you chose. You can still look at all the pictures.") }</p>
+				</section>
+			}
+			if d.Released {
+				<section class="card notice">
+					<h2>{ t(ctx, "Your photos are ready") }</h2>
+					<p class="row"><a class="button primary" href={ templ.SafeURL("room/" + d.Token + "/zip") } download>{ t(ctx, "Download the photos you chose (ZIP)") }</a></p>
+					<p class="meta">
+						{ t(ctx, "They are the originals, as the photographer took them. The ZIP is made while you download, so it can take a while.") }
+						if d.Until != "" {
+							{ t(ctx, "You can download them until {when}.", "when", d.Until) }
+						}
+					</p>
+				</section>
+			}
+			if d.NeedsName || (d.Name == "" && !d.Done && d.Chooser == "") {
+				<form class="card offer-form room-name" method="post" action={ "room/" + d.Token + "/name" }>
+					<div class="field">
+						<label for="room-name">{ t(ctx, "Your name") }</label>
+						<input id="room-name" name="name" maxlength="40" autocomplete="name" required?={ d.NeedsName }/>
+						<small class="meta">
+							if d.NeedsName {
+								{ t(ctx, "Tell us your name to start choosing. Only you will be able to choose in this room.") }
+							} else {
+								{ t(ctx, "So the photographer knows who chose (optional).") }
+							}
+						</small>
+					</div>
+					<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save my name") }</button></p>
+				</form>
+			}
+			if d.Chooser != "" {
+				<p class="card notice">{ t(ctx, "{name} is choosing for this room. You can look at the photos.", "name", d.Chooser) }</p>
+			}
+			if d.CanPick || d.Done || d.Count > 0 {
+				<div class="room-pickbar" role="status">
+					<span class="room-count" data-room-count>{ d.CounterText }</span>
+					if d.CanPick {
+						<form class="room-done" method="post" action={ "room/" + d.Token + "/done" } data-limit={ fmt.Sprint(d.Limit) } data-short={ t(ctx, "You have chosen {n} of {limit}. Send your choice anyway?", "n", "{n}", "limit", "{limit}") } data-title={ t(ctx, "Send your choice?") } data-yes={ t(ctx, "Send my choice") } data-no={ t(ctx, "Keep choosing") }>
+							<button class="primary" type="submit">{ t(ctx, "Send my choice to the photographer") }</button>
+						</form>
+					}
+				</div>
+			}
+			if len(d.Tiles) == 0 {
+				<p class="meta">{ t(ctx, "There are no photos here yet.") }</p>
+			}
+			<ul class="plain room-grid">
+				for _, tile := range d.Tiles {
+					<li class={ "room-item", templ.KV("picked", tile.Picked), templ.KV("noted", tile.Note != "") } id={ fmt.Sprintf("p%d", tile.N) } data-id={ tile.ID } data-note={ tile.Note } data-reply={ tile.Reply }>
+						<a class="room-tile" href={ templ.SafeURL("room/" + d.Token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", d.Total) }>
+							<img src={ "room/" + d.Token + "/photo/" + tile.ID } alt="" loading="lazy"/>
+							<span class="room-n" aria-hidden="true">{ fmt.Sprint(tile.N) }</span>
+							if tile.Video {
+								<span class="room-video" aria-hidden="true">&#9654;</span>
+							}
+							if tile.Note != "" {
+								<span class="room-note" aria-hidden="true">&#9998;</span>
+							}
+						</a>
+						if tile.Mine {
+							<a class="room-dl" href={ templ.SafeURL("room/" + d.Token + "/original/" + tile.ID) } download aria-label={ t(ctx, "Download photo {n}", "n", tile.N) } title={ t(ctx, "Download photo {n}", "n", tile.N) }>&#8681;</a>
+						}
+						if d.CanPick {
+							<form class="room-pick" method="post" action={ "room/" + d.Token + "/pick/" + tile.ID }>
+								<button type="submit" class="room-heart" aria-pressed={ checked(tile.Picked) } aria-label={ pickLabel(ctx, tile.Picked, tile.N) } title={ pickLabel(ctx, tile.Picked, tile.N) }>
+									<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.8 6.4 4.8c2 0 3.6 1.1 4.4 2.6h2.4c.8-1.5 2.4-2.6 4.4-2.6 3.4 0 5.5 3.5 4 7C19.500 16.400 12 21 12 21z"></path></svg>
+								</button>
+							</form>
+						} else if tile.Picked {
+							<span class="room-heart on" aria-label={ t(ctx, "Chosen") } role="img">
+								<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.8 6.4 4.8c2 0 3.6 1.1 4.4 2.6h2.4c.8-1.5 2.4-2.6 4.4-2.6 3.4 0 5.5 3.5 4 7C19.500 16.400 12 21 12 21z"></path></svg>
+							</span>
+						}
+					</li>
+				}
+			</ul>
+		</main>
+	}
+}
+
+// RoomLocked asks for the PIN of a room. It shows nothing of the room, not even its title.
+templ RoomLocked(token string, wrong, wait bool) {
+	@Layout(t(ctx, "PIN needed"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This page needs a PIN") }</h1>
+			<p class="lead">{ t(ctx, "Ask the person who sent you the link for the PIN.") }</p>
+		</section>
+		<form class="card offer-form" method="post" action={ "room/" + token + "/unlock" }>
+			if wrong {
+				<p class="meta bad-note" role="alert">{ t(ctx, "The PIN is not right. Try again.") }</p>
+			}
+			if wait {
+				<p class="meta bad-note" role="alert">{ t(ctx, "Too many wrong tries. Try again in ten minutes.") }</p>
+			}
+			<div class="field">
+				<label for="room-pin">{ t(ctx, "PIN") }</label>
+				<input id="room-pin" name="pin" type="password" required autofocus autocomplete="off"/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Open") }</button></p>
+		</form>
+	}
+}
+
+// RoomPaused is what a client sees while the photographer has paused the room.
+templ RoomPaused() {
+	@Layout(t(ctx, "Closed for now"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This room is closed for now") }</h1>
+			<p class="lead">{ t(ctx, "The photographer has paused it. Try again later.") }</p>
+		</section>
+	}
+}
+
+// ReviewData is the photographer's page for the choices clients sent in a room.
+type ReviewData struct {
+	User, ID, Name   string
+	Selections       []ReviewSel
+	Released         bool
+	ReleasedAt       string
+	Until            string
+	Downloads        int
+	Auto             bool
+	Limit            int
+	Replies          bool // the photographer may answer notes
+	Round            int
+	Several          bool // the room goes through several rounds
+	CanStart         bool // a next round may be started
+	History          []HistoryRound
+}
+
+// HistoryRound is a round that is over, for the review page.
+type HistoryRound struct {
+	Round int
+	Lines []string
+}
+
+// ReviewSel is one selection on the review page.
+type ReviewSel struct {
+	Name, When string
+	Done       bool
+	Photos     []ReviewPhoto
+	Names      string // the file names, one on each line
+	Chosen     int
+}
+
+// ReviewPhoto is one chosen photo on the review page.
+type ReviewPhoto struct {
+	N     int
+	ID    string
+	File  string
+	Who   string // the selection's mark, for answering
+	Chosen bool  // in the choice (not only noted)
+	Note  string
+	Reply string
+}
+
+// RoomReviewPage is where the photographer looks at what clients chose, and releases the originals.
+templ RoomReviewPage(d ReviewData) {
+	@Layout(t(ctx, "Choice in {room}", "room", d.Name), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "Choice in {room}", "room", d.Name) }</h1>
+		<p class="lead">{ t(ctx, "What your client chose, as they saw it (marked). The file names are for finding the photos in your own library.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Several {
+			<section class="card">
+				<h2>{ t(ctx, "Round {n}", "n", d.Round) }</h2>
+				for _, h := range d.History {
+					<p class="meta"><b>{ t(ctx, "Round {n}", "n", h.Round) }</b>: { strings.Join(h.Lines, " \u00b7 ") }</p>
+				}
+				if d.CanStart {
+					<form class="row" hx-post="rooms/round" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Each client will then see only the photos they chose in this round, and can choose again. Continue?") } data-confirm-title={ t(ctx, "Start the next round?") } data-confirm-label={ t(ctx, "Start round") }>
+						<input type="hidden" name="room" value={ d.ID }/>
+						<label for="round-limit">{ t(ctx, "The most photos to choose in round {n} (empty: no limit)", "n", d.Round+1) }</label>
+						<input id="round-limit" name="limit" type="number" min="1" max="5000" inputmode="numeric" class="narrow"/>
+						<button type="submit">{ t(ctx, "Start round {n}", "n", d.Round+1) }</button>
+					</form>
+				} else if d.Released {
+					<p class="meta">{ t(ctx, "The originals are released, so this is the last round. Take the release back to start another.") }</p>
+				}
+			</section>
+		}
+		<section class="card">
+			<h2>{ t(ctx, "The originals") }</h2>
+			if d.Released {
+				<p><span class="chip ok">{ t(ctx, "Released") }</span> { t(ctx, "Released on {when}.", "when", d.ReleasedAt) }
+					if d.Until != "" {
+						{ t(ctx, "Clients can download until {when}.", "when", d.Until) }
+					} else {
+						{ t(ctx, "Clients can download as long as the room works.") }
+					}
+					{ n(ctx, "{n} ZIP was started.", "{n} ZIPs were started.", d.Downloads) }
+				</p>
+				<p class="row"><button hx-post="rooms/withdraw" hx-vals={ vals("room", d.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Clients will no longer be able to download anything, and the room will not release by itself any more. Continue?") } data-confirm-title={ t(ctx, "Take the release back?") } data-confirm-label={ t(ctx, "Take it back") } data-danger="true">{ t(ctx, "Take the release back") }</button></p>
+			} else {
+				<p class="meta">{ t(ctx, "Nothing can be downloaded yet. When you release, each client who sent a choice can download the originals of their own photos.") }
+					if d.Auto {
+						{ t(ctx, "This room releases by itself when a choice is sent.") }
+					}
+				</p>
+				<form class="row" hx-post="rooms/release" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ t(ctx, "Clients who sent a choice will be able to download the originals of their photos. Continue?") } data-confirm-title={ t(ctx, "Release the originals?") } data-confirm-label={ t(ctx, "Release") }>
+					<input type="hidden" name="room" value={ d.ID }/>
+					<label for="rel-days">{ t(ctx, "They can download") }</label>
+					<select id="rel-days" name="days">
+						<option value="7">{ t(ctx, "for 7 days") }</option>
+						<option value="30" selected>{ t(ctx, "for 30 days") }</option>
+						<option value="90">{ t(ctx, "for 90 days") }</option>
+						<option value="0">{ t(ctx, "as long as the room works") }</option>
+					</select>
+					<button class="primary" type="submit">{ t(ctx, "Release the originals") }</button>
+				</form>
+			}
+		</section>
+		if len(d.Selections) == 0 {
+			<p class="meta">{ t(ctx, "Nobody has chosen anything yet.") }</p>
+		}
+		for _, sel := range d.Selections {
+			<section class="card">
+				<h2>{ selectionName(ctx, sel.Name) }</h2>
+				<p class="meta">{ n(ctx, "{n} photo chosen", "{n} photos chosen", sel.Chosen) }
+					if sel.Done {
+						<span class="chip ok">{ t(ctx, "Sent {when}", "when", sel.When) }</span>
+					} else {
+						<span class="chip warn">{ t(ctx, "Still choosing") }</span>
+					}
+				</p>
+				<ul class="plain room-grid">
+					for _, p := range sel.Photos {
+						<li class="room-item">
+							<a class="room-tile" href={ templ.SafeURL("rooms/" + d.ID + "/photo/" + p.ID) } target="_blank" rel="noopener">
+								<img src={ "rooms/" + d.ID + "/photo/" + p.ID } alt="" loading="lazy"/>
+								<span class="room-n" aria-hidden="true">{ fmt.Sprint(p.N) }</span>
+							</a>
+							<small class="meta room-file">{ p.File }
+								if !p.Chosen {
+									<span class="chip">{ t(ctx, "only a note") }</span>
+								}
+							</small>
+							if p.Note != "" {
+								<p class="room-note-text">{ p.Note }</p>
+								if d.Replies {
+									<form class="room-reply" hx-post="rooms/reply" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+										<input type="hidden" name="room" value={ d.ID }/>
+										<input type="hidden" name="who" value={ p.Who }/>
+										<input type="hidden" name="photo" value={ p.ID }/>
+										<label class="meta" for={ "reply-" + p.ID + p.Who }>{ t(ctx, "Your answer") }</label>
+										<textarea id={ "reply-" + p.ID + p.Who } name="text" rows="2" maxlength="280">{ p.Reply }</textarea>
+										<button type="submit">{ t(ctx, "Send answer") }</button>
+									</form>
+								}
+							}
+						</li>
+					}
+				</ul>
+				<div class="field">
+					<label for={ "names-" + sel.Name }>{ t(ctx, "File names") }</label>
+					<textarea id={ "names-" + sel.Name } readonly rows="4">{ sel.Names }</textarea>
+				</div>
+			</section>
+		}
+	}
+}
+
+// PeerSection is where a person connects their app with the app of someone on another server, to share albums with them.
+templ PeerSection(peers []PeerView) {
+	<h2>{ t(ctx, "Albums shared with other servers") }</h2>
+	<p class="meta">{ t(ctx, "Connect this app with the Handoff of someone whose Immich is on another server, so that you can share an album that stays the same in both libraries. Nothing is shared until you both agree on an album. Each app only ever touches its own Immich.") }</p>
+	for i, p := range peers {
+		@PeerRow(p, fmt.Sprintf("peer-%d", i), len(peers) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Invite someone") }</summary>
+		<div class="card offer-form">
+			<p class="meta">{ t(ctx, "You get a link to give to the other person. They paste it into their own Handoff. It works once, for a week.") }</p>
+			<p class="row"><button hx-post="peers/invite" hx-target="#peer-invite" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make an invitation link") }</button></p>
+			<div id="peer-invite"></div>
+		</div>
+	</details>
+	<details class="offer">
+		<summary>{ t(ctx, "Join with an invitation link") }</summary>
+		<form class="card offer-form" hx-post="peers/preview" hx-target="#peer-preview" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="peer-link">{ t(ctx, "The invitation link") }</label>
+				<input id="peer-link" name="link" required autocomplete="off" placeholder="https://..."/>
+			</div>
+			<p class="row form-actions"><button type="submit">{ t(ctx, "Look at the invitation") }</button></p>
+			<div id="peer-preview"></div>
+		</form>
+	</details>
+}
+
+// PeerInviteLink shows a new invitation's link, with a QR code and a copy button.
+templ PeerInviteLink(link, until string) {
+	<div class="field">
+		<label for="peer-invite-link">{ t(ctx, "Give this link to the other person") }</label>
+		<div class="row">
+			<input id="peer-invite-link" class="invite" readonly value={ link }/>
+			<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+			<button type="button" class="show-qr" data-for="peer-invite-link" data-alt={ t(ctx, "QR code of the invitation") }>{ t(ctx, "QR code") }</button>
+		</div>
+		<div class="qr" id="qr-peer-invite-link" hidden></div>
+		<small class="meta">{ t(ctx, "It works once, until {when}.", "when", until) }</small>
+	</div>
+}
+
+// PeerPreview says who an invitation is from and asks whether to accept.
+templ PeerPreview(name, host, link string) {
+	<div class="card notice">
+		<p><b>{ name }</b> { t(ctx, "({host}) invites you to share albums between your servers.", "host", host) }</p>
+		<p class="meta">{ t(ctx, "If you accept, the two apps will know each other and can call each other. Nothing is shared until you both agree on an album, and either of you can end the connection at any time.") }</p>
+		<p class="row"><button class="primary" type="button" hx-post="peers/accept" hx-vals={ vals("link", link) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Accept the invitation") }</button></p>
+	</div>
+}
+
+// PeerRow is one connection: who, where, how it is, and what can be done.
+templ PeerRow(p PeerView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(p.Name, p.Host, peerChips(ctx, p), "sum-"+id)
+		<div class="body">
+			switch {
+				case p.State == "left":
+					<p class="meta">{ t(ctx, "{name} ended the connection. Remove it to forget it.", "name", p.Name) }</p>
+				case p.Problem != "":
+					<p class="meta bad-note">{ t(ctx, "The other app could not be reached: {reason}", "reason", p.Problem) }</p>
+				default:
+					<p class="meta">{ t(ctx, "The other app answered at {when}.", "when", p.Seen) }</p>
+			}
+			if p.TheyPause {
+				<p class="meta">{ t(ctx, "{name} has paused sharing.", "name", p.Name) }</p>
+			}
+			for i, a := range p.Shared {
+				@SharedRow(a, fmt.Sprintf("%s-%d", id, i))
+			}
+			if p.State == "active" && !p.IPaused {
+				<details class="offer">
+					<summary>{ t(ctx, "Share an album with {name}", "name", p.Name) }</summary>
+					<form class="card offer-form" hx-post="peers/share" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="peer" value={ p.ID }/>
+						<div class="field">
+							<label for={ "sh-name-" + id }>{ t(ctx, "What the shared album is called") }</label>
+							<input id={ "sh-name-" + id } name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
+						</div>
+						<div class="field" hx-get="fragments/share-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+							<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+						</div>
+						@ShareChoices(id, true)
+						<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Propose it") }</button></p>
+					</form>
+				</details>
+			}
+			<p class="row">
+				if p.State != "left" {
+					<button hx-post="peers/pause" hx-vals={ vals2("peer", p.ID, "paused", pausedValue(p.IPaused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if p.IPaused {
+							{ t(ctx, "Resume sharing") }
+						} else {
+							{ t(ctx, "Pause sharing") }
+						}
+					</button>
+				}
+				<button hx-post="peers/remove" hx-vals={ vals("peer", p.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The connection ends and the other app is told. Photos already in either library stay where they are. Continue?") } data-confirm-title={ t(ctx, "End the connection?") } data-confirm-label={ t(ctx, "End connection") } data-danger="true">{ t(ctx, "End connection") }</button>
+			</p>
+		</div>
+	</details>
+}
+
+// PeerInvitePage is what an invitation's link shows in a browser.
+templ PeerInvitePage(name, link string) {
+	@Layout(t(ctx, "Invitation to share albums"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "{name} invites you to share albums", "name", name) }</h1>
+			<p class="lead">{ t(ctx, "This link is for your own Handoff, not for this page. On your own Handoff, open the Services tab, choose Join with an invitation link, and paste the address of this page.") }</p>
+		</section>
+		<div class="card offer-form">
+			<div class="field">
+				<label for="peer-invite-here">{ t(ctx, "The address to paste") }</label>
+				<input id="peer-invite-here" class="invite" readonly data-link={ link }/>
+			</div>
+			<p class="meta">{ t(ctx, "Nothing happens until you accept it in your own Handoff. You need a Handoff next to your Immich that can be reached from the internet.") }</p>
+		</div>
+	}
+}
+
+// PeerInviteGone is what a used, expired or unknown invitation shows.
+templ PeerInviteGone() {
+	@Layout(t(ctx, "Invitation"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This invitation is not valid any more") }</h1>
+			<p class="lead">{ t(ctx, "It has expired or was already used. Ask for a new one.") }</p>
+		</section>
+	}
+}
+
+// ShareAlbumSelect is the list of albums in the forms that propose or accept a shared album, with a new album first.
+templ ShareAlbumSelect(albums []AlbumOption, key string) {
+	<label for={ "sh-album-" + key }>{ t(ctx, "Which of your albums") }</label>
+	<select id={ "sh-album-" + key } name="album">
+		<option value="new" selected>{ t(ctx, "A new album, named like the shared album") }</option>
+		for _, a := range albums {
+			<option value={ a.ID }>{ a.Label }</option>
+		}
+	</select>
+}
+
+// ShareChoices are the choices that go with sharing an album: what to share at the start, and (when proposing) what removing does.
+templ ShareChoices(id string, proposing bool) {
+	<fieldset class="targets">
+		<legend>{ t(ctx, "What do you share at the start?") }</legend>
+		<label class="target"><input type="radio" name="history" value="new" checked/><span><b>{ t(ctx, "Only what I add from now on") }</b><small class="meta">{ t(ctx, "Photos already in the album stay yours alone.") }</small></span></label>
+		<label class="target"><input type="radio" name="history" value="all"/><span><b>{ t(ctx, "Everything in the album now, and what I add") }</b><small class="meta">{ t(ctx, "Every photo that is in the album is copied to the other person's library, as they arrive in theirs.") }</small></span></label>
+	</fieldset>
+	if proposing {
+		<fieldset class="targets">
+			<legend>{ t(ctx, "When someone takes a photo out of the album") }</legend>
+			<label class="target"><input type="radio" name="deletion" value="nothing" checked/><span><b>{ t(ctx, "Nothing happens on the other side") }</b><small class="meta">{ t(ctx, "Each of you keeps what you have. Deleting a photo never travels.") }</small></span></label>
+			<label class="target"><input type="radio" name="deletion" value="follow"/><span><b>{ t(ctx, "It is taken out of the other album too") }</b><small class="meta">{ t(ctx, "The photo itself stays in their library; only the album changes.") }</small></span></label>
+		</fieldset>
+	}
+	<p class="meta">{ t(ctx, "Photos leave your library only into the other person's library, only from this album, and only through the other person's own Handoff. You can end the sharing at any time; photos already copied stay where they are.") }</p>
+}
+
+// SharedRow is one shared album with a connection: what it is, in what state, and what can be done.
+templ SharedRow(a SharedView, id string) {
+	<div class="card shared">
+		<p><b>{ a.Name }</b>
+			switch a.State {
+				case "active":
+					<span class="chip ok">{ t(ctx, "Agreed") }</span>
+				case "proposed":
+					<span class="chip warn">{ t(ctx, "Waiting for {name}", "name", a.Peer) }</span>
+				case "invited":
+					<span class="chip warn">{ t(ctx, "Waiting for your answer") }</span>
+				case "left":
+					<span class="chip bad">{ t(ctx, "Ended by {name}", "name", a.Peer) }</span>
+				case "declined":
+					<span class="chip bad">{ t(ctx, "Declined") }</span>
+			}
+		</p>
+		switch a.State {
+			case "invited":
+				<p class="meta">{ t(ctx, "{name} proposes to share this album with you. {name} shares: {what}.", "name", a.Peer, "what", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				<form class="offer-form" hx-post="shared/accept" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<input type="hidden" name="shared" value={ a.ID }/>
+					<div class="field" hx-get={ "fragments/share-albums?for=" + id } hx-trigger="load" hx-swap="innerHTML">
+						<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+					</div>
+					@ShareChoices(id, false)
+					<p class="row form-actions">
+						<button class="primary" type="submit">{ t(ctx, "Accept and share") }</button>
+						<button type="button" hx-post="shared/decline" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Decline") }</button>
+					</p>
+				</form>
+			case "active":
+				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}. {name} shares: {theirs}.", "album", a.Album, "mine", historyText(ctx, a.History), "name", a.Peer, "theirs", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				<p class="meta">
+					if a.Last != "" {
+						{ t(ctx, "Last looked at {when}.", "when", a.Last) }
+					} else {
+						{ t(ctx, "Not looked at yet.") }
+					}
+					{ n(ctx, "{n} photo sent", "{n} photos sent", a.Sent) } &middot; { n(ctx, "{n} photo received", "{n} photos received", a.Received) }
+				</p>
+				if a.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", a.Problem) }</p>
+				}
+				if a.Pending > 0 {
+					<div class="card notice">
+						<p>{ n(ctx, "You took {n} photo out of this album. Take it out of {name}'s album too?", "You took {n} photos out of this album. Take them out of {name}'s album too?", a.Pending, "name", a.Peer) }</p>
+						<p class="meta">{ t(ctx, "Only the album changes there; the photos stay in their library.") }</p>
+						<p class="row">
+							<button class="primary" hx-post="shared/removal" hx-vals={ vals2("shared", a.ID, "do", "follow") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Yes, take them out there too") }</button>
+							<button hx-post="shared/removal" hx-vals={ vals2("shared", a.ID, "do", "keep") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No, leave them there") }</button>
+						</p>
+					</div>
+				}
+				<p class="row"><button hx-post="shared/sync" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Sync now") }</button></p>
+			case "proposed":
+				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}.", "album", a.Album, "mine", historyText(ctx, a.History)) } { deletionText(ctx, a.Deletion) }</p>
+		}
+		if a.State != "invited" {
+			<p class="row"><button hx-post="shared/leave" hx-vals={ vals("shared", a.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The sharing of this album ends and the other app is told. Photos already in either library stay where they are. Continue?") } data-confirm-title={ t(ctx, "End the sharing?") } data-confirm-label={ t(ctx, "End sharing") } data-danger="true">
+				if a.State == "left" || a.State == "declined" {
+					{ t(ctx, "Remove") }
+				} else {
+					{ t(ctx, "End sharing of this album") }
+				}
+			</button></p>
+		}
+	</div>
 }

@@ -108,6 +108,18 @@ func (s *storing) handler() http.Handler {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(jpegBytes)
 	})
+	mux.HandleFunc("GET /api/assets/{id}/original", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		_, ok := s.assetTags[r.PathValue("id")]
+		s.mu.Unlock()
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Disposition", `attachment; filename="../../IMG_0042.jpg"`)
+		w.Write(jpegBytes)
+	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Ids   []string

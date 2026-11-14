@@ -61,6 +61,7 @@ type Server struct {
 	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
 
 	limiter  limiter
+	waker    phoneWaker // the hand-over pass that follows photos sent from a phone
 	gate     downloadGate
 	testGate downloadGate // one test of the notification destinations at a time, and not too often
 }
@@ -102,6 +103,13 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
+	mux.HandleFunc("POST /static/share", w.shareFallback)
+	mux.HandleFunc("GET /send", w.sendPage)
+	mux.HandleFunc("POST /send/start", w.phoneStart)
+	mux.HandleFunc("GET /send/{id}", w.phoneStatus)
+	mux.HandleFunc("PUT /send/{id}/chunk", w.phoneChunk)
+	mux.HandleFunc("POST /send/{id}/done", w.phoneDone)
+	mux.HandleFunc("POST /send/{id}/cancel", w.phoneCancel)
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
 	mux.HandleFunc("POST /services/bridge/remove", w.removeBridge)
@@ -115,7 +123,13 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /d/{token}/upload", w.dropUpload)
 	mux.HandleFunc("GET /drop/{token}/theme.css", w.dropTheme)
 	mux.HandleFunc("GET /drop/{token}/cover", w.dropCover)
+	mux.HandleFunc("GET /drop/{token}/logo", w.dropLogo)
 	mux.HandleFunc("GET /drop/{token}/manifest.webmanifest", w.dropManifest)
+	mux.HandleFunc("GET /drop/{token}/gallery", w.galleryFeed)
+	mux.HandleFunc("GET /drop/{token}/photo/{id}", w.galleryPhoto)
+	mux.HandleFunc("GET /drop/{token}/original/{id}", w.galleryOriginal)
+	mux.HandleFunc("GET /drop/{token}/zip", w.galleryZip)
+	mux.HandleFunc("POST /drop/{token}/heart/{id}", w.galleryHeart)
 	mux.HandleFunc("GET /drop/{token}/mine", w.dropMine)
 	mux.HandleFunc("POST /drop/{token}/mine/delete", w.dropMineDelete)
 	mux.HandleFunc("GET /d/{token}/mine", w.dropMine)
@@ -126,16 +140,71 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/message/delete", w.deleteMessage)
 	mux.HandleFunc("GET /dropbox/voice/{id}", w.voiceNote)
 	mux.HandleFunc("GET /dropbox/guestbook/{id}", w.exportGuestBook)
+	mux.HandleFunc("GET /dropbox/zip/{id}", w.dropZip)
 	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
+	mux.HandleFunc("GET /peer/invite/{token}", w.peerInvitePage)
+	mux.HandleFunc("GET /peer/v1/invite/{token}", w.peerInviteInfo)
+	mux.HandleFunc("POST /peer/v1/join/{token}", w.peerJoin)
+	mux.HandleFunc("POST /peer/v1/hello", w.signed(w.peerHello))
+	mux.HandleFunc("POST /peer/v1/leave", w.signed(w.peerLeave))
+	mux.HandleFunc("POST /peer/v1/album/propose", w.signed(w.peerAlbumPropose))
+	mux.HandleFunc("POST /peer/v1/album/accept", w.signed(w.peerAlbumAccept))
+	mux.HandleFunc("POST /peer/v1/album/decline", w.signed(w.peerAlbumAnswer((*hub.Hub).PeerDeclined)))
+	mux.HandleFunc("POST /peer/v1/album/leave", w.signed(w.peerAlbumAnswer((*hub.Hub).PeerLeftAlbum)))
+	mux.HandleFunc("POST /peer/v1/album/have", w.signed(w.peerAlbumHave))
+	mux.HandleFunc("POST /peer/v1/album/photo", w.peerAlbumPhoto)
+	mux.HandleFunc("POST /peer/v1/album/removed", w.signed(w.peerAlbumRemoved))
+	mux.HandleFunc("POST /shared/removal", w.answerRemoval)
+	mux.HandleFunc("POST /peer/v1/album/done", w.signed(w.peerAlbumDone))
+	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
+	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)
+	mux.HandleFunc("POST /peers/share", w.proposeAlbum)
+	mux.HandleFunc("POST /shared/accept", w.acceptAlbum)
+	mux.HandleFunc("POST /shared/decline", w.declineAlbum)
+	mux.HandleFunc("POST /shared/leave", w.leaveAlbum)
+	mux.HandleFunc("POST /peers/invite", w.newPeerInvite)
+	mux.HandleFunc("POST /peers/preview", w.previewPeerInvite)
+	mux.HandleFunc("POST /peers/accept", w.acceptPeerInvite)
+	mux.HandleFunc("POST /peers/pause", w.pausePeer)
+	mux.HandleFunc("POST /peers/remove", w.removePeer)
+	mux.HandleFunc("GET /room/{token}", w.roomPage)
+	mux.HandleFunc("GET /room/{token}/photo/{id}", w.roomPhoto)
+	mux.HandleFunc("POST /room/{token}/unlock", w.roomUnlock)
+	mux.HandleFunc("POST /room/{token}/pick/{id}", w.roomPick)
+	mux.HandleFunc("POST /room/{token}/done", w.roomDone)
+	mux.HandleFunc("POST /room/{token}/name", w.roomName)
+	mux.HandleFunc("POST /room/{token}/note/{id}", w.roomNote)
+	mux.HandleFunc("POST /rooms/reply", w.replyToNote)
+	mux.HandleFunc("POST /rooms/round", w.startRound)
+	mux.HandleFunc("GET /fragments/room-albums", w.roomAlbums)
+	mux.HandleFunc("POST /rooms", w.createRoom)
+	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)
+	mux.HandleFunc("POST /rooms/end", w.endRoom)
+	mux.HandleFunc("POST /rooms/reopen", w.reopenRoomChoice)
+	mux.HandleFunc("GET /rooms/{id}/review", w.roomReview)
+	mux.HandleFunc("GET /rooms/{id}/photo/{pid}", w.roomReviewPhoto)
+	mux.HandleFunc("POST /rooms/release", w.releaseRoom)
+	mux.HandleFunc("POST /rooms/withdraw", w.withdrawRoom)
+	mux.HandleFunc("GET /room/{token}/original/{id}", w.roomOriginal)
+	mux.HandleFunc("GET /room/{token}/zip", w.roomZip)
 	mux.HandleFunc("GET /frame/{token}", w.framePage)
 	mux.HandleFunc("GET /frame/{token}/feed", w.frameFeed)
 	mux.HandleFunc("GET /frame/{token}/photo/{id}", w.framePhoto)
 	mux.HandleFunc("GET /fragments/frame-albums", w.frameAlbums)
 	mux.HandleFunc("POST /frames", w.createFrame)
 	mux.HandleFunc("POST /frames/end", w.endFrame)
+	mux.HandleFunc("GET /mod/{token}", w.modPage)
+	mux.HandleFunc("GET /mod/{token}/pending/{id}", w.modFile)
+	mux.HandleFunc("POST /mod/{token}/approve", w.modDecide(true))
+	mux.HandleFunc("POST /mod/{token}/reject", w.modDecide(false))
+	mux.HandleFunc("GET /mod/{token}/photo/{id}", w.modImage)
+	mux.HandleFunc("POST /mod/{token}/mark", w.modMark)
+	mux.HandleFunc("POST /dropbox/loved", w.lovedDropBox)
+	mux.HandleFunc("POST /dropbox/moderator", w.moderatorDropBox)
 	mux.HandleFunc("GET /wall/{token}", w.wallPage)
 	mux.HandleFunc("GET /wall/{token}/feed", w.wallFeed)
+	mux.HandleFunc("GET /wall/{token}/logo", w.wallLogo)
 	mux.HandleFunc("GET /wall/{token}/photo/{id}", w.wallPhoto)
 	mux.HandleFunc("POST /dropbox/wall", w.startWall)
 	mux.HandleFunc("POST /dropbox/wall/stop", w.stopWall)
@@ -147,6 +216,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /dropbox/mail", w.mailDropBox)
 	mux.HandleFunc("POST /dropbox/renew", w.renewDropBox)
 	mux.HandleFunc("POST /dropbox/look", w.lookDropBox)
+	mux.HandleFunc("POST /dropbox/event", w.eventDropBox)
 	mux.HandleFunc("POST /dropbox/template", w.saveDropTemplate)
 	mux.HandleFunc("POST /dropbox/template/delete", w.deleteDropTemplate)
 	mux.HandleFunc("POST /dropbox/fromtemplate", w.dropFromTemplate)
@@ -211,7 +281,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
 		upload := dropRoute(r.URL.Path) && (strings.HasSuffix(r.URL.Path, "/upload") || strings.HasSuffix(r.URL.Path, "/message"))
-		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") { // a guest's upload is bounded by its drop box instead
+		if r.Method == http.MethodPost && !upload && !strings.HasPrefix(r.URL.Path, "/dropbox/look") && !strings.HasSuffix(r.URL.Path, "/peer/v1/album/photo") { // a guest's upload is bounded by its drop box instead
 			r.Body = http.MaxBytesReader(rw, r.Body, 1<<20)
 		}
 		// the person's language: their own choice (a cookie the page sets), else what the browser asks for, else English
@@ -232,6 +302,9 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
 			base := strings.Repeat("../", len(strings.Split(strings.Trim(r.URL.Path, "/"), "/"))-1)
 			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, &guestInfo{}))
+		}
+		if strings.HasPrefix(r.URL.Path, "/rooms/") && strings.Count(r.URL.Path, "/") == 3 { // the photographer's pages about one room are two levels down
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))
 		}
 		if strings.HasPrefix(r.URL.Path, "/dropbox/card/") { // the printable card is two levels down
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../../"))
@@ -508,6 +581,10 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Owned = w.ownedViews(ctx, me)
 	d.DropBoxes = w.dropBoxViews(ctx, me)
 	d.Frames = w.frameViews(ctx, me)
+	d.Rooms = w.roomViews(ctx, me)
+	if w.Hub.PeersOn() {
+		d.PeersOn, d.Peers = true, w.peerViews(ctx, me)
+	}
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
@@ -648,7 +725,34 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			held = append(held, NeedView{Tone: "warn", Chip: t(ctx, "Limit"), Title: s.Name, Text: s.Waiting})
 		}
 	}
-	return append(append(lost, ask...), held...)
+	var done []NeedView
+	for _, p := range d.Peers {
+		if p.Problem != "" && p.State == "active" {
+			done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Not reachable"), Title: p.Name,
+				Text: t(ctx, "The other app could not be reached: {reason} Shared albums wait until it can.", "reason", p.Problem)})
+		}
+		for _, a := range p.Shared {
+			switch a.State {
+			case "invited":
+				done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Proposal"), Title: t(ctx, "{name} proposes to share {album}", "name", p.Name, "album", a.Name),
+					Text: t(ctx, "Open the Services tab to look at it and answer.")})
+			case "left":
+				done = append(done, NeedView{Tone: "bad", Chip: t(ctx, "Ended"), Title: a.Name, Text: t(ctx, "{name} ended the sharing of this album. Remove it on the Services tab to delete its key.", "name", p.Name)})
+			}
+			if a.State == "active" && a.Problem != "" {
+				done = append(done, NeedView{Tone: "warn", Chip: t(ctx, "Problem"), Title: a.Name, Text: a.Problem})
+			}
+		}
+	}
+	for _, r := range d.Rooms {
+		for _, sel := range r.Selections {
+			if sel.Done && !r.Ended {
+				done = append(done, NeedView{Tone: "ok", Chip: t(ctx, "Choice sent"), Title: r.Name,
+					Text: n(ctx, "{name} finished choosing: {n} photo.", "{name} finished choosing: {n} photos.", sel.Count, "name", selectionName(ctx, sel.Name))})
+			}
+		}
+	}
+	return append(append(append(lost, ask...), done...), held...)
 }
 
 func (w *Server) dismissGuide(rw http.ResponseWriter, r *http.Request) {

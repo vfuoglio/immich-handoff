@@ -621,9 +621,9 @@ func activityTone(kind string) string {
 	switch kind {
 	case "broken", "removed", "deleted", "left":
 		return "bad"
-	case "limit", "paused", "album":
+	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice":
 		return "ok"
 	}
 	return ""
@@ -653,6 +653,11 @@ func checked(b bool) string {
 // defaults). The page carries them, translated, for the scripts to read (see ts/i18n.ts). A test keeps this list equal
 // to what the scripts really ask for.
 var clientMessages = []string{
+	"Photo {n} of {total}", "Previous photo", "Next photo", "Close",
+	"Photos from this device", "{n} photo arrived in your Immich", "{n} photo could not be sent", "{n} photo is waiting for you to sign in to Immich again",
+	"Choose where it goes, then press Send", "{n} file shared with Handoff is waiting for you to choose where it goes", "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.",
+	"A large video on mobile data", "Cancel", "Locations go with your photos", "Send now", "Wait for Wi-Fi", "Waiting for Wi-Fi: this device is on mobile data", "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.", "{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed.",
+	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
 	"A sender", "Activity", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
 	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
@@ -845,4 +850,83 @@ func frameChips(ctx context.Context, f FrameView) []Chip {
 		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
 	}
 	return []Chip{{Text: t(ctx, "Showing"), Tone: "ok"}}
+}
+
+func roomChips(ctx context.Context, r RoomView) []Chip {
+	switch {
+	case r.Ended:
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	case r.Paused:
+		return []Chip{{Text: t(ctx, "Paused"), Tone: "warn"}}
+	}
+	return []Chip{{Text: t(ctx, "Open"), Tone: "ok"}}
+}
+
+// pausedValue is what the pause button sends: the state the room should be in after the press.
+func pausedValue(nowPaused bool) string {
+	if nowPaused {
+		return "0"
+	}
+	return "1"
+}
+
+// markText says in words how a room's pictures are marked (see markSummary).
+func markText(ctx context.Context, summary string) string {
+	kind, text, _ := strings.Cut(summary, ":")
+	switch kind {
+	case "logo":
+		return t(ctx, "The pictures carry your logo in a corner.")
+	case "both":
+		return t(ctx, "The pictures carry \"{text}\" across them and your logo in a corner.", "text", text)
+	}
+	return t(ctx, "The pictures carry \"{text}\" across them.", "text", text)
+}
+
+func pickLabel(ctx context.Context, picked bool, n int) string {
+	if picked {
+		return t(ctx, "Take photo {n} away from my choice", "n", n)
+	}
+	return t(ctx, "Choose photo {n}", "n", n)
+}
+
+// pickCounter says how many photos a client has chosen, and of how many they may.
+func pickCounter(ctx context.Context, count, limit int) string {
+	if limit > 0 {
+		return t(ctx, "{n} of {limit} chosen", "n", count, "limit", limit)
+	}
+	return n(ctx, "{n} photo chosen", "{n} photos chosen", count)
+}
+
+// selectionName is how a selection is named for the photographer: the name the client gave, or "A client".
+func selectionName(ctx context.Context, name string) string {
+	if name == "" {
+		return t(ctx, "A client")
+	}
+	return name
+}
+
+func peerChips(ctx context.Context, p PeerView) []Chip {
+	switch {
+	case p.State == "left":
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	case p.Problem != "":
+		return []Chip{{Text: t(ctx, "Not reachable"), Tone: "warn"}}
+	case p.IPaused || p.TheyPause:
+		return []Chip{{Text: t(ctx, "Paused"), Tone: "warn"}}
+	}
+	return []Chip{{Text: t(ctx, "Connected"), Tone: "ok"}}
+}
+
+func historyText(ctx context.Context, h string) string {
+	if h == "all" {
+		return t(ctx, "everything in the album now, and what is added")
+	}
+	return t(ctx, "only what is added from now on")
+}
+
+func deletionText(ctx context.Context, d string) string {
+	if d == "follow" {
+		return t(ctx, "Taking a photo out of the album takes it out of the other album too (the photo stays in the library).")
+	}
+	return t(ctx, "Taking a photo out of the album changes nothing on the other side.")
 }

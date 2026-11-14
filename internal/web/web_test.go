@@ -37,6 +37,12 @@ func fakeImmich() http.Handler {
 		json.NewEncoder(w).Encode(v)
 	}
 	mux := http.NewServeMux()
+	// the owner's own session reads originals (for a ZIP of a drop box): any asset is a small picture
+	mux.HandleFunc("GET /api/assets/{id}/original", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Disposition", `attachment; filename="../../IMG_0042.jpg"`)
+		w.Write(jpegBytes)
+	})
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
 			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},

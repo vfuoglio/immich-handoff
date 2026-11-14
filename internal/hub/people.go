@@ -60,7 +60,7 @@ type personQueue struct {
 }
 
 // needsKinds are the events that ask something of a person or tell them something stopped; the rest is news.
-var needsKinds = map[string]bool{"broken": true, "removed": true, "asked": true, "limit": true}
+var needsKinds = map[string]bool{"broken": true, "removed": true, "asked": true, "limit": true, "choice": true, "sharing_problem": true}
 
 // Ready reports whether people can be written to at all.
 func (p *People) Ready() bool {

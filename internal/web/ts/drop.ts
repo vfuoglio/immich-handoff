@@ -97,11 +97,12 @@ interface Answer {
 }
 
 /** One try at sending one file. Resolves with the server's answer, or rejects with whether it is worth trying again. */
-function post(url: string, password: string | null, prompt: string, file: File, onProgress: (fraction: number) => void): Promise<Answer> {
+function post(url: string, password: string | null, prompt: string, guest: string, file: File, onProgress: (fraction: number) => void): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const body = new FormData();
     if (password !== null) body.append("password", password); // before the files: the server reads in order
     if (prompt !== "") body.append("prompt", prompt);
+    if (guest !== "") body.append("guest", guest); // the name shown with the photo, when the box shows names
     body.append("files", file, file.name);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -180,6 +181,7 @@ export function initDrop(): void {
   const camera = form.querySelector<HTMLInputElement>('input[type="file"][name="camera"]');
   const password = form.querySelector<HTMLInputElement>('input[name="password"]');
   const promptSelect = form.querySelector<HTMLSelectElement>('select[name="prompt"]');
+  const guestName = form.querySelector<HTMLInputElement>('input[name="guest"]');
   const submit = form.querySelector<HTMLButtonElement>("button.drop-send");
   const zone = form.querySelector<HTMLElement>(".dz");
   const summary = form.querySelector<HTMLElement>(".drop-summary");
@@ -312,7 +314,7 @@ export function initDrop(): void {
       item.status.textContent = failures === 0 ? t("Sending") : t("Waiting for the connection");
       try {
         const file = failures === 0 ? await shrink(item.file, maxDim) : item.file;
-        const answer = await post(url, password ? password.value : null, item.prompt, file, (f) => {
+        const answer = await post(url, password ? password.value : null, item.prompt, guestName?.value ?? "", file, (f) => {
           item.bar.value = f;
         });
         const line = answer.files?.[0];

@@ -460,6 +460,178 @@ var migrations = []string{
 	 ALTER TABLE services ADD COLUMN ends_at TEXT NOT NULL DEFAULT '';`,
 	// What a drop box's password guards: the upload (the page can be seen) or the whole page. Boxes that had a password keep guarding the upload.
 	`ALTER TABLE dropboxes ADD COLUMN password_scope TEXT NOT NULL DEFAULT 'upload';`,
+	// How long after a box has ended what guests left with it (their names, their hearts, the gallery) is kept.
+	`ALTER TABLE dropboxes ADD COLUMN keep_days INTEGER NOT NULL DEFAULT 0;`,
+	// The gallery of a drop box: guests may look at what the box kept, heart it, and, if the owner allows, download it
+	// and see who sent it. The name a guest gave comes with the photo; a heart is one guest's, kept as a hash.
+	`ALTER TABLE dropboxes ADD COLUMN gallery INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN gallery_download INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropboxes ADD COLUMN gallery_names INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_assets ADD COLUMN guest_name TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE dropbox_pending ADD COLUMN guest_name TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_hearts (
+	   box_id   TEXT NOT NULL,
+	   asset_id INTEGER NOT NULL,
+	   guest    TEXT NOT NULL,
+	   at       TEXT NOT NULL,
+	   PRIMARY KEY (box_id, asset_id, guest)
+	 );`,
+	// A moderator link: a page where a helper with no account approves or rejects what waits in a box.
+	`ALTER TABLE dropboxes ADD COLUMN mod_token TEXT NOT NULL DEFAULT '';
+	 CREATE UNIQUE INDEX dropboxes_mod ON dropboxes (mod_token) WHERE mod_token <> '';`,
+	// The host's picks among the photos a box kept: one can be pinned (always in a best-of) or hidden (from the guests'
+	// gallery, the wall and the guests' ZIP, and left out of a best-of).
+	`ALTER TABLE dropbox_assets ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE dropbox_assets ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`,
+	// What makes a box's guest pages the host's own: a title (the box's name stays the internal one, which is also its
+	// tag) and a logo.
+	`ALTER TABLE dropboxes ADD COLUMN title TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE dropbox_logos (
+	   box_id TEXT PRIMARY KEY,
+	   kind   TEXT NOT NULL,
+	   data   BLOB NOT NULL
+	 );`,
+	// A client room: a link for a client to look at a photographer's album through marked pictures, choose some and, once the
+	// photographer releases them, take the originals. Its key is sealed like every other. Which photos are in it is not kept: it is
+	// the album as it is read (see internal/hub/room.go), like a frame.
+	`CREATE TABLE rooms (
+	   id         TEXT PRIMARY KEY,
+	   token      TEXT NOT NULL UNIQUE,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   title      TEXT NOT NULL DEFAULT '',
+	   album_id   TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   password   TEXT NOT NULL DEFAULT '',
+	   ends_at    TEXT NOT NULL DEFAULT '',
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   created_at TEXT NOT NULL
+	 );`,
+	// How a room marks its pictures: text repeated over them, the logo in a corner, or both; and the logo itself.
+	`ALTER TABLE rooms ADD COLUMN wm_mode TEXT NOT NULL DEFAULT 'text';
+	 ALTER TABLE rooms ADD COLUMN mark_text TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN logo_kind TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN logo BLOB;`,
+	// Choosing in a client room: who chooses (one selection for everyone, one for each visitor, or one named client), how many
+	// photos at most, and the picks. A pick is a photo (by its opaque id in the room), the round, and whose selection it is in
+	// (who is empty for the shared selection and the named client's); the name is shown to the photographer. A selection is
+	// finished with Done.
+	`ALTER TABLE rooms ADD COLUMN pick_mode TEXT NOT NULL DEFAULT 'shared';
+	 ALTER TABLE rooms ADD COLUMN pick_limit INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN claim_who TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN claim_name TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE room_picks (
+	   room_id TEXT NOT NULL,
+	   round   INTEGER NOT NULL,
+	   who     TEXT NOT NULL,
+	   photo   TEXT NOT NULL,
+	   name    TEXT NOT NULL DEFAULT '',
+	   at      TEXT NOT NULL,
+	   PRIMARY KEY (room_id, round, who, photo)
+	 );
+	 CREATE TABLE room_done (
+	   room_id TEXT NOT NULL,
+	   round   INTEGER NOT NULL,
+	   who     TEXT NOT NULL,
+	   name    TEXT NOT NULL DEFAULT '',
+	   at      TEXT NOT NULL,
+	   PRIMARY KEY (room_id, round, who)
+	 );`,
+	// Releasing a client room's originals: by hand (the photographer's own session adds the key's download permission) or
+	// automatically when a client sends a choice; until when they can be downloaded; how many ZIPs were made.
+	`ALTER TABLE rooms ADD COLUMN auto_release INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN release_days INTEGER NOT NULL DEFAULT 30;
+	 ALTER TABLE rooms ADD COLUMN released_at TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN release_until TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN downloads INTEGER NOT NULL DEFAULT 0;`,
+	// Notes on the photos of a client room: what a client writes to the photographer about a photo (one for each photo in a
+	// selection) and, in a room that allows replies, the photographer's answer.
+	`ALTER TABLE rooms ADD COLUMN notes_mode TEXT NOT NULL DEFAULT 'none';
+	 CREATE TABLE room_notes (
+	   room_id    TEXT NOT NULL,
+	   round      INTEGER NOT NULL,
+	   who        TEXT NOT NULL,
+	   photo      TEXT NOT NULL,
+	   name       TEXT NOT NULL DEFAULT '',
+	   body       TEXT NOT NULL,
+	   reply      TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL,
+	   replied_at TEXT NOT NULL DEFAULT '',
+	   PRIMARY KEY (room_id, round, who, photo)
+	 );`,
+	// Rounds in a client room: whether the room goes through several, and which round it is in. A round's picks, notes and sent
+	// choices are kept under its number, so earlier rounds stay as history.
+	`ALTER TABLE rooms ADD COLUMN multi_round INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN round INTEGER NOT NULL DEFAULT 1;`,
+	// Peers: the other apps this one shares albums with (docs/shared-albums-design.md). A peer is made by an invitation; its
+	// secret (the one both apps sign with) is sealed like every key. their_id is the id the other app knows this app by.
+	`CREATE TABLE peers (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   address    TEXT NOT NULL,
+	   secret_enc BLOB NOT NULL,
+	   their_id   TEXT NOT NULL DEFAULT '',
+	   role       TEXT NOT NULL,
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   i_paused   INTEGER NOT NULL DEFAULT 0,
+	   they_paused INTEGER NOT NULL DEFAULT 0,
+	   version    INTEGER NOT NULL DEFAULT 1,
+	   seen_at    TEXT NOT NULL DEFAULT '',
+	   problem    TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE peer_invites (
+	   token_hash TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   used_by    TEXT NOT NULL DEFAULT ''
+	 );`,
+	// A shared album: an album of this person's that is kept the same as an album of the person on the other server (a peer).
+	// It starts as a proposal (from either side), becomes active when the other accepts. The app's key for this person's Immich is
+	// sealed like every key. history is what this side agreed to share when joining ("all" what is in the album, or "new" only
+	// what is added from now on), deletion is the rule both agreed ("nothing" travels, or "follow": removal from the album). The
+	// ledger remembers, by checksum, what is in the album and where it came from, so nothing is sent twice or sent back.
+	`CREATE TABLE shared_albums (
+	   id          TEXT PRIMARY KEY,
+	   owner_id    TEXT NOT NULL,
+	   peer_id     TEXT NOT NULL,
+	   their_id    TEXT NOT NULL DEFAULT '',
+	   name        TEXT NOT NULL,
+	   album_id    TEXT NOT NULL DEFAULT '',
+	   album_name  TEXT NOT NULL DEFAULT '',
+	   key_id      TEXT NOT NULL DEFAULT '',
+	   key_enc     BLOB,
+	   state       TEXT NOT NULL,
+	   proposer    INTEGER NOT NULL DEFAULT 0,
+	   history     TEXT NOT NULL DEFAULT 'new',
+	   their_history TEXT NOT NULL DEFAULT 'new',
+	   deletion    TEXT NOT NULL DEFAULT 'nothing',
+	   created_at  TEXT NOT NULL
+	 );
+	 CREATE TABLE shared_ledger (
+	   album_id TEXT NOT NULL,
+	   checksum TEXT NOT NULL,
+	   asset_id TEXT NOT NULL DEFAULT '',
+	   origin   TEXT NOT NULL,
+	   sent     INTEGER NOT NULL DEFAULT 0,
+	   at       TEXT NOT NULL,
+	   PRIMARY KEY (album_id, checksum)
+	 );`,
+	// How a shared album is doing: when it was last looked at, what went wrong, and how many photos went each way.
+	`ALTER TABLE shared_albums ADD COLUMN last_sync TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE shared_albums ADD COLUMN problem TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE shared_albums ADD COLUMN sent INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE shared_albums ADD COLUMN received INTEGER NOT NULL DEFAULT 0;`,
+	// Taking photos out of a shared album (the "follow" rule): the ledger notes whether a photo is in the album now, and a large
+	// removal waits for the person to say yes (pending holds its checksums).
+	`ALTER TABLE shared_ledger ADD COLUMN present INTEGER NOT NULL DEFAULT 1;
+	 ALTER TABLE shared_albums ADD COLUMN pending TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

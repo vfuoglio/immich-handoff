@@ -69,7 +69,9 @@ function whenActive(reg: ServiceWorkerRegistration): Promise<ServiceWorkerRegist
   });
 }
 
-async function register(): Promise<ServiceWorkerRegistration> {
+/** Registers the service worker (it shows notifications, receives photos shared from the gallery and finishes the queue with the
+ *  screen off) and waits until it runs. */
+export async function register(): Promise<ServiceWorkerRegistration> {
   return whenActive(await navigator.serviceWorker.register("static/sw.js", { scope: "static/" }));
 }
 
