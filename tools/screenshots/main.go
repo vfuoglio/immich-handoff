@@ -3,6 +3,7 @@
 //	go run . gen   <dir> [count]   write sample photos (generated landscapes, no real people)
 //	go run . shots <set> <outdir>  take screenshots of a running demo with headless Chrome
 //	go run . hero  <outdir>        compose the README hero image from earlier shots
+//	go run . room  <outdir> <photos>  a client room: the row, the client's page on a phone, a photo with its note, the review
 //	go run . send  <outdir> <photos>  the Send page on a phone: the card to install, photos chosen, the queue half way
 //	go run . film <scene> <framedir>  film a scene of the running demo as frames, for the README animations (see README.md)
 //
@@ -66,6 +67,11 @@ func main() {
 		shots(os.Args[2], os.Args[3])
 	case "hero":
 		hero(os.Args[2])
+	case "room":
+		if len(os.Args) < 4 {
+			log.Fatal("room needs an output directory and the folder of sample photos")
+		}
+		roomShots(os.Args[2], os.Args[3])
 	case "send":
 		if len(os.Args) < 4 {
 			log.Fatal("send needs an output directory and the folder of sample photos")

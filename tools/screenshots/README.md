@@ -19,6 +19,8 @@ go run . shots lost ../../docs/images
 
 The phone upload page has its own set: `FIRST=2040 go run . send ../../docs/images $DEMO/photos` signs in as Alice on a 390 px phone and sends three sample photos through the page, slowly (it needs the app running with a data folder, as `seed.sh` does it, and three photos that are not yet in Alice's library: `FIRST` is the number of the first, `IMG_2040` by default).
 
+The client room has a set too: `FIRST=2060 go run . room ../../docs/images $DEMO/photos` (after `go run . gen $DEMO/photos 40`) uploads six sample photos as Alice, makes an album and a room of it, lets a client choose, write a note and send the choice, answers it, and takes the four pictures. `FIRST` is the number of the first of six photos not yet in Alice's library.
+
 The sample photos are generated landscapes (`go run . gen <dir>`), so no real pictures or people appear.
 
 Every picture is taken in English: the tool sends `Accept-Language: en` and sets the page's language cookie to English, whatever language the machine uses. The pictures belong to the English documentation.
