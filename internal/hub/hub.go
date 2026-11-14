@@ -17,6 +17,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/peer"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -71,6 +72,10 @@ type Hub struct {
 	// PhoneDir is where the pieces of photos sent from a phone wait until the file is whole (empty: phones cannot send).
 	// PhoneCap is the most one person may have waiting, PhoneMaxFile the most for one file and PhoneKeep how long
 	// unfinished pieces are kept; zero means the defaults (4 GB, 2 GB, 48 hours).
+	// Share: albums may be shared with people on other servers, through other Handoff apps (SHARED_ALBUMS_ENABLE, off by default;
+	// it needs the app's own public address, AppURL, to give to the other app).
+	Share bool
+
 	PhoneDir     string
 	PhoneCap     int64
 	PhoneMaxFile int64
@@ -89,12 +94,13 @@ type Hub struct {
 	phoneStartMu sync.Mutex // starting a file checks what is waiting
 	zipping      sync.Map   // the boxes a ZIP is being made of
 	zipMu        sync.Mutex
-	zipCount     map[string]int          // how many ZIPs of a box guests are having made
-	hlRun        map[string]bool         // boxes whose best-of is being made now
-	digestRun    map[string]bool         // services whose digest is being made now
-	frames       frameCache              // the albums frames last read
-	rooms        roomCache               // the albums client rooms last read
-	pins         pinGuard                // wrong PINs given to client rooms
+	zipCount     map[string]int  // how many ZIPs of a box guests are having made
+	hlRun        map[string]bool // boxes whose best-of is being made now
+	digestRun    map[string]bool // services whose digest is being made now
+	frames       frameCache      // the albums frames last read
+	rooms        roomCache       // the albums client rooms last read
+	pins         pinGuard
+	peerVerify   peer.Verifier           // the signed requests other apps have sent                // wrong PINs given to client rooms
 	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads
 	retries      map[string]*time.Timer  // when each unreachable receiver on another server is tried again
 	bridgeTries  bridgeGuard             // what the invitation pages know about who tried

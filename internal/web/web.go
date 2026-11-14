@@ -143,6 +143,16 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /dropbox/zip/{id}", w.dropZip)
 	mux.HandleFunc("POST /dropbox/share", w.shareDropBox)
 	mux.HandleFunc("POST /dropbox/unshare", w.unshareDropBox)
+	mux.HandleFunc("GET /peer/invite/{token}", w.peerInvitePage)
+	mux.HandleFunc("GET /peer/v1/invite/{token}", w.peerInviteInfo)
+	mux.HandleFunc("POST /peer/v1/join/{token}", w.peerJoin)
+	mux.HandleFunc("POST /peer/v1/hello", w.signed(w.peerHello))
+	mux.HandleFunc("POST /peer/v1/leave", w.signed(w.peerLeave))
+	mux.HandleFunc("POST /peers/invite", w.newPeerInvite)
+	mux.HandleFunc("POST /peers/preview", w.previewPeerInvite)
+	mux.HandleFunc("POST /peers/accept", w.acceptPeerInvite)
+	mux.HandleFunc("POST /peers/pause", w.pausePeer)
+	mux.HandleFunc("POST /peers/remove", w.removePeer)
 	mux.HandleFunc("GET /room/{token}", w.roomPage)
 	mux.HandleFunc("GET /room/{token}/photo/{id}", w.roomPhoto)
 	mux.HandleFunc("POST /room/{token}/unlock", w.roomUnlock)
@@ -557,6 +567,9 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.DropBoxes = w.dropBoxViews(ctx, me)
 	d.Frames = w.frameViews(ctx, me)
 	d.Rooms = w.roomViews(ctx, me)
+	if w.Hub.PeersOn() {
+		d.PeersOn, d.Peers = true, w.peerViews(ctx, me)
+	}
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {

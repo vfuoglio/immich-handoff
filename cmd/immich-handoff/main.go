@@ -215,6 +215,13 @@ func run(log *slog.Logger) error {
 			go h.MailIn.Run(ctx)
 			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
 		}
+		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
+		case "1", "true", "on", "yes":
+			h.Share = true
+			if appURL == "" {
+				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing albums with other servers stays off, because the other app needs this app's address")
+			}
+		}
 		h.PhoneDir = dir + "/phone-uploads" // pieces of photos on their way from a phone; not part of a backup
 		for _, f := range []struct {
 			name string
@@ -248,6 +255,7 @@ func run(log *slog.Logger) error {
 				h.DigestMaintenance(ctx)
 				h.FrameMaintenance(ctx)
 				h.RoomMaintenance(ctx)
+				h.PeerMaintenance(ctx)
 				select {
 				case <-ctx.Done():
 					return

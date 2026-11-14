@@ -904,3 +904,15 @@ func selectionName(ctx context.Context, name string) string {
 	}
 	return name
 }
+
+func peerChips(ctx context.Context, p PeerView) []Chip {
+	switch {
+	case p.State == "left":
+		return []Chip{{Text: t(ctx, "Ended"), Tone: "bad"}}
+	case p.Problem != "":
+		return []Chip{{Text: t(ctx, "Not reachable"), Tone: "warn"}}
+	case p.IPaused || p.TheyPause:
+		return []Chip{{Text: t(ctx, "Paused"), Tone: "warn"}}
+	}
+	return []Chip{{Text: t(ctx, "Connected"), Tone: "ok"}}
+}

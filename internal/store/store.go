@@ -566,6 +566,32 @@ var migrations = []string{
 	// choices are kept under its number, so earlier rounds stay as history.
 	`ALTER TABLE rooms ADD COLUMN multi_round INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE rooms ADD COLUMN round INTEGER NOT NULL DEFAULT 1;`,
+	// Peers: the other apps this one shares albums with (docs/shared-albums-design.md). A peer is made by an invitation; its
+	// secret (the one both apps sign with) is sealed like every key. their_id is the id the other app knows this app by.
+	`CREATE TABLE peers (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   address    TEXT NOT NULL,
+	   secret_enc BLOB NOT NULL,
+	   their_id   TEXT NOT NULL DEFAULT '',
+	   role       TEXT NOT NULL,
+	   state      TEXT NOT NULL DEFAULT 'active',
+	   i_paused   INTEGER NOT NULL DEFAULT 0,
+	   they_paused INTEGER NOT NULL DEFAULT 0,
+	   version    INTEGER NOT NULL DEFAULT 1,
+	   seen_at    TEXT NOT NULL DEFAULT '',
+	   problem    TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE peer_invites (
+	   token_hash TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   owner_name TEXT NOT NULL,
+	   expires_at TEXT NOT NULL,
+	   used_by    TEXT NOT NULL DEFAULT ''
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -487,6 +487,20 @@ On the Services tab, **Make a client room** asks for a name (yours), a title for
 - **A client has no account**: the room cannot tell two people apart except by the browser they use, so a client who uses another browser starts a new choice (in a room where everyone chooses together they join the same one).
 - **Very large shoots**: a room shows at most 2000 photos of its album.
 
+## Albums shared with other servers
+
+For people whose Immich is on **another server** than yours (a relative who runs their own, say), Handoff can keep an album the same in both libraries: what either of you adds appears at the other, as a real copy in each library. Each person runs a Handoff next to their own Immich and the two apps talk to each other; **each app only ever touches its own Immich**, and no Immich key goes to the other server. The administrator switches it on with `SHARED_ALBUMS_ENABLE` (see [Settings](settings.md)); it also needs `PUBLIC_APP_URL`, and the two apps must be able to reach each other over https.
+
+*(This section grows as the parts arrive: the connection comes first, then the shared album itself.)*
+
+### Connecting with someone
+
+1. **Invite someone** (Services tab, *Albums shared with other servers*) makes an **invitation link**, with a QR code. Give it to the other person; it works once, for a week.
+2. The other person opens **their own Handoff**, chooses **Join with an invitation link**, pastes it and presses **Look at the invitation**. The app asks the inviter's app who it is from and says so (name and address); **Accept the invitation** connects the two.
+3. Opening the link in a browser only explains what it is for and joins nothing.
+
+From then on each app shows the connection with its state (**Connected**, **Paused**, **Not reachable**, **Ended**). Either person can **Pause sharing** (the other app shows it) or **End connection**, which tells the other app; photos already in either library stay where they are. A connection is not made unless the inviter's app can call the other app back, so an app that cannot be reached from the internet cannot join.
+
 ## Frames: an album on a screen
 
 A **frame** shows one of your albums full screen on a photo frame, an old tablet or phone, or a TV, with no account on it. Under **Frames** on the Services tab, **Make a frame**: give it a name, choose one of your own albums, how long each photo stays (8, 15, 30 or 60 seconds) and whether the link works until you end it or for 30 days, 90 days or a year. You get a link (and a QR code) to open on the screen; double-click the page for full screen (it is a web page, so on a TV open it in the TV's browser, or cast a tab).

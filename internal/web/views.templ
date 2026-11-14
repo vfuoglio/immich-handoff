@@ -264,6 +264,8 @@ type DashboardData struct {
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
 	Rooms      []RoomView
+	Peers      []PeerView
+	PeersOn    bool
 	Templates  []TemplateView
 }
 
@@ -648,6 +650,9 @@ templ Dashboard(d DashboardData) {
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
 				@RoomSection(d.Rooms)
+				if d.PeersOn {
+					@PeerSection(d.Peers)
+				}
 				@FrameSection(d.Frames)
 			}
 		</section>
@@ -3628,5 +3633,115 @@ templ RoomReviewPage(d ReviewData) {
 				</div>
 			</section>
 		}
+	}
+}
+
+// PeerSection is where a person connects their app with the app of someone on another server, to share albums with them.
+templ PeerSection(peers []PeerView) {
+	<h2>{ t(ctx, "Albums shared with other servers") }</h2>
+	<p class="meta">{ t(ctx, "Connect this app with the Handoff of someone whose Immich is on another server, so that you can share an album that stays the same in both libraries. Nothing is shared until you both agree on an album. Each app only ever touches its own Immich.") }</p>
+	for i, p := range peers {
+		@PeerRow(p, fmt.Sprintf("peer-%d", i), len(peers) == 1)
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Invite someone") }</summary>
+		<div class="card offer-form">
+			<p class="meta">{ t(ctx, "You get a link to give to the other person. They paste it into their own Handoff. It works once, for a week.") }</p>
+			<p class="row"><button hx-post="peers/invite" hx-target="#peer-invite" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make an invitation link") }</button></p>
+			<div id="peer-invite"></div>
+		</div>
+	</details>
+	<details class="offer">
+		<summary>{ t(ctx, "Join with an invitation link") }</summary>
+		<form class="card offer-form" hx-post="peers/preview" hx-target="#peer-preview" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<div class="field">
+				<label for="peer-link">{ t(ctx, "The invitation link") }</label>
+				<input id="peer-link" name="link" required autocomplete="off" placeholder="https://..."/>
+			</div>
+			<p class="row form-actions"><button type="submit">{ t(ctx, "Look at the invitation") }</button></p>
+			<div id="peer-preview"></div>
+		</form>
+	</details>
+}
+
+// PeerInviteLink shows a new invitation's link, with a QR code and a copy button.
+templ PeerInviteLink(link, until string) {
+	<div class="field">
+		<label for="peer-invite-link">{ t(ctx, "Give this link to the other person") }</label>
+		<div class="row">
+			<input id="peer-invite-link" class="invite" readonly value={ link }/>
+			<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+			<button type="button" class="show-qr" data-for="peer-invite-link" data-alt={ t(ctx, "QR code of the invitation") }>{ t(ctx, "QR code") }</button>
+		</div>
+		<div class="qr" id="qr-peer-invite-link" hidden></div>
+		<small class="meta">{ t(ctx, "It works once, until {when}.", "when", until) }</small>
+	</div>
+}
+
+// PeerPreview says who an invitation is from and asks whether to accept.
+templ PeerPreview(name, host, link string) {
+	<div class="card notice">
+		<p><b>{ name }</b> { t(ctx, "({host}) invites you to share albums between your servers.", "host", host) }</p>
+		<p class="meta">{ t(ctx, "If you accept, the two apps will know each other and can call each other. Nothing is shared until you both agree on an album, and either of you can end the connection at any time.") }</p>
+		<p class="row"><button class="primary" type="button" hx-post="peers/accept" hx-vals={ vals("link", link) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Accept the invitation") }</button></p>
+	</div>
+}
+
+// PeerRow is one connection: who, where, how it is, and what can be done.
+templ PeerRow(p PeerView, id string, open bool) {
+	<details class="svc card" name="svc" open?={ open }>
+		@RowHead(p.Name, p.Host, peerChips(ctx, p), "sum-"+id)
+		<div class="body">
+			switch {
+				case p.State == "left":
+					<p class="meta">{ t(ctx, "{name} ended the connection. Remove it to forget it.", "name", p.Name) }</p>
+				case p.Problem != "":
+					<p class="meta bad-note">{ t(ctx, "The other app could not be reached: {reason}", "reason", p.Problem) }</p>
+				default:
+					<p class="meta">{ t(ctx, "The other app answered at {when}.", "when", p.Seen) }</p>
+			}
+			if p.TheyPause {
+				<p class="meta">{ t(ctx, "{name} has paused sharing.", "name", p.Name) }</p>
+			}
+			<p class="row">
+				if p.State != "left" {
+					<button hx-post="peers/pause" hx-vals={ vals2("peer", p.ID, "paused", pausedValue(p.IPaused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if p.IPaused {
+							{ t(ctx, "Resume sharing") }
+						} else {
+							{ t(ctx, "Pause sharing") }
+						}
+					</button>
+				}
+				<button hx-post="peers/remove" hx-vals={ vals("peer", p.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "The connection ends and the other app is told. Photos already in either library stay where they are. Continue?") } data-confirm-title={ t(ctx, "End the connection?") } data-confirm-label={ t(ctx, "End connection") } data-danger="true">{ t(ctx, "End connection") }</button>
+			</p>
+		</div>
+	</details>
+}
+
+// PeerInvitePage is what an invitation's link shows in a browser.
+templ PeerInvitePage(name, link string) {
+	@Layout(t(ctx, "Invitation to share albums"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "{name} invites you to share albums", "name", name) }</h1>
+			<p class="lead">{ t(ctx, "This link is for your own Handoff, not for this page. On your own Handoff, open the Services tab, choose Join with an invitation link, and paste the address of this page.") }</p>
+		</section>
+		<div class="card offer-form">
+			<div class="field">
+				<label for="peer-invite-here">{ t(ctx, "The address to paste") }</label>
+				<input id="peer-invite-here" class="invite" readonly data-link={ link }/>
+			</div>
+			<p class="meta">{ t(ctx, "Nothing happens until you accept it in your own Handoff. You need a Handoff next to your Immich that can be reached from the internet.") }</p>
+		</div>
+	}
+}
+
+// PeerInviteGone is what a used, expired or unknown invitation shows.
+templ PeerInviteGone() {
+	@Layout(t(ctx, "Invitation"), "") {
+		<section class="invite-hero">
+			<h1>{ t(ctx, "This invitation is not valid any more") }</h1>
+			<p class="lead">{ t(ctx, "It has expired or was already used. Ask for a new one.") }</p>
+		</section>
 	}
 }
