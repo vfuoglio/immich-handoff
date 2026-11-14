@@ -2,6 +2,10 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -66,6 +70,7 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 			return hub.ErrNoAlbum
 		}
 		days, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("ends")))
+		limit, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue("picklimit")))
 		var logo []byte
 		if f, _, err := r.FormFile("logo"); err == nil {
 			defer f.Close()
@@ -75,7 +80,7 @@ func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 		}
 		_, err = w.Hub.CreateRoom(ctx, me.sess, me.user, hub.RoomParams{Name: r.PostFormValue("name"), Title: r.PostFormValue("title"),
 			AlbumID: album, PIN: strings.TrimSpace(r.PostFormValue("pin")), EndsInDays: days,
-			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo})
+			Mark: r.PostFormValue("mark"), MarkText: r.PostFormValue("marktext"), Logo: logo, PickMode: r.PostFormValue("pickmode"), PickLimit: limit})
 		return err
 	})
 }
@@ -144,16 +149,169 @@ func (w *Server) roomPage(rw http.ResponseWriter, r *http.Request) {
 		RoomLocked(room.Token, false, false).Render(ctx, rw)
 		return
 	}
+	v := w.roomViewer(rw, r, room)
 	photos, err := w.Hub.RoomPhotos(ctx, room)
 	if err != nil {
 		http.Error(rw, "try again", http.StatusServiceUnavailable)
 		return
 	}
-	tiles := make([]RoomTile, 0, len(photos))
-	for i, p := range photos {
-		tiles = append(tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video})
+	sel, err := w.Hub.RoomSelectionOf(ctx, room, v)
+	if err != nil {
+		http.Error(rw, "try again", http.StatusServiceUnavailable)
+		return
 	}
-	RoomPage(room.ClientTitle(), room.Token, tiles).Render(ctx, rw)
+	d := RoomPageData{Title: room.ClientTitle(), Token: room.Token, Name: v.Name, Count: sel.Count, Limit: sel.Limit, Done: sel.Done, CanPick: sel.CanPick,
+		NeedsName: sel.NeedsName, Chooser: sel.Chooser, Mode: sel.Mode, CounterText: pickCounter(ctx, sel.Count, sel.Limit), Message: roomMessage(ctx, r.URL.Query().Get("e"))}
+	for i, p := range photos {
+		d.Tiles = append(d.Tiles, RoomTile{N: i + 1, ID: p.ID, Video: p.Video, Picked: sel.Picked[p.ID]})
+	}
+	RoomPage(d).Render(ctx, rw)
+}
+
+// roomMessage is the sentence for the code of an error that sent a client back to the page.
+func roomMessage(ctx context.Context, code string) string {
+	switch code {
+	case "limit":
+		return t(ctx, hub.ErrRoomLimit.Error())
+	case "locked":
+		return t(ctx, hub.ErrRoomLocked.Error())
+	case "none":
+		return t(ctx, hub.ErrRoomNoPicks.Error())
+	case "claimed":
+		return t(ctx, hub.ErrRoomClaimed.Error())
+	case "name":
+		return t(ctx, hub.ErrRoomName.Error())
+	}
+	return ""
+}
+
+func roomErrorCode(err error) string {
+	switch {
+	case errors.Is(err, hub.ErrRoomLimit):
+		return "limit"
+	case errors.Is(err, hub.ErrRoomLocked):
+		return "locked"
+	case errors.Is(err, hub.ErrRoomNoPicks):
+		return "none"
+	case errors.Is(err, hub.ErrRoomClaimed):
+		return "claimed"
+	case errors.Is(err, hub.ErrRoomName):
+		return "name"
+	}
+	return ""
+}
+
+// Who a client is: a secret their browser keeps (and the app never shows anyone), hashed with the room's link, so it means
+// nothing in another room and the photographer sees only the name the client gave.
+func roomSecretCookie(r store.Room) string { return "handoff-roomid-" + r.ID[:8] }
+func roomNameCookie(r store.Room) string   { return "handoff-roomname-" + r.ID[:8] }
+
+func (w *Server) roomViewer(rw http.ResponseWriter, r *http.Request, room store.Room) hub.RoomViewer {
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	secret := ""
+	if c, err := r.Cookie(roomSecretCookie(room)); err == nil && len(c.Value) == 32 {
+		secret = c.Value
+	}
+	if secret == "" {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err == nil {
+			secret = hex.EncodeToString(b)
+			http.SetCookie(rw, &http.Cookie{Name: roomSecretCookie(room), Value: secret, Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: secure})
+		}
+	}
+	sum := sha256.Sum256([]byte("room-viewer|" + room.Token + "|" + secret))
+	v := hub.RoomViewer{Who: hex.EncodeToString(sum[:])[:16]}
+	if c, err := r.Cookie(roomNameCookie(room)); err == nil {
+		v.Name = hub.CleanViewerName(c.Value)
+	}
+	return v
+}
+
+// roomAnswer answers a press on the page: JSON for the script, a return to the page for a form.
+func (w *Server) roomAnswer(rw http.ResponseWriter, r *http.Request, room store.Room, back string, sel hub.RoomSelection, picked bool, err error) {
+	ctx := r.Context()
+	rw.Header().Set("Cache-Control", "no-store")
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		rw.Header().Set("Content-Type", "application/json")
+		out := map[string]any{"count": sel.Count, "done": sel.Done, "text": pickCounter(ctx, sel.Count, sel.Limit), "picked": picked}
+		if err != nil {
+			rw.WriteHeader(http.StatusConflict)
+			out["error"] = t(ctx, err.Error())
+		}
+		json.NewEncoder(rw).Encode(out)
+		return
+	}
+	loc := "../../" + room.Token
+	if back == "name" || back == "done" {
+		loc = "../" + room.Token
+	}
+	if err != nil {
+		loc += "?e=" + roomErrorCode(err)
+	}
+	rw.Header().Set("Location", loc)
+	rw.WriteHeader(http.StatusSeeOther)
+}
+
+// roomPick adds a photo to the client's choice, or takes it away.
+func (w *Server) roomPick(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	v := w.roomViewer(rw, r, room)
+	id := r.PathValue("id")
+	before, _ := w.Hub.RoomSelectionOf(r.Context(), room, v)
+	sel, err := w.Hub.RoomPick(r.Context(), room, v, id)
+	if errors.Is(err, hub.ErrDropGone) {
+		http.NotFound(rw, r)
+		return
+	}
+	if err != nil && roomErrorCode(err) == "" {
+		w.Log.Warn("a pick failed", "err", err)
+		http.Error(rw, "try again", http.StatusBadGateway)
+		return
+	}
+	if err != nil {
+		sel = before
+	}
+	w.roomAnswer(rw, r, room, "pick", sel, sel.Picked[id], err)
+}
+
+// roomDone sends the client's choice to the photographer.
+func (w *Server) roomDone(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	v := w.roomViewer(rw, r, room)
+	sel, err := w.Hub.RoomDone(r.Context(), room, v)
+	if err != nil && roomErrorCode(err) == "" {
+		w.Log.Warn("sending a choice failed", "err", err)
+		http.Error(rw, "try again", http.StatusBadGateway)
+		return
+	}
+	w.roomAnswer(rw, r, room, "done", sel, false, err)
+}
+
+// roomName keeps the name a client gives, and in a named room makes them the one who chooses.
+func (w *Server) roomName(rw http.ResponseWriter, r *http.Request) {
+	room, ok := w.roomOpen(rw, r)
+	if !ok {
+		return
+	}
+	r.ParseForm()
+	v := w.roomViewer(rw, r, room)
+	v.Name = hub.CleanViewerName(r.PostFormValue("name"))
+	if v.Name != "" {
+		http.SetCookie(rw, &http.Cookie{Name: roomNameCookie(room), Value: v.Name, Path: "/", MaxAge: 365 * 24 * 3600, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"})
+	}
+	err := w.Hub.RoomClaim(r.Context(), room, v)
+	if err != nil && roomErrorCode(err) == "" {
+		http.Error(rw, "try again", http.StatusBadGateway)
+		return
+	}
+	w.roomAnswer(rw, r, room, "name", hub.RoomSelection{}, false, err)
 }
 
 // roomUnlock takes the PIN of a room and, if it is right, remembers that in the client's browser.

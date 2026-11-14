@@ -3146,6 +3146,18 @@ templ RoomSection(rooms []RoomView) {
 				<input id="rm-logo" name="logo" type="file" accept="image/jpeg,image/png,image/webp"/>
 			</div>
 			<div class="field">
+				<label for="rm-pickmode">{ t(ctx, "Who chooses") }</label>
+				<select id="rm-pickmode" name="pickmode">
+					<option value="shared" selected>{ t(ctx, "Everyone with the link, together (one choice)") }</option>
+					<option value="visitor">{ t(ctx, "Each person on their own") }</option>
+					<option value="named">{ t(ctx, "One named client (the first to give a name)") }</option>
+				</select>
+			</div>
+			<div class="field">
+				<label for="rm-picklimit">{ t(ctx, "The most photos to choose (empty: no limit)") }</label>
+				<input id="rm-picklimit" name="picklimit" type="number" min="1" max="5000" inputmode="numeric" placeholder="30"/>
+			</div>
+			<div class="field">
 				<label for="rm-pin">{ t(ctx, "PIN (optional)") }</label>
 				<input id="rm-pin" name="pin" maxlength="40" autocomplete="off" placeholder={ t(ctx, "4 to 40 characters") }/>
 			</div>
@@ -3232,34 +3244,98 @@ templ RoomRow(r RoomView, id string, open bool) {
 
 // RoomTile is one picture on the client's page.
 type RoomTile struct {
-	N     int
-	ID    string
-	Video bool
+	N      int
+	ID     string
+	Video  bool
+	Picked bool
 }
 
-// RoomPage is what the client sees: the room's title and the marked pictures, in the order of the shoot (ts/room.ts opens them
-// larger; without it each is a link to the marked picture).
-templ RoomPage(title, token string, tiles []RoomTile) {
-	@Layout(title, "") {
-		<main class="room" data-room data-close={ t(ctx, "Close") }>
+// RoomPageData is what the client's page shows.
+type RoomPageData struct {
+	Title, Token string
+	Tiles        []RoomTile
+	Name         string // the name the client gave, if any
+	Count, Limit int
+	CounterText  string
+	Done         bool
+	CanPick      bool
+	NeedsName    bool   // a named room nobody has claimed
+	Chooser      string // a named room somebody else has claimed: who
+	Mode         string
+	Message      string // what went wrong with the last press, in words
+}
+
+// RoomPage is what the client sees: the room's title, the marked pictures in the order of the shoot, a way to choose and to send
+// the choice (ts/room.ts does it without leaving the page; without it each press is a form that comes back to the page), and
+// each picture opens larger.
+templ RoomPage(d RoomPageData) {
+	@Layout(d.Title, "") {
+		<main class="room" data-room data-close={ t(ctx, "Close") } data-choose={ t(ctx, "Choose this photo") } data-chosen={ t(ctx, "Chosen: take it away") } data-can-pick?={ d.CanPick }>
 			<section class="invite-hero">
-				<h1>{ title }</h1>
+				<h1>{ d.Title }</h1>
 				<p class="lead">{ t(ctx, "Choose a photo to see it larger. The pictures carry the photographer's mark; the originals come later.") }</p>
-				<p class="meta">{ n(ctx, "{n} photo", "{n} photos", len(tiles)) }</p>
+				<p class="meta">{ n(ctx, "{n} photo", "{n} photos", len(d.Tiles)) }</p>
 			</section>
-			if len(tiles) == 0 {
+			<p class="card notice bad-note" id="room-msg" role="alert" hidden?={ d.Message == "" }>{ d.Message }</p>
+			if d.Done {
+				<section class="card notice">
+					<h2>{ t(ctx, "Your choice has been sent") }</h2>
+					<p class="meta">{ t(ctx, "The photographer has been told which photos you chose. You can still look at all the pictures.") }</p>
+				</section>
+			}
+			if d.NeedsName || (d.Name == "" && !d.Done && d.Chooser == "") {
+				<form class="card offer-form room-name" method="post" action={ "room/" + d.Token + "/name" }>
+					<div class="field">
+						<label for="room-name">{ t(ctx, "Your name") }</label>
+						<input id="room-name" name="name" maxlength="40" autocomplete="name" required?={ d.NeedsName }/>
+						<small class="meta">
+							if d.NeedsName {
+								{ t(ctx, "Tell us your name to start choosing. Only you will be able to choose in this room.") }
+							} else {
+								{ t(ctx, "So the photographer knows who chose (optional).") }
+							}
+						</small>
+					</div>
+					<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save my name") }</button></p>
+				</form>
+			}
+			if d.Chooser != "" {
+				<p class="card notice">{ t(ctx, "{name} is choosing for this room. You can look at the photos.", "name", d.Chooser) }</p>
+			}
+			if d.CanPick || d.Done || d.Count > 0 {
+				<div class="room-pickbar" role="status">
+					<span class="room-count" data-room-count>{ d.CounterText }</span>
+					if d.CanPick {
+						<form class="room-done" method="post" action={ "room/" + d.Token + "/done" } data-limit={ fmt.Sprint(d.Limit) } data-short={ t(ctx, "You have chosen {n} of {limit}. Send your choice anyway?", "n", "{n}", "limit", "{limit}") } data-title={ t(ctx, "Send your choice?") } data-yes={ t(ctx, "Send my choice") } data-no={ t(ctx, "Keep choosing") }>
+							<button class="primary" type="submit">{ t(ctx, "Send my choice to the photographer") }</button>
+						</form>
+					}
+				</div>
+			}
+			if len(d.Tiles) == 0 {
 				<p class="meta">{ t(ctx, "There are no photos here yet.") }</p>
 			}
 			<ul class="plain room-grid">
-				for _, tile := range tiles {
-					<li>
-						<a class="room-tile" href={ templ.SafeURL("room/" + token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", len(tiles)) }>
-							<img src={ "room/" + token + "/photo/" + tile.ID } alt="" loading="lazy"/>
+				for _, tile := range d.Tiles {
+					<li class={ "room-item", templ.KV("picked", tile.Picked) } id={ fmt.Sprintf("p%d", tile.N) }>
+						<a class="room-tile" href={ templ.SafeURL("room/" + d.Token + "/photo/" + tile.ID) } data-n={ fmt.Sprint(tile.N) } aria-label={ t(ctx, "Photo {n} of {total}", "n", tile.N, "total", len(d.Tiles)) }>
+							<img src={ "room/" + d.Token + "/photo/" + tile.ID } alt="" loading="lazy"/>
 							<span class="room-n" aria-hidden="true">{ fmt.Sprint(tile.N) }</span>
 							if tile.Video {
 								<span class="room-video" aria-hidden="true">&#9654;</span>
 							}
 						</a>
+						if d.CanPick {
+							<form class="room-pick" method="post" action={ "room/" + d.Token + "/pick/" + tile.ID }>
+								<button type="submit" class="room-heart" aria-pressed={ checked(tile.Picked) } aria-label={ pickLabel(ctx, tile.Picked, tile.N) } title={ pickLabel(ctx, tile.Picked, tile.N) }>
+									<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.8 6.4 4.8c2 0 3.6 1.1 4.4 2.6h2.4c.8-1.5 2.4-2.6 4.4-2.6 3.4 0 5.5 3.5 4 7C19.500 16.400 12 21 12 21z"></path></svg>
+								</button>
+							</form>
+						} else if tile.Picked {
+							<span class="room-heart on" aria-label={ t(ctx, "Chosen") } role="img">
+								<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.8 6.4 4.8c2 0 3.6 1.1 4.4 2.6h2.4c.8-1.5 2.4-2.6 4.4-2.6 3.4 0 5.5 3.5 4 7C19.500 16.400 12 21 12 21z"></path></svg>
+							</span>
+						}
 					</li>
 				}
 			</ul>

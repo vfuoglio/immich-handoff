@@ -55,6 +55,8 @@ type RoomParams struct {
 	Mark        string // how the pictures are marked: "text", "logo" or "both" (empty: text)
 	MarkText    string // the text; empty: the photographer's name
 	Logo        []byte // the logo, for "logo" and "both"
+	PickMode    string // who chooses: "shared", "visitor" or "named" (empty: shared)
+	PickLimit   int    // the most photos a selection may hold; 0: no limit
 }
 
 // CreateRoom makes a room of one of the photographer's own albums. It has a key of its own, made with their session, that can
@@ -79,6 +81,10 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		}
 	}
 	markMode, markText, logoKind, err := checkRoomMark(p, owner)
+	if err != nil {
+		return store.Room{}, err
+	}
+	pickMode, pickLimit, err := checkRoomPicks(p)
 	if err != nil {
 		return store.Room{}, err
 	}
@@ -124,7 +130,7 @@ func (h *Hub) CreateRoom(ctx context.Context, sess *immich.API, owner immich.Use
 		return store.Room{}, ErrRoomTooBig
 	}
 	r := store.Room{Token: newToken() + newToken(), OwnerID: owner.ID, OwnerName: owner.Name, Name: name, Title: title,
-		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText}
+		AlbumID: p.AlbumID, AlbumName: album.Name, KeyID: keyID, Key: secret, Mark: markMode, MarkText: markText, PickMode: pickMode, PickLimit: pickLimit}
 	if p.PIN != "" {
 		if r.Password, err = HashDropPassword(p.PIN); err != nil {
 			undo()

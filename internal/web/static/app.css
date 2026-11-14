@@ -817,6 +817,18 @@ ul.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5
 .room-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .room-n { position: absolute; left: .4rem; top: .4rem; min-width: 1.6rem; padding: .05rem .4rem; border-radius: 999px; background: #000a; color: #fff; font-size: .75rem; text-align: center; }
 .room-video { position: absolute; right: .4rem; bottom: .4rem; width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border-radius: 50%; background: #000a; color: #fff; font-size: .8rem; }
+.room-item { position: relative; }
+.room-item.picked .room-tile { outline: 3px solid var(--accent); outline-offset: -3px; }
+.room-pick { position: absolute; right: .3rem; top: .3rem; margin: 0; }
+.room-heart { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; border: 0; background: #000a; color: #fff; cursor: pointer; padding: 0; }
+.room-heart svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.room-heart[aria-pressed="true"], .room-heart.on { color: #ff6b9a; }
+.room-heart[aria-pressed="true"] svg, .room-heart.on svg { fill: currentColor; }
+span.room-heart.on { position: absolute; right: .3rem; top: .3rem; width: 2.2rem; height: 2.2rem; }
+.room-pickbar { position: sticky; top: .5rem; z-index: 5; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; padding: .6rem .9rem; margin: .6rem 0; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.room-count { font-weight: 700; }
+.room-done { margin: 0; }
+.room-heart-big { min-height: 2.75rem; }
 dialog.room-lightbox { max-width: 100vw; }
 .room-caption { text-align: center; color: #fff; margin: .5rem 0 0; }
 .room-bar { justify-content: center; margin: .4rem 0 0; }

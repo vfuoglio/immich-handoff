@@ -881,3 +881,18 @@ func markText(ctx context.Context, summary string) string {
 	}
 	return t(ctx, "The pictures carry \"{text}\" across them.", "text", text)
 }
+
+func pickLabel(ctx context.Context, picked bool, n int) string {
+	if picked {
+		return t(ctx, "Take photo {n} away from my choice", "n", n)
+	}
+	return t(ctx, "Choose photo {n}", "n", n)
+}
+
+// pickCounter says how many photos a client has chosen, and of how many they may.
+func pickCounter(ctx context.Context, count, limit int) string {
+	if limit > 0 {
+		return t(ctx, "{n} of {limit} chosen", "n", count, "limit", limit)
+	}
+	return n(ctx, "{n} photo chosen", "{n} photos chosen", count)
+}

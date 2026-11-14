@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/vault"
 	"github.com/vfuoglio/immich-handoff/internal/web"
@@ -281,5 +283,175 @@ func TestAPinGuardsEverythingAClientCanReachAndIsKeptInTheirBrowser(t *testing.T
 	}
 	if res := post("4711"); res.StatusCode != 429 {
 		t.Errorf("after five wrong tries: %d", res.StatusCode)
+	}
+}
+
+// a client is a browser that keeps its cookies
+type roomClient struct {
+	t    *testing.T
+	base string
+	jar  *cookiejar.Jar
+	c    *http.Client
+}
+
+func newRoomClient(t *testing.T, base string) *roomClient {
+	jar, _ := cookiejar.New(nil)
+	return &roomClient{t: t, base: base, jar: jar, c: &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+}
+
+func (rc *roomClient) do(method, path, body string, json bool) (int, string, http.Header) {
+	rc.t.Helper()
+	req, _ := http.NewRequest(method, rc.base+path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	if json {
+		req.Header.Set("Accept", "application/json")
+	}
+	res, err := rc.c.Do(req)
+	if err != nil {
+		rc.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b), res.Header
+}
+
+func photoIDs(t *testing.T, page, token string) []string {
+	var ids []string
+	seen := map[string]bool{}
+	for _, f := range regexp.MustCompile(`room/`+token+`/pick/([0-9a-f]{16})`).FindAllStringSubmatch(page, -1) {
+		if !seen[f[1]] {
+			seen[f[1]] = true
+			ids = append(ids, f[1])
+		}
+	}
+	return ids
+}
+
+func TestAClientChoosesPhotosOnThePageAndSendsTheChoice(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("ab", 32)
+	var told []string
+	app, _ := setup(t, func(srv *web.Server) {
+		withRoom(t, &st, store.Room{Token: token, Name: "Rossi", Title: "Chiara and Luca", AlbumName: "Wedding", PickMode: store.RoomShared, PickLimit: 2})(srv)
+		srv.Hub.Notify = func(m notify.Message) { told = append(told, m.Text) }
+	})
+	c := newRoomClient(t, app.URL)
+	code, page, _ := c.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, page, token)
+	if code != 200 || len(ids) != 2 || !strings.Contains(page, "0 of 2 chosen") || !strings.Contains(page, `class="room-done"`) {
+		t.Fatalf("%d %d %.300s", code, len(ids), page)
+	}
+	type answer struct {
+		Count  int
+		Done   bool
+		Text   string
+		Picked bool
+		Error  string
+	}
+	pick := func(id string) (int, answer) {
+		code, body, _ := c.do("POST", "/room/"+token+"/pick/"+id, "", true)
+		var a answer
+		json.Unmarshal([]byte(body), &a)
+		return code, a
+	}
+	if code, a := pick(ids[0]); code != 200 || a.Count != 1 || !a.Picked || a.Text != "1 of 2 chosen" {
+		t.Errorf("a pick: %d %+v", code, a)
+	}
+	if code, a := pick(ids[1]); code != 200 || a.Count != 2 {
+		t.Errorf("%d %+v", code, a)
+	}
+	if code, a := pick(ids[0]); code != 200 || a.Count != 1 || a.Picked {
+		t.Errorf("a second press takes it away: %d %+v", code, a)
+	}
+	if code, a := pick("0000000000000000"); code != 404 {
+		t.Errorf("a photo that is not in the room: %d %+v", code, a)
+	}
+	// without the script a press is a form that comes back to the page
+	code, _, h := c.do("POST", "/room/"+token+"/pick/"+ids[0], "", false)
+	if code != 303 || h.Get("Location") != "../../"+token {
+		t.Errorf("a form press: %d %q", code, h.Get("Location"))
+	}
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, "2 of 2 chosen") || strings.Count(page, `aria-pressed="true"`) != 2 {
+		t.Errorf("the page shows the choice: %.200s", page)
+	}
+	// a third pick is refused, in words, at the limit: take one away first
+	other := newRoomClient(t, app.URL)
+	if code, body, _ := other.do("POST", "/room/"+token+"/pick/"+ids[0], "", true); code != 200 {
+		t.Errorf("in a shared room everyone has the same choice, so this takes the pick away: %d %s", code, body)
+	}
+	if code, _, h := c.do("POST", "/room/"+token+"/done", "", false); code != 303 || h.Get("Location") != "../"+token {
+		t.Errorf("done: %d %q", code, h.Get("Location"))
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "Rossi") {
+		t.Errorf("the photographer is told: %q", told)
+	}
+	_, page, _ = c.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, "Your choice has been sent") || strings.Contains(page, `class="room-done"`) || strings.Contains(page, `class="room-pick"`) {
+		t.Errorf("after Done the choice is read-only: %.200s", page)
+	}
+	if code, body, _ := c.do("POST", "/room/"+token+"/pick/"+ids[1], "", true); code != 409 || !strings.Contains(body, "cannot change") {
+		t.Errorf("after Done: %d %s", code, body)
+	}
+	code, _, h = c.do("POST", "/room/"+token+"/pick/"+ids[1], "", false)
+	if code != 303 || h.Get("Location") != "../../"+token+"?e=locked" {
+		t.Errorf("%d %q", code, h.Get("Location"))
+	}
+	_, page, _ = c.do("GET", "/room/"+token+"?e=locked", "", false)
+	if !strings.Contains(page, "cannot change now") {
+		t.Errorf("the page says why")
+	}
+}
+
+func TestInANamedRoomTheFirstToGiveANameChoosesAndNobodyElseCanAndNoWorkWithoutThePin(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("cd", 32)
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi", AlbumName: "Wedding", PickMode: store.RoomNamed}))
+	ann, luca := newRoomClient(t, app.URL), newRoomClient(t, app.URL)
+	_, page, _ := ann.do("GET", "/room/"+token, "", false)
+	ids := photoIDs(t, page, token)
+	if !strings.Contains(page, "Tell us your name to start choosing") || len(ids) != 0 {
+		t.Fatalf("nobody has given a name, so nothing can be chosen yet: %.300s", page)
+	}
+	if code, body, _ := ann.do("POST", "/room/"+token+"/pick/0000000000000000", "", true); code != 404 && code != 409 {
+		t.Errorf("%d %s", code, body)
+	}
+	if code, _, h := ann.do("POST", "/room/"+token+"/name", "name=+Ann++Rossi+", false); code != 303 || h.Get("Location") != "../"+token {
+		t.Errorf("giving a name: %d %q", code, h.Get("Location"))
+	}
+	_, page, _ = ann.do("GET", "/room/"+token, "", false)
+	ids = photoIDs(t, page, token)
+	if len(ids) != 2 || !strings.Contains(page, "0 photos chosen") {
+		t.Fatalf("Ann can choose: %.300s", page)
+	}
+	luca.do("POST", "/room/"+token+"/name", "name=Luca", false)
+	_, page, _ = luca.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, "Ann Rossi is choosing for this room") || strings.Contains(page, `class="room-pick"`) {
+		t.Errorf("Luca can look: %.300s", page)
+	}
+	if code, body, _ := luca.do("POST", "/room/"+token+"/pick/"+ids[0], "", true); code != 409 || !strings.Contains(body, "someone else is choosing") {
+		t.Errorf("%d %s", code, body)
+	}
+	if code, _, _ := ann.do("POST", "/room/"+token+"/pick/"+ids[0], "", true); code != 200 {
+		t.Errorf("Ann picks: %d", code)
+	}
+	_, page, _ = luca.do("GET", "/room/"+token, "", false)
+	if !strings.Contains(page, "1 photo chosen") {
+		t.Errorf("Luca sees Ann's choice: %.200s", page)
+	}
+}
+
+func TestEveryRoomPressNeedsThePinWhenThereIsOne(t *testing.T) {
+	var st *store.Store
+	token := strings.Repeat("ef", 32)
+	hash, _ := hub.HashDropPassword("4711")
+	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi", AlbumName: "Wedding", Password: hash}))
+	c := newRoomClient(t, app.URL)
+	for _, p := range []string{"/room/" + token + "/pick/0000000000000000", "/room/" + token + "/done", "/room/" + token + "/name"} {
+		if code, _, _ := c.do("POST", p, "name=x", true); code != 404 {
+			t.Errorf("%s without the PIN: %d", p, code)
+		}
 	}
 }

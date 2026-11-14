@@ -44,7 +44,7 @@ func roomFixture(t *testing.T, offset int) (port, owner string, alice user, albu
 func TestRoom(t *testing.T) {
 	port, owner, alice, album, photos := roomFixture(t, 74)
 	name := fmt.Sprintf("rossi-%d", time.Now().UnixNano()%1_000_000)
-	code, body := postBody(t, port, "/rooms", owner, url.Values{"name": {name}, "title": {"Chiara and Luca"}, "album": {album}, "pin": {"2468"}, "mark": {"text"}, "marktext": {"Chiara Bianchi"}, "ends": {"0"}})
+	code, body := postBody(t, port, "/rooms", owner, url.Values{"name": {name}, "title": {"Chiara and Luca"}, "album": {album}, "pin": {"2468"}, "mark": {"text"}, "marktext": {"Chiara Bianchi"}, "ends": {"0"}, "pickmode": {"shared"}, "picklimit": {"2"}})
 	if code != 204 {
 		t.Fatalf("make a room: %d %s", code, body)
 	}
@@ -133,6 +133,32 @@ func TestRoom(t *testing.T) {
 	run(t, phone, chromedp.KeyEvent("'")) // ArrowRight is sent below through the page's own handler
 	run(t, phone, chromedp.Evaluate(`document.querySelector('dialog.room-lightbox').dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}))`, nil))
 	until(t, phone, "the next picture", `document.querySelector('.room-caption').textContent === 'Photo 2 of 3'`, 5*time.Second)
+
+	// choosing: up to the limit, a refusal in words beyond it, and Done locks the choice
+	run(t, phone, chromedp.Evaluate(`document.querySelector('dialog.room-lightbox').close()`, nil))
+	heart := func(n int) string {
+		return fmt.Sprintf(`.room-grid li:nth-child(%d) form.room-pick button`, n)
+	}
+	counter := `document.querySelector('[data-room-count]').textContent`
+	run(t, phone, chromedp.Click(heart(1), chromedp.ByQuery))
+	until(t, phone, "one chosen", counter+` === '1 of 2 chosen'`, 10*time.Second)
+	run(t, phone, chromedp.Click(heart(2), chromedp.ByQuery))
+	until(t, phone, "two chosen", counter+` === '2 of 2 chosen'`, 10*time.Second)
+	run(t, phone, chromedp.Click(heart(3), chromedp.ByQuery))
+	until(t, phone, "the limit is told in words", `!document.getElementById('room-msg').hidden && /most there can be/.test(document.getElementById('room-msg').textContent)`, 10*time.Second)
+	if js[string](t, phone, counter) != "2 of 2 chosen" || !js[bool](t, phone, `document.querySelector('.room-grid li:nth-child(1)').classList.contains('picked') && !document.querySelector('.room-grid li:nth-child(3)').classList.contains('picked')`) {
+		t.Errorf("a refused pick changes nothing: %q %v", js[string](t, phone, counter), js[[]string](t, phone, `[...document.querySelectorAll('.room-grid li')].map(li => li.className)`))
+	}
+	// the choice survives a reload (it is kept by the app, not by the page)
+	run(t, phone, chromedp.Reload(), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery))
+	if got := js[string](t, phone, counter); got != "2 of 2 chosen" {
+		t.Errorf("after a reload: %q", got)
+	}
+	run(t, phone, chromedp.Click(`form.room-done button`, chromedp.ByQuery))
+	until(t, phone, "the choice is sent", `/your choice has been sent/i.test(document.body.textContent) && document.querySelectorAll('form.room-pick').length === 0`, 15*time.Second)
+	if js[int](t, phone, `document.querySelectorAll('li.picked').length`) != 2 {
+		t.Error("the picks stay shown, read-only")
+	}
 
 	// paused: the link says closed for now and gives no picture; resumed: it opens again; ended: gone, and the key with it
 	if c, _ := postBody(t, port, "/rooms/pause", owner, url.Values{"room": {roomID}, "paused": {"1"}}); c != 204 {

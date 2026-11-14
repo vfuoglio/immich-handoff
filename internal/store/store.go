@@ -515,6 +515,31 @@ var migrations = []string{
 	 ALTER TABLE rooms ADD COLUMN mark_text TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE rooms ADD COLUMN logo_kind TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE rooms ADD COLUMN logo BLOB;`,
+	// Choosing in a client room: who chooses (one selection for everyone, one for each visitor, or one named client), how many
+	// photos at most, and the picks. A pick is a photo (by its opaque id in the room), the round, and whose selection it is in
+	// (who is empty for the shared selection and the named client's); the name is shown to the photographer. A selection is
+	// finished with Done.
+	`ALTER TABLE rooms ADD COLUMN pick_mode TEXT NOT NULL DEFAULT 'shared';
+	 ALTER TABLE rooms ADD COLUMN pick_limit INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE rooms ADD COLUMN claim_who TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rooms ADD COLUMN claim_name TEXT NOT NULL DEFAULT '';
+	 CREATE TABLE room_picks (
+	   room_id TEXT NOT NULL,
+	   round   INTEGER NOT NULL,
+	   who     TEXT NOT NULL,
+	   photo   TEXT NOT NULL,
+	   name    TEXT NOT NULL DEFAULT '',
+	   at      TEXT NOT NULL,
+	   PRIMARY KEY (room_id, round, who, photo)
+	 );
+	 CREATE TABLE room_done (
+	   room_id TEXT NOT NULL,
+	   round   INTEGER NOT NULL,
+	   who     TEXT NOT NULL,
+	   name    TEXT NOT NULL DEFAULT '',
+	   at      TEXT NOT NULL,
+	   PRIMARY KEY (room_id, round, who)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

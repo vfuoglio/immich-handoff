@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -297,5 +298,163 @@ func TestTheWayAPictureIsMarkedIsCheckedAndTheLogoIsKept(t *testing.T) {
 	logoOnly := makeRoom(t, e, album, func(p *hub.RoomParams) { p.Mark = "logo"; p.Logo = realLogo() })
 	if logoOnly.MarkText != "" {
 		t.Errorf("a logo-only room has no text: %q", logoOnly.MarkText)
+	}
+}
+
+func pickIDs(t *testing.T, e *env, r store.Room) []string {
+	t.Helper()
+	photos, err := e.h.RoomPhotos(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, p := range photos {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
+
+func TestAClientChoosesUpToTheLimitAndDoneLocksTheChoiceAndTellsThePhotographer(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	var told []string
+	e.h.Notify = func(m notify.Message) { told = append(told, m.Text) }
+	album, _ := holiday(t, e, "a.jpg", "b.jpg", "c.jpg")
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickLimit = 2 })
+	ids := pickIDs(t, e, r)
+	v := hub.RoomViewer{Who: "visitor-1", Name: "Chiara"}
+
+	sel, err := e.h.RoomPick(ctx, r, v, ids[0])
+	if err != nil || sel.Count != 1 || !sel.Picked[ids[0]] || !sel.CanPick || sel.Limit != 2 {
+		t.Fatalf("%+v %v", sel, err)
+	}
+	if sel, err = e.h.RoomPick(ctx, r, v, ids[1]); err != nil || sel.Count != 2 {
+		t.Fatalf("%+v %v", sel, err)
+	}
+	if _, err := e.h.RoomPick(ctx, r, v, ids[2]); err != hub.ErrRoomLimit {
+		t.Errorf("the limit: %v", err)
+	}
+	if sel, err = e.h.RoomPick(ctx, r, v, ids[1]); err != nil || sel.Count != 1 || sel.Picked[ids[1]] {
+		t.Errorf("a second press takes the pick away: %+v %v", sel, err)
+	}
+	if _, err := e.h.RoomPick(ctx, r, v, "0000000000000000"); err != hub.ErrDropGone {
+		t.Errorf("a photo that is not in the room: %v", err)
+	}
+	if sel, err := e.h.RoomDone(ctx, r, v); err != nil || !sel.Done || sel.Count != 1 {
+		t.Fatalf("%+v %v", sel, err)
+	}
+	if len(told) != 1 || !strings.Contains(told[0], "Rossi wedding") || !strings.Contains(told[0], "Chiara") || !strings.Contains(told[0], "1 photos") {
+		t.Fatalf("the photographer is told once: %q", told)
+	}
+	if _, err := e.h.RoomPick(ctx, r, v, ids[2]); err != hub.ErrRoomLocked {
+		t.Errorf("a finished choice cannot change: %v", err)
+	}
+	if sel, _ = e.h.RoomSelectionOf(ctx, r, v); !sel.Done || sel.CanPick {
+		t.Errorf("%+v", sel)
+	}
+	if _, err := e.h.RoomDone(ctx, r, v); err != nil || len(told) != 1 {
+		t.Errorf("a second Done tells nobody again: %v %q", err, told)
+	}
+}
+
+func TestDoneNeedsAtLeastOnePick(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg")
+	r := makeRoom(t, e, album, nil)
+	if _, err := e.h.RoomDone(ctx, r, hub.RoomViewer{Who: "v"}); err != hub.ErrRoomNoPicks {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestEveryoneWhoHasTheLinkSharesOneSelectionInASharedRoomAndEachHasTheirOwnInAnotherKind(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg", "c.jpg")
+	shared := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickMode = store.RoomShared })
+	each := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickMode = store.RoomVisitor })
+	ann, luca := hub.RoomViewer{Who: "ann", Name: "Ann"}, hub.RoomViewer{Who: "luca", Name: "Luca"}
+
+	sids := pickIDs(t, e, shared)
+	e.h.RoomPick(ctx, shared, ann, sids[0])
+	if sel, _ := e.h.RoomSelectionOf(ctx, shared, luca); sel.Count != 1 || !sel.Picked[sids[0]] {
+		t.Errorf("in a shared room Luca sees Ann's pick: %+v", sel)
+	}
+	e.h.RoomPick(ctx, shared, luca, sids[1])
+	picks, _ := e.h.Store.Picks(ctx, shared.ID, 1, nil)
+	names := map[string]bool{}
+	for _, p := range picks {
+		names[p.Name] = true
+	}
+	if len(picks) != 2 || !names["Ann"] || !names["Luca"] {
+		t.Errorf("who chose each is kept: %+v", picks)
+	}
+
+	eids := pickIDs(t, e, each)
+	e.h.RoomPick(ctx, each, ann, eids[0])
+	if sel, _ := e.h.RoomSelectionOf(ctx, each, luca); sel.Count != 0 {
+		t.Errorf("each visitor has their own: %+v", sel)
+	}
+	if _, err := e.h.RoomDone(ctx, each, ann); err != nil {
+		t.Fatal(err)
+	}
+	if sel, err := e.h.RoomPick(ctx, each, luca, eids[1]); err != nil || sel.Count != 1 || !sel.CanPick {
+		t.Errorf("Ann's Done does not lock Luca: %+v %v", sel, err)
+	}
+}
+
+func TestInANamedRoomOnlyTheFirstToGiveANameChoosesAndOthersLook(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg", "b.jpg")
+	r := makeRoom(t, e, album, func(p *hub.RoomParams) { p.PickMode = store.RoomNamed })
+	ids := pickIDs(t, e, r)
+	ann, luca := hub.RoomViewer{Who: "ann", Name: " Ann  Rossi "}, hub.RoomViewer{Who: "luca", Name: "Luca"}
+	if sel, _ := e.h.RoomSelectionOf(ctx, r, ann); !sel.NeedsName || sel.CanPick {
+		t.Fatalf("nobody has given a name: %+v", sel)
+	}
+	if _, err := e.h.RoomPick(ctx, r, ann, ids[0]); err != hub.ErrRoomName {
+		t.Errorf("a pick needs a name first: %v", err)
+	}
+	if err := e.h.RoomClaim(ctx, r, hub.RoomViewer{Who: "x"}); err != hub.ErrRoomName {
+		t.Errorf("a claim needs a name: %v", err)
+	}
+	if err := e.h.RoomClaim(ctx, r, ann); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = e.h.Store.RoomByIDAny(ctx, r.ID)
+	if r.ClaimWho != "ann" || r.ClaimName != "Ann Rossi" {
+		t.Fatalf("%+v", r)
+	}
+	if err := e.h.RoomClaim(ctx, r, luca); err != hub.ErrRoomClaimed {
+		t.Errorf("the second to claim: %v", err)
+	}
+	if err := e.h.RoomClaim(ctx, r, ann); err != nil {
+		t.Errorf("the same person claiming again is fine: %v", err)
+	}
+	if sel, _ := e.h.RoomSelectionOf(ctx, r, luca); sel.CanPick || sel.Chooser != "Ann Rossi" {
+		t.Errorf("Luca can look: %+v", sel)
+	}
+	if _, err := e.h.RoomPick(ctx, r, luca, ids[0]); err != hub.ErrRoomClaimed {
+		t.Errorf("%v", err)
+	}
+	if sel, err := e.h.RoomPick(ctx, r, ann, ids[0]); err != nil || sel.Count != 1 {
+		t.Errorf("%+v %v", sel, err)
+	}
+	if sel, _ := e.h.RoomSelectionOf(ctx, r, luca); sel.Count != 1 {
+		t.Errorf("the others see the choice: %+v", sel)
+	}
+}
+
+func TestThePickSettingsAreChecked(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	album, _ := holiday(t, e, "a.jpg")
+	for _, c := range []struct {
+		mode  string
+		limit int
+		want  error
+	}{{"everyone", 0, hub.ErrBadPickMode}, {"", -1, hub.ErrBadPickLim}, {"", 5001, hub.ErrBadPickLim}} {
+		if _, err := e.h.CreateRoom(ctx, e.sess, bob, hub.RoomParams{Name: "x", AlbumID: uuid.MustParse(album), PickMode: c.mode, PickLimit: c.limit}); err != c.want {
+			t.Errorf("%v %v: %v", c.mode, c.limit, err)
+		}
+	}
+	if r := makeRoom(t, e, album, nil); r.PickMode != store.RoomShared || r.PickLimit != 0 {
+		t.Errorf("shared and no limit by default: %+v", r)
 	}
 }
