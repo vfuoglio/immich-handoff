@@ -39,6 +39,69 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	return out
 }
 
+// SuggestionView is a rule with photos waiting for the person's answer.
+type SuggestionView struct {
+	RuleID, Service, Sentence string
+	Count                     int
+	Thumbs                    []NeedThumb
+	Always                    int
+	Phrase                    bool
+}
+
+func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionView {
+	if w.Hub == nil {
+		return nil
+	}
+	list, err := w.Hub.Suggestions(ctx, me.user.ID)
+	if err != nil {
+		return nil
+	}
+	var out []SuggestionView
+	for _, s := range list {
+		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
+		for i, p := range s.Photos {
+			if i == 8 {
+				break
+			}
+			v.Thumbs = append(v.Thumbs, NeedThumb{URL: "rules/photo/" + s.Rule.ID + "/" + p.AssetID, Why: p.Why})
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// rulePhoto shows a photo a rule is suggesting, as the person's own Immich has it.
+func (w *Server) rulePhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	id, err := w.Hub.RulePhotoOf(r.Context(), me.user.ID, r.PathValue("rule"), r.PathValue("asset"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	data, ct, err := me.sess.Thumbnail(r.Context(), id, r.URL.Query().Get("size") == "large")
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if !strings.HasPrefix(ct, "image/") {
+		ct = "image/jpeg"
+	}
+	rw.Header().Set("Content-Type", ct)
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Write(data)
+}
+
+func (w *Server) answerRule(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "rule answered", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.AnswerSuggestion(ctx, me.user, r.PostFormValue("rule"), r.PostFormValue("do"), nil)
+	})
+}
+
 // RuleChoicesView is what the form offers.
 type RuleChoicesView struct {
 	Service string

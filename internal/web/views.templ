@@ -208,7 +208,13 @@ type NeedAction struct {
 type NeedView struct {
 	Tone, Chip, Title, Text string
 	Actions                 []NeedAction
+	Thumbs                  []NeedThumb // small pictures of the photos the card is about
+	More                    int         // how many more there are than are shown
+	Link, LinkLabel         string      // a page that shows all of them
 }
+
+// NeedThumb is one small picture on a card: where it comes from, and a short line saying why it is there.
+type NeedThumb struct{ URL, Why string }
 
 // DayBar is one day of the week's chart.
 type DayBar struct {
@@ -257,6 +263,7 @@ type DashboardData struct {
 	Headline   string // the greeting, e.g. "Hello, Alice."
 	Gist       string // the highlighted half of the heading, e.g. "Two things need you."
 	Needs      []NeedView
+	Suggestions []SuggestionView
 	Scene      []SceneStage // one stage per service that has senders
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
@@ -1678,6 +1685,19 @@ templ NeedCard(n NeedView) {
 	<article class={ "card", "need", n.Tone }>
 		<b><span class={ "chip", n.Tone }>{ n.Chip }</span> { n.Title }</b>
 		<p class="meta">{ n.Text }</p>
+		if len(n.Thumbs) > 0 {
+			<ul class="thumbs">
+				for _, th := range n.Thumbs {
+					<li><img src={ th.URL } alt={ th.Why } title={ th.Why } width="72" height="72" loading="lazy"/></li>
+				}
+				if n.More > 0 {
+					<li class="more">+{ fmt.Sprint(n.More) }</li>
+				}
+			</ul>
+		}
+		if n.Link != "" {
+			<p class="meta"><a href={ templ.SafeURL(n.Link) }>{ n.LinkLabel }</a></p>
+		}
 		if len(n.Actions) > 0 {
 			<p class="row">
 				for _, a := range n.Actions {

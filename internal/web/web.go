@@ -255,6 +255,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/rule-form", w.ruleForm)
 	mux.HandleFunc("GET /fragments/rule-cities", w.ruleCities)
 	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
+	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
+	mux.HandleFunc("POST /rules/answer", w.answerRule)
 	mux.HandleFunc("POST /rules", w.addRule)
 	mux.HandleFunc("POST /rules/pause", w.pauseRule)
 	mux.HandleFunc("POST /rules/delete", w.deleteRule)
@@ -620,6 +622,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	if len(first) > 0 {
 		d.Headline = t(ctx, "Hello, {name}.", "name", first[0])
 	}
+	d.Suggestions = w.suggestionViews(ctx, me)
 	d.Needs = needsOf(ctx, d)
 	d.Gist = needsGist(ctx, len(d.Needs))
 	d.Scene = sceneOf(ctx, d, w.S.Current())
@@ -676,6 +679,17 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: name,
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
+	}
+	for _, sg := range d.Suggestions {
+		more := sg.Count - len(sg.Thumbs)
+		acts := []NeedAction{
+			{Label: t(ctx, "Send"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+			{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")}}
+		if !sg.Phrase {
+			acts = append(acts, NeedAction{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")})
+		}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo for {service}", "{n} new photos for {service}", sg.Count, "service", sg.Service),
+			Text: t(ctx, "Found by your rule: {rule}. Send them to {service}?", "rule", sg.Sentence, "service", sg.Service), Thumbs: sg.Thumbs, More: more, Actions: acts})
 	}
 	for _, o := range d.Owned {
 		if o.Broken != "" {

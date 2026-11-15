@@ -930,3 +930,8 @@ body.wall #glow { display: none; }
   .wall-note { transform: none !important; transition: opacity .4s ease !important; }
 }
 
+
+.thumbs { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; margin: .5rem 0; padding: 0; }
+.thumbs li { width: 72px; height: 72px; border-radius: .5rem; overflow: hidden; background: var(--line, #ddd); }
+.thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumbs li.more { display: grid; place-items: center; font-weight: 600; }

@@ -223,3 +223,9 @@ func (s *Store) MarkRuleLook(ctx context.Context, id string, at time.Time, probl
 	_, err := s.db.ExecContext(ctx, `UPDATE rules SET last_look = ?, problem = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), problem, id)
 	return err
 }
+
+// AddRuleAlways counts one more "Always" answer.
+func (s *Store) AddRuleAlways(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rules SET always = always + 1 WHERE id = ?`, id)
+	return err
+}

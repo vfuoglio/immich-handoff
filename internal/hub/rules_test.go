@@ -188,3 +188,64 @@ func TestAPhraseNeedsSmartSearchAndSaysSoWhenTheServerHasNone(t *testing.T) {
 		t.Errorf("and the problem goes: %q", after.Problem)
 	}
 }
+
+func TestAnsweringASuggestionSendsDeclinesOrAlwaysSendsAndOnlyTheOwnerCanAnswer(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
+	a, b, c := hit(bobID, 60, nil, noraID), hit(bobID, 60, nil, noraID), hit(bobID, 60, nil, noraID)
+	e.f.ruleHits = []map[string]any{a, b, c}
+	stored, _ := e.st.RuleByID(ctx, r.ID)
+	if n, err := e.h.LookRule(ctx, stored); err != nil || n != 3 {
+		t.Fatalf("three suggestions: %d %v", n, err)
+	}
+	sg, err := e.h.Suggestions(ctx, bob.ID)
+	if err != nil || len(sg) != 1 || len(sg[0].Photos) != 3 {
+		t.Fatalf("they are listed: %+v %v", sg, err)
+	}
+	if err := e.h.AnswerSuggestion(ctx, ann, r.ID, hub.AnswerSend, nil); !errors.Is(err, hub.ErrNoRule) {
+		t.Errorf("someone else cannot answer: %v", err)
+	}
+	// a review: only a is ticked; b and c are left out
+	if err := e.h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerSend, []string{a["id"].(string)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.f.tagged) != 1 || e.f.tagged[0] != a["id"] {
+		t.Errorf("the ticked photo is tagged with the service's tag: %v", e.f.tagged)
+	}
+	if len(e.f.tagNames) == 0 || e.f.tagNames[len(e.f.tagNames)-1] != "share" {
+		t.Errorf("with the service's tag: %v", e.f.tagNames)
+	}
+	if !has(e.woken, "a rule sent photos: "+bob.ID.String()) {
+		t.Errorf("a pass is started: %v", e.woken)
+	}
+	states, _ := e.st.RulePhotoStates(ctx, r.ID)
+	if states[a["id"].(string)] != "sent" || states[b["id"].(string)] != "declined" || states[c["id"].(string)] != "declined" {
+		t.Errorf("sent and declined: %v", states)
+	}
+	if err := e.h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerSend, nil); !errors.Is(err, hub.ErrNoSuggestion) {
+		t.Errorf("nothing waits any more: %v", err)
+	}
+	// Always sends and counts; Not these only declines
+	d, f := hit(bobID, 60, nil, noraID), hit(bobID, 60, nil, noraID)
+	e.f.ruleHits = []map[string]any{d, f}
+	e.h.LookRule(ctx, stored)
+	if err := e.h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerAlways, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := e.st.RuleByID(ctx, r.ID); got.Always != 1 {
+		t.Errorf("one Always: %d", got.Always)
+	}
+	g := hit(bobID, 60, nil, noraID)
+	e.f.ruleHits = append(e.f.ruleHits, g)
+	e.h.LookRule(ctx, stored)
+	before := len(e.f.tagged)
+	if err := e.h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerDecline, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.f.tagged) != before {
+		t.Error("declining tags nothing")
+	}
+	if got, _ := e.st.RuleByID(ctx, r.ID); got.Always != 1 {
+		t.Errorf("declining does not count: %d", got.Always)
+	}
+}
