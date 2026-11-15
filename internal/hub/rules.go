@@ -43,6 +43,7 @@ type RuleParams struct {
 	Album     uuid.UUID
 	NotAlbums []uuid.UUID
 	Phrase    string
+	Also      []string // other services of the person's to make the same rule for
 }
 
 // RuleChoices are what a person can choose from, read from their own Immich with their own session.
@@ -79,6 +80,26 @@ func validDay(s string) bool {
 
 // AddRule makes a rule from what the person chose, checking each choice against their own Immich so nothing is made up.
 func (h *Hub) AddRule(ctx context.Context, sess *immich.API, user immich.User, p RuleParams) (store.Rule, error) {
+	also := p.Also
+	p.Also = nil
+	first, err := h.addRule(ctx, sess, user, p)
+	if err != nil {
+		return first, err
+	}
+	for _, svc := range also { // the same rule for each other service: each hands over on its own
+		if svc == p.Service {
+			continue
+		}
+		q := p
+		q.Service = svc
+		if _, err := h.addRule(ctx, sess, user, q); err != nil {
+			return first, fmt.Errorf("the rule for %s was made, but not for %s: %w", p.Service, svc, err)
+		}
+	}
+	return first, nil
+}
+
+func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p RuleParams) (store.Rule, error) {
 	if !h.SelfService() {
 		return store.Rule{}, ErrNotJoined
 	}

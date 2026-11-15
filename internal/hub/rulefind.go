@@ -77,6 +77,10 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 	if err != nil {
 		return nil, err
 	}
+	sentByAny, err := h.Store.RuleSentAssets(ctx, r.OwnerID, r.Service) // another rule for this service handed it over already
+	if err != nil {
+		return nil, err
+	}
 	// the photos of the albums to leave out
 	out := map[uuid.UUID]bool{}
 	for _, al := range c.NotAlbums {
@@ -95,7 +99,7 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 	}
 	var matches []match
 	for _, a := range found {
-		if a.OwnerId != me || a.IsArchived || a.IsTrashed || out[a.Id] || known[a.Id.String()] != "" {
+		if a.OwnerId != me || a.IsArchived || a.IsTrashed || out[a.Id] || known[a.Id.String()] != "" || sentByAny[a.Id.String()] {
 			continue
 		}
 		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < ruleSettle {

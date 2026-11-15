@@ -28932,20 +28932,92 @@ func RuleForm(v RuleChoicesView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2451, "</small></div><p class=\"row form-actions\"><button class=\"primary\" type=\"submit\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2451, "</small></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var1759 string
-		templ_7745c5c3_Var1759, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Make the rule"))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4064, Col: 93}
+		if len(v.Others) > 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2452, "<fieldset class=\"targets\"><legend>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1759 string
+			templ_7745c5c3_Var1759, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Make the same rule for these services too"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4066, Col: 65}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1759))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2453, "</legend> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, o := range v.Others {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2454, "<label class=\"target\"><input type=\"checkbox\" name=\"also\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1760 string
+				templ_7745c5c3_Var1760, templ_7745c5c3_Err = templruntime.NewAttributeExpression(o).Resolve(ctx)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4068, Col: 71}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1760)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2455, "\"><span><b>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1761 string
+				templ_7745c5c3_Var1761, templ_7745c5c3_Err = templ.JoinStringErrs(o)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4068, Col: 87}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1761))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2456, "</b></span></label> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2457, "<small class=\"meta\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1762 string
+			templ_7745c5c3_Var1762, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Each service gets its own rule, answered on its own. A photo that matches goes to a service once, however many rules find it."))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4070, Col: 161}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1762))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2458, "</small></fieldset>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1759))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2459, "<p class=\"row form-actions\"><button class=\"primary\" type=\"submit\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2452, "</button></p></form>")
+		var templ_7745c5c3_Var1763 string
+		templ_7745c5c3_Var1763, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Make the rule"))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4073, Col: 93}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1763))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2460, "</button></p></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -28971,51 +29043,51 @@ func RuleCities(cities []string) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2453, "<option value=\"\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2461, "<option value=\"\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var1761 string
-		templ_7745c5c3_Var1761, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Any city"))
+		var templ_7745c5c3_Var1765 string
+		templ_7745c5c3_Var1765, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Any city"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4070, Col: 38}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4079, Col: 38}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1761))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1765))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2454, "</option> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2462, "</option> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, c := range cities {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2455, "<option value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2463, "<option value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var1762 string
-			templ_7745c5c3_Var1762, templ_7745c5c3_Err = templruntime.NewAttributeExpression(c).Resolve(ctx)
+			var templ_7745c5c3_Var1766 string
+			templ_7745c5c3_Var1766, templ_7745c5c3_Err = templruntime.NewAttributeExpression(c).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4072, Col: 19}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4081, Col: 19}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1762)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2456, "\">")
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1766)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var1763 string
-			templ_7745c5c3_Var1763, templ_7745c5c3_Err = templ.JoinStringErrs(c)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4072, Col: 25}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1763))
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2464, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2457, "</option>")
+			var templ_7745c5c3_Var1767 string
+			templ_7745c5c3_Var1767, templ_7745c5c3_Err = templ.JoinStringErrs(c)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4081, Col: 25}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1767))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2465, "</option>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -29043,7 +29115,7 @@ func SuggestionReviewPage(d SuggestionReview) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var1765 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var1769 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -29055,189 +29127,189 @@ func SuggestionReviewPage(d SuggestionReview) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2458, "<p id=\"flash\" class=\"toast\" role=\"status\" aria-live=\"polite\"></p><h1>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var1766 string
-			templ_7745c5c3_Var1766, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Photos for {service}", "service", d.Service))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4081, Col: 60}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1766))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2459, "</h1><p class=\"lead\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var1767 string
-			templ_7745c5c3_Var1767, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4082, Col: 77}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1767))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2460, " <a href=\"./\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var1768 string
-			templ_7745c5c3_Var1768, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Back to your own page"))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4082, Col: 126}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1768))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2461, "</a></p><form hx-post=\"rules/review\" hx-target=\"#flash\" hx-swap=\"innerHTML\" hx-disabled-elt=\"find button\"><input type=\"hidden\" name=\"rule\" value=\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var1769 string
-			templ_7745c5c3_Var1769, templ_7745c5c3_Err = templruntime.NewAttributeExpression(d.RuleID).Resolve(ctx)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4084, Col: 52}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1769)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2462, "\"><p class=\"meta\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2466, "<p id=\"flash\" class=\"toast\" role=\"status\" aria-live=\"polite\"></p><h1>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var1770 string
-			templ_7745c5c3_Var1770, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again."))
+			templ_7745c5c3_Var1770, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Photos for {service}", "service", d.Service))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4085, Col: 160}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4090, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1770))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2463, "</p><ul class=\"review-grid\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2467, "</h1><p class=\"lead\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1771 string
+			templ_7745c5c3_Var1771, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4091, Col: 77}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1771))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2468, " <a href=\"./\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1772 string
+			templ_7745c5c3_Var1772, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Back to your own page"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4091, Col: 126}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1772))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2469, "</a></p><form hx-post=\"rules/review\" hx-target=\"#flash\" hx-swap=\"innerHTML\" hx-disabled-elt=\"find button\"><input type=\"hidden\" name=\"rule\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1773 string
+			templ_7745c5c3_Var1773, templ_7745c5c3_Err = templruntime.NewAttributeExpression(d.RuleID).Resolve(ctx)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4093, Col: 52}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1773)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2470, "\"><p class=\"meta\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1774 string
+			templ_7745c5c3_Var1774, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again."))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4094, Col: 160}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1774))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2471, "</p><ul class=\"review-grid\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, p := range d.Photos {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2464, "<li><label><img src=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2472, "<li><label><img src=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var1771 string
-				templ_7745c5c3_Var1771, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.URL + "?size=large").ResolveURL(ctx)
+				var templ_7745c5c3_Var1775 string
+				templ_7745c5c3_Var1775, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.URL + "?size=large").ResolveURL(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4090, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4099, Col: 39}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1771)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2465, "\" alt=\"")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1775)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var1772 string
-				templ_7745c5c3_Var1772, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Why).Resolve(ctx)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4090, Col: 53}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1772)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2466, "\" width=\"240\" height=\"240\" loading=\"lazy\"> <span class=\"meta\"><input type=\"checkbox\" name=\"photo\" value=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var1773 string
-				templ_7745c5c3_Var1773, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.ID).Resolve(ctx)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4091, Col: 74}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1773)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2467, "\" checked> ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var1774 string
-				templ_7745c5c3_Var1774, templ_7745c5c3_Err = templ.JoinStringErrs(p.Why)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4091, Col: 94}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1774))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2468, "</span></label></li>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2469, "</ul><p class=\"row form-actions\"><button class=\"primary\" type=\"submit\" name=\"do\" value=\"send\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var1775 string
-			templ_7745c5c3_Var1775, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send the ticked photos"))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4097, Col: 99}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1775))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2470, "</button> ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if !d.Phrase {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2471, "<button type=\"submit\" name=\"do\" value=\"always\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2473, "\" alt=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var1776 string
-				templ_7745c5c3_Var1776, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send the ticked photos, and always"))
+				templ_7745c5c3_Var1776, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.Why).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4099, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4099, Col: 53}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1776))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2472, "</button> ")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1776)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2474, "\" width=\"240\" height=\"240\" loading=\"lazy\"> <span class=\"meta\"><input type=\"checkbox\" name=\"photo\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1777 string
+				templ_7745c5c3_Var1777, templ_7745c5c3_Err = templruntime.NewAttributeExpression(p.ID).Resolve(ctx)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4100, Col: 74}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var1777)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2475, "\" checked> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1778 string
+				templ_7745c5c3_Var1778, templ_7745c5c3_Err = templ.JoinStringErrs(p.Why)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4100, Col: 94}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1778))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2476, "</span></label></li>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2473, "<button type=\"submit\" name=\"do\" value=\"decline\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2477, "</ul><p class=\"row form-actions\"><button class=\"primary\" type=\"submit\" name=\"do\" value=\"send\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var1777 string
-			templ_7745c5c3_Var1777, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Not these"))
+			var templ_7745c5c3_Var1779 string
+			templ_7745c5c3_Var1779, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send the ticked photos"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4101, Col: 73}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4106, Col: 99}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1777))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1779))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2474, "</button></p></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2478, "</button> ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if !d.Phrase {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2479, "<button type=\"submit\" name=\"do\" value=\"always\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var1780 string
+				templ_7745c5c3_Var1780, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Send the ticked photos, and always"))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4108, Col: 98}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1780))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2480, "</button> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2481, "<button type=\"submit\" name=\"do\" value=\"decline\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var1781 string
+			templ_7745c5c3_Var1781, templ_7745c5c3_Err = templ.JoinStringErrs(t(ctx, "Not these"))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `views.templ`, Line: 4110, Col: 73}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var1781))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2482, "</button></p></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout(t(ctx, "Photos for {service}", "service", d.Service), d.User).Render(templ.WithChildren(ctx, templ_7745c5c3_Var1765), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout(t(ctx, "Photos for {service}", "service", d.Service), d.User).Render(templ.WithChildren(ctx, templ_7745c5c3_Var1769), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -110,7 +111,8 @@ type RuleChoicesView struct {
 	Albums  []AlbumOption
 	Country []string
 	City    []string
-	Picked  string // the chosen country, when the cities are listed
+	Picked  string   // the chosen country, when the cities are listed
+	Others  []string // the person's other services, to make the same rule for
 }
 
 // PersonOption is a named person in the form.
@@ -137,6 +139,14 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 	}
 	for _, a := range c.Albums {
 		v.Albums = append(v.Albums, AlbumOption{ID: a.ID.String(), Label: albumLabel(r.Context(), a.Name, a.Count)})
+	}
+	if joined, err := w.Hub.Joined(r.Context(), me.user.ID); err == nil {
+		for name, ok := range joined {
+			if ok && name != v.Service {
+				v.Others = append(v.Others, name)
+			}
+		}
+		sort.Strings(v.Others)
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	RuleForm(v).Render(r.Context(), rw)
@@ -198,7 +208,7 @@ func (w *Server) addRule(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "rule made", func(ctx context.Context, me *member, service string) error {
 		r.ParseForm()
 		p := hub.RuleParams{Service: service, People: ids(r, "person"), NotPeople: ids(r, "notperson"), After: r.PostFormValue("after"), Before: r.PostFormValue("before"),
-			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase")}
+			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase"), Also: r.PostForm["also"]}
 		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
 			p.Album = id
 		}

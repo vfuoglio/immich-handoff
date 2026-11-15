@@ -123,8 +123,18 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 		return ErrNoSuggestion
 	}
 	if len(yes) > 0 {
-		if err := h.sendForRule(ctx, r, yes); err != nil {
-			return err
+		// a photo another rule of this person's for the same service has sent is not sent twice
+		already, _ := h.Store.RuleSentAssets(ctx, r.OwnerID, r.Service)
+		var fresh []string
+		for _, id := range yes {
+			if !already[id] {
+				fresh = append(fresh, id)
+			}
+		}
+		if len(fresh) > 0 {
+			if err := h.sendForRule(ctx, r, fresh); err != nil {
+				return err
+			}
 		}
 		h.Store.SetRulePhotos(ctx, r.ID, yes, store.RuleSuggested, store.RuleSent)
 	}

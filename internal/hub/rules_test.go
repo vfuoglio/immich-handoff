@@ -363,3 +363,34 @@ func TestLookingBackSuggestsOlderPhotosInOneBatchAndOnlyWhenNothingWaits(t *test
 		t.Errorf("only the owner: %v", err)
 	}
 }
+
+func TestTwoRulesThatFindTheSamePhotoHandItOverOnce(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	nora := uuid.MustParse(noraID)
+	one, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{nora}})
+	two, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Country: "Portugal"})
+	p := hit(bobID, 60, nil, noraID)
+	e.f.ruleHits = []map[string]any{p}
+	a, _ := e.st.RuleByID(ctx, one.ID)
+	b, _ := e.st.RuleByID(ctx, two.ID)
+	e.h.LookRule(ctx, a)
+	e.h.LookRule(ctx, b) // both suggest it
+	if err := e.h.AnswerSuggestion(ctx, bob, one.ID, hub.AnswerSend, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.h.AnswerSuggestion(ctx, bob, two.ID, hub.AnswerSend, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.f.tagged) != 1 {
+		t.Errorf("handed over once, not twice: %v", e.f.tagged)
+	}
+	// and a rule that looks afterwards does not offer it again
+	e.h.LookRule(ctx, b)
+	if sg, _ := e.h.SuggestionOf(ctx, bob.ID, two.ID); len(sg.Photos) != 0 {
+		t.Errorf("nothing waits: %+v", sg.Photos)
+	}
+	// the same rule for a service the person has not joined is refused, and says which
+	if _, err := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Phrase: "x", Also: []string{"nowhere"}}); err == nil || !strings.Contains(err.Error(), "nowhere") {
+		t.Errorf("a service they did not join: %v", err)
+	}
+}

@@ -4061,6 +4061,15 @@ templ RuleForm(v RuleChoicesView) {
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
 		</div>
+		if len(v.Others) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "Make the same rule for these services too") }</legend>
+				for _, o := range v.Others {
+					<label class="target"><input type="checkbox" name="also" value={ o }/><span><b>{ o }</b></span></label>
+				}
+				<small class="meta">{ t(ctx, "Each service gets its own rule, answered on its own. A photo that matches goes to a service once, however many rules find it.") }</small>
+			</fieldset>
+		}
 		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the rule") }</button></p>
 	</form>
 }

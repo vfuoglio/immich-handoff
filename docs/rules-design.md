@@ -38,8 +38,8 @@ Sends without asking, only photos that arrive **after the switch**, once they ha
 ### Look back
 A button on a rule suggests the older photos that match (up to 200, newest first) as a batch of suggestions; nothing old is ever sent without a yes.
 
-### Library-wide routing (later)
-A person's rules can route to several services; a photo that matches rules for two services is offered to each, once. Open: ordering and conflicts between rules; not part of the first release.
+### Several services
+Routing to several services is a rule made for each of them at once (the form's "Make the same rule for these services too"): each copy is a rule of its own with its own suggestions, mode and counts, so a photo that matches rules of two services is offered to each, once. Two rules for the **same** service that find the same photo hand it over once: a photo any rule of that person has sent for the service is not offered again, and a second yes does not tag it a second time. Ordering between rules is not needed because each service decides on its own.
 
 ### What a rule can see
 Only what a search shows the sender's own key: their own photos, and who is in them. A rule never reads a face, only the names Immich already gives.
@@ -48,7 +48,7 @@ Only what a search shows the sender's own key: their own photos, and who is in t
 - **#154 the form:** people from the person's own session (names and thumbnails), places from the suggestions, no free text for places.
 - **#155 what Immich filters:** people (all), dates, place, one album and the phrase are Immich's; "except" people and albums, the sender's own, archived and settled are the app's.
 - **#157 notification:** the existing signed one-tap links.
-- **#160 conflicts:** a photo matching two rules of different services is offered to each.
+- **#160 conflicts:** a photo matching two rules of different services is offered to each; the same service never gets it twice.
 
 ## Risks, plainly
 - Face detection is imperfect and names can be wrong; a wrong photo can be suggested, which is why nothing leaves without a yes until the person chooses auto, and auto waits for the photo to settle.

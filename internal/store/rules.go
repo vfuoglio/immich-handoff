@@ -240,3 +240,22 @@ func (s *Store) SetRuleMode(ctx context.Context, id, mode string, at time.Time) 
 	_, err := s.db.ExecContext(ctx, `UPDATE rules SET mode = ?, auto_since = ? WHERE id = ?`, mode, auto, id)
 	return err
 }
+
+// RuleSentAssets are the photos that any rule of this person for this service has sent, so that two rules that match the same
+// photo hand it over once.
+func (s *Store) RuleSentAssets(ctx context.Context, owner uuid.UUID, service string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.asset_id FROM rule_photos p JOIN rules r ON r.id = p.rule_id WHERE r.owner_id = ? AND r.service = ? AND p.state = ?`, owner.String(), service, RuleSent)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
