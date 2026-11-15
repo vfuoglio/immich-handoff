@@ -6,7 +6,11 @@
 //
 // Immich offers no place for a link, so this looks for the avatar by what is true in every language (its title holds
 // the person's email) and puts the link in front of it. If the header cannot be found, because Immich changed, a round
-// button floats at the bottom right instead, so the link is never lost. Nothing else of Immich's page is touched.
+// button floats at the bottom right instead, so the link is never lost. Nothing else of Immich's page is touched
+// by this part; the hand-over button (handover.ts) adds its own, where docs/immich-button-design.md says.
+
+import { startHandover } from "./handover.ts";
+import { addStyles } from "./immich-ui.ts";
 
 const script = document.currentScript;
 const source = script instanceof HTMLScriptElement ? script.src : "";
@@ -23,16 +27,7 @@ if (source) {
 #handoff-link:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 #handoff-link.floating{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:48px;height:48px;background:#241a66;box-shadow:0 4px 14px rgb(0 0 0 / .35)}
 #handoff-link.floating img{width:32px;height:32px}`;
-  // a constructed stylesheet is not held back by a page's content security policy, a <style> element can be
-  if ("adoptedStyleSheets" in document && "replaceSync" in CSSStyleSheet.prototype) {
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(css);
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-  } else {
-    const style = document.createElement("style");
-    style.textContent = css;
-    document.head.append(style);
-  }
+  addStyles(css);
 
   const link = document.createElement("a");
   link.id = "handoff-link";
@@ -75,6 +70,9 @@ if (source) {
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
   schedule();
   setTimeout(schedule, 5100);
+
+  // the hand-over button (docs/immich-button-design.md); the link above works without it
+  startHandover(page, icon);
 }
 
 // makes this file a module of its own, so names in it never clash with another script

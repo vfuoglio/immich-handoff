@@ -1196,5 +1196,6 @@
   "few": "{n} фото передано в {service} из Immich",
   "many": "{n} фото передано в {service} из Immich",
   "other": "{n} фото передано в {service} из Immich"
- }
+ },
+ "Could not hand over": "Не удалось передать"
 }

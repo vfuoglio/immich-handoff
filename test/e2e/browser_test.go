@@ -145,17 +145,16 @@ func settle(t *testing.T, ctx context.Context, view string) {
 type world struct {
 	port                   string
 	owner, sender, grandma string // Immich cookies
-	alice, bob             user
+	alice, bob, gran       user
 }
 
 func theWorld(t *testing.T) world {
 	t.Helper()
 	alice, bob, _, grandma := bootstrap(t)
-	_ = grandma
 	bin := buildApp(t)
 	port := fmt.Sprint(atoi(appPort) + 20)
 	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "HANDOFF_ADMIN_BACKUP_DOWNLOAD=true")
-	w := world{port: port, alice: alice, bob: bob,
+	w := world{port: port, alice: alice, bob: bob, gran: grandma,
 		owner: loginCookie(t, "alice@e2e.test"), sender: loginCookie(t, "bob@e2e.test"), grandma: loginCookie(t, "grandma@e2e.test")}
 	must := func(res *http.Response, want int, what string) {
 		t.Helper()

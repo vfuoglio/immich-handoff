@@ -95,6 +95,7 @@
  "Could not be sent": "Impossible à envoyer",
  "Could not be sent: {reason}": "Envoi impossible : {reason}",
  "Could not do that: {reason}": "Impossible de le faire : {reason}",
+ "Could not hand over": "Impossible de transmettre",
  "Could not send the message": "Impossible d'envoyer le message",
  "Could not switch Tags on: {reason}. You can do it in Immich: Account Settings, Features, Tags.": "Impossible d’activer les étiquettes : {reason}. Vous pouvez le faire dans Immich : Paramètres du compte, Fonctionnalités, Étiquettes.",
  "Could not turn on notifications.": "Impossible d'activer les notifications.",

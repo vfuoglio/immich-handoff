@@ -95,6 +95,7 @@
  "Could not be sent": "Konnte nicht gesendet werden",
  "Could not be sent: {reason}": "Konnte nicht gesendet werden: {reason}",
  "Could not do that: {reason}": "Das ging nicht: {reason}",
+ "Could not hand over": "Konnte nicht übergeben werden",
  "Could not send the message": "Die Nachricht konnte nicht gesendet werden",
  "Could not switch Tags on: {reason}. You can do it in Immich: Account Settings, Features, Tags.": "Tags konnten nicht aktiviert werden: {reason}. Du kannst es in Immich tun: Kontoeinstellungen, Funktionen, Tags.",
  "Could not turn on notifications.": "Benachrichtigungen konnten nicht eingeschaltet werden.",

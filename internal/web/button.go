@@ -25,9 +25,9 @@ type ButtonService struct {
 // ButtonWords are what the button says, in the person's language.
 func buttonWords(ctx context.Context) map[string]string {
 	ids := []string{
-		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Close", "Handing over...",
+		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Handing over...", "Could not hand over",
 		"Your original stays in your library", "Your original goes to your trash once the other side has a copy",
-		"You do not send to any service yet.", "Could not hand over: {reason}", "Taken off again", "Immich Handoff",
+		"You do not send to any service yet.", "Taken off again", "Immich Handoff",
 	}
 	out := make(map[string]string, len(ids))
 	for _, id := range ids {
