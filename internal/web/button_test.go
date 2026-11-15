@@ -138,3 +138,15 @@ func TestAServiceWhoseOwnerDecidesCanBeAskedForFromImmich(t *testing.T) {
 		t.Errorf("a service that needs no asking: %d", code)
 	}
 }
+
+func TestRepeatedPressesAreThrottled(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	var last int
+	for i := 0; i < 40; i++ {
+		last, _ = postForm(t, app.URL+"/immich/send", "sess=other", "service=club&asset="+notMyPhoto)
+	}
+	if last != 429 {
+		t.Errorf("the 40th press in a minute: %d, want 429", last)
+	}
+}

@@ -185,6 +185,18 @@ func TestHandOverButton(t *testing.T) {
 		until(t, phone, "the list", `document.getElementById('handoff-menu') !== null && document.getElementById('handoff-menu').textContent.includes('You do not send to any service yet.') && document.getElementById('handoff-menu').textContent.includes('Waiting for approval')`, 10*time.Second)
 	})
 
+	t.Run("when the app does not answer for the button, the viewer has none and the header link stays", func(t *testing.T) {
+		quiet := w.front(t, true)
+		ctx := browse(t, w.port, w.sender, look{})
+		run(t, ctx, chromedp.Navigate(quiet+"/photos/"+id))
+		until(t, ctx, "the header link", `document.getElementById('handoff-link') !== null`, 30*time.Second)
+		until(t, ctx, "the viewer", `document.querySelector('[data-testid=asset-viewer-navbar-actions] button') !== null`, 30*time.Second)
+		time.Sleep(2 * time.Second)
+		if js[bool](t, ctx, `document.getElementById('handoff-viewer-act') !== null`) {
+			t.Error("a button that could not work")
+		}
+	})
+
 	t.Run("a person the app does not know gets no button", func(t *testing.T) {
 		ctx := browse(t, w.port, w.owner, look{})
 		run(t, ctx, chromedp.Navigate(address+"/photos"))

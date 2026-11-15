@@ -57,3 +57,13 @@ func TestTheRulesIntervalIsCheckedOnlyWhenSet(t *testing.T) {
 		}
 	}
 }
+
+func TestTheHandOverButtonSwitchIsCheckedOnlyWhenSet(t *testing.T) {
+	for v, warns := range map[string]int{"": 0, "true": 0, "false": 0, "off": 0, "maybe": 1} {
+		r := &Report{W: &bytes.Buffer{}}
+		buttonSettings(r, Input{Env: func(k string) string { return map[string]string{"IMMICH_BUTTON_ACTIONS": v}[k] }})
+		if r.Warns != warns || r.Fails != 0 {
+			t.Errorf("%q: %d warnings, %d fails", v, r.Warns, r.Fails)
+		}
+	}
+}

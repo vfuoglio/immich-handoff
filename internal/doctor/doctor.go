@@ -81,6 +81,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	notifications(r, in)
 	sharedAlbums(r, in)
 	rulesSettings(r, in)
+	buttonSettings(r, in)
 	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
@@ -674,6 +675,20 @@ func rulesSettings(r *Report, in Input) {
 		if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.01 || m > 1440 {
 			r.add(Fail, "RULES_SETTLE_MINUTES must be a number of minutes from 0.01 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 5).")
 		}
+	}
+}
+
+// buttonSettings checks IMMICH_BUTTON_ACTIONS, which switches off the hand-over button in Immich's own pages.
+func buttonSettings(r *Report, in Input) {
+	v := strings.ToLower(strings.TrimSpace(firstOf(in.Env, "IMMICH_BUTTON_ACTIONS")))
+	switch v {
+	case "", "true", "1", "on", "yes":
+	case "false", "0", "off", "no":
+		r.section("Hand over from Immich")
+		r.add(OK, "IMMICH_BUTTON_ACTIONS is off: Immich's pages get the link to this app and no hand-over button", "")
+	default:
+		r.section("Hand over from Immich")
+		r.add(Warn, "IMMICH_BUTTON_ACTIONS is "+v+", which is neither true nor false, so the button stays on", "Set it to false to keep only the link in Immich's header, or remove it.")
 	}
 }
 

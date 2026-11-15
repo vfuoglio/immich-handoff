@@ -17,7 +17,11 @@ import (
 // inFrontOfImmich is what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before
 // </body>, and this app under /handoff/ on the same address. It returns that address, written with "localhost" because
 // the browser's sign-in cookies are set for that name, not for the one the test server prints.
-func (w world) inFrontOfImmich(t *testing.T) string {
+func (w world) inFrontOfImmich(t *testing.T) string { return w.front(t, false) }
+
+// front is inFrontOfImmich, and with noButton the app answers nothing under /handoff/immich/ (as an app that has the
+// button switched off, or an older one, does).
+func (w world) front(t *testing.T, noButton bool) string {
 	t.Helper()
 	immich, _ := url.Parse(baseURL)
 	toImmich := httputil.NewSingleHostReverseProxy(immich)
@@ -40,6 +44,9 @@ func (w world) inFrontOfImmich(t *testing.T) string {
 	appURL, _ := url.Parse("http://localhost:" + w.port)
 	toApp := httputil.NewSingleHostReverseProxy(appURL)
 	mux := http.NewServeMux()
+	if noButton {
+		mux.HandleFunc("/handoff/immich/", http.NotFound)
+	}
 	mux.Handle("/handoff/", http.StripPrefix("/handoff", toApp))
 	mux.Handle("/", toImmich)
 	front := httptest.NewServer(mux)

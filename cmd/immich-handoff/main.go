@@ -326,7 +326,8 @@ func run(log *slog.Logger) error {
 	}
 	w := &web.Server{S: s, Hub: h, Theme: theme, ThemeMode: themeMode, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
-		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
+		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER"),
+		ButtonOff: map[string]bool{"false": true, "0": true, "off": true, "no": true}[strings.ToLower(strings.TrimSpace(os.Getenv("IMMICH_BUTTON_ACTIONS")))]}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 
