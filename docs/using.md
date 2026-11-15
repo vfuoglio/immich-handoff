@@ -11,6 +11,12 @@ This page is for the people who send and receive photos. Everything happens on t
 | **Sender** | Someone who tags photos to hand them to a service. |
 | **Tag** | The label you add to a photo in Immich to send it. Each service has its own. |
 | **Inbox** | A tag on everything that just arrived, so the receiver can find what is new. |
+| **Drop box** | A link, QR code or email address that anyone can send photos to without an account. It can also be an **event** with a gallery, a wall and a best-of. |
+| **Pool** | A service where everybody sends and everybody receives, for a trip or a party. |
+| **Client room** | A link for one client to look at an album through marked pictures and choose favourites. |
+| **Rule** | A search in your Immich (people, places, dates, a phrase) that suggests photos to hand over. |
+| **Shared album** | An album two people on different servers keep in step. |
+| **Key** | The restricted API key the app makes in your own Immich account when you join, so it can tag and hand over for you. Nobody sees it, and deleting it in Immich stops everything safely. |
 
 > **Before you start: Tags must be on in Immich.** It is off by default and each person has it for their own account. If it is off, this page shows a notice with a **Turn on Tags** button; you can also do it in Immich under Account Settings, then Features, **Tags**. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Switching it on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
 
