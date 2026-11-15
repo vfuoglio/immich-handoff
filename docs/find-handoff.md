@@ -56,13 +56,17 @@ Reload nginx, then reload an Immich page. If the page is `https://photos.example
 
 ## Hand over from inside Immich
 
+![Immich's photo viewer with the Hand over button in the toolbar and the list of services under it](images/immich-button-viewer-list.png)
+
 With the same one line in your proxy, the script also adds a **Hand over...** button to Immich's own pages, so nobody has to know about tags:
 
 - in the **photo viewer's toolbar**, before the three dots, for the photo being shown;
 - in the **bar that appears when photos are selected**, before the three dots, for the selected photos;
 - as a **Hand over...** line in the three-dot menu of both.
 
-It opens a small list of **the services the person sends to**, each with whether the original stays or goes to the trash, and a note when photos will wait (the owner paused the service, the person paused their own sending, or a daily limit is reached). Choosing one hands the photos over exactly as if the service's tag had been put on them: the same pass, limits, quiet hours and taking back apply. A message in Immich's page says "3 photos handed over to Holiday" with **Undo** (it takes the tag off, so a pass that has not taken them yet leaves them) and a link to the app. The service used last is offered first (kept in that browser only; **Forget my choice** clears it), and services whose owner decides appear under **Ask to join**, so a person can ask without leaving Immich. Words come in the person's language.
+It opens a small list of **the services the person sends to**, each with whether the original stays or goes to the trash, and a note when photos will wait (the owner paused the service, the person paused their own sending, or a daily limit is reached). Choosing one hands the photos over exactly as if the service's tag had been put on them: the same pass, limits, quiet hours and taking back apply. A message in Immich's page says "3 photos handed over to Holiday" with **Undo** (it takes the tag off, so a pass that has not taken them yet leaves them) and a link to the app. ![A message in Immich's page: one photo handed over to Family album, with Undo and a link to the app](images/immich-button-done.png)
+
+The service used last is offered first (kept in that browser only; **Forget my choice** clears it), and services whose owner decides appear under **Ask to join**, so a person can ask without leaving Immich. Words come in the person's language.
 
 **What it needs.** The same as the header link, because the button asks the app on the same address (`/handoff/immich/...`) with the person's Immich cookie: no key, no token and no cross-site setting are involved. It works for people who joined their services **from the page** (the app has their own key to tag with); people whose accounts are fixed in the configuration do not get a list.
 

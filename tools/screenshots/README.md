@@ -55,3 +55,7 @@ for s in palette-dark theme-switch services-light invite-qr; do go run . film $s
 ```
 
 `film` writes JPEG frames and `frames.txt` (each frame with how long it stays), and for a scene that shows only an element, `crop.txt`. `gif.sh` cuts them into a GIF (start and end second, speed, width; `COLORS`, `FPS`, `DITHER` and `CROP` shrink or crop it) and `gifs.sh` holds the cuts that were chosen by looking at each recording; a new recording needs its own times, so look at a few frames first (`ffmpeg -f concat -safe 0 -i frames.txt -vf "fps=0.5,scale=300:-1,tile=5x3" -frames:v 1 sheet.png`). Light pages are small as GIFs; the dark ones, with their drifting light, are the heavy ones, so they use no dithering and a crop where they can. Keep each under about 1.5 MB.
+
+## The social preview
+
+`social-preview.html` is the source of `docs/images/social-preview.png` (1280 by 640, what a link to the repository shows): `google-chrome --headless --hide-scrollbars --window-size=1280,640 --screenshot=docs/images/social-preview.png file://$PWD/tools/screenshots/social-preview.html`. GitHub keeps its own copy: upload the new file under the repository's Settings, Social preview.

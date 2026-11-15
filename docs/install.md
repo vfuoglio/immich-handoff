@@ -2,6 +2,8 @@
 
 About ten minutes. You run one small container next to Immich; everyone else uses a web page and the Immich app they already have.
 
+Want to look first? [The demo](../demo/README.md) runs a throwaway copy of everything with sample photos in one command.
+
 ## Before you start
 
 - **Immich 3.2.0 or newer.** Earlier versions cannot tell the app when a tag is added.
