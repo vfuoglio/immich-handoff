@@ -44,3 +44,7 @@ output-options:
     - removeSharedLink
     - viewAsset
     - removeAssetFromAlbum
+    - getAllPeople
+    - getPerson
+    - searchSmart
+    - getSearchSuggestions
