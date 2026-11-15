@@ -30,6 +30,9 @@ const (
 // albumsDenied makes the fake Immich refuse to list albums, as it does for a key without album.read.
 var albumsDenied atomic.Bool
 
+// buttonTagged is what the fake Immich was asked to tag ("on") or untag ("off"), by asset id.
+var buttonTagged sync.Map
+
 // fakeImmich answers just enough for sign-in checks, counts and a dry-run pass.
 func fakeImmich() http.Handler {
 	j := func(w http.ResponseWriter, v any) {
@@ -115,6 +118,37 @@ func fakeImmich() http.Handler {
 			return
 		}
 		j(w, []any{})
+	})
+	// the hand-over button: photos starting with 5 are "other"'s, any other photo is alice's; tagging is written down
+	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		owner := aliceID
+		if strings.HasPrefix(r.PathValue("id"), "5") {
+			owner = otherID
+		}
+		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+	})
+	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		j(w, []any{map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("PUT /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		for _, id := range body.Ids {
+			buttonTagged.Store(id, "on")
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		j(w, out)
+	})
+	mux.HandleFunc("DELETE /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		for _, id := range body.Ids {
+			buttonTagged.Store(id, "off")
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		j(w, out)
 	})
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		tag := func(id, n string) map[string]any {

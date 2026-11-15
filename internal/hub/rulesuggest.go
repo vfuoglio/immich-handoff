@@ -154,16 +154,22 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 
 // sendForRule tags photos with the service's tag, in the sender's own account, so that the normal hand-over takes them.
 func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) error {
+	return h.tagFor(ctx, r.OwnerID, r.Service, assets, true, "a rule sent photos")
+}
+
+// tagFor puts a service's tag on photos (or takes it off), with the key the person made when they joined, so that the
+// normal hand-over takes them: the pass, the limits, the quiet hours and taking back all apply as for a tag put on in Immich.
+func (h *Hub) tagFor(ctx context.Context, user uuid.UUID, service string, assets []string, on bool, why string) error {
 	var tag string
 	for _, svc := range h.Services() {
-		if svc.Label() == r.Service {
+		if svc.Label() == service {
 			tag = svc.Tag
 		}
 	}
 	if tag == "" {
-		return fmt.Errorf("the service %s is not here any more", r.Service)
+		return fmt.Errorf("the service %s is not here any more", service)
 	}
-	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
+	link, err := h.senderLink(ctx, user, service)
 	if err != nil {
 		return err
 	}
@@ -181,11 +187,14 @@ func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) er
 			ids = append(ids, id)
 		}
 	}
+	if !on {
+		return api.UntagAssets(ctx, tagID, ids)
+	}
 	if err := api.TagAssets(ctx, tagID, ids...); err != nil {
 		return fmt.Errorf("could not tag the photos: %w", err)
 	}
 	if h.Wake != nil {
-		h.Wake("a rule sent photos: " + r.OwnerID.String())
+		h.Wake(why + ": " + user.String())
 	}
 	return nil
 }

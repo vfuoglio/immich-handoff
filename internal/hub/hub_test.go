@@ -54,6 +54,8 @@ type fakeImmich struct {
 	albums        []map[string]any           // bob's own albums
 	uploads       []fakeUpload               // files stored through an upload
 	tagged        []string                   // asset ids that were tagged
+	mine          map[string]string          // photos that exist in someone's library without a tag: asset id -> owner id (the default owner is bob)
+	untagged      []string                   // asset ids the tag was taken off
 	tagNames      []string                   // tags that were made
 	albumAdds     []string                   // "album name: asset id" for each photo put in an album
 	tagIDs        map[string]string          // tag id -> name
@@ -371,10 +373,26 @@ func (f *fakeImmich) handler() http.Handler {
 		f.mu.Unlock()
 		j(w, 200, out)
 	})
+	mux.HandleFunc("DELETE /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			f.untagged = append(f.untagged, id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
 	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		names, ok := f.assetTags[r.PathValue("id")]
+		owner := bobID.String()
+		if o, there := f.mine[r.PathValue("id")]; there {
+			owner, ok = o, true
+		}
 		if !ok {
 			http.Error(w, "no", 404)
 			return
@@ -391,7 +409,7 @@ func (f *fakeImmich) handler() http.Handler {
 		if c := f.created[r.PathValue("id")]; c != "" {
 			created = c
 		}
-		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
 	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

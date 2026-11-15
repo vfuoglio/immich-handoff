@@ -44,6 +44,7 @@ type Server struct {
 	WebhookSecret string
 	Log           *slog.Logger
 	BackgroundCtx context.Context
+	ButtonOff     bool // IMMICH_BUTTON_ACTIONS=false: Immich's pages get the link to the app but no hand-over button
 
 	// PublicImmichURL is the address of Immich as the browser sees it. Optional: with it the page shows
 	// thumbnails of photos that are waiting to be handed over.
@@ -103,6 +104,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
+	mux.HandleFunc("GET /immich/services", w.buttonInfo)
+	mux.HandleFunc("POST /immich/send", w.buttonSend)
+	mux.HandleFunc("POST /immich/undo", w.buttonUndo)
 	mux.HandleFunc("POST /static/share", w.shareFallback)
 	mux.HandleFunc("GET /send", w.sendPage)
 	mux.HandleFunc("POST /send/start", w.phoneStart)

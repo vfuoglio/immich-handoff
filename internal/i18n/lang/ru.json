@@ -1172,5 +1172,29 @@
  "{who}: {photos} could not be handed over; the originals were kept and it will be retried": "{who}: не удалось передать {photos}; оригиналы сохранены, попытка будет повторена",
  "{who}: {photos} refused, the receiver has them in the trash; the originals were kept": "{who}: {photos} отклонено, у получателя они в корзине; оригиналы сохранены",
  "{who}: {photos} wait for the daily limit": "{who}: {photos} ждут дневного лимита",
- "{who}: {photos} wait for the daily limit, until {when}": "{who}: {photos} ждут дневного лимита, до {when}"
+ "{who}: {photos} wait for the daily limit, until {when}": "{who}: {photos} ждут дневного лимита, до {when}",
+ "Hand over...": "Передать…",
+ "Hand over to": "Передать в",
+ "Undo": "Отменить",
+ "Open Handoff": "Открыть Handoff",
+ "Handing over...": "Передаём…",
+ "Your original stays in your library": "Оригинал остаётся в вашей библиотеке",
+ "Your original goes to your trash once the other side has a copy": "Оригинал попадёт в корзину, когда у другой стороны будет копия",
+ "You do not send to any service yet.": "Вы пока ничего не отправляете ни в один сервис.",
+ "Taken off again": "Снято снова",
+ "no photos were chosen": "фотографии не выбраны",
+ "too many photos at once: choose fewer": "слишком много фотографий сразу: выберите меньше",
+ "some of these photos are not yours": "некоторые из этих фотографий не ваши",
+ "{n} photo handed over to {service}": {
+  "one": "{n} фото передано в {service}",
+  "few": "{n} фото передано в {service}",
+  "many": "{n} фото передано в {service}",
+  "other": "{n} фото передано в {service}"
+ },
+ "{n} photo handed over to {service} from Immich": {
+  "one": "{n} фото передано в {service} из Immich",
+  "few": "{n} фото передано в {service} из Immich",
+  "many": "{n} фото передано в {service} из Immich",
+  "other": "{n} фото передано в {service} из Immich"
+ }
 }
