@@ -15,10 +15,22 @@ export interface Service {
   note?: string;
 }
 
+/** A service the person may ask to join. */
+export interface Offer {
+  name: string;
+  pending: boolean;
+}
+
 /** What the app sends when the button first shows. */
 export interface Info {
   words: Record<string, string>;
   services: Service[];
+  offers?: Offer[];
+}
+
+/** The services, the one used last first, so that the usual choice is the first and the one the keyboard lands on. */
+export function inOrder(services: Service[], last: string | null): Service[] {
+  return [...services].sort((a, b) => Number(b.name === last) - Number(a.name === last));
 }
 
 /** The button's words: the app's, in the person's language, or English where the app did not send one. */

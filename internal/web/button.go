@@ -22,10 +22,16 @@ type ButtonService struct {
 	Note string `json:"note,omitempty"` // why photos will wait (paused, daily limit), in words
 }
 
+// ButtonOffer is a service the person does not send to yet but may ask to join.
+type ButtonOffer struct {
+	Name    string `json:"name"`
+	Pending bool   `json:"pending"` // they asked already and the owner has not answered
+}
+
 // ButtonWords are what the button says, in the person's language.
 func buttonWords(ctx context.Context) map[string]string {
 	ids := []string{
-		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Handing over...", "Could not hand over",
+		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Handing over...", "Could not hand over", "Ask to join", "Waiting for approval", "Last used", "Forget my choice",
 		"Your original stays in your library", "Your original goes to your trash once the other side has a copy",
 		"You do not send to any service yet.", "Taken off again", "Immich Handoff",
 	}
@@ -54,6 +60,24 @@ func (w *Server) buttonServices(ctx context.Context, me *member) []ButtonService
 	return out
 }
 
+// buttonOffers lists the services the person could ask to join from Immich's pages: those whose owner decides.
+func (w *Server) buttonOffers(ctx context.Context, me *member) []ButtonOffer {
+	out := []ButtonOffer{}
+	if w.Hub == nil {
+		return out
+	}
+	offers, err := w.Hub.Offers(ctx, me.user.ID)
+	if err != nil {
+		return out
+	}
+	for _, o := range offers {
+		if o.State == "request" || o.State == "pending" {
+			out = append(out, ButtonOffer{Name: o.Service.Label(), Pending: o.State == "pending"})
+		}
+	}
+	return out
+}
+
 func writeJSON(rw http.ResponseWriter, v any) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
@@ -73,7 +97,7 @@ func (w *Server) buttonInfo(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, msg, code)
 		return
 	}
-	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me)})
+	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me)})
 }
 
 func (w *Server) buttonSend(rw http.ResponseWriter, r *http.Request) {
@@ -126,4 +150,27 @@ func (w *Server) buttonAct(rw http.ResponseWriter, r *http.Request, act func(con
 		return
 	}
 	writeJSON(rw, out)
+}
+
+// buttonAsk is a request to join a service whose owner decides, made from the button's list.
+func (w *Server) buttonAsk(rw http.ResponseWriter, r *http.Request) {
+	if w.ButtonOff || w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	service := r.PostFormValue("service")
+	if err := w.Hub.Ask(r.Context(), me.user, service, ""); err != nil {
+		status := http.StatusInternalServerError
+		if hub.IsUserError(err) {
+			status = http.StatusConflict
+		}
+		w.Log.Warn("asking to join from Immich failed", "user", me.user.Email, "service", service, "err", err)
+		http.Error(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())), status)
+		return
+	}
+	writeJSON(rw, map[string]any{"message": t(r.Context(), "You asked to join {service}", "service", service)})
 }

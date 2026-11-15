@@ -63,7 +63,7 @@ func TestHandOverButton(t *testing.T) {
 
 	t.Run("it offers the service bob sends to, says his sending is paused, and hands the photo over with Undo", func(t *testing.T) {
 		run(t, ctx, chromedp.Click(`#handoff-viewer-act`, chromedp.ByQuery))
-		until(t, ctx, "the list of services", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 1`, 10*time.Second)
+		until(t, ctx, "the list of services", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 2`, 10*time.Second)
 		if got := js[string](t, ctx, `document.getElementById('handoff-menu').textContent`); !strings.Contains(got, "live") || !strings.Contains(got, "You paused sending to this service.") {
 			t.Errorf("the menu: %q", got)
 		}
@@ -78,6 +78,23 @@ func TestHandOverButton(t *testing.T) {
 		if !js[bool](t, ctx, `document.querySelector('#handoff-toast a').href.endsWith('/handoff/')`) {
 			t.Error("the message links to the app on the same address")
 		}
+		// the service used is remembered in this browser and offered first; services needing approval can be asked for
+		run(t, ctx, chromedp.Click(`#handoff-viewer-act`, chromedp.ByQuery))
+		until(t, ctx, "the list again", `document.getElementById('handoff-menu') !== null`, 10*time.Second)
+		got := js[string](t, ctx, `document.getElementById('handoff-menu').textContent`)
+		for _, want := range []string{"Last used", "Ask to join", "club", "Forget my choice"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("the list lacks %q: %q", want, got)
+			}
+		}
+		run(t, ctx, chromedp.Click(`#handoff-menu .foot button`, chromedp.ByQuery)) // Forget my choice
+		run(t, ctx, chromedp.Click(`#handoff-viewer-act`, chromedp.ByQuery))
+		until(t, ctx, "the list once more", `document.getElementById('handoff-menu') !== null`, 10*time.Second)
+		if js[bool](t, ctx, `document.getElementById('handoff-menu').textContent.includes('Last used')`) {
+			t.Error("a forgotten choice is still shown")
+		}
+		run(t, ctx, chromedp.Click(`#handoff-menu [role=menuitem]:not(:first-of-type)`, chromedp.ByQuery)) // ask to join club
+		until(t, ctx, "the request", `document.getElementById('handoff-toast') !== null && document.getElementById('handoff-toast').textContent.includes('You asked to join club')`, 10*time.Second)
 	})
 
 	t.Run("with photos selected the bar has the button and the three-dot menu has a line, and both hand the selection over", func(t *testing.T) {
@@ -102,7 +119,7 @@ func TestHandOverButton(t *testing.T) {
 			t.Error("the button is before the three dots, in the bar")
 		}
 		run(t, grid, chromedp.Click(`#handoff-bar-act`, chromedp.ByQuery))
-		until(t, grid, "the list", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 1`, 10*time.Second)
+		until(t, grid, "the list", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 2`, 10*time.Second)
 		run(t, grid, chromedp.Click(`#handoff-menu [role=menuitem]`, chromedp.ByQuery))
 		until(t, grid, "the message", `(document.getElementById('handoff-toast') || {textContent: ''}).textContent.includes('2 photos handed over to live')`, 15*time.Second)
 		for _, id := range ids {
@@ -128,7 +145,7 @@ func TestHandOverButton(t *testing.T) {
 			t.Errorf("the line says %q", got)
 		}
 		run(t, grid, chromedp.Click(`#control-bar li[data-handoff-item]`, chromedp.ByQuery))
-		until(t, grid, "the list", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 1`, 10*time.Second)
+		until(t, grid, "the list", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 2`, 10*time.Second)
 		// and the viewer's three dots have it too
 		run(t, grid, chromedp.Navigate(address+"/photos/"+ids[0]))
 		until(t, grid, "the viewer", `document.getElementById('handoff-viewer-act') !== null`, 30*time.Second)
@@ -165,7 +182,7 @@ func TestHandOverButton(t *testing.T) {
 			t.Error("the words are shown on a phone")
 		}
 		run(t, phone, chromedp.Click(`#handoff-viewer-act`, chromedp.ByQuery))
-		until(t, phone, "the list", `document.getElementById('handoff-menu') !== null && document.getElementById('handoff-menu').textContent.includes('You do not send to any service yet.')`, 10*time.Second)
+		until(t, phone, "the list", `document.getElementById('handoff-menu') !== null && document.getElementById('handoff-menu').textContent.includes('You do not send to any service yet.') && document.getElementById('handoff-menu').textContent.includes('Waiting for approval')`, 10*time.Second)
 	})
 
 	t.Run("a person the app does not know gets no button", func(t *testing.T) {

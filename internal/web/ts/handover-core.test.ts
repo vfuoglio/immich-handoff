@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assetOfPath, countIn, formOf, Selection, wordsOf } from "./handover-core.ts";
+import { assetOfPath, countIn, formOf, inOrder, Selection, wordsOf } from "./handover-core.ts";
 
 const id = "624ac6b0-4a95-41c2-b99c-d9cd19de0843";
 
@@ -52,4 +52,11 @@ test("the count in the bar is the paragraph that is only a number, in any langua
   assert.equal(countIn(["12", "12 ausgewählt"]), 12);
   assert.equal(countIn(["12 selected"]), null);
   assert.equal(countIn([]), null);
+});
+
+test("the service used last comes first, the others keep their order", () => {
+  const list = [{ name: "a", copy: true }, { name: "b", copy: true }, { name: "c", copy: false }];
+  assert.deepEqual(inOrder(list, "c").map((s) => s.name), ["c", "a", "b"]);
+  assert.deepEqual(inOrder(list, null).map((s) => s.name), ["a", "b", "c"]);
+  assert.deepEqual(inOrder(list, "gone").map((s) => s.name), ["a", "b", "c"]);
 });

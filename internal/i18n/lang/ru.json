@@ -1197,5 +1197,8 @@
   "many": "{n} фото передано в {service} из Immich",
   "other": "{n} фото передано в {service} из Immich"
  },
- "Could not hand over": "Не удалось передать"
+ "Could not hand over": "Не удалось передать",
+ "Last used": "Использовался последним",
+ "Forget my choice": "Забыть мой выбор",
+ "You asked to join {service}": "Вы попросили присоединиться к {service}"
 }

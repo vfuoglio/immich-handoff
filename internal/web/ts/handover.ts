@@ -9,7 +9,7 @@
 // Immich offers no place for any of this. What is looked for, and why, is in docs/immich-button-design.md, and
 // TestImmichMarkup holds Immich to it. When something is not found the button is simply not shown.
 
-import { assetOfPath, countIn, formOf, Selection, wordsOf, type Info } from "./handover-core.ts";
+import { assetOfPath, countIn, formOf, inOrder, Selection, wordsOf, type Info } from "./handover-core.ts";
 import { addStyles, oncePerFrame } from "./immich-ui.ts";
 
 const CSS = `
@@ -96,6 +96,24 @@ export function startHandover(app: string, icon: string): void {
     }
   };
 
+  // the service used last is kept in this browser only, and offered first
+  const LAST = "handoff-last-service";
+  const remembered = (): string | null => {
+    try {
+      return localStorage.getItem(LAST);
+    } catch {
+      return null;
+    }
+  };
+  const remember = (name: string | null): void => {
+    try {
+      if (name) localStorage.setItem(LAST, name);
+      else localStorage.removeItem(LAST);
+    } catch {
+      /* storage is off: nothing is remembered */
+    }
+  };
+
   const handOver = async (service: string, assets: string[]): Promise<void> => {
     toast(word("Handing over..."));
     const done = await post("immich/send", service, assets);
@@ -109,6 +127,7 @@ export function startHandover(app: string, icon: string): void {
       const back = await post("immich/undo", service, assets);
       toast(back.ok ? back.message || word("Taken off again") : back.message || word("Could not hand over"), openApp());
     });
+    remember(service);
     toast(done.message, undo, openApp());
   };
 
@@ -138,10 +157,12 @@ export function startHandover(app: string, icon: string): void {
     menu.setAttribute("role", "menu");
     menu.append(element("h2", { textContent: word("Hand over to") }));
     if (got.services.length === 0) menu.append(element("p", { textContent: word("You do not send to any service yet.") }));
-    for (const svc of got.services) {
+    const last = remembered();
+    for (const svc of inOrder(got.services, last)) {
       const item = element("button", { type: "button" }, svc.name);
       item.setAttribute("role", "menuitem");
-      const detail = svc.note || word(svc.copy ? "Your original stays in your library" : "Your original goes to your trash once the other side has a copy");
+      const about = svc.note || word(svc.copy ? "Your original stays in your library" : "Your original goes to your trash once the other side has a copy");
+      const detail = svc.name === last ? `${word("Last used")} · ${about}` : about;
       item.append(element("small", { textContent: detail }));
       item.addEventListener("click", () => {
         const chosen = assets();
@@ -150,7 +171,31 @@ export function startHandover(app: string, icon: string): void {
       });
       menu.append(item);
     }
-    menu.append(element("div", { className: "foot" }, openApp()));
+    const offers = got.offers ?? [];
+    if (offers.length > 0) menu.append(element("h2", { textContent: word("Ask to join") }));
+    for (const offer of offers) {
+      const item = element("button", { type: "button", disabled: offer.pending }, offer.name);
+      item.setAttribute("role", "menuitem");
+      if (offer.pending) item.append(element("small", { textContent: word("Waiting for approval") }));
+      else
+        item.addEventListener("click", async () => {
+          closeMenu();
+          const asked = await post("immich/ask", offer.name, []);
+          if (asked.ok && info?.offers) for (const o of info.offers) if (o.name === offer.name) o.pending = true;
+          toast(asked.message || word("Could not hand over"), openApp());
+        });
+      menu.append(item);
+    }
+    const foot = element("div", { className: "foot" }, openApp());
+    if (last) {
+      const forget = element("button", { type: "button", textContent: word("Forget my choice") });
+      forget.addEventListener("click", () => {
+        remember(null);
+        closeMenu();
+      });
+      foot.append(forget);
+    }
+    menu.append(foot);
     document.body.append(menu);
     const at = anchor.getBoundingClientRect();
     const room = menu.getBoundingClientRect();

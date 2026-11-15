@@ -1,7 +1,9 @@
 package web_test
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/google/uuid"
 	"net/http"
 	"strings"
 	"testing"
@@ -105,5 +107,34 @@ func TestThePressNeedsTheCrossSiteHeaderAndCanBeSwitchedOff(t *testing.T) {
 	}
 	if code, _ := postForm(t, off.URL+"/immich/send", "sess=other", "service=club&asset="+notMyPhoto); code != 404 {
 		t.Errorf("switched off, the press: %d", code)
+	}
+}
+
+func TestAServiceWhoseOwnerDecidesCanBeAskedForFromImmich(t *testing.T) {
+	var st *store.Store
+	withBoard := func(srv *web.Server) {
+		withClub(t, &st)(srv)
+		if _, err := st.AddService(context.Background(), store.Service{Name: "board", Tag: "board-tag", InboxTag: "inbox", Refused: "dup", ExpiryDays: 30,
+			OwnerID: uuid.MustParse(familyID), OwnerName: "Family", OwnerEmail: "family@x.test", KeyID: uuid.New(), Key: "k-family",
+			Policy: store.PolicyApproval, Visibility: store.VisListed}); err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.Hub.Reload(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app, _ := setup(t, withBoard)
+	_, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
+	if !strings.Contains(body, `"offers":[{"name":"board","pending":false}]`) {
+		t.Fatalf("offered: %s", body)
+	}
+	if code, body := postForm(t, app.URL+"/immich/ask", "sess=other", "service=board"); code != 200 || !strings.Contains(body, "You asked to join board") {
+		t.Fatalf("ask: %d %s", code, body)
+	}
+	if _, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil); !strings.Contains(body, `"offers":[{"name":"board","pending":true}]`) {
+		t.Errorf("after asking it waits for the owner: %s", body)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/ask", "sess=other", "service=club"); code != 409 {
+		t.Errorf("a service that needs no asking: %d", code)
 	}
 }

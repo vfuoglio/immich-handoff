@@ -107,6 +107,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /immich/services", w.buttonInfo)
 	mux.HandleFunc("POST /immich/send", w.buttonSend)
 	mux.HandleFunc("POST /immich/undo", w.buttonUndo)
+	mux.HandleFunc("POST /immich/ask", w.buttonAsk)
 	mux.HandleFunc("POST /static/share", w.shareFallback)
 	mux.HandleFunc("GET /send", w.sendPage)
 	mux.HandleFunc("POST /send/start", w.phoneStart)
