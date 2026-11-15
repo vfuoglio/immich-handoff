@@ -1,6 +1,6 @@
 //go:build e2e
 
-// What rules by people, places and dates (#129) rely on in Immich, asked of a real server (docs/rules-design.md has the findings).
+// What rules by people, places and dates (#129) rely on in Immich, asked of a real server (docs/design/rules-design.md has the findings).
 // It stays as the check that Immich still behaves this way. This Immich runs without machine learning, so faces are made by hand
 // (POST /faces gives a photo a face of a named person), which is also how the rest of the suite gets people.
 package e2e

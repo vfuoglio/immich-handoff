@@ -19,7 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Moving the photos of a shared album (docs/shared-albums-design.md). Each app only sends what is new in its own copy of the
+// Moving the photos of a shared album (docs/design/shared-albums-design.md). Each app only sends what is new in its own copy of the
 // album and the other app only stores what it is sent, so both ways is the same code run on both sides. What is new is told by
 // checksum against a ledger: a photo that arrived is remembered as arrived and never sent back; one that was there when sharing
 // began (and its person chose "only what is new") is remembered as the baseline and never sent.

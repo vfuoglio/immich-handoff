@@ -1,5 +1,7 @@
 # Shared albums across servers
 
+> *For contributors: this is a design note, not a user guide. The guides are in [the documentation index](../README.md).*
+
 The conclusion of #141, and the design #131 is built from. The question was whether two people on different Immich servers can share one album that stays in sync, as real copies in each person's own library, and what that would need.
 
 ## Conclusion

@@ -703,7 +703,7 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 		}
 	}
 	h.tagDrop(ctx, api, b, tags, id)
-	// Immich now and then drops a tag put on in the first moments after an upload (see docs/immich-api-notes.md), and
+	// Immich now and then drops a tag put on in the first moments after an upload (see docs/design/immich-api-notes.md), and
 	// the box's key cannot read a photo's tags to check. Putting them on again a little later costs nothing when they
 	// are there and mends the photo when one was dropped.
 	retag := context.WithoutCancel(ctx)

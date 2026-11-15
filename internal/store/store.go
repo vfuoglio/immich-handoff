@@ -566,7 +566,7 @@ var migrations = []string{
 	// choices are kept under its number, so earlier rounds stay as history.
 	`ALTER TABLE rooms ADD COLUMN multi_round INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE rooms ADD COLUMN round INTEGER NOT NULL DEFAULT 1;`,
-	// Peers: the other apps this one shares albums with (docs/shared-albums-design.md). A peer is made by an invitation; its
+	// Peers: the other apps this one shares albums with (docs/design/shared-albums-design.md). A peer is made by an invitation; its
 	// secret (the one both apps sign with) is sealed like every key. their_id is the id the other app knows this app by.
 	`CREATE TABLE peers (
 	   id         TEXT PRIMARY KEY,
@@ -641,7 +641,7 @@ var migrations = []string{
 	`ALTER TABLE shared_albums ADD COLUMN group_names TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE shared_albums ADD COLUMN group_sent TEXT NOT NULL DEFAULT '';`,
 	// Rules: a sender's rule that finds photos by people, places and dates and suggests them for a service they joined
-	// (docs/rules-design.md). cond holds the conditions as JSON. rule_photos is what a rule has done with each photo it matched: it
+	// (docs/design/rules-design.md). cond holds the conditions as JSON. rule_photos is what a rule has done with each photo it matched: it
 	// suggested it (state "suggested", in the batch that is open), the person sent it or declined it, or it was sent by auto.
 	`CREATE TABLE rules (
 	   id        TEXT PRIMARY KEY,
