@@ -16,16 +16,16 @@ No. The app makes a named, restricted key in *your* account with your own sign-i
 No. Senders use Immich as they do now: add a tag, or press the **Hand over...** button if your administrator [added it](find-handoff.md#hand-over-from-inside-immich). Guests without an account use a link or QR code in their browser.
 
 **Does it work with the Immich phone app?**
-Tagging in the app works. The button inside Immich works in a browser, not in the native app. The page also sends photos from a phone: see [Send photos from a phone](using.md#send-photos-from-a-phone).
+Tagging in the app works. The button inside Immich works in a browser, not in the native app. The page also sends photos from a phone: see [Send photos from a phone](guides/phone.md#send-photos-from-a-phone).
 
 **Can I use it for a wedding or a party?**
-Yes. A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is a write-only link or QR code; you can approve photos first, show them on a wall, give guests a gallery with hearts, and make a best-of.
+Yes. A [drop box](guides/events.md#drop-boxes-photos-from-people-who-do-not-have-immich) is a write-only link or QR code; you can approve photos first, show them on a wall, give guests a gallery with hearts, and make a best-of.
 
 **Can a photographer use it for clients?**
-Yes: a [client room](using.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from) shows an album through marked pictures, the client chooses favourites, and you release the originals when you decide.
+Yes: a [client room](guides/client-rooms.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from) shows an album through marked pictures, the client chooses favourites, and you release the originals when you decide.
 
 **Can I share with someone on another Immich server?**
-Yes, with [albums shared across servers](using.md#albums-shared-with-other-servers), and your friend does not even need Handoff if you give a key with a short list of permissions.
+Yes, with [albums shared across servers](guides/shared-albums.md#albums-shared-with-other-servers), and your friend does not even need Handoff if you give a key with a short list of permissions.
 
 **What does it need?**
 Immich 3.2.0 or newer, Docker, and Tags switched on for everyone who takes part. One small container, no database server. See [Install](install.md).

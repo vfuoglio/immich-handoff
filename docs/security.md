@@ -2,11 +2,20 @@
 
 What you are agreeing to when you run this, or join a service. The short version: an app that can act on your photos has to be trusted, so it is built to ask for as little as possible, show people what it does, and make leaving easy.
 
+> **In short**
+> - The app asks for as little as possible: a restricted, named API key in *your own* Immich account, made with your own sign-in, kept encrypted, never shown to anyone.
+> - A photo is only removed after every receiver holds a verified copy (checked by checksum). If anything fails, the original stays.
+> - Leaving is easy: delete the key in Immich or press **Leave**, and everything stops without touching a photo.
+> - People without accounts (drop boxes, rooms, frames) get links that can only do one thing each, and cannot see your library.
+> - The page accepts only people signed in to Immich, needs a cross-site header for every change, and has a strict content security policy.
+>
+> **Contents:** [What a key can do](#what-a-key-can-do) · [Bridges: a receiver on another server](#bridges-a-receiver-on-another-server) · [Drop boxes](#drop-boxes) · [Notifications](#notifications) · [Who decides what](#who-decides-what) · [What is stored](#what-is-stored) · [What other people can see](#what-other-people-can-see) · [Protections in the app](#protections-in-the-app) · [Backups](#backups) · [The image you run](#the-image-you-run) · [Reporting a problem](#reporting-a-problem)
+
 ## What a key can do
 
 An Immich API key cannot be limited to one tag or album. So a sender's key can read and download any photo in that account, and, if the sender chose **move**, delete any photo too. The app only ever acts on photos tagged for a service, and the key is never shown to anyone. If the sender chose **keep my originals** (the default), the key is created **without any permission to delete**.
 
-A sender who links an album to a service ([Using it](using.md#handing-over-a-whole-album)) gives their own key one more permission, `album.read`, added with their own login. It lets the app list the photos in that album; it cannot change, share or delete albums. Photos that other people own are never handed over.
+A sender who links an album to a service ([Using it](guides/household.md#handing-over-a-whole-album)) gives their own key one more permission, `album.read`, added with their own login. It lets the app list the photos in that album; it cannot change, share or delete albums. Photos that other people own are never handed over.
 
 The receiver's key can upload photos, read the receiver's library and add tags. By default (`RECEIVER_DELETE=on`) it can also **move photos to the receiver's trash** (`asset.delete`), which is what makes copies that expire and a sender's "take back the last hand-over" possible. The app uses it for nothing else: it moves to the trash only copies it handed over itself, and only those that were never filed in an album, and it never deletes for good (the receiver's trash keeps them for as long as Immich does). An administrator who does not want a key that can do that sets `RECEIVER_DELETE=off`: keys are then made without it, and a key that has it loses it when its owner next opens the page (see [Settings](settings.md)). If the service puts arrivals in an album, the key can also find, create and add to albums (`album.read`, `album.create`, `albumAsset.create`); it still cannot rename, share, empty or delete an album, and the app only looks at albums the receiver owns, never at ones shared with them.
 
@@ -14,7 +23,7 @@ Each key is named `handoff: <service>` in the owner's own Immich settings, so pe
 
 ## Bridges: a receiver on another server
 
-A [bridge](using.md#receiving-on-another-immich-server) makes the app hold a key to a library on a server **it does not run**, and connect to an address a stranger typed. Both are risks, so each is made as small as it can be. Bridges do not exist until an administrator sets `BRIDGE_ENABLE=true`.
+A [bridge](guides/other-server.md#receiving-on-another-immich-server) makes the app hold a key to a library on a server **it does not run**, and connect to an address a stranger typed. Both are risks, so each is made as small as it can be. Bridges do not exist until an administrator sets `BRIDGE_ENABLE=true`.
 
 **What the key can do.** `user.read`, `tag.create`, `tag.asset` and `asset.upload`: it can upload a photo and put a tag on it. It cannot read or search the library, download anything, list albums, tags, people or keys, and it cannot change itself. The receiver may add one optional permission, `asset.delete`, so that a sender can take a hand-over back: the app then moves the copies it handed over (the ids it remembers, nothing it looks up) to the receiver's trash within 24 hours, never deleting for good. It cannot tell whether the receiver has filed one in an album, so that one goes to the trash too. The permission is read from the key at every pass and before a take-back, so removing it ends the feature at once. This was checked against a real Immich, not assumed. The app refuses a key with more (the optional permission aside), and a key with less, when a bridge is made and again at every pass, so it never holds power it does not need. The receiver makes the key in their own Immich, sees what it can do, and deletes it whenever they like: Immich then refuses it at once, the app stops, and nothing is lost. What the receiver can see of a sender is the photo (with the details Immich carries in the file) and the tag `from/<name>`; no account detail is sent. What the sender sees of the receiver is the name they chose, the version of their Immich and whether the connection works; never their library.
 
@@ -26,7 +35,7 @@ A [bridge](using.md#receiving-on-another-immich-server) makes the app hold a key
 
 ## Drop boxes
 
-A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.
+A [drop box](guides/events.md#drop-boxes-photos-from-people-who-do-not-have-immich) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.
 
 - **What a link allows.** Whoever has it can send photos and videos to its owner's library, up to the limits the owner set, until it expires, is paused or is revoked. That is all. It cannot list, read, download, change or delete anything, and a guest never sees what was stored, not even their own files.
 - **The key.** A drop box has a key of its own in the owner's account, named `handoff: <name> (drop box)`, made with the owner's own login and holding five permissions: `user.read`, `tag.read`, `tag.create`, `tag.asset` and `asset.upload`. A box that files into an album also has `album.read`, `album.create` and `albumAsset.create`, and a box that lets guests take back what they sent also has `asset.read` and `asset.delete`: that is the one kind of box whose key can read a photo's tags and move a photo to the trash (the app only does it for a photo the same guest sent that still carries the box's inbox tag, and only to the trash). It cannot read a photo back, delete one, or change, share or delete an album. Revoking the box deletes it.

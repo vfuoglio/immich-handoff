@@ -2,6 +2,14 @@
 
 Running it day to day: where to put the page, backups, upgrades, monitoring and removing it.
 
+> **In short**
+> - Put the page behind your reverse proxy, either on its own address or under a path of Immich's address (needed for the button inside Immich).
+> - Backups are automatic (daily by default); keep a copy of `HANDOFF_STORE_KEY` somewhere safe, because the backups cannot be read without it.
+> - Upgrade by pulling the new image or tag and restarting; check the release notes first.
+> - `immich-handoff doctor` checks your setup, and `/healthz` and `/metrics` are there for monitoring.
+>
+> **Contents:** [Putting the page behind your reverse proxy](#putting-the-page-behind-your-reverse-proxy) · [Backups](#backups) · [Upgrading](#upgrading) · [Installing the page on a phone](#installing-the-page-on-a-phone) · [Weekly digest](#weekly-digest) · [Photos by email](#photos-by-email) · [Notifications on devices](#notifications-on-devices) · [Letting guests reach a drop box](#letting-guests-reach-a-drop-box) · [Monitoring](#monitoring) · [Notifications](#notifications) · [Checking the setup](#checking-the-setup) · [Removing it](#removing-it)
+
 ## Putting the page behind your reverse proxy
 
 The page signs people in with their **Immich login**: their browser sends Immich's cookie to the page, and the app asks Immich who it belongs to. Browsers send a cookie to every port of the same hostname, so the one rule is: **serve the page on the same hostname as Immich.**
@@ -48,7 +56,7 @@ With a path prefix, set `PUBLIC_IMMICH_URL` to the same address people use (for 
 
 ## Backups
 
-A backup is the data file, which also holds the [messages to the host](using.md#message-to-the-host) of every drop box (messages and voice notes). Files that wait for approval in a [drop box](using.md#approving-files-before-they-are-kept) are kept beside it in `dropbox-pending` and are not in the backup (they are deleted after two weeks anyway).
+A backup is the data file, which also holds the [messages to the host](guides/events-extras.md#message-to-the-host) of every drop box (messages and voice notes). Files that wait for approval in a [drop box](guides/events.md#approving-files-before-they-are-kept) are kept beside it in `dropbox-pending` and are not in the backup (they are deleted after two weeks anyway).
 
 Only installs that let people join keep data: one file, `handoff.db`, in the `handoff-data` volume (its name starts with the folder name; see `docker volume ls`). It holds the services, the memberships and the saved API keys. Fixed-account installs store nothing.
 
@@ -182,17 +190,17 @@ What it needs from you:
 
 - **HTTPS.** Browsers only install a page served over HTTPS (or from `localhost`). Behind a reverse proxy this is the proxy's certificate, as for Immich itself.
 - **The manifest and the icons must be reachable with the person's sign-in.** The page asks for the manifest with the browser's cookies (`crossorigin="use-credentials"`), because behind a login in front of the app (single sign-on at the proxy, for example) a request without cookies would be sent to the login page and the manifest would be ignored. Nothing special is needed otherwise: everything is under the page's own `static/` folder, so it also works behind a path prefix (the manifest's start address is relative).
-- **Nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut. The one service worker the app has (`static/sw.js`) exists only to show push notifications when a person turned them on (see [Notifications on devices](#notifications-on-devices)); it also receives the photos that a phone's Share menu hands to the installed app and, when the browser wakes it for Background Sync, finishes the queue of photos being [sent from a phone](using.md#send-photos-from-a-phone). Its one fetch handler answers the share address (`static/share`) and nothing else; it keeps no cache, and it is registered for the `static/` folder only, so it never sits between the page and the app.
+- **Nothing is cached.** The page works only online, as it must (it shows what is happening now), and no signed-in page is ever kept by the page itself. The home-screen icon is just a shortcut. The one service worker the app has (`static/sw.js`) exists only to show push notifications when a person turned them on (see [Notifications on devices](#notifications-on-devices)); it also receives the photos that a phone's Share menu hands to the installed app and, when the browser wakes it for Background Sync, finishes the queue of photos being [sent from a phone](guides/phone.md#send-photos-from-a-phone). Its one fetch handler answers the share address (`static/share`) and nothing else; it keeps no cache, and it is registered for the `static/` folder only, so it never sits between the page and the app.
 
 I have checked the manifest, the icons and the headers with tests, but not installed it on a physical phone here; if the install option does not show up, the usual cause is the page not being served over HTTPS, and your browser's developer tools (Application, Manifest) say what it found wrong.
 
 ## Weekly digest
 
-The weekly digest of a service ([Using it](using.md#weekly-digest)) is made by the app itself, on Monday at about 08:00 in the app's time zone (`TZ`; set it, or it is UTC in the container). It needs `HANDOFF_STORE_KEY` (the key it uses is the service's, kept in the data file) and Immich reachable; it makes no mail or notification of its own beyond one line to the owner. It looks at the app's record of hand-overs, which is kept for 8 days, so a digest that could not run for more than a day after Monday (the app was off) has fewer than seven days to look at. With `PUBLIC_IMMICH_URL` set the card shows the link as an address; without it, the key to put after your Immich address and `/share/`.
+The weekly digest of a service ([Using it](guides/frames-and-digest.md#weekly-digest)) is made by the app itself, on Monday at about 08:00 in the app's time zone (`TZ`; set it, or it is UTC in the container). It needs `HANDOFF_STORE_KEY` (the key it uses is the service's, kept in the data file) and Immich reachable; it makes no mail or notification of its own beyond one line to the owner. It looks at the app's record of hand-overs, which is kept for 8 days, so a digest that could not run for more than a day after Monday (the app was off) has fewer than seven days to look at. With `PUBLIC_IMMICH_URL` set the card shows the link as an address; without it, the key to put after your Immich address and `/share/`.
 
 ## Photos by email
 
-A drop box can have an email address: guests mail photos to it, and they arrive like uploads ([Using it](using.md#more-ways-in)). The app does this by **reading a mailbox you give it** over IMAP; it runs no mail server and opens no port. It is off unless you set `MAIL_IN_HOST`.
+A drop box can have an email address: guests mail photos to it, and they arrive like uploads ([Using it](guides/events.md#more-ways-in)). The app does this by **reading a mailbox you give it** over IMAP; it runs no mail server and opens no port. It is off unless you set `MAIL_IN_HOST`.
 
 1. **Make a mailbox** that accepts plus-addressing, which Gmail, Fastmail, Proton and most hosted and self-hosted mail systems do (`drop+anything@example.org` lands in `drop@example.org`). Use a mailbox that is only for this: **the app deletes the mail it handles** (or, with `MAIL_IN_AFTER=seen`, only marks it read).
 2. **Set** `MAIL_IN_HOST`, `MAIL_IN_USER`, `MAIL_IN_PASSWORD` (or `MAIL_IN_PASSWORD_FILE`) and `MAIL_IN_ADDRESS=drop@example.org`; see [Settings](settings.md). For Gmail and some others you need an app password. `MAIL_IN_TLS=none` is allowed only for a mail server on the same machine.
@@ -218,7 +226,7 @@ What is stored for each device: the address of the browser's push service and tw
 
 ## Letting guests reach a drop box
 
-A [drop box](using.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages (`/drop/<link>`, the short `/d/<code>`, and what hangs off them, such as `/upload` and `/mine`; and, for a [wall](using.md#the-wall), `/wall/<link>`) must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
+A [drop box](guides/events.md#drop-boxes-photos-from-people-who-do-not-have-immich) is for people who have no Immich login, so its pages (`/drop/<link>`, the short `/d/<code>`, and what hangs off them, such as `/upload` and `/mine`; and, for a [wall](guides/events-extras.md#the-wall), `/wall/<link>`) must be reachable from the internet **without any sign-in in front of them**. The rest of the page keeps working only for people signed in to Immich; you do not open that.
 
 - **Same hostname rule.** Guests only need the link, so the hostname does not matter to them, but the link is built from the address the owner has the page open on. Owners should open the page on the address guests can reach.
 - **Behind single sign-on at the proxy** (Authelia, Authentik, oauth2-proxy and the like): add a rule that lets `/handoff/drop/`, `/handoff/d/` and `/handoff/wall/` (or `/drop/`, `/d/` and `/wall/` on the page's own address) through without the login. Leave everything else behind it.
@@ -274,7 +282,7 @@ destinations:
 
 `tls` is `starttls` by default (port 587, the connection must be upgraded or nothing is sent), `tls` for a server that is encrypted from the first byte (port 465), or `none` (port 25) for a relay on a network you trust; a password is never sent with `none`, and the app refuses to start with that combination. Messages that arrive within `group` (two minutes unless you say otherwise; `0` sends one mail for each message) become **one mail**, with a line for each, and the subject names the most serious kind. Each mail has a plain-text part and a simple HTML part (a button that opens the page when `PUBLIC_APP_URL` is set); it never has pictures from elsewhere or tracking links, and the subject never names anyone.
 
-**Email to the people taking part.** One mail destination can instead be the server the app uses to write to each person who asks for it (the **Email me** card, see [Using it](using.md#email-about-what-happens-to-you)):
+**Email to the people taking part.** One mail destination can instead be the server the app uses to write to each person who asks for it (the **Email me** card, see [Using it](guides/notifications.md#email-about-what-happens-to-you)):
 
 ```yaml
   - name: people
@@ -291,7 +299,7 @@ Mark it with `people: true` and leave out `to` and `kinds`: it writes to nobody 
 
 **The JSON format** posts `{"source":"immich-handoff","kind":"problem","title":"...","text":"...","link":"...","time":"2026-11-11T22:00:00Z"}`. In Home Assistant, create an automation with a **Webhook** trigger (turn off "Only accessible from the local network" only if the app is outside it), and use `{{ trigger.json.text }}` and `{{ trigger.json.kind }}` in the action, for example a `notify.mobile_app_<phone>` call, a light or a spoken message. The same format fits n8n, Node-RED and anything that accepts a JSON POST.
 
-**Links in messages.** Mail and notifications to the people taking part carry one-tap buttons for the few things a person can answer (approving a request, resuming). They are built from `PUBLIC_APP_URL`; without it messages carry no buttons. See [Answering from a message](using.md#answering-from-a-message) and [Action links](security.md#action-links).
+**Links in messages.** Mail and notifications to the people taking part carry one-tap buttons for the few things a person can answer (approving a request, resuming). They are built from `PUBLIC_APP_URL`; without it messages carry no buttons. See [Answering from a message](guides/notifications.md#answering-from-a-message) and [Action links](security.md#action-links).
 
 **Testing it.** Nothing tells you a destination works until something goes wrong, so test it: on the administrator's page, **Notifications** lists each destination (its name, format and the kinds it takes, never its address) and **Send a test notification** sends one message to each, whatever kinds it takes, and shows how each answered (delivered, or why not: "answered 401", "could not reach it"). A test makes one attempt and mail goes out at once. From the command line, `immich-handoff doctor` lists the destinations and checks the settings (it sends nothing), and `immich-handoff doctor --send-test` also sends the test. The server set aside for mail to the people taking part is not tested here; each person has a test button for their own mail.
 

@@ -65,6 +65,14 @@ If a photo does not arrive, run the setup check: `docker compose exec immich-han
 
 That is the whole setup. [Using it](using.md) explains what people see on the page, and [Operations](operations.md) covers HTTPS, backups and upgrades.
 
+## Now pick what you want to do
+
+- Share photos with your household or friends: [the household guide](guides/household.md)
+- Collect photos from guests at an event: [collect photos from guests](guides/events.md)
+- Deliver a shoot to a client: [client rooms](guides/client-rooms.md)
+- Share an album with a friend on another server: [share albums across servers](guides/shared-albums.md)
+- Stop tagging by hand: [rules and the button](guides/automate.md)
+
 ## Prefer to set the accounts up yourself?
 
 If you would rather create the API keys yourself than let people join from the page, or you want several fixed services in a file, see [Fixed accounts](fixed-accounts.md).

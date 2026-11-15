@@ -48,7 +48,7 @@ With several receivers on one service, the original is touched only after **ever
 
 ## Quiet hours and what a service accepts
 
-A service in the routes file can say when it hands photos over and what it takes in, as a service made on the page can ([Using it](using.md#quiet-hours-and-what-a-service-accepts)):
+A service in the routes file can say when it hands photos over and what it takes in, as a service made on the page can ([Using it](guides/controls.md#quiet-hours-and-what-a-service-accepts)):
 
 ```yaml
 services:

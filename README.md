@@ -29,11 +29,11 @@ Immich keeps every photo in the account that uploaded it. Shared albums and link
 
 | I want to... | You get | Start here |
 |---|---|---|
-| **Share photos with my household or friends** on one server | Anyone hands photos to anyone's library. Each sender chooses to keep or move their originals. | [Joining a service](docs/using.md#joining-a-service) |
-| **Collect photos from guests** at a wedding, party or club, even without Immich | A link or QR code that only *receives*: moderation, a wall on a screen, a gallery and a best-of for the guests | [Drop boxes and events](docs/using.md#drop-boxes-photos-from-people-who-do-not-have-immich) |
-| **Deliver a shoot to a client** | A room the client opens on a phone: favourites, notes, rounds, and you release the originals when you decide | [Client rooms](docs/using.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from) |
-| **Share an album with a friend on another server** | Photos both ways between two Immich servers, signed, with no echo; works even if your friend does not run Handoff | [Albums shared with other servers](docs/using.md#albums-shared-with-other-servers) |
-| **Stop tagging by hand** | A **Hand over...** button inside Immich, and rules that suggest photos of named people, places and dates | [Rules](docs/using.md#rules-photos-by-who-where-and-when) and [the button](docs/find-handoff.md#hand-over-from-inside-immich) |
+| **Share photos with my household or friends** on one server | Anyone hands photos to anyone's library. Each sender chooses to keep or move their originals. | [Joining a service](docs/guides/household.md) |
+| **Collect photos from guests** at a wedding, party or club, even without Immich | A link or QR code that only *receives*: moderation, a wall on a screen, a gallery and a best-of for the guests | [Drop boxes and events](docs/guides/events.md) |
+| **Deliver a shoot to a client** | A room the client opens on a phone: favourites, notes, rounds, and you release the originals when you decide | [Client rooms](docs/guides/client-rooms.md) |
+| **Share an album with a friend on another server** | Photos both ways between two Immich servers, signed, with no echo; works even if your friend does not run Handoff | [Albums shared with other servers](docs/guides/shared-albums.md) |
+| **Stop tagging by hand** | A **Hand over...** button inside Immich, and rules that suggest photos of named people, places and dates | [Rules](docs/guides/automate.md) and [the button](docs/find-handoff.md#hand-over-from-inside-immich) |
 
 A *service* is simply a named place photos are handed to ("Holiday 2026"); its owner decides who may send.
 
@@ -47,10 +47,10 @@ A *service* is simply a named place photos are handed to ("Holiday 2026"); its o
 - **Keys nobody can see, and a way out.** The app makes a named, restricted key in your account with your own login. Delete it in Immich, or press **Leave**, and everything stops safely without touching a photo.
 - **Careful by design.** A photo is only removed after the other side holds a verified copy. Duplicates are recognised. If anything fails, your original stays put.
 - **Beyond people with accounts.** A **drop box** is a link (or a QR code, or an email address) that anyone can send photos to, with no account, and it doubles as an **event**: a gallery for guests (hearts, downloads, a ZIP), a moderator link for a helper, a wall, an album of what guests loved and your own title, logo and colours; an **event pool** gives everybody everybody's photos for a trip or a party; a **frame** shows an album on a screen; a **weekly digest** picks the best of the week.
-- **From your phone, too.** Besides tagging, the **Send** tab sends photos and videos from the phone in pieces that survive a lost connection, tagged for the service you pick; on Android it is in the Share menu of the gallery and finishes with the screen off. See the [phone guide](docs/using.md#send-photos-from-a-phone).
-- **Rules instead of tags.** A sender can let a **rule** look in Immich for photos of named people, taken between two dates, in a place, in an album or looking like a phrase, and **suggest** them on the Overview with pictures: *Send*, *Not these* or *Always*, and after three *Always* the rule can send by itself. See [Rules](docs/using.md#rules-photos-by-who-where-and-when).
+- **From your phone, too.** Besides tagging, the **Send** tab sends photos and videos from the phone in pieces that survive a lost connection, tagged for the service you pick; on Android it is in the Share menu of the gallery and finishes with the screen off. See the [phone guide](docs/guides/phone.md#send-photos-from-a-phone).
+- **Rules instead of tags.** A sender can let a **rule** look in Immich for photos of named people, taken between two dates, in a place, in an album or looking like a phrase, and **suggest** them on the Overview with pictures: *Send*, *Not these* or *Always*, and after three *Always* the rule can send by itself. See [Rules](docs/guides/automate.md).
 - **Hand over from inside Immich.** A **Hand over...** button in Immich's own photo viewer, selection bar and three-dot menus lists the services you send to and hands the photos over, with **Undo**, no tags needed. See [Hand over from inside Immich](docs/find-handoff.md#hand-over-from-inside-immich).
-- **For photographers.** A **client room** shows an album to a client through pictures marked with your name, on a phone, behind a PIN if you like: the client chooses favourites (up to a limit, in rounds if you want), leaves notes, and you release the originals when you decide. See [Client rooms](docs/using.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from).
+- **For photographers.** A **client room** shows an album to a client through pictures marked with your name, on a phone, behind a PIN if you like: the client chooses favourites (up to a limit, in rounds if you want), leaves notes, and you release the originals when you decide. See [Client rooms](docs/guides/client-rooms.md).
 - **Told your way.** Notifications to ntfy, Home Assistant or any webhook, to your mailbox, and, if people ask for it, to their own phone or email, with buttons to approve a request from the message itself.
 - **Small.** One container, no database server, nothing stored unless you let people join from the page.
 
@@ -125,7 +125,7 @@ Then open `http://<your-host>:8080/`, sign in to Immich, and offer your first se
 |---|---|
 | [Questions people ask first](docs/faq.md) | Is it the right tool, and what does it do to my photos |
 | [Install](docs/install.md) | Ten minutes from clone to first photo |
-| [Using it](docs/using.md) | For the people who send and receive |
+| [Guides by use case](docs/using.md) | Household, event guests, client rooms, other servers, rules, phone |
 | [What is carried over](docs/what-is-carried-over.md) | What travels with a photo, and what does not |
 | [The administrator's page](docs/admin.md) | See every service and member, check the connections, remove what is stuck |
 | [Fixed accounts](docs/fixed-accounts.md) | Set the accounts up yourself, or run several fixed services |
