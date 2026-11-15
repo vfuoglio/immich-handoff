@@ -108,7 +108,9 @@ func insideShots(outdir string) {
 	// the viewer: the button, the list, the message
 	must("close the list", chromedp.KeyEvent("\x1b"))
 	var id string
-	must("a photo", chromedp.Evaluate(`document.querySelector('[data-thumbnail-focus-container]').dataset.asset`, &id))
+	tile := 3
+	fmt.Sscan(env("INSIDE_TILE", "3"), &tile) // which photo of the grid the viewer shows
+	must("a photo", chromedp.Evaluate(fmt.Sprintf(`document.querySelectorAll('[data-thumbnail-focus-container]')[%d].dataset.asset`, tile), &id))
 	must("open the viewer", chromedp.Navigate(base+"/photos/"+id))
 	wait("the button in the viewer", `document.getElementById('handoff-viewer-act') !== null`)
 	time.Sleep(1500 * time.Millisecond)

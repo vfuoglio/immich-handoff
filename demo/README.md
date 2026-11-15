@@ -14,11 +14,13 @@ Open **http://localhost:2295** and sign in to Immich as one of the people (passw
 
 | Who | Sign in | What they have |
 |---|---|---|
-| Alice | `alice@demo.test` | 10 photos, an album "Holiday", and two services she offers: **Family album** (open) and **Photo club** (she approves senders) |
-| Bob | `bob@demo.test` | 10 photos; he joined Family album and five of his photos were already handed over |
-| Carol | `carol@demo.test` | 10 photos, and no services yet: ask to join Photo club |
+| Alice | `alice@demo.test` | 10 photos (a trip to Innsbruck), an album "Holiday", and two services she offers: **Family album** (open) and **Photo club** (she approves senders) |
+| Bob | `bob@demo.test` | 10 photos (a party); he joined Family album and five of his photos were already handed over |
+| Carol | `carol@demo.test` | 10 photos (travels), and no services yet: ask to join Photo club |
 
 (The Immich administrator is `admin@demo.test` / `Demo-admin-1`.)
+
+The sample photos in `photos/` are public-domain or CC0 pictures from Wikimedia Commons, with no recognisable people; [`photos/CREDITS.md`](photos/CREDITS.md) lists the author, license and source of each. Each person also has a near-duplicate, a too-dark photo and a blurry one, so the duplicate and quality checks have something to show.
 
 The app is on the same address under **/handoff/**, and a small nginx puts a script into Immich's pages, so you see two things inside Immich itself: the Handoff icon in the header, and a **Hand over...** button in the photo viewer and when photos are selected.
 
