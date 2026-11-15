@@ -258,6 +258,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
 	mux.HandleFunc("POST /rules/auto", w.autoRule)
+	mux.HandleFunc("POST /rules/lookback", w.lookBackRule)
 	mux.HandleFunc("GET /rules/review/{id}", w.ruleReview)
 	mux.HandleFunc("POST /rules/review", w.reviewRule)
 	mux.HandleFunc("POST /rules", w.addRule)

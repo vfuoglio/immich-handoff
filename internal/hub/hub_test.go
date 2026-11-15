@@ -424,12 +424,13 @@ func (f *fakeImmich) handler() http.Handler {
 			TagIds       []string `json:"tagIds"`
 			AlbumIds     []string `json:"albumIds"`
 			CreatedAfter string   `json:"createdAfter"`
+			PersonIds    []string `json:"personIds"`
 		}
 		raw, _ := io.ReadAll(r.Body)
 		json.Unmarshal(raw, &body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if body.CreatedAfter != "" { // a rule's search
+		if body.CreatedAfter != "" || len(body.PersonIds) > 0 { // a rule's search
 			var m map[string]any
 			json.Unmarshal(raw, &m)
 			f.lastSearch = m

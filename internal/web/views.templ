@@ -3978,6 +3978,7 @@ templ RulesBox(s ServiceView) {
 					} else if r.CanAuto {
 						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on this rule sends the photos it finds without asking you, so a wrong photo can reach the service. Only photos that reach Immich from now on are sent, and you can switch it back at any time. Continue?") } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
 					}
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" title={ t(ctx, "Suggest the older photos that match this rule too") }>{ t(ctx, "Also look back") }</button>
 					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
 						if r.Paused {
 							{ t(ctx, "Resume this rule") }

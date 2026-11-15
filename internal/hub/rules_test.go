@@ -314,7 +314,9 @@ func TestARuleSendsByItselfOnlyAfterThreeAlwaysOnlyNewSettledPhotosAndNeverForAP
 		t.Errorf("nothing is sent before a photo has been in Immich half an hour: %v", e.f.tagged[before:])
 	}
 	// a photo that reached Immich after the switch and has settled is sent without asking
-	settled := hit(bobID, 40, func(m map[string]any) { m["createdAt"] = time.Now().Add(-40 * time.Minute).UTC().Format(time.RFC3339Nano) }, noraID)
+	settled := hit(bobID, 40, func(m map[string]any) {
+		m["createdAt"] = time.Now().Add(-40 * time.Minute).UTC().Format(time.RFC3339Nano)
+	}, noraID)
 	e.f.ruleHits = []map[string]any{settled}
 	// the rule's "since" and auto moment: make the switch earlier than the photo
 	e.st.SetRuleMode(ctx, r.ID, "auto", time.Now().Add(-2*time.Hour))
@@ -334,5 +336,30 @@ func TestARuleSendsByItselfOnlyAfterThreeAlwaysOnlyNewSettledPhotosAndNeverForAP
 	}
 	if stored().Mode != "suggest" {
 		t.Error("asks first again")
+	}
+}
+
+func TestLookingBackSuggestsOlderPhotosInOneBatchAndOnlyWhenNothingWaits(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
+	if _, err := e.h.LookBack(ctx, bob, r.ID); !errors.Is(err, hub.ErrNothingOlder) {
+		t.Errorf("nothing older: %v", err)
+	}
+	e.f.ruleHits = []map[string]any{hit(bobID, 60*24*400, nil, noraID), hit(bobID, 60*24*30, nil, noraID), hit(bobID, 60*24*2, func(m map[string]any) { m["isArchived"] = true }, noraID)}
+	n, err := e.h.LookBack(ctx, bob, r.ID)
+	if err != nil || n != 2 {
+		t.Fatalf("two older photos, not the archived one: %d %v", n, err)
+	}
+	if _, present := e.f.lastSearch["createdAfter"]; present && e.f.lastSearch["createdAfter"] != nil {
+		t.Errorf("a look back does not limit itself to new photos: %v", e.f.lastSearch)
+	}
+	if sg, _ := e.h.SuggestionOf(ctx, bob.ID, r.ID); len(sg.Photos) != 2 {
+		t.Errorf("they wait as suggestions: %+v", sg.Photos)
+	}
+	if _, err := e.h.LookBack(ctx, bob, r.ID); !errors.Is(err, hub.ErrLookBackBusy) {
+		t.Errorf("answer first: %v", err)
+	}
+	if _, err := e.h.LookBack(ctx, ann, r.ID); !errors.Is(err, hub.ErrNoRule) {
+		t.Errorf("only the owner: %v", err)
 	}
 }

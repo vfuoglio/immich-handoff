@@ -266,3 +266,10 @@ func (w *Server) autoRule(rw http.ResponseWriter, r *http.Request) {
 		return w.Hub.SetRuleAuto(ctx, me.user, r.PostFormValue("rule"), r.PostFormValue("on") == "1")
 	})
 }
+
+func (w *Server) lookBackRule(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "rule looked back", func(ctx context.Context, me *member, _ string) error {
+		_, err := w.Hub.LookBack(ctx, me.user, r.PostFormValue("rule"))
+		return err
+	})
+}

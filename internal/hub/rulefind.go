@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
+	"sort"
 	"strings"
 	"time"
 
@@ -49,7 +50,7 @@ type match struct {
 }
 
 // FindForRule finds what a rule matches now and has not handled yet. It changes nothing.
-func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r store.Rule) ([]match, error) {
+func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r store.Rule, back bool) ([]match, error) {
 	c := r.Cond
 	f := immich.RuleFilter{Country: c.Country, City: c.City, Phrase: c.Phrase, TakenAfter: dayStart(c.After)}
 	if c.Before != "" {
@@ -62,9 +63,11 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 	if c.Album != nil {
 		f.AlbumID, _ = uuid.Parse(c.Album.ID)
 	}
-	f.CreatedAfter = r.Since
-	if week := h.now().Add(-ruleWindow); week.After(f.CreatedAfter) {
-		f.CreatedAfter = week
+	if !back { // a look back is the one time a rule looks at photos that were in Immich before it was made
+		f.CreatedAfter = r.Since
+		if week := h.now().Add(-ruleWindow); week.After(f.CreatedAfter) {
+			f.CreatedAfter = week
+		}
 	}
 	found, err := api.RuleSearch(ctx, f)
 	if err != nil {
@@ -165,7 +168,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		h.Store.MarkRuleLook(ctx, r.ID, h.now(), "your Immich does not accept the app's key")
 		return 0, err
 	}
-	matches, err := h.FindForRule(ctx, api, me.ID, r)
+	matches, err := h.FindForRule(ctx, api, me.ID, r, false)
 	if err != nil {
 		problem := trimNet(err)
 		if errors.Is(err, immich.ErrNoSmartSearch) {
@@ -249,4 +252,54 @@ func (h *Hub) RulesLoop(ctx context.Context) {
 			h.RulesMaintenance(ctx)
 		}
 	}
+}
+
+var (
+	ErrLookBackBusy = errors.New("answer the photos that are waiting for this rule first, then look back")
+	ErrNothingOlder = errors.New("no older photo matches this rule")
+)
+
+// lookBackMost is the most photos one look back suggests.
+const lookBackMost = 200
+
+// LookBack suggests the older photos that match a rule (the ones that were in Immich before it was made, or before last week), the
+// newest first, as one batch of suggestions. Nothing is sent: they wait for the person's answer like any other.
+func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, error) {
+	r, err := h.ruleOf(ctx, user.ID, id)
+	if err != nil {
+		return 0, err
+	}
+	if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {
+		return 0, ErrLookBackBusy
+	}
+	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
+	if err != nil {
+		return 0, err
+	}
+	api, err := h.Connect(link.Key)
+	if err != nil {
+		return 0, err
+	}
+	me, err := api.Me(ctx)
+	if err != nil {
+		return 0, err
+	}
+	matches, err := h.FindForRule(ctx, api, me.ID, r, true)
+	if err != nil {
+		return 0, err
+	}
+	if len(matches) == 0 {
+		return 0, ErrNothingOlder
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].Asset.FileCreatedAt.After(matches[j].Asset.FileCreatedAt) })
+	if len(matches) > lookBackMost {
+		matches = matches[:lookBackMost]
+	}
+	for _, m := range matches {
+		if err := h.Store.PutRulePhoto(ctx, r.ID, m.Asset.Id.String(), store.RuleSuggested, m.Why); err != nil {
+			return 0, err
+		}
+	}
+	h.event(ctx, r.Service, user.ID, "rule", i18n.PackN("{n} older photo found for {service} by a rule: {rule}", "{n} older photos found for {service} by a rule: {rule}", len(matches), "service", r.Service, "rule", RuleSentence(r.Cond)))
+	return len(matches), nil
 }
