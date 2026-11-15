@@ -24,6 +24,8 @@ For a wedding, a birthday, a club night. You run Immich and have [installed Hand
 
 A drop box is a link for people without an Immich account: relatives at a wedding, guests at an event. You make one on the **Services** tab, under **Make a drop box**, and share its link, a message with it, or its QR code. Guests open it in any browser, choose photos and send them. What arrives goes into **your** library, tagged `inbox/<name of the box>`, to look through before you file it. Nothing else changes: it is not a service, nobody has to be approved, and there is no sender.
 
+**What arrives shows in your Activity list**, as one line for each burst that is kept up to date ("12 photos arrived in Mia's birthday"), so you can see guests sending without opening the box. It is a line of the log only: nobody is notified for each photo.
+
 What a guest sees: the name of the box, your message, a form to choose photos (and videos, unless the box is for photos only), and afterwards what became of each file. **They cannot see your library, what other guests sent, or even what they sent themselves once they leave the page**, unless you switch on the [gallery](events-extras.md#an-event-from-the-first-guest-to-the-last-photo). Immich's own shared link with uploads switched on shows guests the whole album; a drop box does not.
 
 What you set, all optional:

@@ -96,6 +96,7 @@ type Hub struct {
 	accounts     map[string]*syncer.Account // by link id, so pointers stay stable between reloads
 	granted      map[uuid.UUID]bool         // people whose keys were given the stack permissions in this run
 	drop         dropGuard                  // what the drop boxes' limits know about their guests
+	arrived      arrivals                   // photos arriving in drop boxes, counted for the Activity list
 	wall         wallCache                  // the pictures a wall fetched last
 	hearts       heartGuard                 // when each guest gave hearts in the last hour
 	slots        chan struct{}              // places for downloads of originals (see originals)

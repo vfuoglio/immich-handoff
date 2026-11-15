@@ -1186,6 +1186,17 @@ func (s *Store) AddEvent(ctx context.Context, e Event) error {
 	return err
 }
 
+// BumpEvent keeps one line of the log for a burst of the same thing, such as guests' photos arriving in a drop box: when
+// the newest line of this kind for this service is not older than the window it is replaced by this one (so it comes
+// up to the top with the new text), otherwise a new line is added.
+func (s *Store) BumpEvent(ctx context.Context, e Event, window time.Duration) error {
+	cutoff := time.Now().Add(-window).UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id = (SELECT MAX(id) FROM events WHERE service = ? AND kind = ?) AND at > ?`, e.Service, e.Kind, cutoff); err != nil {
+		return err
+	}
+	return s.AddEvent(ctx, e)
+}
+
 // Events returns the most recent entries, newest first.
 func (s *Store) Events(ctx context.Context, limit int) ([]Event, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT at, service, user_id, kind, text FROM events ORDER BY id DESC LIMIT ?`, limit)

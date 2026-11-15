@@ -726,6 +726,41 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 	}
 }
 
+// arrivalBurst is how long photos arriving in one box go on being one line of the host's Activity list.
+const arrivalBurst = 10 * time.Minute
+
+type arrivals struct {
+	mu    sync.Mutex
+	boxes map[string]*arrivalCount
+}
+
+type arrivalCount struct {
+	n    int
+	last time.Time
+}
+
+// noteArrival puts what guests send in the box's owner's Activity list as one line for each burst ("12 photos arrived in
+// Mia's birthday"), kept up to date as more arrive. It is a line of the log only: nobody is notified for each photo.
+func (h *Hub) noteArrival(ctx context.Context, b store.DropBox) {
+	h.arrived.mu.Lock()
+	if h.arrived.boxes == nil {
+		h.arrived.boxes = map[string]*arrivalCount{}
+	}
+	a := h.arrived.boxes[b.ID]
+	if a == nil || time.Since(a.last) > arrivalBurst {
+		a = &arrivalCount{}
+		h.arrived.boxes[b.ID] = a
+	}
+	a.n++
+	a.last = time.Now()
+	n := a.n
+	h.arrived.mu.Unlock()
+	text := i18n.PackN("{n} photo arrived in {box}", "{n} photos arrived in {box}", n, "box", b.Name)
+	if err := h.Store.BumpEvent(ctx, store.Event{Service: b.Name, UserID: b.OwnerID, Kind: "arrival", Text: text}, arrivalBurst); err != nil {
+		h.Log.Warn("could not write the activity log", "err", err)
+	}
+}
+
 // kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
 // allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
 func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt, guestName string, asset uuid.UUID) {
@@ -738,6 +773,7 @@ func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int
 		_ = h.Store.AddDropBytes(c, b.ID, n)
 	}
 	_ = h.Store.RecordDropArrival(c, b.ID, who, time.Now())
+	h.noteArrival(c, b)
 	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} arrived ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
 	h.checkBurst(ctx, b)
 	g := &h.drop

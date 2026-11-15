@@ -13,6 +13,8 @@
 
 The details follow, by area.
 
+- **Photos guests send now show in the host's Activity list.** Each burst of photos arriving in a drop box is one line ("12 photos arrived in Mia's birthday") that is kept up to date as more come, in the host's Activity and in the administrator's recent events. It is a line of the log only: nobody is notified for each photo.
+
 ### Look and feel
 - **Two colour schemes, each in light and dark.** The pages come in **Twilight** (the indigo, magenta and orange of the app's icon, unchanged and still the default) and **Immich** (calm blues on near-neutral greys). Everyone chooses from the new palette button in the bar, next to the light/dark button, and the choice is remembered in their own browser. The administrator sets where people start with `THEME` (`twilight` or `immich`) and, if wanted, `THEME_MODE` (`auto`, `light` or `dark`); see [Settings](docs/settings.md). A phone's address bar takes the colour of the scheme. A drop box's own accent colour now also wins over both schemes.
 - **A new look, made for the phone as much as for the desktop.** A pill in the middle of the bar slides a gradient under the view you are in (Overview, Services, Activity); on a phone it becomes a tab bar at the bottom of the screen. Cards are glass with a soft light that follows the pointer, buttons are pills, checkboxes are switches, dialogs rise from the bottom on a phone, every view fades in, and a search bar under each headline opens the command palette.

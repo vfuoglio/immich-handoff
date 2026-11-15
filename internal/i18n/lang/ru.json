@@ -1200,5 +1200,11 @@
  "Could not hand over": "Не удалось передать",
  "Last used": "Использовался последним",
  "Forget my choice": "Забыть мой выбор",
- "You asked to join {service}": "Вы попросили присоединиться к {service}"
+ "You asked to join {service}": "Вы попросили присоединиться к {service}",
+ "{n} photo arrived in {box}": {
+  "one": "{n} фото пришло в {box}",
+  "few": "{n} фото пришло в {box}",
+  "many": "{n} фото пришло в {box}",
+  "other": "{n} фото пришло в {box}"
+ }
 }

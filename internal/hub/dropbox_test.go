@@ -1469,3 +1469,47 @@ func TestWhatAPasswordGuardsIsChosenWhenTheBoxIsMade(t *testing.T) {
 		t.Error("two boxes must not share a token")
 	}
 }
+
+func TestPhotosArrivingInABoxAreOneLineOfTheHostsActivityUntilAPauseInTheArrivals(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	b := newBox(t, e, hub.DropParams{Name: "Birthday"})
+	box, _ := e.h.OpenDropBox(ctx, b.Token)
+	say := func() []string {
+		got, err := e.h.Activity(ctx, bob.ID, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, a := range got {
+			if a.Kind == "arrival" {
+				out = append(out, en(a.Text))
+			}
+		}
+		return out
+	}
+	if _, err := e.h.ReceiveDropFile(ctx, box.ID, "a.jpg", bytes.NewReader(jpeg), "g1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := say(); len(got) != 1 || got[0] != "1 photo arrived in Birthday" {
+		t.Fatalf("after one: %q", got)
+	}
+	for i, who := range []string{"g2", "g3"} {
+		img := append(append([]byte(nil), jpeg...), byte(i)) // another file, not the same one again
+		if _, err := e.h.ReceiveDropFile(ctx, box.ID, "b.jpg", bytes.NewReader(img), who); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := say(); len(got) != 1 || got[0] != "3 photos arrived in Birthday" {
+		t.Errorf("after three, one line that says so: %q", got)
+	}
+	evs, _ := e.st.Events(ctx, 50)
+	lines := 0
+	for _, ev := range evs {
+		if ev.Kind == "arrival" {
+			lines++
+		}
+	}
+	if lines != 1 {
+		t.Errorf("the log holds one line, not one per photo: %d", lines)
+	}
+}

@@ -1011,6 +1011,10 @@
   "one": "{n} foto chegou ao seu Immich",
   "other": "{n} fotos chegaram ao seu Immich"
  },
+ "{n} photo arrived in {box}": {
+  "one": "{n} foto chegou a {box}",
+  "other": "{n} fotos chegaram a {box}"
+ },
  "{n} photo chosen": {
   "one": "{n} foto escolhida",
   "other": "{n} fotos escolhidas"
