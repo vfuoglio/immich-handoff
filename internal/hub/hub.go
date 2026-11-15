@@ -79,6 +79,8 @@ type Hub struct {
 	// largest file one may carry, in bytes (SHARED_ALBUMS_MAX_MB; zero: 2 GB).
 	SharedEvery   time.Duration
 	SharedMaxFile int64
+	// GroupMax is the most people one album is shared with through its creator (zero: ten).
+	GroupMax int
 
 	PhoneDir     string
 	PhoneCap     int64

@@ -198,6 +198,9 @@ func (h *Hub) SyncShared(ctx context.Context, id string) error {
 	case problem == "" && a.Problem != "":
 		h.event(ctx, "", a.OwnerID, "share", i18n.Pack("Sharing the album {album} with {other} works again", "album", a.Name, "other", p.Name))
 	}
+	if p.Role != store.PeerImmich {
+		h.tellMembers(context.WithoutCancel(ctx), a, p)
+	}
 	if sent > 0 && p.Role != store.PeerImmich { // the other person is told that photos arrived, once for the whole pass
 		var reply struct{}
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)

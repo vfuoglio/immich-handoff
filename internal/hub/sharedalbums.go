@@ -145,6 +145,9 @@ func (h *Hub) ProposeAlbum(ctx context.Context, sess *immich.API, owner immich.U
 	} else if len(list) >= maxShared {
 		return store.SharedAlbum{}, ErrTooManyShared
 	}
+	if err := h.checkGroupRoom(ctx, owner.ID, p.AlbumID); err != nil {
+		return store.SharedAlbum{}, err
+	}
 	id := uuid.NewString()
 	album, albumName, keyID, secret, err := h.ownAlbum(ctx, sess, owner, p.AlbumID, name, history, id)
 	if err != nil {
@@ -248,6 +251,9 @@ func (h *Hub) AcceptAlbum(ctx context.Context, sess *immich.API, owner immich.Us
 	}
 	if pr.State != store.PeerActive || pr.IPaused {
 		return ErrPeerNotActive
+	}
+	if err := h.checkGroupRoom(ctx, owner.ID, p.AlbumID); err != nil {
+		return err
 	}
 	album, albumName, keyID, secret, err := h.ownAlbum(ctx, sess, owner, p.AlbumID, a.Name, history, a.ID)
 	if err != nil {

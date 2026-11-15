@@ -636,6 +636,10 @@ var migrations = []string{
 	// on their server, two_way says the key can also read it.
 	`ALTER TABLE shared_albums ADD COLUMN their_album TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE shared_albums ADD COLUMN two_way INTEGER NOT NULL DEFAULT 0;`,
+	// Groups through the creator: the names of the others in the album that the creator told this side (group_names), and the names
+	// this side told the other as the creator (group_sent), so that a change is told once.
+	`ALTER TABLE shared_albums ADD COLUMN group_names TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE shared_albums ADD COLUMN group_sent TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

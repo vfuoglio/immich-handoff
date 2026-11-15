@@ -156,6 +156,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /peer/v1/album/photo", w.peerAlbumPhoto)
 	mux.HandleFunc("POST /peer/v1/album/removed", w.signed(w.peerAlbumRemoved))
 	mux.HandleFunc("POST /shared/removal", w.answerRemoval)
+	mux.HandleFunc("POST /peer/v1/album/members", w.signed(w.peerAlbumMembers))
 	mux.HandleFunc("POST /peer/v1/album/done", w.signed(w.peerAlbumDone))
 	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
 	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)

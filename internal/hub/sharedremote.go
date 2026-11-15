@@ -99,6 +99,9 @@ func (h *Hub) ShareWithImmich(ctx context.Context, sess *immich.API, owner immic
 			return store.SharedAlbum{}, fmt.Errorf("could not make the album on their Immich: %s", trimNet(err))
 		}
 	}
+	if err := h.checkGroupRoom(ctx, owner.ID, in.AlbumID); err != nil {
+		return store.SharedAlbum{}, err
+	}
 	id := uuid.NewString()
 	album, albumName, keyID, secret, err := h.ownAlbum(ctx, sess, owner, in.AlbumID, name, history, id)
 	if err != nil {

@@ -522,6 +522,16 @@ Each app looks at its own copy of the album **every few minutes** (`SHARED_ALBUM
 - **What you are told.** In your Activity (and on your devices or by email, if you asked for those): when photos arrive from the other person (one line for a whole pass: \"3 photos arrived from Anna in Summer\"), when someone proposes an album, answers, or ends the sharing, and **once** when sharing stops working (the other app cannot be reached, a file was too large) and once when it works again, not at every look. The Overview's *Needs you* shows a proposal waiting for your answer, a connection that is not reachable, a sharing the other person ended and an album whose last look found a problem. `immich-handoff doctor` checks the settings (`PUBLIC_APP_URL` set and https, the two numbers).
 - **What is sent is only the photos of that album** that are new on your side: what arrived, and, if you chose "only what I add from now on", what was there when you began, are never sent.
 
+### More than two people: a group through the creator
+
+An album can be shared with **several people**, up to ten, with no extra setting: the person who made it (the creator) shares **the same album** with each of them, one connection each. The creator's app passes the photos on: what one member adds arrives in the creator's album and is sent from there to every other member, and the other way round. Members never connect to each other.
+
+- **Nothing loops and nothing is copied twice.** Each connection remembers, by checksum, what arrived over it and never sends it back; a member who already has a photo (even one they added at the same moment as someone else) does not get a second copy.
+- **A member sees the others' names, nothing more.** Under their album's row it says *Also in this album, through {creator}: ...*, and the proposal they accept says that other people may join. The creator's row says whom the album is passed between.
+- **A member leaving** ends only their own connection; the others carry on, and the creator's page shows *Ended by {name}* until they remove it. The photos already copied stay everywhere.
+- **If the creator's server is off,** the members' photos wait and are sent when it is back (the row says the other app could not be reached); nothing is lost, but nothing moves between members in the meantime.
+- **The limit** is ten people per album (a proposal beyond that says so). With the rule *taken out of the other album too*, a photo the creator's app takes out because one member did is taken out for the other members that agreed to it, within a few minutes.
+
 ### Sharing with someone who has no Handoff
 
 For a relative or a friend who has an Immich and will never run Handoff, **Share an album with someone who has no Handoff** (on the Services tab, under *Albums shared with other servers*) lets this one app work on both sides. You need the address of their Immich and a **key they make on their own Immich** (Account settings, API keys) and give to you; give them the exact permissions below, and tell them they can delete the key at any time, which ends the sharing at once. The page shows the same list.

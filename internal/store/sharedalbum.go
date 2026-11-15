@@ -49,15 +49,17 @@ type SharedAlbum struct {
 	Pending             []string  // checksums of a large removal that waits for the person's yes
 	TheirAlbum          string    // one-app way: the album on their Immich
 	TwoWay              bool      // one-app way: their key can also read the album
+	GroupNames          []string  // the others in the album, as the creator told this side
+	GroupSent           []string  // what this side, as the creator, last told the other
 }
 
-const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received, pending, their_album, two_way`
+const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received, pending, their_album, two_way, group_names, group_sent`
 
 func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, error) {
 	var a SharedAlbum
-	var owner, album, key, created, last, pending string
+	var owner, album, key, created, last, pending, names, sent string
 	var enc []byte
-	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received, &pending, &a.TheirAlbum, &a.TwoWay); err != nil {
+	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received, &pending, &a.TheirAlbum, &a.TwoWay, &names, &sent); err != nil {
 		return a, err
 	}
 	a.OwnerID, _ = uuid.Parse(owner)
@@ -67,6 +69,12 @@ func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, err
 	a.LastSync, _ = time.Parse(time.RFC3339Nano, last)
 	if pending != "" {
 		_ = json.Unmarshal([]byte(pending), &a.Pending)
+	}
+	if names != "" {
+		_ = json.Unmarshal([]byte(names), &a.GroupNames)
+	}
+	if sent != "" {
+		_ = json.Unmarshal([]byte(sent), &a.GroupSent)
 	}
 	if len(enc) > 0 {
 		plain, err := s.vault.Open(enc, a.ID)
@@ -91,8 +99,8 @@ func (s *Store) AddSharedAlbum(ctx context.Context, a SharedAlbum) (SharedAlbum,
 			return a, err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received, pendingJSON(a.Pending), a.TheirAlbum, b2i(a.TwoWay))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received, pendingJSON(a.Pending), a.TheirAlbum, b2i(a.TwoWay), pendingJSON(a.GroupNames), pendingJSON(a.GroupSent))
 	return a, err
 }
 
@@ -362,5 +370,17 @@ func (s *Store) LedgerGone(ctx context.Context, album string, checksums []string
 // LedgerRestore gives a photo that was taken out and is back in the album a new origin, as if it were new (or as arrived).
 func (s *Store) LedgerRestore(ctx context.Context, album, checksum, asset, origin string, sent bool) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE shared_ledger SET origin = ?, asset_id = ?, sent = ?, present = 1 WHERE album_id = ? AND checksum = ?`, origin, asset, b2i(sent), album, checksum)
+	return err
+}
+
+// SetSharedGroupNames records the names of the others in the album that the creator told this side.
+func (s *Store) SetSharedGroupNames(ctx context.Context, id string, names []string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET group_names = ? WHERE id = ?`, pendingJSON(names), id)
+	return err
+}
+
+// SetSharedGroupSent records the names this side, as the creator, last told the other.
+func (s *Store) SetSharedGroupSent(ctx context.Context, id string, names []string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE shared_albums SET group_sent = ? WHERE id = ?`, pendingJSON(names), id)
 	return err
 }
