@@ -533,7 +533,10 @@ func TestASenderChoosesAnAlbumFromTheirOwnList(t *testing.T) {
 		t.Errorf("signed out: %d", code)
 	}
 	hdr := map[string]string{"X-Requested-With": "immich-handoff"}
-	for _, path := range []string{"/services/album", "/services/album/stop"} {
+	if code, _ := do(t, "GET", app.URL+"/fragments/rule-form?service=family", "", nil); code != 401 {
+		t.Errorf("the rule form needs a sign-in: %d", code)
+	}
+	for _, path := range []string{"/services/album", "/services/album/stop", "/rules", "/rules/pause", "/rules/delete"} {
 		if code, _ := do(t, "POST", app.URL+path, "sess=alice", nil); code != 400 {
 			t.Errorf("%s needs the cross-site header, got %d", path, code)
 		}

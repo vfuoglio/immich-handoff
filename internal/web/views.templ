@@ -72,6 +72,7 @@ type ServiceView struct {
 	Copy     bool   // the signed-in sender chose to keep their originals (otherwise they are moved to their trash)
 	Album    string // receiver: the album arrivals are put in, if the service has one
 	CanWatch bool   // sender: joined from this page, so may link an album
+	RuleList []RuleView // sender: the rules that suggest photos for this service
 	Watch    string // sender: the album linked to this service, whose photos are all handed over
 
 	Hold       string // why this sender's photos are on hold (paused by the owner, or by themselves); empty: not
@@ -994,6 +995,7 @@ templ SendRow(s ServiceView, id string, open bool) {
 			</div>
 			if s.CanWatch {
 				@WatchBox(s)
+				@RulesBox(s)
 			}
 			if s.CanPause {
 				<p class="row">
@@ -3921,4 +3923,121 @@ templ SharedRow(a SharedView, id string) {
 			</button></p>
 		}
 	</div>
+}
+
+// RulesBox is a sender's rules for a service: what each looks for, what it does, and a form to make another.
+templ RulesBox(s ServiceView) {
+	<div class="rules">
+		<h3>{ t(ctx, "Rules") }</h3>
+		<p class="meta">{ t(ctx, "A rule looks in your Immich for photos by who is in them, where and when, and asks you before anything is handed over. It only looks at photos that reach Immich from now on.") }</p>
+		for _, r := range s.RuleList {
+			<div class="card rule">
+				<p><b>{ r.Sentence }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Automatic") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				<p class="row">
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "End this rule? Photos it already handed over stay where they are.") } data-confirm-title={ t(ctx, "End the rule?") } data-confirm-label={ t(ctx, "End rule") } data-danger="true">{ t(ctx, "End rule") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a rule") }</summary>
+			<div hx-get={ "fragments/rule-form?service=" + url.QueryEscape(s.Name) } hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your people, places and albums...") }</p>
+			</div>
+		</details>
+	</div>
+}
+
+// RuleForm is the form that makes a rule: only choices Immich itself offers, plus dates and a phrase.
+templ RuleForm(v RuleChoicesView) {
+	<form class="card offer-form" hx-post="rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="service" value={ v.Service }/>
+		<p class="meta">{ t(ctx, "Choose what to look for. Everything you choose must hold for a photo to match.") }</p>
+		if len(v.People) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "Photos of") }</legend>
+				for _, p := range v.People {
+					<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
+				}
+			</fieldset>
+			<fieldset class="targets">
+				<legend>{ t(ctx, "But not photos with") }</legend>
+				for _, p := range v.People {
+					<label class="target"><input type="checkbox" name="notperson" value={ p.ID }/><span><b>{ p.Name }</b></span></label>
+				}
+			</fieldset>
+		} else {
+			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so a rule cannot look for people. Name them in Immich and come back.") }</p>
+		}
+		<div class="field">
+			<label>{ t(ctx, "Taken between") }</label>
+			<div class="row"><input type="date" name="after" aria-label={ t(ctx, "From") }/> <input type="date" name="before" aria-label={ t(ctx, "To") }/></div>
+		</div>
+		if len(v.Country) > 0 {
+			<div class="field">
+				<label>{ t(ctx, "Place") }</label>
+				<div class="row">
+					<select name="country" hx-get="fragments/rule-cities" hx-target="next select" hx-swap="innerHTML" hx-trigger="change">
+						<option value="">{ t(ctx, "Anywhere") }</option>
+						for _, c := range v.Country {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+					<select name="city"><option value="">{ t(ctx, "Any city") }</option></select>
+				</div>
+				<small class="meta">{ t(ctx, "Only places your library has photos from are offered. Immich sometimes names a neighbourhood instead of a city.") }</small>
+			</div>
+		}
+		if len(v.Albums) > 0 {
+			<div class="field">
+				<label>{ t(ctx, "In the album") }</label>
+				<select name="album">
+					<option value="">{ t(ctx, "Any album") }</option>
+					for _, a := range v.Albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+			<fieldset class="targets">
+				<legend>{ t(ctx, "But not in the album") }</legend>
+				for _, a := range v.Albums {
+					<label class="target"><input type="checkbox" name="notalbum" value={ a.ID }/><span><b>{ a.Label }</b></span></label>
+				}
+			</fieldset>
+		}
+		<div class="field">
+			<label for="rule-phrase">{ t(ctx, "That look like (optional)") }</label>
+			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
+			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the rule") }</button></p>
+	</form>
+}
+
+// RuleCities is the city menu's options once a country is chosen.
+templ RuleCities(cities []string) {
+	<option value="">{ t(ctx, "Any city") }</option>
+	for _, c := range cities {
+		<option value={ c }>{ c }</option>
+	}
 }

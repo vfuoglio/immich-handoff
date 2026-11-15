@@ -640,6 +640,31 @@ var migrations = []string{
 	// this side told the other as the creator (group_sent), so that a change is told once.
 	`ALTER TABLE shared_albums ADD COLUMN group_names TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE shared_albums ADD COLUMN group_sent TEXT NOT NULL DEFAULT '';`,
+	// Rules: a sender's rule that finds photos by people, places and dates and suggests them for a service they joined
+	// (docs/rules-design.md). cond holds the conditions as JSON. rule_photos is what a rule has done with each photo it matched: it
+	// suggested it (state "suggested", in the batch that is open), the person sent it or declined it, or it was sent by auto.
+	`CREATE TABLE rules (
+	   id        TEXT PRIMARY KEY,
+	   owner_id  TEXT NOT NULL,
+	   service   TEXT NOT NULL,
+	   cond      TEXT NOT NULL,
+	   mode      TEXT NOT NULL DEFAULT 'suggest',
+	   always    INTEGER NOT NULL DEFAULT 0,
+	   paused    INTEGER NOT NULL DEFAULT 0,
+	   since     TEXT NOT NULL,
+	   auto_since TEXT NOT NULL DEFAULT '',
+	   last_look TEXT NOT NULL DEFAULT '',
+	   problem   TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE rule_photos (
+	   rule_id  TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   state    TEXT NOT NULL,
+	   why      TEXT NOT NULL DEFAULT '',
+	   at       TEXT NOT NULL,
+	   PRIMARY KEY (rule_id, asset_id)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -48,3 +48,4 @@ output-options:
     - getPerson
     - searchSmart
     - getSearchSuggestions
+    - getPersonThumbnail

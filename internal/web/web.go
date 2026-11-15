@@ -252,6 +252,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /sync", w.syncNow)
 	mux.HandleFunc("POST /preferences/tags", w.enableTags)
 	mux.HandleFunc("GET /fragments/albums", w.albumChoice)
+	mux.HandleFunc("GET /fragments/rule-form", w.ruleForm)
+	mux.HandleFunc("GET /fragments/rule-cities", w.ruleCities)
+	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
+	mux.HandleFunc("POST /rules", w.addRule)
+	mux.HandleFunc("POST /rules/pause", w.pauseRule)
+	mux.HandleFunc("POST /rules/delete", w.deleteRule)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
@@ -446,7 +452,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
 			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
-				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
+				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName, RuleList: w.ruleViews(ctx, m, svc.Label()),
 				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name, Rules: w.rulesText(ctx, svc)}
 			switch {
 			case svc.Paused:

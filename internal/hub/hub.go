@@ -463,6 +463,7 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	if err := h.Store.RemoveLink(ctx, link.ID); err != nil {
 		return err
 	}
+	h.Store.DeleteRulesOf(ctx, user.ID, service) // its rules end with the membership
 	h.event(ctx, service, user.ID, "left", i18n.Pack("{name} stopped sending to {service}", "name", user.Name, "service", service))
 	h.Log.Info("left", "service", service, "user", user.Email)
 	return h.Reload(ctx)

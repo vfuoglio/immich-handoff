@@ -67,6 +67,9 @@ type fakeImmich struct {
 	removedLinks  []string
 	videos        map[string]bool // asset ids that are videos (the rest are photos)
 	archived      map[string]bool // asset ids the owner archived
+	named         []map[string]any // the named people of bob's library, for rules
+	countries     []string         // the countries bob's photos are from
+	cities        map[string][]string
 }
 
 type fakeUpload struct {
@@ -159,6 +162,20 @@ func (f *fakeImmich) handler() http.Handler {
 		f.keyPerms[id] = body.Permissions
 		f.keyUpdates++
 		j(w, 200, map[string]any{"id": id, "name": "k", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		j(w, 200, map[string]any{"people": append([]map[string]any{}, f.named...), "hasNextPage": false, "total": len(f.named), "hidden": 0})
+	})
+	mux.HandleFunc("GET /api/search/suggestions", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if r.URL.Query().Get("type") == "city" {
+			j(w, 200, append([]string{}, f.cities[r.URL.Query().Get("country")]...))
+			return
+		}
+		j(w, 200, append([]string{}, f.countries...))
 	})
 	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()

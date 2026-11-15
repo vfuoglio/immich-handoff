@@ -3056,6 +3056,13 @@ type ClientInterface interface {
 	// Corresponds with GET /people/{id} (the `GetPerson` operationId).
 	GetPerson(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetPersonThumbnail Get person thumbnail
+	//
+	// Retrieve the thumbnail file for a person.
+	//
+	// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+	GetPersonThumbnail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SearchAssetsWithBody Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -3756,6 +3763,23 @@ func (c *Client) GetAllPeople(ctx context.Context, params *GetAllPeopleParams, r
 // Corresponds with GET /people/{id} (the `GetPerson` operationId).
 func (c *Client) GetPerson(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetPersonRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetPersonThumbnail Get person thumbnail
+//
+// Retrieve the thumbnail file for a person.
+//
+// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+func (c *Client) GetPersonThumbnail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPersonThumbnailRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -5351,6 +5375,40 @@ func NewGetPersonRequest(server string, id openapi_types.UUID) (*http.Request, e
 	return req, nil
 }
 
+// NewGetPersonThumbnailRequest constructs an http.Request for the GetPersonThumbnail method
+func NewGetPersonThumbnailRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/people/%s/thumbnail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSearchAssetsRequest calls the generic SearchAssets builder with application/json body
 func NewSearchAssetsRequest(server string, params *SearchAssetsParams, body SearchAssetsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -6691,6 +6749,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /people/{id} (the `GetPerson` operationId).
 	GetPersonWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonResponse, error)
 
+	// GetPersonThumbnailWithResponse Get person thumbnail
+	//
+	// Retrieve the thumbnail file for a person.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+	GetPersonThumbnailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonThumbnailResponse, error)
+
 	// SearchAssetsWithBodyWithResponse Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -7676,6 +7743,40 @@ func (r GetPersonResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetPersonResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetPersonThumbnailResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPersonThumbnailResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPersonThumbnailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPersonThumbnailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPersonThumbnailResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8959,6 +9060,21 @@ func (c *ClientWithResponses) GetPersonWithResponse(ctx context.Context, id open
 	return ParseGetPersonResponse(rsp)
 }
 
+// GetPersonThumbnailWithResponse Get person thumbnail
+//
+// Retrieve the thumbnail file for a person.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+func (c *ClientWithResponses) GetPersonThumbnailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonThumbnailResponse, error) {
+	rsp, err := c.GetPersonThumbnail(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPersonThumbnailResponse(rsp)
+}
+
 // SearchAssetsWithBodyWithResponse Search assets by metadata
 //
 // Search for assets based on various metadata criteria.
@@ -9879,6 +9995,22 @@ func ParseGetPersonResponse(rsp *http.Response) (*GetPersonResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseGetPersonThumbnailResponse parses an HTTP response from a GetPersonThumbnailWithResponse call
+func ParseGetPersonThumbnailResponse(rsp *http.Response) (*GetPersonThumbnailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPersonThumbnailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil
