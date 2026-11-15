@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { assetOfPath, formOf, wordsOf } from "./handover-core.ts";
+import { assetOfPath, countIn, formOf, Selection, wordsOf } from "./handover-core.ts";
 
 const id = "624ac6b0-4a95-41c2-b99c-d9cd19de0843";
 
@@ -29,4 +29,27 @@ test("the press sends the service and each photo once", () => {
   const form = formOf("Family & friends", [id, "x"]);
   assert.equal(form.get("service"), "Family & friends");
   assert.deepEqual(form.getAll("asset"), [id, "x"]);
+});
+
+test("a selection that has scrolled out of the page is still known, and one that cannot be known says so", () => {
+  const sel = new Selection();
+  sel.see([{ id: "a", selected: true }, { id: "b", selected: true }, { id: "c", selected: false }]);
+  assert.deepEqual(sel.idsFor(2)?.sort(), ["a", "b"]);
+  sel.see([{ id: "c", selected: true }]); // another screen: a and b are no longer drawn
+  assert.deepEqual(sel.idsFor(3)?.sort(), ["a", "b", "c"]);
+  sel.see([{ id: "b", selected: false }]); // b is drawn again and the person took it off
+  assert.deepEqual(sel.idsFor(2)?.sort(), ["a", "c"]);
+  assert.equal(sel.idsFor(500), null, "Select all: Immich counts photos that were never drawn");
+  assert.equal(sel.idsFor(null), null);
+  assert.equal(sel.idsFor(0), null);
+  sel.clear();
+  assert.equal(sel.size, 0);
+  assert.equal(sel.idsFor(2), null);
+});
+
+test("the count in the bar is the paragraph that is only a number, in any language", () => {
+  assert.equal(countIn(["12", "12 selected"]), 12);
+  assert.equal(countIn(["12", "12 ausgewählt"]), 12);
+  assert.equal(countIn(["12 selected"]), null);
+  assert.equal(countIn([]), null);
 });

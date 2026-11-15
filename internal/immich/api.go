@@ -420,6 +420,11 @@ func (a *API) UntagAssets(ctx context.Context, tag openapi_types.UUID, ids []ope
 		if r.JSON200 == nil {
 			return statusErr("untagAssets", r.StatusCode(), r.Body)
 		}
+		for _, item := range *r.JSON200 {
+			if !item.Success && (item.Error == nil || string(*item.Error) != "not_found") {
+				return fmt.Errorf("untagAssets: %s not untagged (%v)", item.Id, item.Error)
+			}
+		}
 		ids = ids[n:]
 	}
 	return nil

@@ -57,9 +57,9 @@ is a long press. Nothing here depends on the circle: the script only reads `data
   further along. Immich redraws the toolbar when the person moves between photos; a `MutationObserver`, as for the
   header link, puts the button back at most once per frame.
 - **Selection bar.** A button is added in the right-hand group of `#control-bar`, before the three-dot menu. On a phone
-  that bar is already full to the edge of the screen (Immich 3.2.0: 374 px of 374 px at 390 px wide), so after adding
-  the button the script checks that the bar did not grow past its width (`scrollWidth > clientWidth`), and if it did,
-  takes the button out again and leaves the menu entry as the only way.
+  that bar is nearly full (Immich 3.2.0 at 390 px wide: about 70 px spare, and the button is 40 px, icon only), so
+  after adding the button the script checks that the bar did not grow past its width (`scrollWidth > clientWidth`),
+  and if it did, takes the button out again and leaves the menu entry as the only way.
 - **Three-dot menus.** An `li[role="menuitem"]`, made by copying an existing one (so it has Immich's own look, light
   and dark) and given the words "Hand over...", is added to the end of the `ul[role="menu"]` that is already in the
   page. It stays there when the menu is closed and opened again, and a click on it is received by the script and closes
