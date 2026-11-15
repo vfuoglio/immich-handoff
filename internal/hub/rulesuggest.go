@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -209,10 +208,6 @@ var (
 	ErrAutoPhrase  = errors.New("a rule with a phrase always asks first, because a look-alike is never certain")
 	ErrRuleNotAuto = errors.New("that rule is not sending by itself")
 )
-
-// autoSettle is how long a photo must have been in Immich before a rule sends it without asking: longer than for a suggestion, so
-// that every face has been found and a person to leave out has had the time to show.
-const autoSettle = 30 * time.Minute
 
 // SetRuleAuto lets a rule send what it finds by itself, or takes that back. Only photos that reach Immich after the switch are
 // ever sent without asking; what was already waiting stays a suggestion.

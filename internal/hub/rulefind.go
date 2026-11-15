@@ -24,8 +24,17 @@ import (
 
 const (
 	ruleWindow = 7 * 24 * time.Hour
-	ruleSettle = 5 * time.Minute // a photo is offered once it has been in Immich this long, so that its faces have been looked for
+	// defaultSettle is how long a photo is in Immich before it is offered, so that its faces have been looked for
+	// (RULES_SETTLE_MINUTES); a rule sends one by itself after six times as long.
+	defaultSettle = 5 * time.Minute
 )
+
+func (h *Hub) ruleSettle() time.Duration {
+	if h.RulesSettle > 0 {
+		return h.RulesSettle
+	}
+	return defaultSettle
+}
 
 // ruleEvery is how often rules look (RULES_CHECK_MINUTES, default 10).
 func (h *Hub) ruleEvery() time.Duration {
@@ -102,7 +111,7 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		if a.OwnerId != me || a.IsArchived || a.IsTrashed || out[a.Id] || known[a.Id.String()] != "" || sentByAny[a.Id.String()] {
 			continue
 		}
-		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < ruleSettle {
+		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < h.ruleSettle() {
 			continue
 		}
 		people := a.People
@@ -187,7 +196,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	for _, m := range matches {
 		id := m.Asset.Id.String()
 		if r.Mode == store.RuleAuto && r.Cond.Phrase == "" && !m.Asset.CreatedAt.Before(r.AutoSince) {
-			if h.now().Sub(m.Asset.CreatedAt) < autoSettle {
+			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleSettle() {
 				continue // not settled enough to send without asking; it is looked at again next time
 			}
 			auto = append(auto, id)

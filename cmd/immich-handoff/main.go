@@ -222,6 +222,13 @@ func run(log *slog.Logger) error {
 			}
 			h.RulesEvery = time.Duration(m * float64(time.Minute))
 		}
+		if v := env("RULES_SETTLE_MINUTES", ""); v != "" {
+			m, err := strconv.ParseFloat(v, 64)
+			if err != nil || m < 0.01 || m > 1440 {
+				return errors.New("RULES_SETTLE_MINUTES must be a number of minutes, from 0.01 to 1440")
+			}
+			h.RulesSettle = time.Duration(m * float64(time.Minute))
+		}
 		go h.RulesLoop(ctx)
 		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
 		case "1", "true", "on", "yes":
