@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### What is new, by what you want to do
+- **Collect photos from people without Immich.** Drop boxes became events: a gallery for guests with hearts and downloads, a moderator link for a helper, a wall on a screen, a best-of, an event pool where everybody gets everybody's photos, frames, a weekly digest, photos sent by email, and your own title, logo and colours. See [Drop boxes](docs/using.md#drop-boxes-photos-from-people-who-do-not-have-immich).
+- **Deliver a shoot to a client.** Client rooms: marked pictures on a phone, favourites up to a limit, notes, rounds, and the originals released when you decide. See [Client rooms](docs/using.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from).
+- **Share albums across servers.** Photos both ways between two Immich servers, with groups of up to ten, and a one-app way that works when your friend does not run Handoff. See [Albums shared with other servers](docs/using.md#albums-shared-with-other-servers).
+- **Stop tagging by hand.** A **Hand over...** button inside Immich's photo viewer, selection bar and menus, with Undo, and rules that suggest photos by named people, places, dates or a phrase (and send by themselves after three *Always*). See [Hand over from inside Immich](docs/find-handoff.md#hand-over-from-inside-immich) and [Rules](docs/using.md#rules-photos-by-who-where-and-when).
+- **Send from a phone.** A **Send** tab that survives a lost connection, and the Share menu on Android.
+- **Know what is happening.** Two colour schemes, a live scene, notifications to ntfy, email and people's own devices, and approve-from-a-message links.
+- **Run it with more confidence.** A test button for notifications, fewer repeated messages for the administrator, and `doctor` checks for the new settings.
+
+The details follow, by area.
+
 ### Look and feel
 - **Two colour schemes, each in light and dark.** The pages come in **Twilight** (the indigo, magenta and orange of the app's icon, unchanged and still the default) and **Immich** (calm blues on near-neutral greys). Everyone chooses from the new palette button in the bar, next to the light/dark button, and the choice is remembered in their own browser. The administrator sets where people start with `THEME` (`twilight` or `immich`) and, if wanted, `THEME_MODE` (`auto`, `light` or `dark`); see [Settings](docs/settings.md). A phone's address bar takes the colour of the scheme. A drop box's own accent colour now also wins over both schemes.
 - **A new look, made for the phone as much as for the desktop.** A pill in the middle of the bar slides a gradient under the view you are in (Overview, Services, Activity); on a phone it becomes a tab bar at the bottom of the screen. Cards are glass with a soft light that follows the pointer, buttons are pills, checkboxes are switches, dialogs rise from the bottom on a phone, every view fades in, and a search bar under each headline opens the command palette.
