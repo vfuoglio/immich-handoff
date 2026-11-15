@@ -13,7 +13,7 @@
 
 The details follow, by area.
 
-- **Photos guests send now show in the host's Activity list.** Each burst of photos arriving in a drop box is one line ("12 photos arrived in Mia's birthday") that is kept up to date as more come, in the host's Activity and in the administrator's recent events. It is a line of the log only: nobody is notified for each photo.
+- **Photos guests send now show in the host's Activity list.** Each burst of photos arriving in a drop box is one line ("12 photos arrived in Mia's birthday") that is kept up to date as more come, in the host's Activity and in the administrator's recent events. It is a line of the log only: nobody is notified for each photo. In the live scene on the Overview each drop box is now a stage of its own: every drop (the photos one guest sends together) flies from the left, named by whoever sent it, into the box, the total goes up by the number of photos and a **+N** fades in over it as they arrive.
 
 ### Look and feel
 - **Two colour schemes, each in light and dark.** The pages come in **Twilight** (the indigo, magenta and orange of the app's icon, unchanged and still the default) and **Immich** (calm blues on near-neutral greys). Everyone chooses from the new palette button in the bar, next to the light/dark button, and the choice is remembered in their own browser. The administrator sets where people start with `THEME` (`twilight` or `immich`) and, if wanted, `THEME_MODE` (`auto`, `light` or `dark`); see [Settings](docs/settings.md). A phone's address bar takes the colour of the scheme. A drop box's own accent colour now also wins over both schemes.
