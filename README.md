@@ -80,6 +80,13 @@ Everything below is recorded from the real page, in the dark or the light varian
 
 <table>
   <tr>
+    <td width="50%" valign="top"><img src="docs/images/immich-button-viewer-list.png" alt="Immich's photo viewer with a Hand over button in the toolbar and the list of services under it"><br><sub><b>A button inside Immich,</b> so nobody has to know about tags.</sub></td>
+    <td width="50%" valign="top"><img src="docs/images/rules-suggestion.png" alt="A rule's suggestion on the Overview: three photos with Send, Not these and Always"><br><sub><b>Rules suggest,</b> you decide with one tap.</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td width="50%" valign="top"><img src="docs/images/join-choice.png" alt="Joining a service: keep my originals or move them to my trash"><br><sub><b>You choose</b> what happens to your originals when you join.</sub></td>
     <td width="50%" valign="top"><img src="docs/images/owner-service.png" alt="A service you offer, with a request waiting for approval"><br><sub><b>Owners approve</b> senders and can share an invitation link.</sub></td>
   </tr>
@@ -101,6 +108,10 @@ Immich's own sharing is the right tool for *showing* photos. Handoff is for *mov
 | Between two servers | Public link only | No | **Yes**, signed, both ways |
 | Photos picked automatically | No | Everything | **Rules** by person, place, date or phrase |
 | Revoke it | Delete the link | Stop sharing | Delete the key in Immich; nothing else is touched |
+
+## Try it first
+
+Not ready to install? [`demo/`](demo/README.md) starts a throwaway Immich with three people and sample photos, and Handoff with the button inside Immich, in one `docker compose up`. Nothing leaves your machine, and one command removes it.
 
 ## Quick start
 

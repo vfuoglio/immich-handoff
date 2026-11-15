@@ -6,6 +6,10 @@
 
 **What you see:** Suggestions with pictures on the Overview, and a message with **Undo** in Immich after a press.
 
+![A suggestion on the Overview: three new photos for Family album found by a rule, with Send, Not these and Always](../images/rules-suggestion.png)
+
+![Immich's selection bar with the Hand over button and the list of services](../images/immich-button-selection-list.png)
+
 ## Rules: photos by who, where and when
 
 Instead of tagging, a **rule** looks in your Immich for photos by **who is in them, where and when**, and asks you before anything is handed over. On the service's card (a service you joined from this page), under **Rules**, press **Make a rule** and choose what to look for. Everything you choose must hold for a photo to match:

@@ -87,6 +87,10 @@ func main() {
 			log.Fatal("film needs a scene name and a directory for the frames")
 		}
 		film(os.Args[2], os.Args[3])
+	case "inside":
+		insideShots(os.Args[2])
+	case "rules":
+		rulesShots(os.Args[2])
 	case "proxycheck":
 		proxycheck(os.Args[2])
 	default:

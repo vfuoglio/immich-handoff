@@ -55,6 +55,8 @@ An album can be shared with **several people**, up to ten, with no extra setting
 
 ### Sharing with someone who has no Handoff
 
+![An album shared both ways with Cousin Marco, who has an Immich and no Handoff: agreed, with Sync now and End sharing of this album](../images/shared-oneapp-row.png)
+
 For a relative or a friend who has an Immich and will never run Handoff, **Share an album with someone who has no Handoff** (on the Services tab, under *Albums shared with other servers*) lets this one app work on both sides. You need the address of their Immich and a **key they make on their own Immich** (Account settings, API keys) and give to you; give them the exact permissions below, and tell them they can delete the key at any time, which ends the sharing at once. The page shows the same list.
 
 - **To only send them the album:** `user.read`, `asset.upload`, `album.create`, `albumAsset.create`. The key can put photos into their library and make an album; it cannot read, search or delete anything. Your album's photos are copied into a new album on their Immich named like the shared album; nothing comes back.
