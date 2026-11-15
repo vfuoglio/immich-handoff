@@ -17,7 +17,7 @@ func TestSharingAlbumsIsCheckedOnlyWhenItIsOn(t *testing.T) {
 	if out, r := sharedReport(nil); out != "" || r.Fails != 0 {
 		t.Errorf("off: %q", out)
 	}
-	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "true"}); r.Fails != 1 || !strings.Contains(out, "PUBLIC_APP_URL is not set") {
+	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "true"}); r.Fails != 0 || r.Warns != 1 || !strings.Contains(out, "PUBLIC_APP_URL is not set") {
 		t.Errorf("no address: %d\n%s", r.Fails, out)
 	}
 	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "on", "PUBLIC_APP_URL": "https://handoff.example.com"}); r.Fails != 0 || r.Warns != 0 || !strings.Contains(out, "sharing albums is on") {

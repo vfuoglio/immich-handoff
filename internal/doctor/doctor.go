@@ -621,8 +621,8 @@ func remote(ctx context.Context, r *Report, rm *bridge.Remote) {
 	}
 }
 
-// sharedAlbums checks the settings of sharing albums with other servers (SHARED_ALBUMS_ENABLE), which needs the app's own
-// public address, because the other app is given it and calls it.
+// sharedAlbums checks the settings of sharing albums with other servers (SHARED_ALBUMS_ENABLE). Sharing with another Handoff needs
+// the app's own public address, because the other app is given it and calls it; sharing with someone who has no Handoff does not.
 func sharedAlbums(r *Report, in Input) {
 	switch strings.ToLower(strings.TrimSpace(firstOf(in.Env, "SHARED_ALBUMS_ENABLE"))) {
 	case "1", "true", "on", "yes":
@@ -634,7 +634,7 @@ func sharedAlbums(r *Report, in Input) {
 	pu, err := url.Parse(u)
 	switch {
 	case u == "":
-		r.add(Fail, "SHARED_ALBUMS_ENABLE is on but PUBLIC_APP_URL is not set, so sharing stays off: the other app is given this app's address",
+		r.add(Warn, "SHARED_ALBUMS_ENABLE is on but PUBLIC_APP_URL is not set, so sharing with another Handoff stays off (the other app is given this app's address); sharing with someone who has an Immich and no Handoff works",
 			"Set PUBLIC_APP_URL to the address the other app reaches this one at, for example https://handoff.example.com")
 	case err != nil || pu.Host == "" || (pu.Scheme != "https" && pu.Scheme != "http"):
 		r.add(Fail, "PUBLIC_APP_URL is not a web address: "+u, "Use a full address such as https://handoff.example.com")
