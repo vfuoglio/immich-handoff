@@ -175,4 +175,4 @@
 - Services with several senders and receivers via a routes file; one-to-many.
 
 ## 0.0.1
-- Tag a photo `share`; the photo is handed to one family account through an Immich workflow.
+- Tag a photo `share`; the photo is handed to one other account through an Immich workflow.
