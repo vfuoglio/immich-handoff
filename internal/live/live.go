@@ -121,16 +121,17 @@ func (b *Bus) Publish(e Event) {
 		return
 	}
 	key := string(e.Kind) + "\x00" + e.Service + "\x00" + e.Sender + "\x00" + e.Reason
+	stands := max(e.Count, 1) // an event can already stand for several photos
 	b.mu.Lock()
 	if p, ok := b.pending[key]; ok {
-		p.n++
+		p.n += stands
 		b.mu.Unlock()
 		return
 	}
 	if b.pending == nil {
 		b.pending = map[string]*pending{}
 	}
-	b.pending[key] = &pending{ev: e, n: 1}
+	b.pending[key] = &pending{ev: e, n: stands}
 	window := b.Window
 	if window <= 0 {
 		window = 300 * time.Millisecond

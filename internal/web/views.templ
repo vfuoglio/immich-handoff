@@ -193,6 +193,8 @@ type SceneStage struct {
 	Where   string // one line about the receiving side
 	Out     bool   // the person sends here: the photos fly away from them, not toward them
 	Lanes   []SceneLane
+	Drop    bool // a drop box: one lane for whoever is sending (a guest or a person), and the box's total so far
+	Total   int  // a drop box's files so far, which the counter starts from
 }
 
 // NeedAction is a button on a card in the "Needs you" strip.
@@ -1803,7 +1805,7 @@ templ Scene(stages []SceneStage) {
 	<section id="scene" class="scene" hx-get="fragments/scene" hx-trigger="scene:refresh from:body" hx-swap="outerHTML" aria-label={ t(ctx, "Live hand-overs") }>
 		<p class="meta scene-offline" data-offline hidden>{ t(ctx, "Live updates are off for now: the connection to the app dropped. They come back by themselves; the numbers above still refresh when you reload the page.") }</p>
 		for _, st := range stages {
-			<article class="card stage" data-stage data-service={ st.Service } data-dir={ sceneDir(st) }>
+			<article class="card stage" data-stage data-service={ st.Service } data-dir={ sceneDir(st) } data-kind={ sceneKind(st) } data-start={ fmt.Sprint(st.Total) }>
 				<header>
 					<h3>{ st.Service }</h3>
 					<span class="meta">{ st.Where }</span>
@@ -1825,8 +1827,9 @@ templ Scene(stages []SceneStage) {
 					</div>
 					<aside class="gate" aria-label={ t(ctx, "Arrivals in {service}", "service", st.Service) }>
 						<div class="landed" data-landed aria-hidden="true"></div>
-						<div>
-							<span class="big" data-arrived data-odo={ "arrived:" + st.Service }>0</span>
+						<div class="total">
+							<span class="plus-box" data-plus aria-hidden="true"></span>
+							<span class="big" data-arrived data-odo={ "arrived:" + st.Service }>{ fmt.Sprint(st.Total) }</span>
 							<span class="cl">{ t(ctx, "arrived while you watch") }</span>
 						</div>
 					</aside>

@@ -155,6 +155,28 @@ export function describe(ev: LiveEvent): string {
   }
 }
 
+/** How long a token takes to fly, and the part of the flight at which it reaches the gate (see fly). */
+export const FLIGHT_MS = 1500;
+export const HIT_AT = 0.9;
+
+/**
+ * When the "+N" over a box's total shows, for a drop that takes `flight` milliseconds to land: it starts to appear a fraction of
+ * a second before the photos reach the box, is fully visible as they hit (and the total goes up), and fades out quickly after.
+ */
+export function plusTiming(flight: number): { delay: number; duration: number; visibleAt: number; fadeFrom: number } {
+  const hit = flight * HIT_AT; // when the token reaches the box
+  const lead = 320; // how long before that it starts to appear
+  const delay = Math.max(0, hit - lead);
+  const duration = lead + (flight - hit) + 330; // up to the total going up (at the end of the flight), and a quick fade after
+  return { delay, duration, visibleAt: lead / duration, fadeFrom: (lead + (flight - hit)) / duration };
+}
+
+/** Who a drop box's lane names: the guest's name when they gave one, or a guest. */
+export function dropWho(sender: string | undefined, fallback: string): string {
+  const name = sender?.trim();
+  return name ? name : fallback;
+}
+
 /** How many tokens to animate for a burst, and how many photos are left to count without one. */
 export function flights(count: number, max: number): { shown: number; extra: number } {
   const n = Math.max(1, count);
@@ -185,6 +207,9 @@ interface Stage {
   counter: HTMLElement;
   landed: HTMLElement;
   out: boolean; // the person sends here: tokens fly from the right edge to the left, away from "You"
+  drop: boolean; // a drop box: one lane for whoever is sending, and a total the "+N" shows over
+  start: number; // a drop box's total when the page was drawn
+  plus: HTMLElement | null;
 }
 
 /** How many photos arrived at each service's gate while the page was open; kept across refreshes of the scene. */
@@ -216,7 +241,8 @@ function readStages(root: HTMLElement): Stage[] {
       if (state === "capped") flags.capped = true;
       lanes.push({ el: laneEl, sender: laneEl.dataset["sender"] ?? "", flags, label, track, tokens: 0 });
     });
-    stages.push({ el, service, lanes, counter, landed, out: el.dataset["dir"] === "out" });
+    const start = Number.parseInt(el.dataset["start"] ?? "0", 10);
+    stages.push({ el, service, lanes, counter, landed, out: el.dataset["dir"] === "out", drop: el.dataset["kind"] === "drop", start: Number.isFinite(start) ? start : 0, plus: el.querySelector<HTMLElement>("[data-plus]") });
   });
   return stages;
 }
@@ -239,7 +265,7 @@ function say(root: HTMLElement, text: string): void {
 }
 
 function land(stage: Stage, n: number, hue: number): void {
-  const total = (arrived.get(stage.service) ?? 0) + n;
+  const total = (arrived.get(stage.service) ?? stage.start) + n;
   arrived.set(stage.service, total);
   setOdometer(stage.counter, total, `arrived:${stage.service}`);
   const chip = document.createElement("i");
@@ -254,8 +280,31 @@ function land(stage: Stage, n: number, hue: number): void {
   while (stage.landed.children.length > 5) stage.landed.lastElementChild?.remove();
 }
 
+/** The "+N" over a box's total: in as the photos near the box, full as they hit, out as the total goes up. */
+function plusCue(stage: Stage, n: number): void {
+  if (!stage.plus || reduced() || document.hidden) return;
+  const cue = document.createElement("span");
+  cue.className = "plus";
+  cue.textContent = `+${n}`;
+  stage.plus.appendChild(cue);
+  const when = plusTiming(FLIGHT_MS);
+  const run = cue.animate(
+    [
+      { opacity: 0, transform: "translateY(5px)", offset: 0 },
+      { opacity: 1, transform: "translateY(0)", offset: when.visibleAt },
+      { opacity: 1, transform: "translateY(0)", offset: when.fadeFrom },
+      { opacity: 0, transform: "translateY(-4px)", offset: 1 },
+    ],
+    { duration: when.duration, delay: when.delay, easing: "ease-out", fill: "both" },
+  );
+  run.onfinish = () => cue.remove();
+  run.oncancel = () => cue.remove();
+}
+
 function fly(stage: Stage, lane: Lane, count: number, outcome: "handed" | "refused" | "failed"): void {
-  const { shown, extra } = flights(count, MAX_TOKENS_PER_LANE);
+  // photos a guest sends together are one drop: one token for the group, and the whole count goes in when it lands
+  const { shown, extra } = stage.drop ? { shown: 1, extra: Math.max(0, count - 1) } : flights(count, MAX_TOKENS_PER_LANE);
+  if (stage.drop && outcome === "handed") plusCue(stage, count);
   const animate = !reduced() && !document.hidden;
   for (let i = 0; i < shown; i++) {
     const hue = hueTurn++ % HUES;
@@ -276,10 +325,10 @@ function fly(stage: Stage, lane: Lane, count: number, outcome: "handed" | "refus
     const frames: Keyframe[] = [
       { transform: "translateX(0) scale(.6)", opacity: 0 },
       { transform: `translateX(${dir * width * 0.08}px) scale(1)`, opacity: 1, offset: 0.12 },
-      { transform: `translateX(${dir * stop}px) scale(1)`, opacity: 1, offset: 0.9 },
+      { transform: `translateX(${dir * stop}px) scale(1)`, opacity: 1, offset: HIT_AT },
       { transform: `translateX(${dir * (outcome === "handed" ? stop + 24 : outcome === "refused" ? stop * 0.5 : stop)}px) scale(${outcome === "failed" ? 0.2 : 0.5})`, opacity: 0 },
     ];
-    const run = token.animate(frames, { duration: 1500 + i * 180, delay: i * 140, easing: "cubic-bezier(.45,.05,.3,1)", fill: "backwards" });
+    const run = token.animate(frames, { duration: FLIGHT_MS + i * 180, delay: i * 140, easing: "cubic-bezier(.45,.05,.3,1)", fill: "backwards" });
     const done = (): void => {
       token.remove();
       lane.tokens--;
@@ -302,14 +351,14 @@ export function initScene(root: HTMLElement): void {
   const reread = (): void => {
     stages = readStages(root);
     stages.forEach((s) => {
-      const n = arrived.get(s.service) ?? 0;
+      const n = arrived.get(s.service) ?? s.start;
       setOdometer(s.counter, n, `arrived:${s.service}`);
     });
   };
   reread();
 
   const onLive = (e: CustomEvent<LiveEvent>): void => {
-    const ev = e.detail;
+    let ev = e.detail;
     if (ev.kind === "resync") {
       say(root, describe(ev));
       document.body.dispatchEvent(new CustomEvent("scene:refresh"));
@@ -317,8 +366,16 @@ export function initScene(root: HTMLElement): void {
     }
     const stage = stages.find((s) => s.service === ev.service);
     if (!stage) return;
+    if (stage.drop) {
+      const who = dropWho(ev.sender, t("A guest"));
+      ev = { ...ev, sender: who };
+      const name = stage.lanes[0]?.el.querySelector<HTMLElement>(".lane-who b");
+      if (name) name.textContent = who; // the lane names whoever is sending
+      const avatar = stage.lanes[0]?.el.querySelector<HTMLElement>(".avatar");
+      if (avatar) avatar.textContent = [...who][0]?.toUpperCase() ?? "?";
+    }
     say(root, describe(ev));
-    const lanes = target(stage, ev);
+    const lanes = stage.drop ? stage.lanes : target(stage, ev);
     for (const lane of lanes) {
       lane.flags = applyEvent(lane.flags, ev);
       paint(lane);

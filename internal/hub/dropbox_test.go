@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
@@ -1511,5 +1512,36 @@ func TestPhotosArrivingInABoxAreOneLineOfTheHostsActivityUntilAPauseInTheArrival
 	}
 	if lines != 1 {
 		t.Errorf("the log holds one line, not one per photo: %d", lines)
+	}
+}
+
+func TestWhatGuestsSendReachesTheHostsLiveSceneAsOneDropForEachGuest(t *testing.T) {
+	e, ctx := setup(t, true), context.Background()
+	bus := &live.Bus{Window: 10 * time.Millisecond}
+	e.h.Bus = bus
+	hostFeed, _ := bus.Subscribe(bob.ID, false)
+	otherFeed, _ := bus.Subscribe(ann.ID, false)
+	b := newBox(t, e, hub.DropParams{Name: "Birthday", Gallery: true, GalleryNames: true}) // a box that shows who sent each photo keeps the name
+	box, _ := e.h.OpenDropBox(ctx, b.Token)
+	for i, who := range []string{"g1", "g1", "g1"} { // three photos from one guest, close together
+		img := append(append([]byte(nil), jpeg...), byte(i))
+		if _, err := e.h.ReceiveDropFileWith(ctx, box.ID, "p.jpg", bytes.NewReader(img), who, hub.DropMeta{Name: "Mia"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(1900 * time.Millisecond) // the drop is told once the guest has paused
+	var got []live.Event
+	for _, ev := range heard(hostFeed) {
+		if ev.Kind == live.Handed && ev.Service == "Birthday" {
+			got = append(got, ev)
+		}
+	}
+	if len(got) != 1 || got[0].Count != 3 || got[0].Sender != "Mia" {
+		t.Fatalf("the host hears one drop of three from Mia: %+v", got)
+	}
+	for _, ev := range heard(otherFeed) {
+		if ev.Service == "Birthday" {
+			t.Errorf("someone else heard about the box: %+v", ev)
+		}
 	}
 }
