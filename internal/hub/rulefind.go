@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"strings"
 	"time"
 
@@ -173,6 +174,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		h.Store.MarkRuleLook(ctx, r.ID, h.now(), problem)
 		return 0, err
 	}
+	waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested)
 	for _, m := range matches {
 		if err := h.Store.PutRulePhoto(ctx, r.ID, m.Asset.Id.String(), store.RuleSuggested, m.Why); err != nil {
 			return 0, err
@@ -181,6 +183,14 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	h.Store.MarkRuleLook(ctx, r.ID, h.now(), "")
 	if len(matches) > 0 {
 		h.Log.Debug("a rule found photos", "rule", r.ID, "count", len(matches))
+		if len(waiting) == 0 && !r.Paused { // told once for a batch, when it begins, not for each photo that joins it
+			user := immich.User{ID: r.OwnerID, Name: link.Name}
+			h.eventWith(ctx, r.Service, user.ID, "suggestion",
+				i18n.PackN("{n} new photo for {service} matches your rule: {rule}. Look at it on the Overview.", "{n} new photos for {service} match your rule: {rule}. Look at them on the Overview.", len(matches), "service", r.Service, "rule", RuleSentence(r.Cond)),
+				[]ActionSpec{
+					{Recipient: r.OwnerID, RecipientName: link.Name, Kind: ActionRuleSend, Service: r.Service, Target: r.ID, Group: r.ID},
+					{Recipient: r.OwnerID, RecipientName: link.Name, Kind: ActionRuleDecline, Service: r.Service, Target: r.ID, Group: r.ID}})
+		}
 	}
 	return len(matches), nil
 }

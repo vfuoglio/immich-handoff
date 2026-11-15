@@ -18,6 +18,8 @@ const (
 	ActionDecline       = "decline"        // the owner declines it
 	ActionResumeService = "resume-service" // the owner resumes a service they paused
 	ActionResumeSender  = "resume-sender"  // a sender resumes their own sending
+	ActionRuleSend      = "rule-send"      // a sender sends the photos a rule suggested
+	ActionRuleDecline   = "rule-decline"   // and says "not these"
 )
 
 var (
@@ -49,6 +51,10 @@ func actionLabel(kind string) string {
 		return "Decline"
 	case ActionResumeService:
 		return "Resume service"
+	case ActionRuleSend:
+		return "Send"
+	case ActionRuleDecline:
+		return "Not these"
 	}
 	return "Resume sending"
 }
@@ -118,6 +124,12 @@ func (h *Hub) ActionPage(ctx context.Context, token string) (ActionInfo, bool) {
 		if !h.senderPaused(ctx, a.UserID, a.Service) {
 			return ActionInfo{}, false
 		}
+	case ActionRuleSend, ActionRuleDecline:
+		sg, err := h.SuggestionOf(ctx, a.UserID, a.Target)
+		if err != nil || len(sg.Photos) == 0 {
+			return ActionInfo{}, false
+		}
+		info.Name = RuleSentence(sg.Rule.Cond)
 	default:
 		return ActionInfo{}, false
 	}
@@ -178,6 +190,17 @@ func (h *Hub) RunAction(ctx context.Context, token string) (ActionInfo, error) {
 		return info, h.SetServicePaused(ctx, person, a.Service, false)
 	case ActionResumeSender:
 		return info, h.SetMemberPaused(ctx, person, a.Service, false)
+	case ActionRuleSend, ActionRuleDecline:
+		answer := AnswerSend
+		if a.Kind == ActionRuleDecline {
+			answer = AnswerDecline
+		}
+		if err := h.AnswerSuggestion(ctx, person, a.Target, answer, nil); errors.Is(err, ErrNoSuggestion) {
+			return info, ErrAlreadyDecided
+		} else if err != nil {
+			return info, err
+		}
+		return info, nil
 	}
 	return info, ErrActionInvalid
 }

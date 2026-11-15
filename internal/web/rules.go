@@ -217,3 +217,45 @@ func (w *Server) deleteRule(rw http.ResponseWriter, r *http.Request) {
 		return w.Hub.DeleteRule(ctx, me.user, r.PostFormValue("rule"))
 	})
 }
+
+// SuggestionReview is the page that shows everything a rule found, one photo at a time.
+type SuggestionReview struct {
+	User, RuleID, Service, Sentence string
+	Photos                          []RuleReviewPhoto
+	Phrase                          bool
+}
+
+// RuleReviewPhoto is one photo on the review page.
+type RuleReviewPhoto struct{ ID, URL, Why string }
+
+func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	sg, err := w.Hub.SuggestionOf(r.Context(), me.user.ID, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
+	for _, p := range sg.Photos {
+		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	SuggestionReviewPage(d).Render(r.Context(), rw)
+}
+
+// reviewRule settles a whole batch from the review page: the ticked photos are answered yes, the others are left out.
+func (w *Server) reviewRule(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "rule reviewed", func(ctx context.Context, me *member, _ string) error {
+		r.ParseForm()
+		do := r.PostFormValue("do")
+		only := []string{}
+		for _, id := range r.PostForm["photo"] {
+			only = append(only, id)
+		}
+		return w.Hub.AnswerSuggestion(ctx, me.user, r.PostFormValue("rule"), do, only)
+	})
+}

@@ -257,6 +257,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
 	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
+	mux.HandleFunc("GET /rules/review/{id}", w.ruleReview)
+	mux.HandleFunc("POST /rules/review", w.reviewRule)
 	mux.HandleFunc("POST /rules", w.addRule)
 	mux.HandleFunc("POST /rules/pause", w.pauseRule)
 	mux.HandleFunc("POST /rules/delete", w.deleteRule)
@@ -689,7 +691,7 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			acts = append(acts, NeedAction{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")})
 		}
 		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo for {service}", "{n} new photos for {service}", sg.Count, "service", sg.Service),
-			Text: t(ctx, "Found by your rule: {rule}. Send them to {service}?", "rule", sg.Sentence, "service", sg.Service), Thumbs: sg.Thumbs, More: more, Actions: acts})
+			Text: t(ctx, "Found by your rule: {rule}. Send them to {service}?", "rule", sg.Sentence, "service", sg.Service), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 	}
 	for _, o := range d.Owned {
 		if o.Broken != "" {

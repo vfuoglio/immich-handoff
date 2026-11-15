@@ -221,6 +221,10 @@ func actionSentence(ctx context.Context, info hub.ActionInfo) (question, button 
 		return t(ctx, "Decline {name}'s request to send photos to {service}?", "name", info.Name, "service", info.Service), t(ctx, "Decline")
 	case hub.ActionResumeService:
 		return t(ctx, "Resume the service {service}?", "service", info.Service), t(ctx, "Resume service")
+	case hub.ActionRuleSend:
+		return t(ctx, "Send the photos your rule found ({rule}) to {service}?", "rule", info.Name, "service", info.Service), t(ctx, "Send")
+	case hub.ActionRuleDecline:
+		return t(ctx, "Leave out the photos your rule found ({rule}) for {service}?", "rule", info.Name, "service", info.Service), t(ctx, "Not these")
 	}
 	return t(ctx, "Resume your sending to {service}?", "service", info.Service), t(ctx, "Resume sending")
 }

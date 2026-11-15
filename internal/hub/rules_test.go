@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
 const (
@@ -247,5 +248,32 @@ func TestAnsweringASuggestionSendsDeclinesOrAlwaysSendsAndOnlyTheOwnerCanAnswer(
 	}
 	if got, _ := e.st.RuleByID(ctx, r.ID); got.Always != 1 {
 		t.Errorf("declining does not count: %d", got.Always)
+	}
+}
+
+func TestAMessageLinkSendsOrLeavesOutWhatARuleFoundAndWorksOnce(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
+	a := hit(bobID, 60, nil, noraID)
+	e.f.ruleHits = []map[string]any{a}
+	stored, _ := e.st.RuleByID(ctx, r.ID)
+	e.h.LookRule(ctx, stored)
+	send, _ := e.st.ActionMake(ctx, store.ActionLink{UserID: bobID, UserName: "Bob", Kind: hub.ActionRuleSend, Service: "family", Target: r.ID, Group: r.ID})
+	no, _ := e.st.ActionMake(ctx, store.ActionLink{UserID: bobID, UserName: "Bob", Kind: hub.ActionRuleDecline, Service: "family", Target: r.ID, Group: r.ID})
+	if info, ok := e.h.ActionPage(ctx, send); !ok || !strings.Contains(info.Name, "Nora") {
+		t.Fatalf("the page says what it is about: %+v %v", info, ok)
+	}
+	if _, err := e.h.RunAction(ctx, send); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.f.tagged) != 1 || e.f.tagged[0] != a["id"] {
+		t.Errorf("tagged: %v", e.f.tagged)
+	}
+	// the other link of the same message is no longer about anything
+	if _, ok := e.h.ActionPage(ctx, no); ok {
+		t.Error("nothing waits any more, so the other link is as good as unknown")
+	}
+	if _, err := e.h.RunAction(ctx, no); err == nil {
+		t.Error("and does nothing")
 	}
 }

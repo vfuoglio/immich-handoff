@@ -4061,3 +4061,34 @@ templ RuleCities(cities []string) {
 		<option value={ c }>{ c }</option>
 	}
 }
+
+// SuggestionReviewPage shows every photo a rule found, large enough to judge, with a tick on each. Ticked photos are sent, the
+// others are left out for good.
+templ SuggestionReviewPage(d SuggestionReview) {
+	@Layout(t(ctx, "Photos for {service}", "service", d.Service), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
+		<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="rule" value={ d.RuleID }/>
+			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
+			<ul class="review-grid">
+				for _, p := range d.Photos {
+					<li>
+						<label>
+							<img src={ p.URL + "?size=large" } alt={ p.Why } width="240" height="240" loading="lazy"/>
+							<span class="meta"><input type="checkbox" name="photo" value={ p.ID } checked/> { p.Why }</span>
+						</label>
+					</li>
+				}
+			</ul>
+			<p class="row form-actions">
+				<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Send the ticked photos") }</button>
+				if !d.Phrase {
+					<button type="submit" name="do" value="always">{ t(ctx, "Send the ticked photos, and always") }</button>
+				}
+				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
+			</p>
+		</form>
+	}
+}
