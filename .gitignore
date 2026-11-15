@@ -1,2 +1,4 @@
 .env
 /immich-handoff
+__pycache__/
+*.pyc

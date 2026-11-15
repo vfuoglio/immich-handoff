@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fills the demonstration (run by the `seed` service of demo/docker-compose.yml, once): an Immich administrator, three people, sample photos, and a little history in the app."""
-import io, json, math, os, random, sys, time, urllib.request, urllib.error, uuid
+import io, json, os, sys, time, urllib.request, urllib.error, uuid
 from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -39,52 +39,30 @@ def login(email, pw):
     cookies = "; ".join(c.split(";")[0] for c in h.get_all("Set-Cookie") or [])
     return j["accessToken"], cookies
 
-# ---- pictures: scenes with a sky, a sun, hills and some texture, so each one is different and sharp --------------------
-def scene(seed, w=1600, h=1067):
-    r = random.Random(seed)
-    palettes = [((255, 190, 120), (90, 120, 200)), ((120, 200, 255), (20, 60, 140)), ((255, 140, 160), (70, 40, 120)), ((250, 230, 150), (50, 150, 120)),
-                ((200, 220, 255), (60, 80, 120)), ((255, 170, 90), (40, 20, 60)), ((170, 255, 200), (20, 90, 100))]
-    top, bottom = palettes[seed % len(palettes)]
-    img = Image.new("RGB", (w, h))
-    px = img.load()
-    for y in range(h):
-        t = y / h
-        c = tuple(int(top[i] * (1 - t) + bottom[i] * t) for i in range(3))
-        for x in range(w): px[x, y] = c
-    d = ImageDraw.Draw(img)
-    sx, sy, sr = r.randint(w // 5, 4 * w // 5), r.randint(h // 8, h // 3), r.randint(50, 110)
-    d.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(255, 245, 200))
-    for layer in range(4):
-        base = h * (0.55 + layer * 0.1)
-        col = tuple(max(0, int(c * (0.55 - layer * 0.1))) for c in (90, 140, 90))
-        pts = [(0, h)]
-        for x in range(0, w + 40, 40):
-            pts.append((x, base + 60 * math.sin(x / (110 + layer * 40) + r.random() * 6) + r.randint(-18, 18)))
-        pts.append((w, h))
-        d.polygon(pts, fill=col)
-    for _ in range(900):  # grain and detail, so the picture is sharp
-        x, y = r.randint(0, w - 1), r.randint(h // 2, h - 1)
-        d.point((x, y), fill=tuple(r.randint(30, 200) for _ in range(3)))
-    for _ in range(70):
-        x, y = r.randint(0, w), r.randint(h // 2, h)
-        d.rectangle([x, y, x + r.randint(2, 9), y + r.randint(2, 9)], fill=tuple(r.randint(20, 220) for _ in range(3)))
-    return img
+# ---- pictures: real photos from demo/photos (public domain, see photos/CREDITS.md) ----------------------------------------
+PHOTOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photos")
+# who has what: Alice a trip to Innsbruck, Bob a party, Carol travels (the numbers are the file names' prefixes)
+OWNS = {1: [26, 27, 28, 29, 30, 32, 33], 2: [1, 3, 16, 17, 20, 25, 18], 3: [34, 35, 36, 37, 7, 10, 11]}
+
+def photo_file(n):
+    return next(f for f in sorted(os.listdir(PHOTOS)) if f.startswith(f"{n:02d}-"))
 
 def jpeg(img):
     b = io.BytesIO(); img.save(b, "JPEG", quality=88); return b.getvalue()
 
 def photos(owner_seed):
+    """Seven real photos, a near-duplicate of the first (for the duplicate check), a too-dark one and a blurry one."""
+    files = [photo_file(n) for n in OWNS[owner_seed]]
     out = []
-    for i in range(6):
-        out.append((f"scene-{owner_seed}-{i + 1}.jpg", jpeg(scene(owner_seed * 10 + i))))
-    base = scene(owner_seed * 10 + 7)
-    out.append((f"twin-a-{owner_seed}.jpg", jpeg(base)))
-    twin = base.copy(); twin.putpixel((5, 5), (1, 2, 3)); d = ImageDraw.Draw(twin); d.ellipse([20, 20, 60, 60], fill=(250, 250, 250))
-    out.append((f"twin-b-{owner_seed}.jpg", jpeg(twin)))
-    dark = scene(owner_seed * 10 + 8).point(lambda v: int(v * 0.06))
-    out.append((f"too-dark-{owner_seed}.jpg", jpeg(dark)))
-    blur = scene(owner_seed * 10 + 9).filter(ImageFilter.GaussianBlur(26))
-    out.append((f"blurry-{owner_seed}.jpg", jpeg(blur)))
+    for f in files:
+        out.append((f, open(os.path.join(PHOTOS, f), "rb").read()))
+    first = Image.open(os.path.join(PHOTOS, files[0])).convert("RGB")
+    twin = first.copy(); twin.putpixel((5, 5), (1, 2, 3)); d = ImageDraw.Draw(twin); d.ellipse([20, 20, 60, 60], fill=(250, 250, 250))
+    out.append(("twin-" + files[0], jpeg(twin)))
+    dark = Image.open(os.path.join(PHOTOS, files[1])).convert("RGB").point(lambda v: int(v * 0.06))
+    out.append(("too-dark-" + files[1], jpeg(dark)))
+    blur = Image.open(os.path.join(PHOTOS, files[2])).convert("RGB").filter(ImageFilter.GaussianBlur(26))
+    out.append(("blurry-" + files[2], jpeg(blur)))
     return out
 
 def upload(token, name, data, when):
@@ -125,7 +103,7 @@ def main():
         for i, (fname, data) in enumerate(photos(n)):
             ids[name].append(upload(tokens[name], fname, data, now - timedelta(days=7 - i % 6, hours=i)))
         print(name, "has", len(ids[name]), "photos")
-    s, album, _ = call("POST", IMMICH + "/albums", {"albumName": "Holiday", "assetIds": ids["alice"][:6]}, {"Authorization": "Bearer " + tokens["alice"]})
+    s, album, _ = call("POST", IMMICH + "/albums", {"albumName": "Holiday", "assetIds": ids["alice"][:7]}, {"Authorization": "Bearer " + tokens["alice"]})
     print("alice's album Holiday:", s)
 
     # a little history in the app: Alice offers "Family album" (open); Bob joins it and hands over five photos

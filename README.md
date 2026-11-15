@@ -80,7 +80,7 @@ Everything below is recorded from the real page, in the dark or the light varian
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/images/immich-button-viewer-list.png" alt="Immich's photo viewer with a Hand over button in the toolbar and the list of services under it"><br><sub><b>A button inside Immich,</b> so nobody has to know about tags.</sub></td>
+    <td width="50%" valign="top"><img src="docs/images/immich-button-viewer-list.jpg" alt="Immich's photo viewer with a Hand over button in the toolbar and the list of services under it"><br><sub><b>A button inside Immich,</b> so nobody has to know about tags.</sub></td>
     <td width="50%" valign="top"><img src="docs/images/rules-suggestion.png" alt="A rule's suggestion on the Overview: three photos with Send, Not these and Always"><br><sub><b>Rules suggest,</b> you decide with one tap.</sub></td>
   </tr>
 </table>

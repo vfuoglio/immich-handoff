@@ -75,6 +75,7 @@ services:
       PYTHONUNBUFFERED: "1"
     volumes:
       - ./seed.py:/seed.py:ro
+      - ./photos:/photos:ro
     command: ["sh", "-c", "pip install -q --disable-pip-version-check pillow && python /seed.py"]
     restart: "no"
     depends_on:

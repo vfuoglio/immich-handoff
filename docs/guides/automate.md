@@ -8,7 +8,7 @@
 
 ![A suggestion on the Overview: three new photos for Family album found by a rule, with Send, Not these and Always](../images/rules-suggestion.png)
 
-![Immich's selection bar with the Hand over button and the list of services](../images/immich-button-selection-list.png)
+![Immich's selection bar with the Hand over button and the list of services](../images/immich-button-selection-list.jpg)
 
 ## Rules: photos by who, where and when
 
