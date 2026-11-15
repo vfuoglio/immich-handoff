@@ -2,6 +2,14 @@
 
 Running it day to day: where to put the page, backups, upgrades, monitoring and removing it.
 
+> **In short**
+> - Put the page behind your reverse proxy, either on its own address or under a path of Immich's address (needed for the button inside Immich).
+> - Backups are automatic (daily by default); keep a copy of `HANDOFF_STORE_KEY` somewhere safe, because the backups cannot be read without it.
+> - Upgrade by pulling the new image or tag and restarting; check the release notes first.
+> - `immich-handoff doctor` checks your setup, and `/healthz` and `/metrics` are there for monitoring.
+>
+> **Contents:** [Putting the page behind your reverse proxy](#putting-the-page-behind-your-reverse-proxy) · [Backups](#backups) · [Upgrading](#upgrading) · [Installing the page on a phone](#installing-the-page-on-a-phone) · [Weekly digest](#weekly-digest) · [Photos by email](#photos-by-email) · [Notifications on devices](#notifications-on-devices) · [Letting guests reach a drop box](#letting-guests-reach-a-drop-box) · [Monitoring](#monitoring) · [Notifications](#notifications) · [Checking the setup](#checking-the-setup) · [Removing it](#removing-it)
+
 ## Putting the page behind your reverse proxy
 
 The page signs people in with their **Immich login**: their browser sends Immich's cookie to the page, and the app asks Immich who it belongs to. Browsers send a cookie to every port of the same hostname, so the one rule is: **serve the page on the same hostname as Immich.**
@@ -169,7 +177,7 @@ The image comes from Docker Hub: `docker-compose.yml` names `vfuoglio/immich-han
 
 **An untagged image of a gigabyte or more after building.** The `Dockerfile` has two stages: one with the Go toolchain and the source, and the 15 MB image you run. Some Docker setups (the classic builder, `DOCKER_BUILDKIT=0`) keep the first stage as an image shown as `<none>:<none>`. It is only the leftover of the build and nothing uses it. Remove it with `docker image prune`, which deletes every untagged image on that machine, so check `docker images -f dangling=true` first. `docker builder prune` also clears the build cache.
 
-Before you upgrade **Immich** itself, you can run this project's whole test suite against the new Immich: `IMMICH_VERSION=<tag> test/run.sh` (see [Architecture](architecture.md)).
+Before you upgrade **Immich** itself, you can run this project's whole test suite against the new Immich: `IMMICH_VERSION=<tag> test/run.sh` (see [Architecture](architecture.md#testing)).
 
 ## Installing the page on a phone
 

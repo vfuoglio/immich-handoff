@@ -6,7 +6,7 @@
 
 **What you see:** Each person's originals stay where they are; copies arrive tagged `from/<name>`.
 
-## In five steps
+## In a few steps
 
 For a holiday with friends who all have an account on your Immich server. Each person keeps taking photos with their own phone; a photo any of you tags goes to everyone else.
 
@@ -17,7 +17,7 @@ For a holiday with friends who all have an account on your Immich server. Each p
 
 **What you see:** each person's own originals stay where they are, a photo is never sent back to its sender, and people get what is shared *from the moment they join*.
 
-**Worth knowing:** joining a pool lets everyone in it have your tagged photos. Offer it by invitation or with approval if you want to choose who is in. Details: [Event pool](../guides/trip-pool.md#event-pool-everybody-gets-everybodys-photos) and [Security](../security.md#event-pools).
+**Worth knowing:** joining a pool lets everyone in it have your tagged photos. Offer it by invitation or with approval if you want to choose who is in. Details: [Event pool](trip-pool.md#event-pool-everybody-gets-everybodys-photos) and [Security](../security.md#event-pools).
 
 ## Event pool: everybody gets everybody's photos
 

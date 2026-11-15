@@ -2,6 +2,15 @@
 
 What you are agreeing to when you run this, or join a service. The short version: an app that can act on your photos has to be trusted, so it is built to ask for as little as possible, show people what it does, and make leaving easy.
 
+> **In short**
+> - The app asks for as little as possible: a restricted, named API key in *your own* Immich account, made with your own sign-in, kept encrypted, never shown to anyone.
+> - A photo is only removed after every receiver holds a verified copy (checked by checksum). If anything fails, the original stays.
+> - Leaving is easy: delete the key in Immich or press **Leave**, and everything stops without touching a photo.
+> - People without accounts (drop boxes, rooms, frames) get links that can only do one thing each, and cannot see your library.
+> - The page accepts only people signed in to Immich, needs a cross-site header for every change, and has a strict content security policy.
+>
+> **Contents:** [What a key can do](#what-a-key-can-do) · [Bridges: a receiver on another server](#bridges-a-receiver-on-another-server) · [Drop boxes](#drop-boxes) · [Notifications](#notifications) · [Who decides what](#who-decides-what) · [What is stored](#what-is-stored) · [What other people can see](#what-other-people-can-see) · [Protections in the app](#protections-in-the-app) · [Backups](#backups) · [The image you run](#the-image-you-run) · [Reporting a problem](#reporting-a-problem)
+
 ## What a key can do
 
 An Immich API key cannot be limited to one tag or album. So a sender's key can read and download any photo in that account, and, if the sender chose **move**, delete any photo too. The app only ever acts on photos tagged for a service, and the key is never shown to anyone. If the sender chose **keep my originals** (the default), the key is created **without any permission to delete**.
