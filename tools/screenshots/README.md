@@ -21,6 +21,8 @@ The phone upload page has its own set: `FIRST=2040 go run . send ../../docs/imag
 
 The client room has a set too: `FIRST=2060 go run . room ../../docs/images $DEMO/photos` (after `go run . gen $DEMO/photos 40`) uploads six sample photos as Alice, makes an album and a room of it, lets a client choose, write a note and send the choice, answers it, and takes the four pictures. `FIRST` is the number of the first of six photos not yet in Alice's library.
 
+The pictures of an album shared with someone who has no Handoff (the form that lists what the key can do, and the row of an album shared both ways) come from `SHARED=1 ./seed.sh reset` (which also switches sharing on in the demo app) and then `FIRST=2100 go run . shared ../../docs/images $DEMO/photos`: it uploads four sample photos as Alice, makes the key "Cousin Marco" (Family's account on the same demo Immich) would give, shares an album with it and takes the two pictures. `FIRST` is the number of the first of four photos not yet in Alice's library.
+
 The sample photos are generated landscapes (`go run . gen <dir>`), so no real pictures or people appear.
 
 Every picture is taken in English: the tool sends `Accept-Language: en` and sets the page's language cookie to English, whatever language the machine uses. The pictures belong to the English documentation.

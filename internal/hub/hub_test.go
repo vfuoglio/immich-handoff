@@ -54,6 +54,8 @@ type fakeImmich struct {
 	albums        []map[string]any           // bob's own albums
 	uploads       []fakeUpload               // files stored through an upload
 	tagged        []string                   // asset ids that were tagged
+	mine          map[string]string          // photos that exist in someone's library without a tag: asset id -> owner id (the default owner is bob)
+	untagged      []string                   // asset ids the tag was taken off
 	tagNames      []string                   // tags that were made
 	albumAdds     []string                   // "album name: asset id" for each photo put in an album
 	tagIDs        map[string]string          // tag id -> name
@@ -65,8 +67,14 @@ type fakeImmich struct {
 	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
 	members       map[string]map[string]bool // album id -> asset ids in it
 	removedLinks  []string
-	videos        map[string]bool // asset ids that are videos (the rest are photos)
-	archived      map[string]bool // asset ids the owner archived
+	videos        map[string]bool  // asset ids that are videos (the rest are photos)
+	archived      map[string]bool  // asset ids the owner archived
+	named         []map[string]any // the named people of bob's library, for rules
+	countries     []string         // the countries bob's photos are from
+	cities        map[string][]string
+	ruleHits      []map[string]any // what a rule's search finds (raw photos)
+	lastSearch    map[string]any   // the body of the last rule search
+	smartOff      bool             // the server cannot do a smart search
 }
 
 type fakeUpload struct {
@@ -159,6 +167,20 @@ func (f *fakeImmich) handler() http.Handler {
 		f.keyPerms[id] = body.Permissions
 		f.keyUpdates++
 		j(w, 200, map[string]any{"id": id, "name": "k", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		j(w, 200, map[string]any{"people": append([]map[string]any{}, f.named...), "hasNextPage": false, "total": len(f.named), "hidden": 0})
+	})
+	mux.HandleFunc("GET /api/search/suggestions", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if r.URL.Query().Get("type") == "city" {
+			j(w, 200, append([]string{}, f.cities[r.URL.Query().Get("country")]...))
+			return
+		}
+		j(w, 200, append([]string{}, f.countries...))
 	})
 	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -351,10 +373,26 @@ func (f *fakeImmich) handler() http.Handler {
 		f.mu.Unlock()
 		j(w, 200, out)
 	})
+	mux.HandleFunc("DELETE /api/tags/{id}/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		out := []any{}
+		f.mu.Lock()
+		for _, id := range body.Ids {
+			f.untagged = append(f.untagged, id)
+			out = append(out, map[string]any{"id": id, "success": true})
+		}
+		f.mu.Unlock()
+		j(w, 200, out)
+	})
 	mux.HandleFunc("GET /api/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		names, ok := f.assetTags[r.PathValue("id")]
+		owner := bobID.String()
+		if o, there := f.mine[r.PathValue("id")]; there {
+			owner, ok = o, true
+		}
 		if !ok {
 			http.Error(w, "no", 404)
 			return
@@ -371,7 +409,7 @@ func (f *fakeImmich) handler() http.Handler {
 		if c := f.created[r.PathValue("id")]; c != "" {
 			created = c
 		}
-		j(w, 200, map[string]any{"id": r.PathValue("id"), "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "isTrashed": f.trashed[r.PathValue("id")], "tags": tags, "originalFileName": name, "fileCreatedAt": created, "fileModifiedAt": created})
 	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -401,12 +439,26 @@ func (f *fakeImmich) handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			TagIds   []string `json:"tagIds"`
-			AlbumIds []string `json:"albumIds"`
+			TagIds       []string `json:"tagIds"`
+			AlbumIds     []string `json:"albumIds"`
+			CreatedAfter string   `json:"createdAfter"`
+			PersonIds    []string `json:"personIds"`
 		}
-		json.NewDecoder(r.Body).Decode(&body)
+		raw, _ := io.ReadAll(r.Body)
+		json.Unmarshal(raw, &body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if body.CreatedAfter != "" || len(body.PersonIds) > 0 { // a rule's search
+			var m map[string]any
+			json.Unmarshal(raw, &m)
+			f.lastSearch = m
+			items := []any{}
+			for _, h := range f.ruleHits {
+				items = append(items, h)
+			}
+			j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+			return
+		}
 		items := []any{}
 		add := func(id string) {
 			created := ts
@@ -444,6 +496,19 @@ func (f *fakeImmich) handler() http.Handler {
 				}
 			next:
 			}
+		}
+		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+	})
+	mux.HandleFunc("POST /api/search/smart", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.smartOff {
+			j(w, 400, map[string]any{"message": "Smart search is not enabled"})
+			return
+		}
+		items := []any{}
+		for _, h := range f.ruleHits {
+			items = append(items, h)
 		}
 		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
 	})

@@ -17,7 +17,7 @@ func TestSharingAlbumsIsCheckedOnlyWhenItIsOn(t *testing.T) {
 	if out, r := sharedReport(nil); out != "" || r.Fails != 0 {
 		t.Errorf("off: %q", out)
 	}
-	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "true"}); r.Fails != 1 || !strings.Contains(out, "PUBLIC_APP_URL is not set") {
+	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "true"}); r.Fails != 0 || r.Warns != 1 || !strings.Contains(out, "PUBLIC_APP_URL is not set") {
 		t.Errorf("no address: %d\n%s", r.Fails, out)
 	}
 	if out, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "on", "PUBLIC_APP_URL": "https://handoff.example.com"}); r.Fails != 0 || r.Warns != 0 || !strings.Contains(out, "sharing albums is on") {
@@ -40,5 +40,30 @@ func TestTheAddressTheOtherAppIsToldMustBeOneItCanUse(t *testing.T) {
 	}
 	if _, r := sharedReport(map[string]string{"SHARED_ALBUMS_ENABLE": "1", "PUBLIC_APP_URL": "https://h.example", "SHARED_ALBUMS_EVERY_MINUTES": "0", "SHARED_ALBUMS_MAX_MB": "x"}); r.Fails != 2 {
 		t.Errorf("bad numbers: %d", r.Fails)
+	}
+}
+
+func TestTheRulesIntervalIsCheckedOnlyWhenSet(t *testing.T) {
+	r := &Report{W: &bytes.Buffer{}}
+	rulesSettings(r, Input{Env: func(k string) string { return map[string]string{}[k] }})
+	if r.Fails != 0 {
+		t.Error("unset is fine")
+	}
+	for v, fails := range map[string]int{"10": 0, "0.1": 0, "0": 1, "x": 1, "2000": 1} {
+		r := &Report{W: &bytes.Buffer{}}
+		rulesSettings(r, Input{Env: func(k string) string { return map[string]string{"RULES_CHECK_MINUTES": v}[k] }})
+		if r.Fails != fails {
+			t.Errorf("%s: %d fails", v, r.Fails)
+		}
+	}
+}
+
+func TestTheHandOverButtonSwitchIsCheckedOnlyWhenSet(t *testing.T) {
+	for v, warns := range map[string]int{"": 0, "true": 0, "false": 0, "off": 0, "maybe": 1} {
+		r := &Report{W: &bytes.Buffer{}}
+		buttonSettings(r, Input{Env: func(k string) string { return map[string]string{"IMMICH_BUTTON_ACTIONS": v}[k] }})
+		if r.Warns != warns || r.Fails != 0 {
+			t.Errorf("%q: %d warnings, %d fails", v, r.Warns, r.Fails)
+		}
 	}
 }

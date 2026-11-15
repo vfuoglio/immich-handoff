@@ -145,6 +145,9 @@ func (h *Hub) ProposeAlbum(ctx context.Context, sess *immich.API, owner immich.U
 	} else if len(list) >= maxShared {
 		return store.SharedAlbum{}, ErrTooManyShared
 	}
+	if err := h.checkGroupRoom(ctx, owner.ID, p.AlbumID); err != nil {
+		return store.SharedAlbum{}, err
+	}
 	id := uuid.NewString()
 	album, albumName, keyID, secret, err := h.ownAlbum(ctx, sess, owner, p.AlbumID, name, history, id)
 	if err != nil {
@@ -249,6 +252,9 @@ func (h *Hub) AcceptAlbum(ctx context.Context, sess *immich.API, owner immich.Us
 	if pr.State != store.PeerActive || pr.IPaused {
 		return ErrPeerNotActive
 	}
+	if err := h.checkGroupRoom(ctx, owner.ID, p.AlbumID); err != nil {
+		return err
+	}
 	album, albumName, keyID, secret, err := h.ownAlbum(ctx, sess, owner, p.AlbumID, a.Name, history, a.ID)
 	if err != nil {
 		return err
@@ -306,7 +312,8 @@ func (h *Hub) LeaveSharedAlbum(ctx context.Context, sess *immich.API, owner immi
 			h.Log.Warn("ending a shared album: could not delete its key (it may already be gone)", "err", err)
 		}
 	}
-	if pr, err := h.peerOf(ctx, owner.ID, a.PeerID); err == nil && pr.State == store.PeerActive && a.TheirID != "" && a.State != store.ShareLeft {
+	pr, perr := h.peerOf(ctx, owner.ID, a.PeerID)
+	if perr == nil && pr.State == store.PeerActive && pr.Role != store.PeerImmich && a.TheirID != "" && a.State != store.ShareLeft {
 		var reply struct{}
 		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		peer.Call(cctx, h.peerClient(), pr.Address, pr.TheirID, pr.Secret, "POST", "/peer/v1/album/leave", AnswerMsg{To: a.TheirID}, &reply)
@@ -314,6 +321,9 @@ func (h *Hub) LeaveSharedAlbum(ctx context.Context, sess *immich.API, owner immi
 	}
 	if err := h.Store.DeleteSharedAlbum(ctx, a.ID); err != nil {
 		return err
+	}
+	if perr == nil && pr.Role == store.PeerImmich { // a connection made for this one album only
+		h.Store.DeletePeer(ctx, pr.ID)
 	}
 	h.event(ctx, "", owner.ID, "share", i18n.Pack("{name} ended sharing the album {album}", "name", owner.Name, "album", a.Name))
 	return nil

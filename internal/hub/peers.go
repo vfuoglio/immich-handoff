@@ -46,6 +46,10 @@ const (
 // the page (there is a data file) and the app knows its own public address, which it gives to the other app.
 func (h *Hub) PeersOn() bool { return h.Share && h.SelfService() && strings.TrimSpace(h.AppURL) != "" }
 
+// SharingOn reports whether people can share albums at all: the administrator switched it on and people can join from the page.
+// Sharing with someone who has no Handoff needs no address of this app, because nothing calls it.
+func (h *Hub) SharingOn() bool { return h.Share && h.SelfService() }
+
 func (h *Hub) peerClient() *http.Client { return h.Bridge.Policy.HTTPClient() }
 
 func (h *Hub) selfBase() string { return strings.TrimSuffix(strings.TrimSpace(h.AppURL), "/") }
@@ -323,7 +327,7 @@ func (h *Hub) PeerAuth(ctx context.Context, peerID string, header http.Header, m
 		return store.Peer{}, ErrPeerAuth
 	}
 	p, err := h.Store.PeerByID(ctx, peerID)
-	if err != nil || p.State != store.PeerActive {
+	if err != nil || p.State != store.PeerActive || p.Role == store.PeerImmich {
 		return store.Peer{}, ErrPeerAuth
 	}
 	if err := h.peerVerify.Check(p.Secret, header, method, peer.SignedPath(path), body, h.now()); err != nil {
@@ -376,7 +380,7 @@ func (h *Hub) SetPeerPaused(ctx context.Context, owner immich.User, id string, p
 		return err
 	}
 	p.IPaused = paused
-	if p.State == store.PeerActive {
+	if p.State == store.PeerActive && p.Role != store.PeerImmich {
 		h.helloPeer(ctx, p) // the greeting carries the state; if the other app is away it learns at the next one
 	}
 	return nil
@@ -388,7 +392,7 @@ func (h *Hub) RemovePeer(ctx context.Context, sess *immich.API, owner immich.Use
 	if err != nil {
 		return err
 	}
-	if p.State == store.PeerActive {
+	if p.State == store.PeerActive && p.Role != store.PeerImmich {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		peer.Call(cctx, h.peerClient(), p.Address, p.TheirID, p.Secret, "POST", "/peer/v1/leave", struct{}{}, nil) //nolint:errcheck
 		cancel()
@@ -412,7 +416,7 @@ func (h *Hub) RemovePeer(ctx context.Context, sess *immich.API, owner immich.Use
 
 // PeerMaintenance greets every active peer to see that it is there, and forgets old invitations.
 func (h *Hub) PeerMaintenance(ctx context.Context) {
-	if !h.PeersOn() {
+	if !h.SharingOn() {
 		return
 	}
 	h.Store.PrunePeerInvites(ctx, h.now())
@@ -421,7 +425,12 @@ func (h *Hub) PeerMaintenance(ctx context.Context) {
 		return
 	}
 	for _, p := range list {
-		h.helloPeer(ctx, p)
+		switch {
+		case p.Role == store.PeerImmich:
+			h.checkImmichPeer(ctx, p)
+		case h.PeersOn():
+			h.helloPeer(ctx, p)
+		}
 	}
 }
 

@@ -51,7 +51,7 @@ func env(k, d string) string {
 
 func main() {
 	if len(os.Args) < 3 {
-		log.Fatal("usage: screenshots gen <dir> [count] | shots <set> <outdir> | hero <outdir>")
+		log.Fatal("usage: screenshots gen <dir> [count] | shots <set> <outdir> | hero <outdir> | room | send | shared | film")
 	}
 	switch os.Args[1] {
 	case "gen":
@@ -72,6 +72,11 @@ func main() {
 			log.Fatal("room needs an output directory and the folder of sample photos")
 		}
 		roomShots(os.Args[2], os.Args[3])
+	case "shared":
+		if len(os.Args) < 4 {
+			log.Fatal("shared needs an output directory and the folder of sample photos")
+		}
+		sharedShots(os.Args[2], os.Args[3])
 	case "send":
 		if len(os.Args) < 4 {
 			log.Fatal("send needs an output directory and the folder of sample photos")

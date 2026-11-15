@@ -714,6 +714,36 @@ func (e SearchOrderField) Valid() bool {
 	}
 }
 
+// Defines values for SearchSuggestionType.
+const (
+	CameraLensModel SearchSuggestionType = "camera-lens-model"
+	CameraMake      SearchSuggestionType = "camera-make"
+	CameraModel     SearchSuggestionType = "camera-model"
+	City            SearchSuggestionType = "city"
+	Country         SearchSuggestionType = "country"
+	State           SearchSuggestionType = "state"
+)
+
+// Valid indicates whether the value is a known member of the SearchSuggestionType enum.
+func (e SearchSuggestionType) Valid() bool {
+	switch e {
+	case CameraLensModel:
+		return true
+	case CameraMake:
+		return true
+	case CameraModel:
+		return true
+	case City:
+		return true
+	case Country:
+		return true
+	case State:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SharedLinkType.
 const (
 	ALBUM      SharedLinkType = "ALBUM"
@@ -1707,6 +1737,19 @@ type PeopleResponse struct {
 	SidebarWeb bool `json:"sidebarWeb"`
 }
 
+// PeopleResponseDto People response
+type PeopleResponseDto struct {
+	// HasNextPage Whether there are more pages
+	HasNextPage *bool `json:"hasNextPage,omitempty"`
+
+	// Hidden Number of hidden people
+	Hidden int                 `json:"hidden"`
+	People []PersonResponseDto `json:"people"`
+
+	// Total Total number of people
+	Total int `json:"total"`
+}
+
 // PeopleUpdate defines model for PeopleUpdate.
 type PeopleUpdate struct {
 	// Enabled Whether people are enabled
@@ -1926,6 +1969,9 @@ type SearchResponseDto struct {
 	Assets SearchAssetResponseDto `json:"assets"`
 }
 
+// SearchSuggestionType Suggestion type
+type SearchSuggestionType string
+
 // ServerVersionResponseDto defines model for ServerVersionResponseDto.
 type ServerVersionResponseDto struct {
 	// Major Major version number
@@ -2041,6 +2087,155 @@ type SharedLinksUpdate struct {
 
 	// SidebarWeb Whether shared links appear in web sidebar
 	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
+}
+
+// SmartSearchDto defines model for SmartSearchDto.
+type SmartSearchDto struct {
+	// AlbumIds Filter by album IDs
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	AlbumIds *[]openapi_types.UUID `json:"albumIds,omitempty"`
+
+	// City Filter by city name
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	City *string `json:"city,omitempty"`
+
+	// Country Filter by country name
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Country *string `json:"country,omitempty"`
+
+	// CreatedAfter Filter by creation date (after)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CreatedAfter *time.Time `json:"createdAfter,omitempty"`
+
+	// CreatedBefore Filter by creation date (before)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CreatedBefore *time.Time    `json:"createdBefore,omitempty"`
+	Filter        *SearchFilter `json:"filter,omitempty"`
+
+	// IsEncoded Filter by encoded status
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IsEncoded *bool `json:"isEncoded,omitempty"`
+
+	// IsFavorite Filter by favorite status
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IsFavorite *bool `json:"isFavorite,omitempty"`
+
+	// IsMotion Filter by motion photo status
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IsMotion *bool `json:"isMotion,omitempty"`
+
+	// IsNotInAlbum Filter assets not in any album
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IsNotInAlbum *bool `json:"isNotInAlbum,omitempty"`
+
+	// IsOffline Filter by offline status
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IsOffline *bool `json:"isOffline,omitempty"`
+
+	// Language Search language code
+	Language *string `json:"language,omitempty"`
+
+	// LensModel Filter by lens model
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	LensModel *string `json:"lensModel,omitempty"`
+
+	// LibraryId Library ID to filter by
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	LibraryId *openapi_types.UUID `json:"libraryId,omitempty"`
+
+	// Make Filter by camera make
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Make *string `json:"make,omitempty"`
+
+	// Model Filter by camera model
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Model *string `json:"model,omitempty"`
+
+	// Ocr Filter by OCR text content
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Ocr *string `json:"ocr,omitempty"`
+
+	// Page Page number
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Page *int `json:"page,omitempty"`
+
+	// PersonIds Filter by person IDs
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	PersonIds *[]openapi_types.UUID `json:"personIds,omitempty"`
+
+	// Query Natural language search query
+	Query *string `json:"query,omitempty"`
+
+	// QueryAssetId Asset ID to use as search reference
+	QueryAssetId *openapi_types.UUID `json:"queryAssetId,omitempty"`
+
+	// Rating Filter by rating [1-5], or null for unrated
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Rating *int `json:"rating,omitempty"`
+
+	// Size Number of results to return
+	Size *int `json:"size,omitempty"`
+
+	// State Filter by state/province name
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	State *string `json:"state,omitempty"`
+
+	// TagIds Filter by tag IDs
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	TagIds *[]openapi_types.UUID `json:"tagIds,omitempty"`
+
+	// TakenAfter Filter by taken date (after)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	TakenAfter *time.Time `json:"takenAfter,omitempty"`
+
+	// TakenBefore Filter by taken date (before)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	TakenBefore *time.Time `json:"takenBefore,omitempty"`
+
+	// TrashedAfter Filter by trash date (after)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	TrashedAfter *time.Time `json:"trashedAfter,omitempty"`
+
+	// TrashedBefore Filter by trash date (before)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	TrashedBefore *time.Time `json:"trashedBefore,omitempty"`
+
+	// Type Asset type
+	Type *AssetTypeEnum `json:"type,omitempty"`
+
+	// UpdatedAfter Filter by update date (after)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdatedAfter *time.Time `json:"updatedAfter,omitempty"`
+
+	// UpdatedBefore Filter by update date (before)
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdatedBefore *time.Time `json:"updatedBefore,omitempty"`
+
+	// Visibility Asset visibility
+	Visibility *AssetVisibility `json:"visibility,omitempty"`
+
+	// WithDeleted Include deleted assets
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	WithDeleted *bool `json:"withDeleted,omitempty"`
+
+	// WithExif Include EXIF data in response
+	WithExif *bool `json:"withExif,omitempty"`
 }
 
 // StackCreateDto defines model for StackCreateDto.
@@ -2457,10 +2652,50 @@ type ViewAssetParams struct {
 	Slug   *string         `form:"slug,omitempty" json:"slug,omitempty"`
 }
 
+// GetAllPeopleParams defines parameters for GetAllPeople.
+type GetAllPeopleParams struct {
+	// ClosestAssetId Closest asset ID for similarity search
+	ClosestAssetId *openapi_types.UUID `form:"closestAssetId,omitempty" json:"closestAssetId,omitempty"`
+
+	// ClosestPersonId Closest person ID for similarity search
+	ClosestPersonId *openapi_types.UUID `form:"closestPersonId,omitempty" json:"closestPersonId,omitempty"`
+
+	// Page Page number for pagination
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// Size Number of items per page
+	Size *int `form:"size,omitempty" json:"size,omitempty"`
+
+	// WithHidden Include hidden people
+	WithHidden *bool `form:"withHidden,omitempty" json:"withHidden,omitempty"`
+}
+
 // SearchAssetsParams defines parameters for SearchAssets.
 type SearchAssetsParams struct {
 	Key  *string `form:"key,omitempty" json:"key,omitempty"`
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty"`
+}
+
+// GetSearchSuggestionsParams defines parameters for GetSearchSuggestions.
+type GetSearchSuggestionsParams struct {
+	// Country Filter by country
+	Country *string `form:"country,omitempty" json:"country,omitempty"`
+
+	// IncludeNull Include null values in suggestions
+	IncludeNull *bool `form:"includeNull,omitempty" json:"includeNull,omitempty"`
+
+	// LensModel Filter by lens model
+	LensModel *string `form:"lensModel,omitempty" json:"lensModel,omitempty"`
+
+	// Make Filter by camera make
+	Make *string `form:"make,omitempty" json:"make,omitempty"`
+
+	// Model Filter by camera model
+	Model *string `form:"model,omitempty" json:"model,omitempty"`
+
+	// State Filter by state/province
+	State *string              `form:"state,omitempty" json:"state,omitempty"`
+	Type  SearchSuggestionType `form:"type" json:"type"`
 }
 
 // SearchWorkflowsParams defines parameters for SearchWorkflows.
@@ -2521,6 +2756,9 @@ type UploadAssetMultipartRequestBody = AssetMediaCreateDto
 
 // SearchAssetsJSONRequestBody defines body for SearchAssets for application/json ContentType.
 type SearchAssetsJSONRequestBody = MetadataSearchDto
+
+// SearchSmartJSONRequestBody defines body for SearchSmart for application/json ContentType.
+type SearchSmartJSONRequestBody = SmartSearchDto
 
 // CreateSharedLinkJSONRequestBody defines body for CreateSharedLink for application/json ContentType.
 type CreateSharedLinkJSONRequestBody = SharedLinkCreateDto
@@ -2804,6 +3042,27 @@ type ClientInterface interface {
 	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
 	ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAllPeople Get all people
+	//
+	// Retrieve a list of all people.
+	//
+	// Corresponds with GET /people (the `GetAllPeople` operationId).
+	GetAllPeople(ctx context.Context, params *GetAllPeopleParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPerson Get a person
+	//
+	// Retrieve a person by id.
+	//
+	// Corresponds with GET /people/{id} (the `GetPerson` operationId).
+	GetPerson(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPersonThumbnail Get person thumbnail
+	//
+	// Retrieve the thumbnail file for a person.
+	//
+	// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+	GetPersonThumbnail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SearchAssetsWithBody Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -2821,6 +3080,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /search/metadata (the `SearchAssets` operationId).
 	SearchAssets(ctx context.Context, params *SearchAssetsParams, body SearchAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchSmartWithBody Smart asset search
+	//
+	// Perform a smart search for assets by using machine learning vectors to determine relevance.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+	SearchSmartWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchSmart Smart asset search
+	//
+	// Perform a smart search for assets by using machine learning vectors to determine relevance.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+	SearchSmart(ctx context.Context, body SearchSmartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSearchSuggestions Retrieve search suggestions
+	//
+	// Retrieve search suggestions based on partial input. This endpoint is used for typeahead search features.
+	//
+	// Corresponds with GET /search/suggestions (the `GetSearchSuggestions` operationId).
+	GetSearchSuggestions(ctx context.Context, params *GetSearchSuggestionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetServerVersion Get server version
 	//
@@ -3455,6 +3739,57 @@ func (c *Client) ViewAsset(ctx context.Context, id openapi_types.UUID, params *V
 	return c.Client.Do(req)
 }
 
+// GetAllPeople Get all people
+//
+// Retrieve a list of all people.
+//
+// Corresponds with GET /people (the `GetAllPeople` operationId).
+func (c *Client) GetAllPeople(ctx context.Context, params *GetAllPeopleParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAllPeopleRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetPerson Get a person
+//
+// Retrieve a person by id.
+//
+// Corresponds with GET /people/{id} (the `GetPerson` operationId).
+func (c *Client) GetPerson(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPersonRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetPersonThumbnail Get person thumbnail
+//
+// Retrieve the thumbnail file for a person.
+//
+// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+func (c *Client) GetPersonThumbnail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPersonThumbnailRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // SearchAssetsWithBody Search assets by metadata
 //
 // Search for assets based on various metadata criteria.
@@ -3483,6 +3818,61 @@ func (c *Client) SearchAssetsWithBody(ctx context.Context, params *SearchAssetsP
 // Corresponds with POST /search/metadata (the `SearchAssets` operationId).
 func (c *Client) SearchAssets(ctx context.Context, params *SearchAssetsParams, body SearchAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSearchAssetsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchSmartWithBody Smart asset search
+//
+// Perform a smart search for assets by using machine learning vectors to determine relevance.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+func (c *Client) SearchSmartWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchSmartRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchSmart Smart asset search
+//
+// Perform a smart search for assets by using machine learning vectors to determine relevance.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+func (c *Client) SearchSmart(ctx context.Context, body SearchSmartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchSmartRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSearchSuggestions Retrieve search suggestions
+//
+// Retrieve search suggestions based on partial input. This endpoint is used for typeahead search features.
+//
+// Corresponds with GET /search/suggestions (the `GetSearchSuggestions` operationId).
+func (c *Client) GetSearchSuggestions(ctx context.Context, params *GetSearchSuggestionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSearchSuggestionsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4849,6 +5239,176 @@ func NewViewAssetRequest(server string, id openapi_types.UUID, params *ViewAsset
 	return req, nil
 }
 
+// NewGetAllPeopleRequest constructs an http.Request for the GetAllPeople method
+func NewGetAllPeopleRequest(server string, params *GetAllPeopleParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/people")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.ClosestAssetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "closestAssetId", *params.ClosestAssetId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ClosestPersonId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "closestPersonId", *params.ClosestPersonId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Size != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "size", *params.Size, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.WithHidden != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "withHidden", *params.WithHidden, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPersonRequest constructs an http.Request for the GetPerson method
+func NewGetPersonRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/people/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPersonThumbnailRequest constructs an http.Request for the GetPersonThumbnail method
+func NewGetPersonThumbnailRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/people/%s/thumbnail", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSearchAssetsRequest calls the generic SearchAssets builder with application/json body
 func NewSearchAssetsRequest(server string, params *SearchAssetsParams, body SearchAssetsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4924,6 +5484,168 @@ func NewSearchAssetsRequestWithBody(server string, params *SearchAssetsParams, c
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewSearchSmartRequest calls the generic SearchSmart builder with application/json body
+func NewSearchSmartRequest(server string, body SearchSmartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSearchSmartRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSearchSmartRequestWithBody constructs an http.Request for the SearchSmart method, with any body, and a specified content type
+func NewSearchSmartRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/search/smart")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetSearchSuggestionsRequest constructs an http.Request for the GetSearchSuggestions method
+func NewGetSearchSuggestionsRequest(server string, params *GetSearchSuggestionsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/search/suggestions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Country != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "country", *params.Country, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IncludeNull != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "includeNull", *params.IncludeNull, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.LensModel != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lensModel", *params.LensModel, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Make != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "make", *params.Make, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Model != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "model", *params.Model, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -6009,6 +6731,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
 	ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error)
 
+	// GetAllPeopleWithResponse Get all people
+	//
+	// Retrieve a list of all people.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /people (the `GetAllPeople` operationId).
+	GetAllPeopleWithResponse(ctx context.Context, params *GetAllPeopleParams, reqEditors ...RequestEditorFn) (*GetAllPeopleResponse, error)
+
+	// GetPersonWithResponse Get a person
+	//
+	// Retrieve a person by id.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /people/{id} (the `GetPerson` operationId).
+	GetPersonWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonResponse, error)
+
+	// GetPersonThumbnailWithResponse Get person thumbnail
+	//
+	// Retrieve the thumbnail file for a person.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+	GetPersonThumbnailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonThumbnailResponse, error)
+
 	// SearchAssetsWithBodyWithResponse Search assets by metadata
 	//
 	// Search for assets based on various metadata criteria.
@@ -6026,6 +6775,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /search/metadata (the `SearchAssets` operationId).
 	SearchAssetsWithResponse(ctx context.Context, params *SearchAssetsParams, body SearchAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchAssetsResponse, error)
+
+	// SearchSmartWithBodyWithResponse Smart asset search
+	//
+	// Perform a smart search for assets by using machine learning vectors to determine relevance.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+	SearchSmartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchSmartResponse, error)
+
+	// SearchSmartWithResponse Smart asset search
+	//
+	// Perform a smart search for assets by using machine learning vectors to determine relevance.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+	SearchSmartWithResponse(ctx context.Context, body SearchSmartJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchSmartResponse, error)
+
+	// GetSearchSuggestionsWithResponse Retrieve search suggestions
+	//
+	// Retrieve search suggestions based on partial input. This endpoint is used for typeahead search features.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /search/suggestions (the `GetSearchSuggestions` operationId).
+	GetSearchSuggestionsWithResponse(ctx context.Context, params *GetSearchSuggestionsParams, reqEditors ...RequestEditorFn) (*GetSearchSuggestionsResponse, error)
 
 	// GetServerVersionWithResponse Get server version
 	//
@@ -6891,6 +7667,122 @@ func (r ViewAssetResponse) ContentType() string {
 	return ""
 }
 
+type GetAllPeopleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PeopleResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAllPeopleResponse) GetJSON200() *PeopleResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAllPeopleResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAllPeopleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAllPeopleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAllPeopleResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetPersonResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PersonResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetPersonResponse) GetJSON200() *PersonResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPersonResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPersonResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPersonResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPersonResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetPersonThumbnailResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r GetPersonThumbnailResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPersonThumbnailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPersonThumbnailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetPersonThumbnailResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type SearchAssetsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6926,6 +7818,88 @@ func (r SearchAssetsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SearchAssetsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SearchSmartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SearchResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchSmartResponse) GetJSON200() *SearchResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchSmartResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchSmartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchSmartResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchSmartResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetSearchSuggestionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]string
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSearchSuggestionsResponse) GetJSON200() *[]string {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSearchSuggestionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSearchSuggestionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSearchSuggestionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSearchSuggestionsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8056,6 +9030,51 @@ func (c *ClientWithResponses) ViewAssetWithResponse(ctx context.Context, id open
 	return ParseViewAssetResponse(rsp)
 }
 
+// GetAllPeopleWithResponse Get all people
+//
+// Retrieve a list of all people.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /people (the `GetAllPeople` operationId).
+func (c *ClientWithResponses) GetAllPeopleWithResponse(ctx context.Context, params *GetAllPeopleParams, reqEditors ...RequestEditorFn) (*GetAllPeopleResponse, error) {
+	rsp, err := c.GetAllPeople(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAllPeopleResponse(rsp)
+}
+
+// GetPersonWithResponse Get a person
+//
+// Retrieve a person by id.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /people/{id} (the `GetPerson` operationId).
+func (c *ClientWithResponses) GetPersonWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonResponse, error) {
+	rsp, err := c.GetPerson(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPersonResponse(rsp)
+}
+
+// GetPersonThumbnailWithResponse Get person thumbnail
+//
+// Retrieve the thumbnail file for a person.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /people/{id}/thumbnail (the `GetPersonThumbnail` operationId).
+func (c *ClientWithResponses) GetPersonThumbnailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPersonThumbnailResponse, error) {
+	rsp, err := c.GetPersonThumbnail(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPersonThumbnailResponse(rsp)
+}
+
 // SearchAssetsWithBodyWithResponse Search assets by metadata
 //
 // Search for assets based on various metadata criteria.
@@ -8084,6 +9103,51 @@ func (c *ClientWithResponses) SearchAssetsWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseSearchAssetsResponse(rsp)
+}
+
+// SearchSmartWithBodyWithResponse Smart asset search
+//
+// Perform a smart search for assets by using machine learning vectors to determine relevance.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+func (c *ClientWithResponses) SearchSmartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SearchSmartResponse, error) {
+	rsp, err := c.SearchSmartWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchSmartResponse(rsp)
+}
+
+// SearchSmartWithResponse Smart asset search
+//
+// Perform a smart search for assets by using machine learning vectors to determine relevance.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /search/smart (the `SearchSmart` operationId).
+func (c *ClientWithResponses) SearchSmartWithResponse(ctx context.Context, body SearchSmartJSONRequestBody, reqEditors ...RequestEditorFn) (*SearchSmartResponse, error) {
+	rsp, err := c.SearchSmart(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchSmartResponse(rsp)
+}
+
+// GetSearchSuggestionsWithResponse Retrieve search suggestions
+//
+// Retrieve search suggestions based on partial input. This endpoint is used for typeahead search features.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /search/suggestions (the `GetSearchSuggestions` operationId).
+func (c *ClientWithResponses) GetSearchSuggestionsWithResponse(ctx context.Context, params *GetSearchSuggestionsParams, reqEditors ...RequestEditorFn) (*GetSearchSuggestionsResponse, error) {
+	rsp, err := c.GetSearchSuggestions(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSearchSuggestionsResponse(rsp)
 }
 
 // GetServerVersionWithResponse Get server version
@@ -8884,6 +9948,74 @@ func ParseViewAssetResponse(rsp *http.Response) (*ViewAssetResponse, error) {
 	return response, nil
 }
 
+// ParseGetAllPeopleResponse parses an HTTP response from a GetAllPeopleWithResponse call
+func ParseGetAllPeopleResponse(rsp *http.Response) (*GetAllPeopleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAllPeopleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PeopleResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPersonResponse parses an HTTP response from a GetPersonWithResponse call
+func ParseGetPersonResponse(rsp *http.Response) (*GetPersonResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPersonResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PersonResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPersonThumbnailResponse parses an HTTP response from a GetPersonThumbnailWithResponse call
+func ParseGetPersonThumbnailResponse(rsp *http.Response) (*GetPersonThumbnailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPersonThumbnailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseSearchAssetsResponse parses an HTTP response from a SearchAssetsWithResponse call
 func ParseSearchAssetsResponse(rsp *http.Response) (*SearchAssetsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -8900,6 +10032,58 @@ func ParseSearchAssetsResponse(rsp *http.Response) (*SearchAssetsResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SearchResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSearchSmartResponse parses an HTTP response from a SearchSmartWithResponse call
+func ParseSearchSmartResponse(rsp *http.Response) (*SearchSmartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchSmartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SearchResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSearchSuggestionsResponse parses an HTTP response from a GetSearchSuggestionsWithResponse call
+func ParseGetSearchSuggestionsResponse(rsp *http.Response) (*GetSearchSuggestionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSearchSuggestionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []string
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

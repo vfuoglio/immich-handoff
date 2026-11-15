@@ -80,6 +80,8 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	settings(r, in)
 	notifications(r, in)
 	sharedAlbums(r, in)
+	rulesSettings(r, in)
+	buttonSettings(r, in)
 	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
@@ -621,8 +623,8 @@ func remote(ctx context.Context, r *Report, rm *bridge.Remote) {
 	}
 }
 
-// sharedAlbums checks the settings of sharing albums with other servers (SHARED_ALBUMS_ENABLE), which needs the app's own
-// public address, because the other app is given it and calls it.
+// sharedAlbums checks the settings of sharing albums with other servers (SHARED_ALBUMS_ENABLE). Sharing with another Handoff needs
+// the app's own public address, because the other app is given it and calls it; sharing with someone who has no Handoff does not.
 func sharedAlbums(r *Report, in Input) {
 	switch strings.ToLower(strings.TrimSpace(firstOf(in.Env, "SHARED_ALBUMS_ENABLE"))) {
 	case "1", "true", "on", "yes":
@@ -634,7 +636,7 @@ func sharedAlbums(r *Report, in Input) {
 	pu, err := url.Parse(u)
 	switch {
 	case u == "":
-		r.add(Fail, "SHARED_ALBUMS_ENABLE is on but PUBLIC_APP_URL is not set, so sharing stays off: the other app is given this app's address",
+		r.add(Warn, "SHARED_ALBUMS_ENABLE is on but PUBLIC_APP_URL is not set, so sharing with another Handoff stays off (the other app is given this app's address); sharing with someone who has an Immich and no Handoff works",
 			"Set PUBLIC_APP_URL to the address the other app reaches this one at, for example https://handoff.example.com")
 	case err != nil || pu.Host == "" || (pu.Scheme != "https" && pu.Scheme != "http"):
 		r.add(Fail, "PUBLIC_APP_URL is not a web address: "+u, "Use a full address such as https://handoff.example.com")
@@ -655,6 +657,38 @@ func sharedAlbums(r *Report, in Input) {
 		if n, err := strconv.ParseInt(v, 10, 64); err != nil || n < 1 || n > 1<<20 {
 			r.add(Fail, "SHARED_ALBUMS_MAX_MB must be a number of megabytes, 1 or more, and the app will not start with "+v, "Fix it or remove it (the default is 2048).")
 		}
+	}
+}
+
+// rulesSettings checks RULES_CHECK_MINUTES, which the app refuses to start with when it is not a number of minutes from 0.1 to 1440.
+func rulesSettings(r *Report, in Input) {
+	if firstOf(in.Env, "RULES_CHECK_MINUTES") == "" && firstOf(in.Env, "RULES_SETTLE_MINUTES") == "" {
+		return
+	}
+	r.section("Rules")
+	if v := firstOf(in.Env, "RULES_CHECK_MINUTES"); v != "" {
+		if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.1 || m > 1440 {
+			r.add(Fail, "RULES_CHECK_MINUTES must be a number of minutes from 0.1 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 10).")
+		}
+	}
+	if v := firstOf(in.Env, "RULES_SETTLE_MINUTES"); v != "" {
+		if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.01 || m > 1440 {
+			r.add(Fail, "RULES_SETTLE_MINUTES must be a number of minutes from 0.01 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 5).")
+		}
+	}
+}
+
+// buttonSettings checks IMMICH_BUTTON_ACTIONS, which switches off the hand-over button in Immich's own pages.
+func buttonSettings(r *Report, in Input) {
+	v := strings.ToLower(strings.TrimSpace(firstOf(in.Env, "IMMICH_BUTTON_ACTIONS")))
+	switch v {
+	case "", "true", "1", "on", "yes":
+	case "false", "0", "off", "no":
+		r.section("Hand over from Immich")
+		r.add(OK, "IMMICH_BUTTON_ACTIONS is off: Immich's pages get the link to this app and no hand-over button", "")
+	default:
+		r.section("Hand over from Immich")
+		r.add(Warn, "IMMICH_BUTTON_ACTIONS is "+v+", which is neither true nor false, so the button stays on", "Set it to false to keep only the link in Immich's header, or remove it.")
 	}
 }
 

@@ -1,6 +1,6 @@
 # Shared albums across servers
 
-The conclusion of #141, and the design #131 is built from. **Not built yet.** The question was whether two people on different Immich servers can share one album that stays in sync, as real copies in each person's own library, and what that would need.
+The conclusion of #141, and the design #131 is built from. The question was whether two people on different Immich servers can share one album that stays in sync, as real copies in each person's own library, and what that would need.
 
 ## Conclusion
 
@@ -53,8 +53,8 @@ Only what the shared album carries: the files with the dates and places inside t
 - **#144 receiving endpoint:** `photo` streams the body into `UploadFile`; large videos are bounded by a per-file size cap setting.
 - **#145 the same photo on both sides at once:** both have the same checksum, so each side's `have` says it is there and nothing moves.
 - **#146 deletions:** see above; a trashed duplicate is never put back in an album.
-- **#147 key judgement:** by exact permission set; a key with more is refused with the reason.
-- **#148 group size:** a creator's server relays up to 10 members at first.
+- **#147 key judgement:** by exact permission set (`bridge.CheckShared`): the small key receives, adding the three reading permissions makes it two-way; a key with more or fewer is refused with the reason. Taking a photo out of the album does not travel in the one-app way.
+- **#148 group size:** a creator's server relays up to 10 members at first. No extra origin id was needed: each connection's ledger (a photo that arrived over it is never sent back over it) and Immich's duplicate answer stop a loop; what a member sees of the others is their names, sent by the creator (`/peer/v1/album/members`).
 
 ## Risks, plainly
 - Both people must run Handoff and reach each other over HTTPS (the one-app way is for relatives who will not).

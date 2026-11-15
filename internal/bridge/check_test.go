@@ -137,3 +137,32 @@ func TestPermissionsHelpNamesAllFourAndTheOptionalOne(t *testing.T) {
 		t.Fatal("the design says four")
 	}
 }
+
+func TestCheckSharedJudgesTheSmallAndTheTwoWayKeyByExactlyWhatIsNeeded(t *testing.T) {
+	two := append(append([]string{}, SharedReceivePermissions...), SharedTwoWayExtra...)
+	cases := []struct {
+		name  string
+		perms []string
+		way   bool
+		kind  error
+	}{
+		{"receive only", SharedReceivePermissions, false, nil},
+		{"two way", two, true, nil},
+		{"too broad", append(append([]string{}, two...), "asset.delete"), false, ErrKeyTooBroad},
+		{"too small", []string{"user.read"}, false, ErrKeyTooSmall},
+		{"half a reading key", append(append([]string{}, SharedReceivePermissions...), "asset.read", "album.read"), false, ErrKeyTooSmall},
+	}
+	for _, c := range cases {
+		f := newFake(t)
+		f.Permissions = c.perms
+		_, way, err := CheckShared(context.Background(), f.client(), f.URL, "good-key")
+		if c.kind == nil && err != nil || c.kind != nil && !errors.Is(err, c.kind) || way != c.way {
+			t.Errorf("%s: two-way %v, err %v", c.name, way, err)
+		}
+	}
+	f := newFake(t)
+	f.Permissions = SharedReceivePermissions
+	if _, _, err := CheckShared(context.Background(), f.client(), f.URL, "wrong"); !errors.Is(err, ErrRevoked) {
+		t.Errorf("a key the server does not know: %v", err)
+	}
+}

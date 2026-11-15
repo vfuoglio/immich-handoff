@@ -46,13 +46,36 @@ Reload nginx, then reload an Immich page. If the page is `https://photos.example
 - It is shown only to people signed in. The `immich_is_authenticated` cookie only decides whether to add the tag; it is not a security check, and the Handoff page checks the sign-in itself, as always.
 - It uses the app's own icon and needs no setting. The text on hover is "Immich Handoff".
 - Immich offers no place for a link, so the script finds Immich's avatar by what is true in every language (its title holds the person's email) and puts the link in front of it. **If an Immich update changes the header and the script cannot find it, a round button floats at the bottom right instead**, so the way in is never lost. The project's end-to-end tests run this against the Immich version they are pinned to, so a change shows up when that version is raised.
-- Nothing else of Immich's page is changed, and the script reads nothing from it.
+- The link changes nothing of Immich's page. The hand-over button below does read the page, to find its place and the photos you chose, and adds its own button and message; it changes nothing else.
 - If you add a Content Security Policy to Immich's pages in the proxy, the script comes from the same address, so `script-src 'self'` allows it. The icon needs `img-src 'self'`.
 
 **What it does not do**
 
 - The **Immich phone app** (not the browser) is a native app and does not show it. People using the app can open the page in the phone's browser once and use **Add to Home Screen**; see [Operations](operations.md#installing-the-page-on-a-phone).
 - It does not tell people anything: it is only a way in. Immich's own notifications are not used for this (see below).
+
+## Hand over from inside Immich
+
+With the same one line in your proxy, the script also adds a **Hand over...** button to Immich's own pages, so nobody has to know about tags:
+
+- in the **photo viewer's toolbar**, before the three dots, for the photo being shown;
+- in the **bar that appears when photos are selected**, before the three dots, for the selected photos;
+- as a **Hand over...** line in the three-dot menu of both.
+
+It opens a small list of **the services the person sends to**, each with whether the original stays or goes to the trash, and a note when photos will wait (the owner paused the service, the person paused their own sending, or a daily limit is reached). Choosing one hands the photos over exactly as if the service's tag had been put on them: the same pass, limits, quiet hours and taking back apply. A message in Immich's page says "3 photos handed over to Holiday" with **Undo** (it takes the tag off, so a pass that has not taken them yet leaves them) and a link to the app. The service used last is offered first (kept in that browser only; **Forget my choice** clears it), and services whose owner decides appear under **Ask to join**, so a person can ask without leaving Immich. Words come in the person's language.
+
+**What it needs.** The same as the header link, because the button asks the app on the same address (`/handoff/immich/...`) with the person's Immich cookie: no key, no token and no cross-site setting are involved. It works for people who joined their services **from the page** (the app has their own key to tag with); people whose accounts are fixed in the configuration do not get a list.
+
+**What it does not do.**
+
+- It offers a button only when it can find its place and, for several photos, when it can be sure which are selected. Immich draws only the photos near the screen, so after **Select all** on a long timeline the number Immich shows can be larger than what the script has seen; then the button is not shown rather than guess. Choose photos one screen at a time, or tag them as before.
+- It only hands over the person's **own** photos (at most 200 at a time); a photo from someone else's shared album is refused with a plain message.
+- It sends nothing until a service is chosen.
+- It does not work in the Immich phone app, only in a browser.
+
+**Switching it off.** `IMMICH_BUTTON_ACTIONS=false` keeps only the link in the header ([settings](settings.md)); the app then answers nothing for the button. If the app cannot be reached on the same address, or Immich's markup is not what the script looks for, the button is simply not there and the header link stays.
+
+**Immich versions.** The script looks for a handful of things in Immich's page (a test id on the viewer's toolbar, an id on the selection bar, data attributes on the photos, ARIA roles on the menus); [the design note](immich-button-design.md) lists them. The end-to-end tests check them on the Immich version they are pinned to, so a change shows up when that version is raised. On another version the button can disappear; nothing else breaks.
 
 ## Before people have signed in
 

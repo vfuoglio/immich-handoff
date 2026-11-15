@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vfuoglio/immich-handoff/internal/bridge"
+
 	"github.com/a-h/templ"
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
@@ -930,3 +932,6 @@ func deletionText(ctx context.Context, d string) string {
 	}
 	return t(ctx, "Taking a photo out of the album changes nothing on the other side.")
 }
+
+func receivePermissions() string { return strings.Join(bridge.SharedReceivePermissions, ", ") }
+func twoWayPermissions() string  { return strings.Join(bridge.SharedTwoWayExtra, ", ") }

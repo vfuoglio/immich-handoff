@@ -1,6 +1,6 @@
 # Fixed accounts
 
-The usual way to run immich-handoff is to let people join and offer services from the web page ([Install](install.md)). This page is for the other way: **you**, the admin, create the API keys and decide who sends to whom, with nothing stored by the app. It suits a single household where you want everything written down in one file. You can use it alongside self-service.
+The usual way to run immich-handoff is to let people join and offer services from the web page ([Install](install.md)). This page is for the other way: **you**, the admin, create the API keys and decide who sends to whom, with nothing stored by the app. It suits a small, fixed set of accounts where you want everything written down in one file. You can use it alongside self-service.
 
 ## One service, keys in `.env`
 

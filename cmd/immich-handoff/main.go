@@ -215,6 +215,21 @@ func run(log *slog.Logger) error {
 			go h.MailIn.Run(ctx)
 			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
 		}
+		if v := env("RULES_CHECK_MINUTES", ""); v != "" {
+			m, err := strconv.ParseFloat(v, 64)
+			if err != nil || m < 0.1 || m > 1440 {
+				return errors.New("RULES_CHECK_MINUTES must be a number of minutes, from 0.1 to 1440")
+			}
+			h.RulesEvery = time.Duration(m * float64(time.Minute))
+		}
+		if v := env("RULES_SETTLE_MINUTES", ""); v != "" {
+			m, err := strconv.ParseFloat(v, 64)
+			if err != nil || m < 0.01 || m > 1440 {
+				return errors.New("RULES_SETTLE_MINUTES must be a number of minutes, from 0.01 to 1440")
+			}
+			h.RulesSettle = time.Duration(m * float64(time.Minute))
+		}
+		go h.RulesLoop(ctx)
 		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
 		case "1", "true", "on", "yes":
 			h.Share = true
@@ -232,11 +247,9 @@ func run(log *slog.Logger) error {
 				}
 				h.SharedMaxFile = n << 20
 			}
-			if appURL != "" {
-				go h.SharedLoop(ctx)
-			}
+			go h.SharedLoop(ctx)
 			if appURL == "" {
-				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing albums with other servers stays off, because the other app needs this app's address")
+				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing with another Handoff stays off, because the other app needs this app's address; sharing with someone who has an Immich and no Handoff works")
 			}
 		}
 		h.PhoneDir = dir + "/phone-uploads" // pieces of photos on their way from a phone; not part of a backup
@@ -313,7 +326,8 @@ func run(log *slog.Logger) error {
 	}
 	w := &web.Server{S: s, Hub: h, Theme: theme, ThemeMode: themeMode, Notifier: notifier, BaseURL: base, WebhookHeader: webhookHeader,
 		WebhookSecret: secret, Log: log, BackgroundCtx: ctx, WebhookURL: os.Getenv("PUBLIC_WEBHOOK_URL"), Backups: backups, Bus: bus, BackupDownload: os.Getenv("HANDOFF_ADMIN_BACKUP_DOWNLOAD") == "true",
-		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER")}
+		PublicImmichURL: os.Getenv("PUBLIC_IMMICH_URL"), Version: version, ClientIPHeader: os.Getenv("DROPBOX_CLIENT_IP_HEADER"),
+		ButtonOff: map[string]bool{"false": true, "0": true, "off": true, "no": true}[strings.ToLower(strings.TrimSpace(os.Getenv("IMMICH_BUTTON_ACTIONS")))]}
 
 	go s.ProvisionRetry(ctx, hook) // background: Immich may still be loading its plugins
 

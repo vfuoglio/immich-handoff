@@ -79,6 +79,12 @@ type Hub struct {
 	// largest file one may carry, in bytes (SHARED_ALBUMS_MAX_MB; zero: 2 GB).
 	SharedEvery   time.Duration
 	SharedMaxFile int64
+	// GroupMax is the most people one album is shared with through its creator (zero: ten).
+	GroupMax int
+	// RulesEvery is how often rules look for photos (RULES_CHECK_MINUTES; zero: ten minutes).
+	RulesEvery time.Duration
+	// RulesSettle is how long a photo is in Immich before a rule offers it (RULES_SETTLE_MINUTES; zero: five minutes).
+	RulesSettle time.Duration
 
 	PhoneDir     string
 	PhoneCap     int64
@@ -461,6 +467,7 @@ func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, ser
 	if err := h.Store.RemoveLink(ctx, link.ID); err != nil {
 		return err
 	}
+	h.Store.DeleteRulesOf(ctx, user.ID, service) // its rules end with the membership
 	h.event(ctx, service, user.ID, "left", i18n.Pack("{name} stopped sending to {service}", "name", user.Name, "service", service))
 	h.Log.Info("left", "service", service, "user", user.Email)
 	return h.Reload(ctx)

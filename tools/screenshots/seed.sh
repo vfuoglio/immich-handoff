@@ -92,6 +92,13 @@ export HANDOFF_STORE_KEY=demo-store-key-0123456789abcdef
 export DATA_DIR=$DEMO/data
 export LISTEN_ADDR=:$APP_PORT
 ENV
+  if [ "${SHARED:-}" = 1 ]; then # for the pictures of shared albums: sharing on, and the demo's own address allowed
+    cat >> "$DEMO/env.sh" <<ENV
+export SHARED_ALBUMS_ENABLE=true
+export BRIDGE_ALLOW_PRIVATE=true
+export PUBLIC_APP_URL=$APP
+ENV
+  fi
   echo "stack $STACK ready: Immich http://localhost:$IMMICH_PORT, app will run on $APP"
   ;;
 setup)

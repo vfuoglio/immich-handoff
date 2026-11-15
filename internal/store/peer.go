@@ -18,6 +18,7 @@ const (
 
 	PeerInviter = "inviter" // this app made the invitation
 	PeerJoiner  = "joiner"  // this app accepted one
+	PeerImmich  = "immich"  // no Handoff on the other side: the address is their Immich and the secret is the key they made
 )
 
 // Peer is another Handoff app that this person shares albums with.

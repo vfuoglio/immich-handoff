@@ -44,6 +44,7 @@ type Server struct {
 	WebhookSecret string
 	Log           *slog.Logger
 	BackgroundCtx context.Context
+	ButtonOff     bool // IMMICH_BUTTON_ACTIONS=false: Immich's pages get the link to the app but no hand-over button
 
 	// PublicImmichURL is the address of Immich as the browser sees it. Optional: with it the page shows
 	// thumbnails of photos that are waiting to be handed over.
@@ -103,6 +104,10 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/digest", w.setDigest)
 	mux.HandleFunc("POST /services/pool", w.setPool)
 	mux.HandleFunc("POST /services/takeback", w.takeBack)
+	mux.HandleFunc("GET /immich/services", w.buttonInfo)
+	mux.HandleFunc("POST /immich/send", w.buttonSend)
+	mux.HandleFunc("POST /immich/undo", w.buttonUndo)
+	mux.HandleFunc("POST /immich/ask", w.buttonAsk)
 	mux.HandleFunc("POST /static/share", w.shareFallback)
 	mux.HandleFunc("GET /send", w.sendPage)
 	mux.HandleFunc("POST /send/start", w.phoneStart)
@@ -156,10 +161,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /peer/v1/album/photo", w.peerAlbumPhoto)
 	mux.HandleFunc("POST /peer/v1/album/removed", w.signed(w.peerAlbumRemoved))
 	mux.HandleFunc("POST /shared/removal", w.answerRemoval)
+	mux.HandleFunc("POST /peer/v1/album/members", w.signed(w.peerAlbumMembers))
 	mux.HandleFunc("POST /peer/v1/album/done", w.signed(w.peerAlbumDone))
 	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
 	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)
 	mux.HandleFunc("POST /peers/share", w.proposeAlbum)
+	mux.HandleFunc("POST /peers/share-immich", w.shareWithImmich)
 	mux.HandleFunc("POST /shared/accept", w.acceptAlbum)
 	mux.HandleFunc("POST /shared/decline", w.declineAlbum)
 	mux.HandleFunc("POST /shared/leave", w.leaveAlbum)
@@ -250,6 +257,18 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /sync", w.syncNow)
 	mux.HandleFunc("POST /preferences/tags", w.enableTags)
 	mux.HandleFunc("GET /fragments/albums", w.albumChoice)
+	mux.HandleFunc("GET /fragments/rule-form", w.ruleForm)
+	mux.HandleFunc("GET /fragments/rule-cities", w.ruleCities)
+	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
+	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
+	mux.HandleFunc("POST /rules/answer", w.answerRule)
+	mux.HandleFunc("POST /rules/auto", w.autoRule)
+	mux.HandleFunc("POST /rules/lookback", w.lookBackRule)
+	mux.HandleFunc("GET /rules/review/{id}", w.ruleReview)
+	mux.HandleFunc("POST /rules/review", w.reviewRule)
+	mux.HandleFunc("POST /rules", w.addRule)
+	mux.HandleFunc("POST /rules/pause", w.pauseRule)
+	mux.HandleFunc("POST /rules/delete", w.deleteRule)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
@@ -444,7 +463,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
 			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
-				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName,
+				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName, RuleList: w.ruleViews(ctx, m, svc.Label()),
 				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name, Rules: w.rulesText(ctx, svc)}
 			switch {
 			case svc.Paused:
@@ -582,8 +601,8 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.DropBoxes = w.dropBoxViews(ctx, me)
 	d.Frames = w.frameViews(ctx, me)
 	d.Rooms = w.roomViews(ctx, me)
-	if w.Hub.PeersOn() {
-		d.PeersOn, d.Peers = true, w.peerViews(ctx, me)
+	if w.Hub.SharingOn() {
+		d.PeersOn, d.PeerInvites, d.Peers = true, w.Hub.PeersOn(), w.peerViews(ctx, me)
 	}
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
@@ -612,6 +631,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	if len(first) > 0 {
 		d.Headline = t(ctx, "Hello, {name}.", "name", first[0])
 	}
+	d.Suggestions = w.suggestionViews(ctx, me)
 	d.Needs = needsOf(ctx, d)
 	d.Gist = needsGist(ctx, len(d.Needs))
 	d.Scene = sceneOf(ctx, d, w.S.Current())
@@ -668,6 +688,17 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: name,
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
+	}
+	for _, sg := range d.Suggestions {
+		more := sg.Count - len(sg.Thumbs)
+		acts := []NeedAction{
+			{Label: t(ctx, "Send"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+			{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")}}
+		if !sg.Phrase {
+			acts = append(acts, NeedAction{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")})
+		}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo for {service}", "{n} new photos for {service}", sg.Count, "service", sg.Service),
+			Text: t(ctx, "Found by your rule: {rule}. Send them to {service}?", "rule", sg.Sentence, "service", sg.Service), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 	}
 	for _, o := range d.Owned {
 		if o.Broken != "" {
