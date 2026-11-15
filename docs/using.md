@@ -173,6 +173,10 @@ A card also has **Look at them one by one**: a page with every photo large, the 
 
 Ending a rule never touches photos already handed over, and leaving the service ends its rules. The permissions the rule needs are the ones your key for the service has; for the albums it asks you to give the key **read albums**, through your own sign-in, as when you link an album.
 
+### Handing over from inside Immich
+
+If your administrator has put the Handoff button in Immich's pages ([Make Handoff easy to find](find-handoff.md#hand-over-from-inside-immich)), you can hand photos over without tags: open a photo, or select several, and press **Hand over...** in the toolbar (or choose **Hand over...** in the three-dot menu). Pick the service; Immich's page then says how many photos were handed over, with **Undo** for a moment. The list shows only services you send to from this page, says whether your original stays or goes to your trash, and warns when photos will wait (a pause, a daily limit). The service you used last is first in the list; **Forget my choice** clears it. A service whose owner decides is listed under **Ask to join**; pressing it asks, and the list then says **Waiting for approval**. Only your own photos can be handed over, up to 200 at once. It does the same as putting the tag on, so everything above about limits, quiet hours and taking back applies.
+
 ## Receiving photos
 
 ### Offering a service
