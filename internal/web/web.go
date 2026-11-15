@@ -160,6 +160,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /shared/sync", w.syncAlbumNow)
 	mux.HandleFunc("GET /fragments/share-albums", w.shareAlbums)
 	mux.HandleFunc("POST /peers/share", w.proposeAlbum)
+	mux.HandleFunc("POST /peers/share-immich", w.shareWithImmich)
 	mux.HandleFunc("POST /shared/accept", w.acceptAlbum)
 	mux.HandleFunc("POST /shared/decline", w.declineAlbum)
 	mux.HandleFunc("POST /shared/leave", w.leaveAlbum)
@@ -582,8 +583,8 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.DropBoxes = w.dropBoxViews(ctx, me)
 	d.Frames = w.frameViews(ctx, me)
 	d.Rooms = w.roomViews(ctx, me)
-	if w.Hub.PeersOn() {
-		d.PeersOn, d.Peers = true, w.peerViews(ctx, me)
+	if w.Hub.SharingOn() {
+		d.PeersOn, d.PeerInvites, d.Peers = true, w.Hub.PeersOn(), w.peerViews(ctx, me)
 	}
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)

@@ -136,6 +136,7 @@ type PeerView struct {
 	Shared             []SharedView
 	IPaused, TheyPause bool
 	Seen, Problem      string
+	NoApp              bool // the other person has an Immich and no Handoff
 }
 
 func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
@@ -147,7 +148,7 @@ func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
 	l := loc(ctx)
 	var out []PeerView
 	for _, p := range list {
-		v := PeerView{ID: p.ID, Name: p.Name, Role: p.Role, State: p.State, IPaused: p.IPaused, TheyPause: p.TheyPaused, Problem: p.Problem}
+		v := PeerView{ID: p.ID, Name: p.Name, Role: p.Role, NoApp: p.Role == store.PeerImmich, State: p.State, IPaused: p.IPaused, TheyPause: p.TheyPaused, Problem: p.Problem}
 		if u, err := url.Parse(p.Address); err == nil {
 			v.Host = u.Host + u.Path
 		}
@@ -156,7 +157,7 @@ func (w *Server) peerViews(ctx context.Context, me *member) []PeerView {
 		}
 		if shared, err := w.Hub.Store.SharedAlbumsWith(ctx, p.ID); err == nil {
 			for _, a := range shared {
-				sv := SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name, Problem: a.Problem, Sent: a.Sent, Received: a.Received, Pending: len(a.Pending)}
+				sv := SharedView{ID: a.ID, Name: a.Name, Album: a.AlbumName, State: a.State, Proposer: a.Proposer, History: a.History, TheirHistory: a.TheirHistory, Deletion: a.Deletion, Peer: p.Name, Problem: a.Problem, Sent: a.Sent, Received: a.Received, Pending: len(a.Pending), NoApp: p.Role == store.PeerImmich, TwoWay: a.TwoWay}
 				if !a.LastSync.IsZero() {
 					sv.Last = l.Stamp(a.LastSync.Local())
 				}
@@ -176,7 +177,8 @@ type SharedView struct {
 	Deletion                     string
 	Last, Problem                string
 	Sent, Received               int
-	Pending                      int // photos taken out that wait for the person's yes
+	Pending                      int  // photos taken out that wait for the person's yes
+	NoApp, TwoWay                bool // the other person has no Handoff; their key can also read the album
 }
 
 func (w *Server) newPeerInvite(rw http.ResponseWriter, r *http.Request) {
@@ -422,5 +424,17 @@ func (w *Server) peerAlbumRemoved(rw http.ResponseWriter, r *http.Request, p sto
 func (w *Server) answerRemoval(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "removal answered", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.AnswerRemoval(ctx, me.user, r.PostFormValue("shared"), r.PostFormValue("do") == "follow")
+	})
+}
+
+// shareWithImmich shares an album with someone who has an Immich and no Handoff.
+func (w *Server) shareWithImmich(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album shared with an Immich", func(ctx context.Context, me *member, _ string) error {
+		in := hub.ImmichShare{Person: r.PostFormValue("person"), Address: r.PostFormValue("address"), Key: r.PostFormValue("key"), Name: r.PostFormValue("name"), History: r.PostFormValue("history")}
+		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
+			in.AlbumID = id
+		}
+		_, err := w.Hub.ShareWithImmich(ctx, me.sess, me.user, in)
+		return err
 	})
 }

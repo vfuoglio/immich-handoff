@@ -97,6 +97,81 @@ func Check(ctx context.Context, hc *http.Client, addr, key string) (Info, error)
 	return info, nil
 }
 
+// SharedReceivePermissions is what the key of a relative who has no Handoff holds when they only receive an album: say who it is, upload
+// and make an album to put the photos in. Nothing reads, searches or deletes.
+var SharedReceivePermissions = []string{"user.read", "asset.upload", "album.create", "albumAsset.create"}
+
+// SharedTwoWayExtra is what a two-way key holds on top of that: reading the album and downloading its originals. It can read the
+// whole library of the person who made it (Immich cannot limit a key to one album); the app only ever asks for the one album.
+var SharedTwoWayExtra = []string{"asset.read", "asset.download", "album.read"}
+
+// SharedPermissionsHelp says in words which permissions to give the key of a relative's Immich, for the page and the log.
+func SharedPermissionsHelp() string {
+	return "To receive an album only, give the key exactly: " + strings.Join(SharedReceivePermissions, ", ") +
+		". To share both ways, add: " + strings.Join(SharedTwoWayExtra, ", ") + ". No others."
+}
+
+// CheckShared says whether the app may share an album with a server that has no Handoff, at addr (already accepted by
+// Policy.Address) with key, and in which way: twoWay is true if the key can also read the album. The rule is the same as for a
+// bridge: exactly what is needed, no more and no less.
+func CheckShared(ctx context.Context, hc *http.Client, addr, key string) (info Info, twoWay bool, err error) {
+	var v struct{ Major, Minor, Patch int }
+	if err = getJSON(ctx, hc, addr+"/api/server/version", "", &v); err != nil {
+		return
+	}
+	if v.Major == 0 && v.Minor == 0 && v.Patch == 0 {
+		return info, false, ErrNotImmich
+	}
+	info = Info{Version: fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch), Major: v.Major}
+	if !slices.Contains(SupportedMajors, v.Major) {
+		return info, false, &Failure{Kind: ErrVersion, Detail: info.Version + ", tested with " + majorsText()}
+	}
+	var k struct {
+		Permissions []string `json:"permissions"`
+	}
+	if err = getJSON(ctx, hc, addr+"/api/api-keys/me", key, &k); err != nil {
+		return
+	}
+	twoWay, err = judgeShared(k.Permissions)
+	return
+}
+
+func judgeShared(have []string) (bool, error) {
+	var extra, missing []string
+	for _, p := range have {
+		if !slices.Contains(SharedReceivePermissions, p) && !slices.Contains(SharedTwoWayExtra, p) {
+			extra = append(extra, p)
+		}
+	}
+	for _, p := range SharedReceivePermissions {
+		if !slices.Contains(have, p) {
+			missing = append(missing, p)
+		}
+	}
+	reads := 0
+	for _, p := range SharedTwoWayExtra {
+		if slices.Contains(have, p) {
+			reads++
+		}
+	}
+	sort.Strings(extra)
+	switch {
+	case len(extra) > 0:
+		return false, &Failure{Kind: ErrKeyTooBroad, Detail: strings.Join(extra, ", "), Help: SharedPermissionsHelp()}
+	case len(missing) > 0:
+		return false, &Failure{Kind: ErrKeyTooSmall, Detail: strings.Join(missing, ", "), Help: SharedPermissionsHelp()}
+	case reads > 0 && reads < len(SharedTwoWayExtra): // half a two-way key does neither job well
+		var lack []string
+		for _, p := range SharedTwoWayExtra {
+			if !slices.Contains(have, p) {
+				lack = append(lack, p)
+			}
+		}
+		return false, &Failure{Kind: ErrKeyTooSmall, Detail: strings.Join(lack, ", "), Help: SharedPermissionsHelp()}
+	}
+	return reads == len(SharedTwoWayExtra), nil
+}
+
 func majorsText() string {
 	var out []string
 	for _, m := range SupportedMajors {

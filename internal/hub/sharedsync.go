@@ -184,15 +184,21 @@ func (h *Hub) SyncShared(ctx context.Context, id string) error {
 		return ErrSharedBusy
 	}
 	defer h.syncing.Delete(a.ID)
-	sent, problem := h.sendNew(ctx, a, p)
-	h.Store.MarkSharedPass(context.WithoutCancel(ctx), a.ID, h.now(), problem, sent, 0)
+	var sent, received int
+	var problem string
+	if p.Role == store.PeerImmich {
+		sent, received, problem = h.syncImmich(ctx, a, p)
+	} else {
+		sent, problem = h.sendNew(ctx, a, p)
+	}
+	h.Store.MarkSharedPass(context.WithoutCancel(ctx), a.ID, h.now(), problem, sent, received)
 	switch {
 	case problem != "" && a.Problem == "": // told once, not on every look
 		h.event(ctx, "", a.OwnerID, "sharing_problem", i18n.Pack("Sharing the album {album} with {other} ran into a problem: {reason}", "album", a.Name, "other", p.Name, "reason", problem))
 	case problem == "" && a.Problem != "":
 		h.event(ctx, "", a.OwnerID, "share", i18n.Pack("Sharing the album {album} with {other} works again", "album", a.Name, "other", p.Name))
 	}
-	if sent > 0 { // the other person is told that photos arrived, once for the whole pass
+	if sent > 0 && p.Role != store.PeerImmich { // the other person is told that photos arrived, once for the whole pass
 		var reply struct{}
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		peer.Call(cctx, h.peerClient(), p.Address, p.TheirID, p.Secret, "POST", "/peer/v1/album/done", DoneMsg{To: a.TheirID, N: sent}, &reply)
@@ -209,26 +215,9 @@ func (h *Hub) sendNew(ctx context.Context, a store.SharedAlbum, p store.Peer) (s
 	if err != nil {
 		return 0, err.Error()
 	}
-	list, err := api.AlbumAssets(ctx, a.AlbumID)
-	if err != nil {
-		return 0, "could not read the album: " + trimNet(err)
-	}
-	by := map[string]immich.AssetResponseDto{}
-	for _, x := range list {
-		if x.Checksum == "" || x.IsTrashed {
-			continue
-		}
-		by[x.Checksum] = x
-		// a photo the ledger has not seen is this person's own new photo; one that was taken out and is back is new again
-		origin, _, known, err := h.Store.LedgerHas(ctx, a.ID, x.Checksum)
-		switch {
-		case err != nil:
-			return 0, err.Error()
-		case !known:
-			h.Store.LedgerPut(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
-		case origin == store.OriginRemoved:
-			h.Store.LedgerRestore(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
-		}
+	by, problem := h.noteOwn(ctx, a, api)
+	if problem != "" {
+		return 0, problem
 	}
 	h.followRemovals(ctx, a, p, api, by)
 	_, order, err := h.Store.LedgerUnsent(ctx, a.ID)
@@ -281,6 +270,32 @@ func (h *Hub) sendNew(ctx context.Context, a store.SharedAlbum, p store.Peer) (s
 	return sent, problem
 }
 
+// noteOwn lists the person's album and notes in the ledger every photo it has not seen: those are the person's own new photos
+// (one that was taken out and is back is new again). It answers the photos by checksum.
+func (h *Hub) noteOwn(ctx context.Context, a store.SharedAlbum, api *immich.API) (map[string]immich.AssetResponseDto, string) {
+	list, err := api.AlbumAssets(ctx, a.AlbumID)
+	if err != nil {
+		return nil, "could not read the album: " + trimNet(err)
+	}
+	by := map[string]immich.AssetResponseDto{}
+	for _, x := range list {
+		if x.Checksum == "" || x.IsTrashed {
+			continue
+		}
+		by[x.Checksum] = x
+		origin, _, known, err := h.Store.LedgerHas(ctx, a.ID, x.Checksum)
+		switch {
+		case err != nil:
+			return nil, err.Error()
+		case !known:
+			h.Store.LedgerPut(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
+		case origin == store.OriginRemoved:
+			h.Store.LedgerRestore(ctx, a.ID, x.Checksum, x.Id.String(), store.OriginMine, false)
+		}
+	}
+	return by, ""
+}
+
 // sendPhoto streams one original to the other app.
 func (h *Hub) sendPhoto(ctx context.Context, api *immich.API, a store.SharedAlbum, p store.Peer, x immich.AssetResponseDto) error {
 	resp, err := api.Original(ctx, x.Id)
@@ -330,7 +345,7 @@ func (h *Hub) SyncSharedNow(ctx context.Context, owner uuid.UUID, id string) err
 
 // SharedMaintenance looks at every active shared album, one after the other.
 func (h *Hub) SharedMaintenance(ctx context.Context) {
-	if !h.PeersOn() {
+	if !h.SharingOn() {
 		return
 	}
 	list, err := h.Store.ActiveSharedAlbums(ctx)

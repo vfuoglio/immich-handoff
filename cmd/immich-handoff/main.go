@@ -232,11 +232,9 @@ func run(log *slog.Logger) error {
 				}
 				h.SharedMaxFile = n << 20
 			}
-			if appURL != "" {
-				go h.SharedLoop(ctx)
-			}
+			go h.SharedLoop(ctx)
 			if appURL == "" {
-				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing albums with other servers stays off, because the other app needs this app's address")
+				log.Warn("SHARED_ALBUMS_ENABLE is on, but PUBLIC_APP_URL is not set: sharing with another Handoff stays off, because the other app needs this app's address; sharing with someone who has an Immich and no Handoff works")
 			}
 		}
 		h.PhoneDir = dir + "/phone-uploads" // pieces of photos on their way from a phone; not part of a backup

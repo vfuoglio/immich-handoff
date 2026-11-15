@@ -39,6 +39,7 @@ type sharing struct {
 	photos  map[string]*fakePhoto       // by asset id
 	members map[string][]string         // album id -> asset ids
 	uploads int                         // photos uploaded with a key (what a peer sent)
+	revoked map[string]bool             // keys the server no longer accepts
 }
 
 type fakePhoto struct {
@@ -132,6 +133,19 @@ func (f *sharing) handler(base http.Handler) http.Handler {
 			}
 		}
 		w.WriteHeader(204)
+	})
+	mux.HandleFunc("GET /api/server/version", func(w http.ResponseWriter, r *http.Request) {
+		j(w, 200, map[string]int{"major": 3, "minor": 2, "patch": 0})
+	})
+	mux.HandleFunc("GET /api/api-keys/me", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		k, ok := f.keys[r.Header.Get("x-api-key")]
+		f.mu.Unlock()
+		if !ok {
+			http.Error(w, `{"message":"Invalid API key"}`, 401)
+			return
+		}
+		j(w, 200, map[string]any{"id": k.id, "name": "k", "permissions": k.perms})
 	})
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -287,7 +301,16 @@ func (f *sharing) handler(base http.Handler) http.Handler {
 		j(w, 200, out)
 	})
 	mux.Handle("/", base)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		gone := f.revoked[r.Header.Get("x-api-key")]
+		f.mu.Unlock()
+		if gone {
+			http.Error(w, `{"message":"Invalid API key"}`, 401)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // takeOut removes a photo from an album without deleting it, as a person does in Immich.
@@ -316,17 +339,18 @@ func (f *sharing) trash(album, sum string) {
 
 // anApp is one running Handoff, with its own data file, for tests of two apps that talk to each other.
 type anApp struct {
-	url  string
-	hub  *hub.Hub
-	st   *store.Store
-	srv  *httptest.Server
-	fake *sharing
-	user string // the cookie of the person who uses it
+	url    string
+	hub    *hub.Hub
+	st     *store.Store
+	srv    *httptest.Server
+	fake   *sharing
+	user   string // the cookie of the person who uses it
+	immich string // its Immich's address
 }
 
 func startApp(t *testing.T, user string, share bool, allowPrivate bool) *anApp {
 	t.Helper()
-	fake := &sharing{keys: map[string]sharedKey{}, albums: map[string][]map[string]any{}, photos: map[string]*fakePhoto{}, members: map[string][]string{}}
+	fake := &sharing{revoked: map[string]bool{}, keys: map[string]sharedKey{}, albums: map[string][]map[string]any{}, photos: map[string]*fakePhoto{}, members: map[string][]string{}}
 	im := httptest.NewServer(fake.handler(fakeImmich()))
 	t.Cleanup(im.Close)
 	v, _ := vault.New("0123456789abcdef0123")
@@ -348,7 +372,7 @@ func startApp(t *testing.T, user string, share bool, allowPrivate bool) *anApp {
 	}
 	s.Provider = h
 	handler = (&web.Server{S: s, Hub: h, BaseURL: im.URL, WebhookHeader: "X-Webhook-Secret", WebhookSecret: "s", Log: log, BackgroundCtx: context.Background()}).Handler()
-	return &anApp{url: srv.URL, hub: h, st: st, srv: srv, fake: fake, user: user}
+	return &anApp{url: srv.URL, hub: h, st: st, srv: srv, fake: fake, user: user, immich: im.URL}
 }
 
 func (a *anApp) as(t *testing.T, method, path, body string) (int, string) {

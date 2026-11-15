@@ -266,6 +266,7 @@ type DashboardData struct {
 	Rooms      []RoomView
 	Peers      []PeerView
 	PeersOn    bool
+	PeerInvites bool
 	Templates  []TemplateView
 }
 
@@ -651,7 +652,7 @@ templ Dashboard(d DashboardData) {
 				@DropBoxSection(d.DropBoxes, d.Templates)
 				@RoomSection(d.Rooms)
 				if d.PeersOn {
-					@PeerSection(d.Peers)
+					@PeerSection(d.Peers, d.PeerInvites)
 				}
 				@FrameSection(d.Frames)
 			}
@@ -3637,29 +3638,64 @@ templ RoomReviewPage(d ReviewData) {
 }
 
 // PeerSection is where a person connects their app with the app of someone on another server, to share albums with them.
-templ PeerSection(peers []PeerView) {
+templ PeerSection(peers []PeerView, invites bool) {
 	<h2>{ t(ctx, "Albums shared with other servers") }</h2>
 	<p class="meta">{ t(ctx, "Connect this app with the Handoff of someone whose Immich is on another server, so that you can share an album that stays the same in both libraries. Nothing is shared until you both agree on an album. Each app only ever touches its own Immich.") }</p>
 	for i, p := range peers {
 		@PeerRow(p, fmt.Sprintf("peer-%d", i), len(peers) == 1)
 	}
-	<details class="offer">
-		<summary>{ t(ctx, "Invite someone") }</summary>
-		<div class="card offer-form">
-			<p class="meta">{ t(ctx, "You get a link to give to the other person. They paste it into their own Handoff. It works once, for a week.") }</p>
-			<p class="row"><button hx-post="peers/invite" hx-target="#peer-invite" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make an invitation link") }</button></p>
-			<div id="peer-invite"></div>
-		</div>
-	</details>
-	<details class="offer">
-		<summary>{ t(ctx, "Join with an invitation link") }</summary>
-		<form class="card offer-form" hx-post="peers/preview" hx-target="#peer-preview" hx-swap="innerHTML" hx-disabled-elt="find button">
-			<div class="field">
-				<label for="peer-link">{ t(ctx, "The invitation link") }</label>
-				<input id="peer-link" name="link" required autocomplete="off" placeholder="https://..."/>
+	if invites {
+		<details class="offer">
+			<summary>{ t(ctx, "Invite someone") }</summary>
+			<div class="card offer-form">
+				<p class="meta">{ t(ctx, "You get a link to give to the other person. They paste it into their own Handoff. It works once, for a week.") }</p>
+				<p class="row"><button hx-post="peers/invite" hx-target="#peer-invite" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Make an invitation link") }</button></p>
+				<div id="peer-invite"></div>
 			</div>
-			<p class="row form-actions"><button type="submit">{ t(ctx, "Look at the invitation") }</button></p>
-			<div id="peer-preview"></div>
+		</details>
+		<details class="offer">
+			<summary>{ t(ctx, "Join with an invitation link") }</summary>
+			<form class="card offer-form" hx-post="peers/preview" hx-target="#peer-preview" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<div class="field">
+					<label for="peer-link">{ t(ctx, "The invitation link") }</label>
+					<input id="peer-link" name="link" required autocomplete="off" placeholder="https://..."/>
+				</div>
+				<p class="row form-actions"><button type="submit">{ t(ctx, "Look at the invitation") }</button></p>
+				<div id="peer-preview"></div>
+			</form>
+		</details>
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Share an album with someone who has no Handoff") }</summary>
+		<form class="card offer-form" hx-post="peers/share-immich" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<p class="meta">{ t(ctx, "For a relative or a friend who has an Immich and will never run Handoff. This app copies the album's photos into an album on their Immich, with a key that they make on their own Immich and give to you. You can see exactly what the key can do below, and they can delete it at any time to end the sharing.") }</p>
+			<div class="field">
+				<label for="im-person">{ t(ctx, "Who is it?") }</label>
+				<input id="im-person" name="person" required maxlength="40" autocomplete="off"/>
+			</div>
+			<div class="field">
+				<label for="im-address">{ t(ctx, "The address of their Immich") }</label>
+				<input id="im-address" name="address" required autocomplete="off" placeholder="https://photos.example.org"/>
+			</div>
+			<div class="field">
+				<label for="im-key">{ t(ctx, "The key they made") }</label>
+				<input id="im-key" name="key" type="password" required autocomplete="off"/>
+			</div>
+			<div class="card notice">
+				<p><b>{ t(ctx, "What the key can do") }</b></p>
+				<p class="meta">{ t(ctx, "To only send them the album, the key needs exactly these permissions: {list}. It can then put photos into their library and make an album; it cannot read, search or delete anything.", "list", receivePermissions()) }</p>
+				<p class="meta">{ t(ctx, "To share both ways, it also needs: {list}. It can then read the whole of their library, because Immich cannot limit a key to one album; this app only ever asks for the one album. Their photos you did not ask for are never copied.", "list", twoWayPermissions()) }</p>
+				<p class="meta">{ t(ctx, "A key with any other permission is refused. Taking a photo out of the album does not travel in this way of sharing.") }</p>
+			</div>
+			<div class="field">
+				<label for="im-name">{ t(ctx, "What the shared album is called") }</label>
+				<input id="im-name" name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
+			</div>
+			<div class="field" hx-get="fragments/share-albums?for=immich" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
+			</div>
+			@ShareChoices("immich", false)
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Start sharing") }</button></p>
 		</form>
 	</details>
 }
@@ -3695,8 +3731,12 @@ templ PeerRow(p PeerView, id string, open bool) {
 			switch {
 				case p.State == "left":
 					<p class="meta">{ t(ctx, "{name} ended the connection. Remove it to forget it.", "name", p.Name) }</p>
+				case p.Problem != "" && p.NoApp:
+					<p class="meta bad-note">{ t(ctx, "Their Immich does not take the key: {reason}", "reason", p.Problem) }</p>
 				case p.Problem != "":
 					<p class="meta bad-note">{ t(ctx, "The other app could not be reached: {reason}", "reason", p.Problem) }</p>
+				case p.NoApp:
+					<p class="meta">{ t(ctx, "Their Immich accepted the key at {when}. They can delete the key on their Immich at any time, which ends the sharing.", "when", p.Seen) }</p>
 				default:
 					<p class="meta">{ t(ctx, "The other app answered at {when}.", "when", p.Seen) }</p>
 			}
@@ -3706,7 +3746,7 @@ templ PeerRow(p PeerView, id string, open bool) {
 			for i, a := range p.Shared {
 				@SharedRow(a, fmt.Sprintf("%s-%d", id, i))
 			}
-			if p.State == "active" && !p.IPaused {
+			if p.State == "active" && !p.IPaused && !p.NoApp {
 				<details class="offer">
 					<summary>{ t(ctx, "Share an album with {name}", "name", p.Name) }</summary>
 					<form class="card offer-form" hx-post="peers/share" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -3791,7 +3831,11 @@ templ ShareChoices(id string, proposing bool) {
 			<label class="target"><input type="radio" name="deletion" value="follow"/><span><b>{ t(ctx, "It is taken out of the other album too") }</b><small class="meta">{ t(ctx, "The photo itself stays in their library; only the album changes.") }</small></span></label>
 		</fieldset>
 	}
-	<p class="meta">{ t(ctx, "Photos leave your library only into the other person's library, only from this album, and only through the other person's own Handoff. You can end the sharing at any time; photos already copied stay where they are.") }</p>
+	if id != "immich" {
+		<p class="meta">{ t(ctx, "Photos leave your library only into the other person's library, only from this album, and only through the other person's own Handoff. You can end the sharing at any time; photos already copied stay where they are.") }</p>
+	} else {
+		<p class="meta">{ t(ctx, "Photos leave your library only into their library, only from this album. You can end the sharing at any time; photos already copied stay where they are.") }</p>
+	}
 }
 
 // SharedRow is one shared album with a connection: what it is, in what state, and what can be done.
@@ -3826,7 +3870,15 @@ templ SharedRow(a SharedView, id string) {
 					</p>
 				</form>
 			case "active":
-				<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}. {name} shares: {theirs}.", "album", a.Album, "mine", historyText(ctx, a.History), "name", a.Peer, "theirs", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				if a.NoApp {
+					if a.TwoWay {
+						<p class="meta">{ t(ctx, "Your album {album}, shared both ways with {name}'s Immich: photos you add go there, and photos they add to their album come here. They have no Handoff; their key can read their library.", "album", a.Album, "name", a.Peer) }</p>
+					} else {
+						<p class="meta">{ t(ctx, "Your album {album}, sent to {name}'s Immich. Their key only receives: photos you add go there, nothing comes back.", "album", a.Album, "name", a.Peer) }</p>
+					}
+				} else {
+					<p class="meta">{ t(ctx, "Your album {album}. You share: {mine}. {name} shares: {theirs}.", "album", a.Album, "mine", historyText(ctx, a.History), "name", a.Peer, "theirs", historyText(ctx, a.TheirHistory)) } { deletionText(ctx, a.Deletion) }</p>
+				}
 				<p class="meta">
 					if a.Last != "" {
 						{ t(ctx, "Last looked at {when}.", "when", a.Last) }

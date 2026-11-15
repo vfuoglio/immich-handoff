@@ -47,15 +47,17 @@ type SharedAlbum struct {
 	Problem             string    // what stopped the last pass or a photo (empty: nothing)
 	Sent, Received      int       // photos that went each way
 	Pending             []string  // checksums of a large removal that waits for the person's yes
+	TheirAlbum          string    // one-app way: the album on their Immich
+	TwoWay              bool      // one-app way: their key can also read the album
 }
 
-const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received, pending`
+const sharedCols = `id, owner_id, peer_id, their_id, name, album_id, album_name, key_id, key_enc, state, proposer, history, their_history, deletion, created_at, last_sync, problem, sent, received, pending, their_album, two_way`
 
 func (s *Store) scanShared(sc interface{ Scan(...any) error }) (SharedAlbum, error) {
 	var a SharedAlbum
 	var owner, album, key, created, last, pending string
 	var enc []byte
-	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received, &pending); err != nil {
+	if err := sc.Scan(&a.ID, &owner, &a.PeerID, &a.TheirID, &a.Name, &album, &a.AlbumName, &key, &enc, &a.State, &a.Proposer, &a.History, &a.TheirHistory, &a.Deletion, &created, &last, &a.Problem, &a.Sent, &a.Received, &pending, &a.TheirAlbum, &a.TwoWay); err != nil {
 		return a, err
 	}
 	a.OwnerID, _ = uuid.Parse(owner)
@@ -89,8 +91,8 @@ func (s *Store) AddSharedAlbum(ctx context.Context, a SharedAlbum) (SharedAlbum,
 			return a, err
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received, pendingJSON(a.Pending))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_albums (`+sharedCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.OwnerID.String(), a.PeerID, a.TheirID, a.Name, nilUUID(a.AlbumID), a.AlbumName, nilUUID(a.KeyID), enc, a.State, b2i(a.Proposer), a.History, a.TheirHistory, a.Deletion, a.CreatedAt.Format(time.RFC3339Nano), tstr(a.LastSync), a.Problem, a.Sent, a.Received, pendingJSON(a.Pending), a.TheirAlbum, b2i(a.TwoWay))
 	return a, err
 }
 
