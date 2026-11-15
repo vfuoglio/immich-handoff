@@ -11,7 +11,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// TestImmichMarkup holds Immich's own page to what the hand-over button relies on (docs/immich-button-design.md): the
+// TestImmichMarkup holds Immich's own page to what the hand-over button relies on (docs/design/immich-button-design.md): the
 // photo viewer's toolbar, the bar that shows when photos are selected, the tiles and where they keep a photo's id, and
 // the menus that open from three dots. Immich offers no hooks for this, so when it is upgraded and one of these
 // moves, this is the test that says so, before a button quietly disappears.

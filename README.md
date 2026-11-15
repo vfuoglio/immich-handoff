@@ -123,6 +123,7 @@ Then open `http://<your-host>:8080/`, sign in to Immich, and offer your first se
 
 | Page | What it covers |
 |---|---|
+| [Questions people ask first](docs/faq.md) | Is it the right tool, and what does it do to my photos |
 | [Install](docs/install.md) | Ten minutes from clone to first photo |
 | [Using it](docs/using.md) | For the people who send and receive |
 | [What is carried over](docs/what-is-carried-over.md) | What travels with a photo, and what does not |

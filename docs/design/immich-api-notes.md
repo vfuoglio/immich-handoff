@@ -1,5 +1,7 @@
 # Immich API behaviour this project relies on
 
+> *For contributors: this is a design note, not a user guide. The guides are in [the documentation index](../README.md).*
+
 Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `IMMICH_VERSION=<tag> test/run.sh` before upgrading.
 
 ## Sign-in sessions

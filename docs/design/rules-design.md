@@ -1,5 +1,7 @@
 # Rules: hand-over by people, places and dates
 
+> *For contributors: this is a design note, not a user guide. The guides are in [the documentation index](../README.md).*
+
 The conclusion of #153, and the design #129 is built from. The question was whether Handoff can suggest, and then hand over, photos by **who is in them, where and when** with nothing tagged by hand, and what Immich gives for it.
 
 ## Conclusion

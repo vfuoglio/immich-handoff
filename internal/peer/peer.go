@@ -1,4 +1,4 @@
-// Package peer is how two Handoff apps talk to each other about an album they share (docs/shared-albums-design.md). Every
+// Package peer is how two Handoff apps talk to each other about an album they share (docs/design/shared-albums-design.md). Every
 // request between them is signed with a secret only the two apps know: the signature covers the method, the path, the time, a
 // nonce and a hash of the body, so a request cannot be changed, replayed or made up. Nothing here knows about Immich.
 package peer

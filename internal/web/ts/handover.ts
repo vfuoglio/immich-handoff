@@ -6,7 +6,7 @@
 // address under /handoff/ (docs/find-handoff.md). So a request to the app carries the person's Immich cookie and needs
 // no key. The script never tags anything itself: it asks the app, which checks the person and the photos.
 //
-// Immich offers no place for any of this. What is looked for, and why, is in docs/immich-button-design.md, and
+// Immich offers no place for any of this. What is looked for, and why, is in docs/design/immich-button-design.md, and
 // TestImmichMarkup holds Immich to it. When something is not found the button is simply not shown.
 
 import { assetOfPath, countIn, formOf, inOrder, Selection, wordsOf, type Info } from "./handover-core.ts";

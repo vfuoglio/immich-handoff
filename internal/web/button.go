@@ -10,7 +10,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 )
 
-// The hand-over button in Immich's own pages (internal/web/ts/immich-button.ts, docs/immich-button-design.md) asks the
+// The hand-over button in Immich's own pages (internal/web/ts/immich-button.ts, docs/design/immich-button-design.md) asks the
 // app for three things, from Immich's address under /handoff/, so the person's Immich cookie comes with each request:
 // the services they send to with the button's words in their language, and then to hand photos over, and to undo that.
 // The page never holds a key: the app checks the person, checks the photos are theirs and does the tagging itself.

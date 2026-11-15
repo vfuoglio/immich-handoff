@@ -18,7 +18,7 @@ import (
 
 // retagAfter is how long after an upload its tag is put on a second time. Immich now and then drops a tag put on in
 // the first moments after an upload, and a key made for a bridge cannot read the photo to check (see
-// docs/immich-api-notes.md). Putting it on again a little later costs nothing when it is there.
+// docs/design/immich-api-notes.md). Putting it on again a little later costs nothing when it is there.
 var retagAfter = 6 * time.Second
 
 // Remote is a receiver on another Immich server, reached with a key that can only upload and tag. It implements

@@ -7,7 +7,7 @@
 // Immich offers no place for a link, so this looks for the avatar by what is true in every language (its title holds
 // the person's email) and puts the link in front of it. If the header cannot be found, because Immich changed, a round
 // button floats at the bottom right instead, so the link is never lost. Nothing else of Immich's page is touched
-// by this part; the hand-over button (handover.ts) adds its own, where docs/immich-button-design.md says.
+// by this part; the hand-over button (handover.ts) adds its own, where docs/design/immich-button-design.md says.
 
 import { startHandover } from "./handover.ts";
 import { addStyles } from "./immich-ui.ts";
@@ -71,7 +71,7 @@ if (source) {
   schedule();
   setTimeout(schedule, 5100);
 
-  // the hand-over button (docs/immich-button-design.md); the link above works without it
+  // the hand-over button (docs/design/immich-button-design.md); the link above works without it
   startHandover(page, icon);
 }
 

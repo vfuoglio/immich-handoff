@@ -75,7 +75,7 @@ It opens a small list of **the services the person sends to**, each with whether
 
 **Switching it off.** `IMMICH_BUTTON_ACTIONS=false` keeps only the link in the header ([settings](settings.md)); the app then answers nothing for the button. If the app cannot be reached on the same address, or Immich's markup is not what the script looks for, the button is simply not there and the header link stays.
 
-**Immich versions.** The script looks for a handful of things in Immich's page (a test id on the viewer's toolbar, an id on the selection bar, data attributes on the photos, ARIA roles on the menus); [the design note](immich-button-design.md) lists them. The end-to-end tests check them on the Immich version they are pinned to, so a change shows up when that version is raised. On another version the button can disappear; nothing else breaks.
+**Immich versions.** The script looks for a handful of things in Immich's page (a test id on the viewer's toolbar, an id on the selection bar, data attributes on the photos, ARIA roles on the menus); [the design note](design/immich-button-design.md) lists them. The end-to-end tests check them on the Immich version they are pinned to, so a change shows up when that version is raised. On another version the button can disappear; nothing else breaks.
 
 ## Before people have signed in
 
