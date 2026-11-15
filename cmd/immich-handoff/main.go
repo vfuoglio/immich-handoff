@@ -215,6 +215,14 @@ func run(log *slog.Logger) error {
 			go h.MailIn.Run(ctx)
 			log.Info("photos by email are on", "folder", ms.Folder, "every", ms.Every.String())
 		}
+		if v := env("RULES_CHECK_MINUTES", ""); v != "" {
+			m, err := strconv.ParseFloat(v, 64)
+			if err != nil || m < 0.1 || m > 1440 {
+				return errors.New("RULES_CHECK_MINUTES must be a number of minutes, from 0.1 to 1440")
+			}
+			h.RulesEvery = time.Duration(m * float64(time.Minute))
+		}
+		go h.RulesLoop(ctx)
 		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
 		case "1", "true", "on", "yes":
 			h.Share = true

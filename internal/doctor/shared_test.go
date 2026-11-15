@@ -42,3 +42,18 @@ func TestTheAddressTheOtherAppIsToldMustBeOneItCanUse(t *testing.T) {
 		t.Errorf("bad numbers: %d", r.Fails)
 	}
 }
+
+func TestTheRulesIntervalIsCheckedOnlyWhenSet(t *testing.T) {
+	r := &Report{W: &bytes.Buffer{}}
+	rulesSettings(r, Input{Env: func(k string) string { return map[string]string{}[k] }})
+	if r.Fails != 0 {
+		t.Error("unset is fine")
+	}
+	for v, fails := range map[string]int{"10": 0, "0.1": 0, "0": 1, "x": 1, "2000": 1} {
+		r := &Report{W: &bytes.Buffer{}}
+		rulesSettings(r, Input{Env: func(k string) string { return map[string]string{"RULES_CHECK_MINUTES": v}[k] }})
+		if r.Fails != fails {
+			t.Errorf("%s: %d fails", v, r.Fails)
+		}
+	}
+}

@@ -154,3 +154,72 @@ func (s *Store) DeleteRulesOf(ctx context.Context, owner uuid.UUID, service stri
 	}
 	return nil
 }
+
+// RulePhoto is what a rule has done with one photo.
+type RulePhoto struct {
+	AssetID string
+	State   string
+	Why     string
+	At      time.Time
+}
+
+// RulePhotoStates tells, for every photo a rule has handled, what it did with it.
+func (s *Store) RulePhotoStates(ctx context.Context, rule string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, state FROM rule_photos WHERE rule_id = ?`, rule)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, st string
+		if err := rows.Scan(&id, &st); err != nil {
+			return nil, err
+		}
+		out[id] = st
+	}
+	return out, rows.Err()
+}
+
+// RulePhotos lists the photos of a rule in one state, oldest first.
+func (s *Store) RulePhotos(ctx context.Context, rule, state string) ([]RulePhoto, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, state, why, at FROM rule_photos WHERE rule_id = ? AND state = ? ORDER BY at, asset_id`, rule, state)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RulePhoto
+	for rows.Next() {
+		var p RulePhoto
+		var at string
+		if err := rows.Scan(&p.AssetID, &p.State, &p.Why, &at); err != nil {
+			return nil, err
+		}
+		p.At, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// PutRulePhoto records what a rule did with a photo, keeping the first reason it gave.
+func (s *Store) PutRulePhoto(ctx context.Context, rule, asset, state, why string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rule_photos (rule_id, asset_id, state, why, at) VALUES (?,?,?,?,?)
+		ON CONFLICT(rule_id, asset_id) DO UPDATE SET state = excluded.state`, rule, asset, state, why, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// SetRulePhotos moves some photos of a rule from one state to another.
+func (s *Store) SetRulePhotos(ctx context.Context, rule string, assets []string, from, to string) error {
+	for _, a := range assets {
+		if _, err := s.db.ExecContext(ctx, `UPDATE rule_photos SET state = ?, at = ? WHERE rule_id = ? AND asset_id = ? AND state = ?`, to, time.Now().UTC().Format(time.RFC3339Nano), rule, a, from); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MarkRuleLook records that a rule was looked at, and what went wrong (empty: nothing).
+func (s *Store) MarkRuleLook(ctx context.Context, id string, at time.Time, problem string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rules SET last_look = ?, problem = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), problem, id)
+	return err
+}

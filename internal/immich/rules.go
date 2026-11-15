@@ -83,14 +83,72 @@ func (a *API) Places(ctx context.Context, country string) ([]string, error) {
 	return out, nil
 }
 
-// SmartSearch asks Immich for the photos that look like a phrase, among those that reached it after a moment. A server without
-// machine learning answers ErrNoSmartSearch.
-func (a *API) SmartSearch(ctx context.Context, phrase string, after time.Time, size int) ([]AssetResponseDto, error) {
-	body := SmartSearchDto{Query: &phrase, Size: &size}
-	if !after.IsZero() {
-		body.CreatedAfter = &after
+// RuleFilter is what a rule asks Immich to find: every set field must hold.
+type RuleFilter struct {
+	PersonIDs     []openapi_types.UUID
+	TakenAfter    time.Time
+	TakenBefore   time.Time
+	Country, City string
+	AlbumID       openapi_types.UUID // the zero value: any album
+	CreatedAfter  time.Time
+	Phrase        string
+}
+
+// RuleSearch finds the photos a rule matches in Immich's own terms: one search with everything Immich can filter. With a phrase it
+// is a smart search (the closest 100), otherwise a metadata search through every page. The people each result carries and its
+// place come with it. A server without machine learning answers ErrNoSmartSearch for a phrase.
+func (a *API) RuleSearch(ctx context.Context, f RuleFilter) ([]AssetResponseDto, error) {
+	if f.Phrase == "" {
+		dto := MetadataSearchDto{}
+		yes := true
+		dto.WithPeople, dto.WithExif = &yes, &yes
+		if len(f.PersonIDs) > 0 {
+			dto.PersonIds = &f.PersonIDs
+		}
+		if !f.TakenAfter.IsZero() {
+			dto.TakenAfter = &f.TakenAfter
+		}
+		if !f.TakenBefore.IsZero() {
+			dto.TakenBefore = &f.TakenBefore
+		}
+		if f.Country != "" {
+			dto.Country = &f.Country
+		}
+		if f.City != "" {
+			dto.City = &f.City
+		}
+		if f.AlbumID != (openapi_types.UUID{}) {
+			dto.AlbumIds = &[]openapi_types.UUID{f.AlbumID}
+		}
+		if !f.CreatedAfter.IsZero() {
+			dto.CreatedAfter = &f.CreatedAfter
+		}
+		return a.Search(ctx, dto)
 	}
-	r, err := a.c.SearchSmartWithResponse(ctx, body)
+	size := 100
+	dto := SmartSearchDto{Query: &f.Phrase, Size: &size}
+	if len(f.PersonIDs) > 0 {
+		dto.PersonIds = &f.PersonIDs
+	}
+	if !f.TakenAfter.IsZero() {
+		dto.TakenAfter = &f.TakenAfter
+	}
+	if !f.TakenBefore.IsZero() {
+		dto.TakenBefore = &f.TakenBefore
+	}
+	if f.Country != "" {
+		dto.Country = &f.Country
+	}
+	if f.City != "" {
+		dto.City = &f.City
+	}
+	if f.AlbumID != (openapi_types.UUID{}) {
+		dto.AlbumIds = &[]openapi_types.UUID{f.AlbumID}
+	}
+	if !f.CreatedAfter.IsZero() {
+		dto.CreatedAfter = &f.CreatedAfter
+	}
+	r, err := a.c.SearchSmartWithResponse(ctx, dto)
 	if err != nil {
 		return nil, err
 	}

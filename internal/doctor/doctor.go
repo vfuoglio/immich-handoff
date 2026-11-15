@@ -80,6 +80,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	settings(r, in)
 	notifications(r, in)
 	sharedAlbums(r, in)
+	rulesSettings(r, in)
 	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
 		fmt.Fprintln(w, "\nThe other checks need Immich, so they were skipped.")
@@ -655,6 +656,18 @@ func sharedAlbums(r *Report, in Input) {
 		if n, err := strconv.ParseInt(v, 10, 64); err != nil || n < 1 || n > 1<<20 {
 			r.add(Fail, "SHARED_ALBUMS_MAX_MB must be a number of megabytes, 1 or more, and the app will not start with "+v, "Fix it or remove it (the default is 2048).")
 		}
+	}
+}
+
+// rulesSettings checks RULES_CHECK_MINUTES, which the app refuses to start with when it is not a number of minutes from 0.1 to 1440.
+func rulesSettings(r *Report, in Input) {
+	v := firstOf(in.Env, "RULES_CHECK_MINUTES")
+	if v == "" {
+		return
+	}
+	r.section("Rules")
+	if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.1 || m > 1440 {
+		r.add(Fail, "RULES_CHECK_MINUTES must be a number of minutes from 0.1 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 10).")
 	}
 }
 

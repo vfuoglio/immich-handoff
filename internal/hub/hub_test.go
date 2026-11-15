@@ -65,11 +65,14 @@ type fakeImmich struct {
 	thumbs        map[string][]byte          // name prefix -> the picture the thumbnail of such a photo is
 	members       map[string]map[string]bool // album id -> asset ids in it
 	removedLinks  []string
-	videos        map[string]bool // asset ids that are videos (the rest are photos)
-	archived      map[string]bool // asset ids the owner archived
+	videos        map[string]bool  // asset ids that are videos (the rest are photos)
+	archived      map[string]bool  // asset ids the owner archived
 	named         []map[string]any // the named people of bob's library, for rules
 	countries     []string         // the countries bob's photos are from
 	cities        map[string][]string
+	ruleHits      []map[string]any // what a rule's search finds (raw photos)
+	lastSearch    map[string]any   // the body of the last rule search
+	smartOff      bool             // the server cannot do a smart search
 }
 
 type fakeUpload struct {
@@ -418,12 +421,25 @@ func (f *fakeImmich) handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			TagIds   []string `json:"tagIds"`
-			AlbumIds []string `json:"albumIds"`
+			TagIds       []string `json:"tagIds"`
+			AlbumIds     []string `json:"albumIds"`
+			CreatedAfter string   `json:"createdAfter"`
 		}
-		json.NewDecoder(r.Body).Decode(&body)
+		raw, _ := io.ReadAll(r.Body)
+		json.Unmarshal(raw, &body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if body.CreatedAfter != "" { // a rule's search
+			var m map[string]any
+			json.Unmarshal(raw, &m)
+			f.lastSearch = m
+			items := []any{}
+			for _, h := range f.ruleHits {
+				items = append(items, h)
+			}
+			j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+			return
+		}
 		items := []any{}
 		add := func(id string) {
 			created := ts
@@ -461,6 +477,19 @@ func (f *fakeImmich) handler() http.Handler {
 				}
 			next:
 			}
+		}
+		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
+	})
+	mux.HandleFunc("POST /api/search/smart", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.smartOff {
+			j(w, 400, map[string]any{"message": "Smart search is not enabled"})
+			return
+		}
+		items := []any{}
+		for _, h := range f.ruleHits {
+			items = append(items, h)
 		}
 		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
 	})

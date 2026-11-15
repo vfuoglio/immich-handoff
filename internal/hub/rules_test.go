@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -97,5 +98,93 @@ func TestARuleNeedsSomethingToLookForAndOnlyRealChoices(t *testing.T) {
 	}
 	if list, _ := e.h.RulesFor(ctx, bob.ID, "family"); len(list) != 0 {
 		t.Error("its rules ended with the membership")
+	}
+}
+
+func hit(owner uuid.UUID, ageMinutes int, mod func(m map[string]any), people ...string) map[string]any {
+	var ps []any
+	for _, p := range people {
+		ps = append(ps, map[string]any{"id": p, "name": map[string]string{noraID: "Nora", leoID: "Leo"}[p], "isHidden": false, "thumbnailPath": "x"})
+	}
+	at := time.Now().Add(-time.Duration(ageMinutes) * time.Minute).UTC().Format(time.RFC3339Nano)
+	m := map[string]any{"id": uuid.NewString(), "ownerId": owner.String(), "createdAt": at, "hasMetadata": true, "thumbhash": "abc", "isArchived": false, "isTrashed": false,
+		"localDateTime": "2026-05-04T10:00:00Z", "fileCreatedAt": at, "originalFileName": "x.jpg", "type": "IMAGE", "people": ps}
+	if mod != nil {
+		mod(m)
+	}
+	return m
+}
+
+func TestARuleSuggestsOnlyWhatMatchesAndHasSettledAndNeverTheSamePhotoTwice(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	nora, leo := noraID, leoID
+	r, err := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(nora)}, NotPeople: []uuid.UUID{uuid.MustParse(leo)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := hit(bobID, 60, nil, nora)
+	e.f.ruleHits = []map[string]any{
+		good,
+		hit(bobID, 60, nil, nora, leo), // Leo is in it too
+		hit(bobID, 60, func(m map[string]any) { m["isArchived"] = true }, nora),
+		hit(bobID, 60, func(m map[string]any) { m["isTrashed"] = true }, nora),
+		hit(annID, 60, nil, nora), // someone else's photo in a shared album
+		hit(bobID, 1, nil, nora),  // too new: faces may not be found yet
+		hit(bobID, 60, func(m map[string]any) { m["thumbhash"] = nil }, nora),
+		hit(bobID, 60, func(m map[string]any) { m["hasMetadata"] = false }, nora),
+	}
+	stored, _ := e.st.RuleByID(ctx, r.ID)
+	n, err := e.h.LookRule(ctx, stored)
+	if err != nil || n != 1 {
+		t.Fatalf("one photo matches: %d %v", n, err)
+	}
+	got, _ := e.st.RulePhotos(ctx, r.ID, "suggested")
+	if len(got) != 1 || got[0].AssetID != good["id"] || got[0].Why != "Nora in it" {
+		t.Fatalf("it says why: %+v", got)
+	}
+	ids, _ := e.f.lastSearch["personIds"].([]any)
+	if len(ids) != 1 || ids[0] != nora || e.f.lastSearch["createdAfter"] == nil || e.f.lastSearch["withPeople"] != true {
+		t.Errorf("Immich is asked for the people and for new photos only: %v", e.f.lastSearch)
+	}
+	// looking again adds nothing; a photo the person declined is never offered again
+	if n, _ = e.h.LookRule(ctx, stored); n != 0 {
+		t.Errorf("the same photo is not suggested twice: %d", n)
+	}
+	e.st.SetRulePhotos(ctx, r.ID, []string{good["id"].(string)}, "suggested", "declined")
+	if n, _ = e.h.LookRule(ctx, stored); n != 0 {
+		t.Errorf("a declined photo stays declined: %d", n)
+	}
+	// a later photo (its faces found after the first look) simply joins
+	late := hit(bobID, 60, nil, nora)
+	e.f.ruleHits = append(e.f.ruleHits, late)
+	if n, _ = e.h.LookRule(ctx, stored); n != 1 {
+		t.Errorf("a photo that settles later is found: %d", n)
+	}
+	if after, _ := e.st.RuleByID(ctx, r.ID); after.LastLook.IsZero() || after.Problem != "" {
+		t.Errorf("the look is recorded: %+v", after)
+	}
+}
+
+func TestAPhraseNeedsSmartSearchAndSaysSoWhenTheServerHasNone(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, err := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Phrase: "a beach"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := e.st.RuleByID(ctx, r.ID)
+	e.f.smartOff = true
+	if _, err := e.h.LookRule(ctx, stored); err == nil {
+		t.Fatal("no smart search")
+	}
+	if after, _ := e.st.RuleByID(ctx, r.ID); !strings.Contains(after.Problem, "cannot do a smart search") {
+		t.Errorf("said plainly: %q", after.Problem)
+	}
+	e.f.smartOff = false
+	e.f.ruleHits = []map[string]any{hit(bobID, 60, nil)}
+	if n, err := e.h.LookRule(ctx, stored); err != nil || n != 1 {
+		t.Fatalf("a smart search finds a photo: %d %v", n, err)
+	}
+	if after, _ := e.st.RuleByID(ctx, r.ID); after.Problem != "" {
+		t.Errorf("and the problem goes: %q", after.Problem)
 	}
 }

@@ -81,6 +81,8 @@ type Hub struct {
 	SharedMaxFile int64
 	// GroupMax is the most people one album is shared with through its creator (zero: ten).
 	GroupMax int
+	// RulesEvery is how often rules look for photos (RULES_CHECK_MINUTES; zero: ten minutes).
+	RulesEvery time.Duration
 
 	PhoneDir     string
 	PhoneCap     int64
