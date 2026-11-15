@@ -317,13 +317,17 @@ func (h *Hub) PhoneFinish(ctx context.Context, sess *immich.API, user uuid.UUID,
 	}
 	photo = uid.String()
 	if tag != "" {
-		t, err := sess.UpsertTag(ctx, tag)
-		if err != nil {
+		if err := tagPhone(ctx, sess, tag, uid); err != nil {
 			return "", false, fmt.Errorf("the photo is in your library, but it could not be tagged: %w", err)
 		}
-		if err := sess.TagAssets(ctx, t, uid); err != nil {
-			return "", false, fmt.Errorf("the photo is in your library, but it could not be tagged: %w", err)
-		}
+		// Immich now and then drops a tag put on in the first moments after an upload (see docs/immich-api-notes.md), and
+		// then the photo would never be handed over. Putting it on again a little later costs nothing when it is there.
+		retag := context.WithoutCancel(ctx)
+		time.AfterFunc(phoneRetagAfter, func() {
+			if err := tagPhone(retag, sess, tag, uid); err != nil {
+				h.Log.Debug("phone upload: the second tagging failed", "err", err)
+			}
+		})
 	}
 	os.Remove(part)
 	u.Done, u.Dup = photo, dup
@@ -381,4 +385,15 @@ func (h *Hub) PhoneMaintenance() int {
 		os.Remove(dir) // only succeeds when empty
 	}
 	return removed
+}
+
+// phoneRetagAfter is how long after a phone upload its tag is put on a second time.
+var phoneRetagAfter = 6 * time.Second
+
+func tagPhone(ctx context.Context, sess *immich.API, tag string, id uuid.UUID) error {
+	t, err := sess.UpsertTag(ctx, tag)
+	if err != nil {
+		return err
+	}
+	return sess.TagAssets(ctx, t, id)
 }

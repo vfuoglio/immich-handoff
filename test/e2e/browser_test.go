@@ -564,7 +564,9 @@ func TestBrowser(t *testing.T) {
 		})
 		until(t, ctx, "the lane to say paused", `document.querySelector('#scene [data-lane]').dataset.state === 'paused'`, 10*time.Second)
 		// and back
-		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-services details.svc[open] button[data-act="resume"]').click()`, nil))
+		// the list is refreshed by the page, so the row may have closed again: the button is found wherever it is
+		until(t, ctx, "the resume button", `document.querySelector('#v-services details.svc button[data-act="resume"]') !== null`, 10*time.Second)
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-services details.svc button[data-act="resume"]').click()`, nil))
 		until(t, ctx, "the lane to flow again", `document.querySelector('#scene [data-lane]').dataset.state === 'flow'`, 10*time.Second)
 	})
 
