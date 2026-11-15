@@ -153,6 +153,11 @@ Then open `http://<your-host>:8080/` on the same hostname you use for Immich, si
 
 Immich 3.2.0, end to end in Docker: every flow above runs against a real Immich in the project's tests. Tagging from the phone app is tested through the same call the app makes, not on a physical phone.
 
+## Questions, ideas and bugs
+
+- **A question, an idea, or how you use it:** [Discussions](https://github.com/vfuoglio/immich-handoff/discussions). Showing your setup there helps the next person.
+- **Something is broken:** [open an issue](https://github.com/vfuoglio/immich-handoff/issues), with the output of `docker compose exec immich-handoff /immich-handoff doctor`.
+
 ## Background
 
 immich-handoff is based on the idea of immich_family_sync.

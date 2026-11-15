@@ -2,6 +2,8 @@
 
 Start with the setup check, then the app's log (`docker compose logs --tail 100`), then find your symptom below.
 
+Still stuck? Ask in [Discussions](https://github.com/vfuoglio/immich-handoff/discussions) for help, or [open an issue](https://github.com/vfuoglio/immich-handoff/issues) if you think it is a bug; include the output of the setup check below.
+
 ## Check your setup first
 
 ```
