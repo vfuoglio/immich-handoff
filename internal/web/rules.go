@@ -17,6 +17,7 @@ type RuleView struct {
 	Paused             bool
 	Last, Problem      string
 	Phrase             bool
+	CanAuto            bool // answered Always often enough, and may be let go on by itself
 }
 
 func (w *Server) ruleViews(ctx context.Context, me *member, service string) []RuleView {
@@ -30,7 +31,7 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	l := loc(ctx)
 	out := make([]RuleView, 0, len(rules))
 	for _, r := range rules {
-		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != ""}
+		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != "", CanAuto: hub.CanAuto(r)}
 		if !r.LastLook.IsZero() {
 			v.Last = l.Stamp(r.LastLook.Local())
 		}
@@ -257,5 +258,11 @@ func (w *Server) reviewRule(rw http.ResponseWriter, r *http.Request) {
 			only = append(only, id)
 		}
 		return w.Hub.AnswerSuggestion(ctx, me.user, r.PostFormValue("rule"), do, only)
+	})
+}
+
+func (w *Server) autoRule(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "rule automatic", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.SetRuleAuto(ctx, me.user, r.PostFormValue("rule"), r.PostFormValue("on") == "1")
 	})
 }

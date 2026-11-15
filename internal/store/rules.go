@@ -229,3 +229,14 @@ func (s *Store) AddRuleAlways(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE rules SET always = always + 1 WHERE id = ?`, id)
 	return err
 }
+
+// SetRuleMode switches a rule between asking first and sending by itself. Switching to auto records the moment: only photos that
+// reached Immich after it are ever sent without asking.
+func (s *Store) SetRuleMode(ctx context.Context, id, mode string, at time.Time) error {
+	auto := ""
+	if mode == RuleAuto {
+		auto = at.UTC().Format(time.RFC3339Nano)
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE rules SET mode = ?, auto_since = ? WHERE id = ?`, mode, auto, id)
+	return err
+}

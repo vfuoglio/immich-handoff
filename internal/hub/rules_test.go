@@ -277,3 +277,62 @@ func TestAMessageLinkSendsOrLeavesOutWhatARuleFoundAndWorksOnce(t *testing.T) {
 		t.Error("and does nothing")
 	}
 }
+
+func TestARuleSendsByItselfOnlyAfterThreeAlwaysOnlyNewSettledPhotosAndNeverForAPhrase(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
+	ph, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Phrase: "a beach"})
+	if err := e.h.SetRuleAuto(ctx, bob, r.ID, true); !errors.Is(err, hub.ErrAutoTooSoon) || !hub.IsUserError(err) {
+		t.Errorf("not before three Always: %v", err)
+	}
+	stored := func() store.Rule { x, _ := e.st.RuleByID(ctx, r.ID); return x }
+	old := hit(bobID, 600, nil, noraID) // reached Immich before the switch: stays a suggestion
+	for i := 0; i < 3; i++ {
+		e.f.ruleHits = []map[string]any{hit(bobID, 60, nil, noraID)}
+		e.h.LookRule(ctx, stored())
+		if err := e.h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerAlways, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.f.ruleHits = []map[string]any{old}
+	e.h.LookRule(ctx, stored())
+	if err := e.h.SetRuleAuto(ctx, bob, r.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := stored(); got.Mode != "auto" || got.AutoSince.IsZero() {
+		t.Fatalf("automatic since now: %+v", got)
+	}
+	if err := e.h.SetRuleAuto(ctx, bob, ph.ID, true); !errors.Is(err, hub.ErrAutoPhrase) {
+		t.Errorf("never for a phrase: %v", err)
+	}
+	before := len(e.f.tagged)
+	fresh, young := hit(bobID, 0, func(m map[string]any) { m["createdAt"] = time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano) }, noraID), hit(bobID, 10, nil, noraID)
+	// "fresh" reached Immich after the switch but only moments ago; "young" is ten minutes old (settled for a suggestion, not for auto)
+	e.f.ruleHits = []map[string]any{fresh, young}
+	e.h.LookRule(ctx, stored())
+	if len(e.f.tagged) != before {
+		t.Errorf("nothing is sent before a photo has been in Immich half an hour: %v", e.f.tagged[before:])
+	}
+	// a photo that reached Immich after the switch and has settled is sent without asking
+	settled := hit(bobID, 40, func(m map[string]any) { m["createdAt"] = time.Now().Add(-40 * time.Minute).UTC().Format(time.RFC3339Nano) }, noraID)
+	e.f.ruleHits = []map[string]any{settled}
+	// the rule's "since" and auto moment: make the switch earlier than the photo
+	e.st.SetRuleMode(ctx, r.ID, "auto", time.Now().Add(-2*time.Hour))
+	if n, err := e.h.LookRule(ctx, stored()); err != nil || n != 0 {
+		t.Fatalf("no suggestion, it was sent: %d %v", n, err)
+	}
+	if len(e.f.tagged) != before+1 || e.f.tagged[before] != settled["id"] {
+		t.Errorf("sent on its own: %v", e.f.tagged)
+	}
+	// the photos from before the switch (the old one, and the ten-minute-old one, which was there when it was switched on) are only
+	// suggestions
+	if sg, _ := e.h.SuggestionOf(ctx, bob.ID, r.ID); len(sg.Photos) != 2 {
+		t.Errorf("what was there before stays a suggestion: %+v", sg.Photos)
+	}
+	if err := e.h.SetRuleAuto(ctx, bob, r.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if stored().Mode != "suggest" {
+		t.Error("asks first again")
+	}
+}

@@ -3967,7 +3967,17 @@ templ RulesBox(s ServiceView) {
 				if r.Problem != "" {
 					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
 				}
+				if r.Mode == "auto" {
+					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there half an hour, within this service's limits and quiet hours. You can still take a hand-over back.") }</p>
+				} else if r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always to this rule {n} times. You can let it send by itself from now on.", "n", r.Always) }</p>
+				}
 				<p class="row">
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on this rule sends the photos it finds without asking you, so a wrong photo can reach the service. Only photos that reach Immich from now on are sent, and you can switch it back at any time. Continue?") } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
+					}
 					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
 						if r.Paused {
 							{ t(ctx, "Resume this rule") }

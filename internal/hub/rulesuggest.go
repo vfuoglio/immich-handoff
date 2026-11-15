@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -191,4 +192,50 @@ func (h *Hub) RulePhotoOf(ctx context.Context, user uuid.UUID, ruleID, asset str
 		return uuid.Nil, ErrNoSuggestion
 	}
 	return uuid.Parse(asset)
+}
+
+var (
+	ErrAutoTooSoon = errors.New("a rule can send by itself after you have answered Always to it three times")
+	ErrAutoPhrase  = errors.New("a rule with a phrase always asks first, because a look-alike is never certain")
+	ErrRuleNotAuto = errors.New("that rule is not sending by itself")
+)
+
+// autoSettle is how long a photo must have been in Immich before a rule sends it without asking: longer than for a suggestion, so
+// that every face has been found and a person to leave out has had the time to show.
+const autoSettle = 30 * time.Minute
+
+// SetRuleAuto lets a rule send what it finds by itself, or takes that back. Only photos that reach Immich after the switch are
+// ever sent without asking; what was already waiting stays a suggestion.
+func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on bool) error {
+	r, err := h.ruleOf(ctx, user.ID, id)
+	if err != nil {
+		return err
+	}
+	if !on {
+		if r.Mode != store.RuleAuto {
+			return nil
+		}
+		if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleSuggest, h.now()); err != nil {
+			return err
+		}
+		h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service} ask first again: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
+		return nil
+	}
+	if r.Cond.Phrase != "" {
+		return ErrAutoPhrase
+	}
+	if r.Always < alwaysToAuto {
+		return ErrAutoTooSoon
+	}
+	if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleAuto, h.now()); err != nil {
+		return err
+	}
+	h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} let a rule for {service} send by itself: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
+	return nil
+}
+
+// CanAuto says whether a rule may be let go on by itself: it has been answered Always often enough, it is not automatic yet and
+// has no phrase.
+func CanAuto(r store.Rule) bool {
+	return r.Mode != store.RuleAuto && r.Always >= alwaysToAuto && r.Cond.Phrase == ""
 }

@@ -175,24 +175,47 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		return 0, err
 	}
 	waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested)
+	var auto []string
+	var suggested int
 	for _, m := range matches {
-		if err := h.Store.PutRulePhoto(ctx, r.ID, m.Asset.Id.String(), store.RuleSuggested, m.Why); err != nil {
+		id := m.Asset.Id.String()
+		if r.Mode == store.RuleAuto && r.Cond.Phrase == "" && !m.Asset.CreatedAt.Before(r.AutoSince) {
+			if h.now().Sub(m.Asset.CreatedAt) < autoSettle {
+				continue // not settled enough to send without asking; it is looked at again next time
+			}
+			auto = append(auto, id)
+			if err := h.Store.PutRulePhoto(ctx, r.ID, id, store.RuleSuggested, m.Why); err != nil {
+				return 0, err
+			}
+			continue
+		}
+		suggested++
+		if err := h.Store.PutRulePhoto(ctx, r.ID, id, store.RuleSuggested, m.Why); err != nil {
 			return 0, err
 		}
 	}
+	if len(auto) > 0 {
+		if err := h.sendForRule(ctx, r, auto); err != nil {
+			// they stay suggestions: nothing is lost, and the person can still answer
+			h.Store.MarkRuleLook(ctx, r.ID, h.now(), trimNet(err))
+			return suggested, err
+		}
+		h.Store.SetRulePhotos(ctx, r.ID, auto, store.RuleSuggested, store.RuleSent)
+		h.event(ctx, r.Service, r.OwnerID, "rule", i18n.PackN("{n} photo sent to {service} by a rule on its own: {rule}", "{n} photos sent to {service} by a rule on its own: {rule}", len(auto), "service", r.Service, "rule", RuleSentence(r.Cond)))
+	}
 	h.Store.MarkRuleLook(ctx, r.ID, h.now(), "")
-	if len(matches) > 0 {
-		h.Log.Debug("a rule found photos", "rule", r.ID, "count", len(matches))
+	if suggested > 0 {
+		h.Log.Debug("a rule found photos", "rule", r.ID, "count", suggested)
 		if len(waiting) == 0 && !r.Paused { // told once for a batch, when it begins, not for each photo that joins it
 			user := immich.User{ID: r.OwnerID, Name: link.Name}
 			h.eventWith(ctx, r.Service, user.ID, "suggestion",
-				i18n.PackN("{n} new photo for {service} matches your rule: {rule}. Look at it on the Overview.", "{n} new photos for {service} match your rule: {rule}. Look at them on the Overview.", len(matches), "service", r.Service, "rule", RuleSentence(r.Cond)),
+				i18n.PackN("{n} new photo for {service} matches your rule: {rule}. Look at it on the Overview.", "{n} new photos for {service} match your rule: {rule}. Look at them on the Overview.", suggested, "service", r.Service, "rule", RuleSentence(r.Cond)),
 				[]ActionSpec{
 					{Recipient: r.OwnerID, RecipientName: link.Name, Kind: ActionRuleSend, Service: r.Service, Target: r.ID, Group: r.ID},
 					{Recipient: r.OwnerID, RecipientName: link.Name, Kind: ActionRuleDecline, Service: r.Service, Target: r.ID, Group: r.ID}})
 		}
 	}
-	return len(matches), nil
+	return suggested, nil
 }
 
 // RulesMaintenance looks at every rule that is not paused, one after the other.
