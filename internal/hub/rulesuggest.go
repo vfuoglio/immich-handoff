@@ -13,7 +13,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Answering what a rule suggests (docs/rules-design.md). The photos a rule found wait in its open batch. "Send" tags them with the
+// Answering what a rule suggests (docs/design/rules-design.md). The photos a rule found wait in its open batch. "Send" tags them with the
 // service's tag through the sender's own key, which is exactly what the person would have done by hand, so everything that already
 // exists (limits, quiet hours, the daily cap, take-back, the live scene) applies. "Not these" remembers them as declined for the
 // rule, which stays. "Always" sends them and counts, so that after a few the person can let the rule go on by itself.

@@ -15,7 +15,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Finding what a rule matches (docs/rules-design.md). A pass asks Immich for what it can filter (people, dates, place, album, a
+// Finding what a rule matches (docs/design/rules-design.md). A pass asks Immich for what it can filter (people, dates, place, album, a
 // phrase) among the photos that reached it in the last week, then the app finishes the job with what Immich cannot: only the
 // sender's own photos, nothing archived, trashed or hidden, nothing with a person to leave out or in an album to leave out, nothing
 // that has not settled yet, and nothing the rule has already handled. What is left joins the rule's batch of suggestions, each with

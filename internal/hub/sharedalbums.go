@@ -19,7 +19,7 @@ import (
 
 // Shared albums: an album of this person's that is kept the same as an album of the person on the other server. This file is
 // agreeing on one: a proposal from either side, an answer, the key each app gets for its own Immich, and what each side chose
-// to share. The photos themselves move in a later part (docs/shared-albums-design.md).
+// to share. The photos themselves move in a later part (docs/design/shared-albums-design.md).
 
 var (
 	ErrBadShareName   = errors.New("give the shared album a name of one to sixty characters")

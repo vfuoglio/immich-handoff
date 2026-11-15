@@ -320,7 +320,7 @@ func (h *Hub) PhoneFinish(ctx context.Context, sess *immich.API, user uuid.UUID,
 		if err := tagPhone(ctx, sess, tag, uid); err != nil {
 			return "", false, fmt.Errorf("the photo is in your library, but it could not be tagged: %w", err)
 		}
-		// Immich now and then drops a tag put on in the first moments after an upload (see docs/immich-api-notes.md), and
+		// Immich now and then drops a tag put on in the first moments after an upload (see docs/design/immich-api-notes.md), and
 		// then the photo would never be handed over. Putting it on again a little later costs nothing when it is there.
 		retag := context.WithoutCancel(ctx)
 		time.AfterFunc(phoneRetagAfter, func() {

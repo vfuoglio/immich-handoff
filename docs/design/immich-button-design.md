@@ -1,7 +1,9 @@
 # Handing over from inside Immich: how the button finds its place
 
+> *For contributors: this is a design note, not a user guide. The guides are in [the documentation index](../README.md).*
+
 This is the design note for the hand-over button in Immich's own pages (issue #49). The header link already in Immich
-(`internal/web/ts/immich-button.ts`, set up as in [find-handoff.md](find-handoff.md)) shows that a script added by a
+(`internal/web/ts/immich-button.ts`, set up as in [find-handoff.md](../find-handoff.md)) shows that a script added by a
 reverse proxy can live in Immich's page. This note records what Immich's page looks like to such a script, what the
 button may rely on, and what it must never do. It was found by driving a real Chrome against Immich 3.2.0 through the
 same proxy the browser tests use; `TestImmichMarkup` in `test/e2e` holds Immich to every fact below.

@@ -1,21 +1,28 @@
 # immich-handoff documentation
 
-Start with the page that matches what you are doing.
+Start with what you want to do.
 
-| I want to... | Read |
+## I want to...
+
+| | Read |
 |---|---|
+| **Share photos with my household or friends** | [Joining a service](guides/household.md#joining-a-service), then [Sending photos](guides/household.md#sending-photos) |
+| **Collect photos from guests** at an event, with no account needed | [Drop boxes](guides/events.md#drop-boxes-photos-from-people-who-do-not-have-immich) and [an event, from the first guest to the last photo](guides/events-extras.md#an-event-from-the-first-guest-to-the-last-photo) |
+| **Deliver a shoot to a client** | [Client rooms](guides/client-rooms.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from) |
+| **Share an album with a friend on another server** | [Albums shared with other servers](guides/shared-albums.md#albums-shared-with-other-servers) |
+| **Stop tagging by hand** | [Rules](guides/automate.md#rules-photos-by-who-where-and-when) and [the button inside Immich](find-handoff.md#hand-over-from-inside-immich) |
+| **Send from my phone** | [Send photos from a phone](guides/phone.md#send-photos-from-a-phone) |
 | **Run it** so people can hand photos to each other | [Install](install.md), then [Operations](operations.md) |
-| **Send or receive photos** (I use the page) | [Using it](using.md) |
-| Set up the accounts and keys myself, or run several fixed services | [Fixed accounts](fixed-accounts.md) |
+| **Look after the whole installation** | [The administrator's page](admin.md) |
+| Set up the accounts and keys myself | [Fixed accounts](fixed-accounts.md) |
 | Know what travels with a photo, and what does not | [What is carried over](what-is-carried-over.md) |
 | Look up a setting | [Settings](settings.md) |
-| **Make it easy to find** (a button in Immich's header, a login-page message) | [Make Handoff easy to find](find-handoff.md) |
-| **Look after the whole installation** (I administer the Immich server) | [The administrator's page](admin.md) |
 | Know what I am trusting, and what is stored | [Security and trust](security.md) |
+| Find out if it is the right tool | [Questions people ask first](faq.md) |
 | Fix something that is not working | [Troubleshooting](troubleshooting.md) |
-| Understand or change the code | [How it works inside](architecture.md) |
-| Publish a new version | [Releasing](releasing.md) |
 
-Also here: [notes on the Immich behaviour this project relies on](immich-api-notes.md), and the [changelog](../CHANGELOG.md). The design for handing photos to another Immich server is in [bridges-design.md](bridges-design.md), and the design for albums shared across servers (not built yet) is in [shared-albums-design.md](shared-albums-design.md).
+## For contributors
+
+[How it works inside](architecture.md), [Releasing](releasing.md), the [changelog](../CHANGELOG.md), and the design notes in [design/](design/): [bridges](design/bridges-design.md), [albums shared across servers](design/shared-albums-design.md), [rules](design/rules-design.md), [the button in Immich's pages](design/immich-button-design.md) and [notes on the Immich behaviour this project relies on](design/immich-api-notes.md).
 
 New to the idea? The [project page](../README.md) shows what it does in a minute.
