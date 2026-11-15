@@ -10,19 +10,17 @@ Want to look first? [The demo](../demo/README.md) runs a throwaway copy of every
 - **Docker**, on the machine that runs Immich (or one that shares a Docker network with it).
 - **Every person who takes part, senders and receivers, needs Tags switched on** in their Immich account. Immich has it off by default, separately for each user. Senders need it to add tags to photos, and receivers need it to see the inbox tag on what arrives. Without it a person cannot see or set tags in the Immich app, even though the hand-over itself still works. **The page notices this:** when someone opens it with Tags off, it shows a notice with a **Turn on Tags** button, which changes that one setting in their own Immich account (the same as Account Settings -> Features -> Tags). Either way, switching it on is not enough: the person must also **reload Immich (refresh the browser tab or window)** before the tag options appear.
 
-## 1. Get the files
+## 1. Get the files and make your secrets
 
 Use a release, not `main`. `main` is where the next version is being built; it can be unstable and can be ahead of the published image. The latest release is **v1.2.0**; newer ones, with what changed in each, are on the [releases page](https://github.com/vfuoglio/immich-handoff/releases). Without git, download that release's "Source code" archive from the same page instead of cloning.
 
 ```
-git clone --branch v1.2.0 https://github.com/vfuoglio/immich-handoff.git
-cd immich-handoff
+git clone --branch v1.2.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
+sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 ```
 
-## 2. Fill in three values
-
-Open `.env` and set the three values in its **Required** section:
+The `sed` line writes two different long random values into `.env` (on a Mac use `sed -i ''`). If you prefer to do it by hand, open `.env` and set the three values in its **Required** section:
 
 | Setting | What to put |
 |---|---|
@@ -32,7 +30,7 @@ Open `.env` and set the three values in its **Required** section:
 
 The rest works as it is when Immich runs on that network under its standard service name, `immich-server`. You do **not** need to create any API keys: the app creates one for each person at the moment they join, through their own Immich login.
 
-## 3. Start it
+## 2. Start it
 
 This downloads the published image for your machine (amd64 or arm64). To build it from the source instead, add the build file: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
@@ -43,7 +41,7 @@ docker compose logs -f
 
 You should see a line saying self-service joining is on. If the app stops with a message about `WEBHOOK_SECRET` or `HANDOFF_STORE_KEY`, the value is missing or too short.
 
-## 4. Set up the first service
+## 3. Set up the first service
 
 Open `http://<your-host>:8080/` in a browser **on the same hostname you use for Immich** (the page uses your Immich login; see [Operations](operations.md#putting-the-page-behind-your-reverse-proxy) for HTTPS and reverse proxies). Sign in to Immich first if you are asked to.
 
@@ -57,7 +55,7 @@ Everyone else now opens the same page. They see the service and **join** it, cho
 
 ![Choosing to join and what happens to your originals](images/join-choice.png)
 
-## 5. Send a photo
+## 4. Send a photo
 
 A person who joined tags a photo `share` in the Immich app. Within a few seconds it is in the receiver's library, tagged `inbox`:
 
