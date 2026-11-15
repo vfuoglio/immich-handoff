@@ -3,13 +3,10 @@
 package e2e
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -657,33 +654,7 @@ func TestBrowser(t *testing.T) {
 		// what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
 		// and this app under /handoff/ on the same address. This is also the check that Immich's header still has
 		// the shape the script looks for.
-		immich, _ := url.Parse(baseURL)
-		toImmich := httputil.NewSingleHostReverseProxy(immich)
-		director := toImmich.Director
-		toImmich.Director = func(r *http.Request) { director(r); r.Header.Del("Accept-Encoding") }
-		toImmich.ModifyResponse = func(res *http.Response) error {
-			if !strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") || !strings.Contains(res.Request.Header.Get("Cookie"), "immich_is_authenticated=true") {
-				return nil
-			}
-			body, err := io.ReadAll(res.Body)
-			if err != nil {
-				return err
-			}
-			body = bytes.Replace(body, []byte("</body>"), []byte(`<script src="/handoff/static/immich-button.js" defer></script></body>`), 1)
-			res.Body = io.NopCloser(bytes.NewReader(body))
-			res.ContentLength = int64(len(body))
-			res.Header.Set("Content-Length", fmt.Sprint(len(body)))
-			return nil
-		}
-		appURL, _ := url.Parse("http://localhost:" + w.port)
-		toApp := httputil.NewSingleHostReverseProxy(appURL)
-		mux := http.NewServeMux()
-		mux.Handle("/handoff/", http.StripPrefix("/handoff", toApp))
-		mux.Handle("/", toImmich)
-		front := httptest.NewServer(mux)
-		t.Cleanup(front.Close) // after the browsers (cleanups run last in, first out): their open connections would hold it
-		// the browser's sign-in cookies are set for "localhost", not for the address the test server prints
-		address := strings.Replace(front.URL, "127.0.0.1", "localhost", 1)
+		address := w.inFrontOfImmich(t)
 
 		for _, phone := range []bool{false, true} {
 			l := look{}
