@@ -62,8 +62,9 @@ is a long press. Nothing here depends on the circle: the script only reads `data
   and if it did, takes the button out again and leaves the menu entry as the only way.
 - **Three-dot menus.** An `li[role="menuitem"]`, made by copying an existing one (so it has Immich's own look, light
   and dark) and given the words "Hand over...", is added to the end of the `ul[role="menu"]` that is already in the
-  page. It stays there when the menu is closed and opened again, and a click on it is received by the script and closes
-  Immich's menu by itself. The script then opens its own list of services.
+  page. It stays there when the menu is closed and opened again, and a click on it is received by the script,
+  which opens its own list of services. Immich's menu does not always close by itself after that; the script does not
+  rely on it, and the list sits above it.
 
 If Immich's right-click menu on a tile exists in a later version, it is handled the same way, by the same rule: a
 `ul[role="menu"]` that is seen is given the item.
@@ -95,5 +96,5 @@ also forbids the header link, and the button then is simply not there.
 
 `TestImmichMarkup` checks, on the pinned Immich: that a tile carries its id and a `data-selected` that follows the
 person's choice; that the bar has a number, a three-dot menu and a place beside it; that an item added to the menu stays
-and is clicked and closes the menu; that the viewer has the id in its address and the toolbar and menu named above; and
+and is clicked (Immich's menu does not always close by itself, and the script does not rely on it); that the viewer has the id in its address and the toolbar and menu named above; and
 that on a phone the bar is full. When Immich is upgraded and one of them moves, that test fails and says which.
