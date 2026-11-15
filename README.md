@@ -8,7 +8,7 @@
 
 # immich-handoff
 
-**Hand photos from one Immich account to another, just by tagging them.**
+**Photos arrive in the right Immich library: by tag, button, rule or QR code.**
 
 [![CI](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml/badge.svg)](https://github.com/vfuoglio/immich-handoff/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/vfuoglio/immich-handoff)](https://github.com/vfuoglio/immich-handoff/releases/latest)
@@ -21,17 +21,27 @@
   <sub>The live scene, recorded from the real page: every tagged photo travels along its sender's lane into the library.</sub>
 </p>
 
-Immich keeps every photo in the account that uploaded it. There is no built-in way to hand one to someone else's library: shared albums leave ownership with the person who uploaded, and partner sharing is read-only. **immich-handoff adds the missing step.** You tag a photo in the Immich app, and a few seconds later it is in another account, checked and ready to file.
+Immich keeps every photo in the account that uploaded it. Shared albums and links let people *look* at your photos; partner sharing is read-only. None of them puts a photo **in someone else's library**, collects photos from people who have no account, or connects two servers. **immich-handoff adds that step.** Tag a photo, press a button in Immich, let a rule suggest it, or scan a QR code, and a few seconds later the photo is in the other library, checked and ready to file. Whoever owns a library decides who may send to it, and whoever owns a photo decides whether the original stays or moves.
 
 > **Not affiliated with Immich.** immich-handoff is an independent, community project. It is not made, endorsed or supported by the Immich team. It is a companion that talks to your own Immich server through its public API. "Immich" is the name of that project and belongs to its authors. For help with Immich itself, use [Immich's own channels](https://immich.app).
 
-Everyone's phone keeps backing up to their own account, and anyone can hand photos to anyone else on the same Immich server. Friends pool a trip into one library. A club or a team collects its photos in one place. A photographer hands a shoot to a client. Whoever receives decides who may send.
+## What do you want to do?
+
+| I want to... | You get | Start here |
+|---|---|---|
+| **Share photos with my household or friends** on one server | Anyone hands photos to anyone's library. Each sender chooses to keep or move their originals. | [Joining a service](docs/using.md#joining-a-service) |
+| **Collect photos from guests** at a wedding, party or club, even without Immich | A link or QR code that only *receives*: moderation, a wall on a screen, a gallery and a best-of for the guests | [Drop boxes and events](docs/using.md#drop-boxes-photos-from-people-who-do-not-have-immich) |
+| **Deliver a shoot to a client** | A room the client opens on a phone: favourites, notes, rounds, and you release the originals when you decide | [Client rooms](docs/using.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from) |
+| **Share an album with a friend on another server** | Photos both ways between two Immich servers, signed, with no echo; works even if your friend does not run Handoff | [Albums shared with other servers](docs/using.md#albums-shared-with-other-servers) |
+| **Stop tagging by hand** | A **Hand over...** button inside Immich, and rules that suggest photos of named people, places and dates | [Rules](docs/using.md#rules-photos-by-who-where-and-when) and [the button](docs/find-handoff.md#hand-over-from-inside-immich) |
+
+A *service* is simply a named place photos are handed to ("Holiday 2026"); its owner decides who may send.
 
 ![Tag a photo, Immich tells immich-handoff, the photo arrives in the receiver's library](docs/images/flow.svg)
 
-## Why you might like it
+## Everything it does, and why you can trust it
 
-- **Nothing new to learn.** Sending is adding a tag in the Immich app you already use, on a phone or the web.
+- **Nothing new to learn.** Send by adding a tag in the Immich app you already use, or with the button inside Immich, on a phone or the web.
 - **You decide about your own originals.** When you take part you choose: **keep** your photo and send a copy, or **move** it to your trash once the other side has it. The choice is yours, not the receiver's.
 - **Anyone can offer a service.** Create one, decide who may send (people you approve, or anyone), and share an invitation link if you want it private.
 - **Keys nobody can see, and a way out.** The app makes a named, restricted key in your account with your own login. Delete it in Immich, or press **Leave**, and everything stops safely without touching a photo.
@@ -78,6 +88,19 @@ Everything below is recorded from the real page, in the dark or the light varian
     <td width="50%" valign="top"><img src="docs/images/immich-family.png" alt="The receiver's Immich timeline with the handed-over photos"><br><sub><b>What arrives</b> in the receiver's own Immich.</sub></td>
   </tr>
 </table>
+
+## Why not shared albums or share links?
+
+Immich's own sharing is the right tool for *showing* photos. Handoff is for *moving, collecting and delivering* them.
+
+| | Shared album / link | Partner sharing | immich-handoff |
+|---|---|---|---|
+| The photo ends up in the other person's library | No | No (read-only) | **Yes**, a real copy they own |
+| You choose to keep or move your original | n/a | n/a | **Yes**, a move waits for a verified copy |
+| People without Immich can send you photos | Upload links, no review | No | **Yes**, write-only drop box with moderation, wall and gallery |
+| Between two servers | Public link only | No | **Yes**, signed, both ways |
+| Photos picked automatically | No | Everything | **Rules** by person, place, date or phrase |
+| Revoke it | Delete the link | Stop sharing | Delete the key in Immich; nothing else is touched |
 
 ## Quick start
 
