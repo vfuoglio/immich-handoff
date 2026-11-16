@@ -35,3 +35,8 @@ No. It is an independent community project, not made or endorsed by the Immich t
 
 **What if Immich changes?**
 The project's tests run against a real Immich, and the button inside Immich is checked against its pages on the pinned version; a change shows up when that version is raised. If the button cannot find its place it hides itself and nothing else breaks.
+
+**What if Immich adds this itself?**
+It may add some of it. Immich's team develops sharing in the open, and people have long asked for a way to copy a shared photo into their own library. immich-handoff only uses Immich's public API and changes nothing inside it, so if Immich covers a part of what you use it for, you can stop using that part and nothing else is affected.
+
+What would still be useful on its own: the sender choosing whether the original stays or moves (and nothing is removed before a verified copy exists), guests without an account sending through a QR code with moderation, a wall and a gallery, client rooms for photographers, and sharing between two servers. Leaving is easy: delete the key in Immich, or press **Leave**, and every photo stays where it is.

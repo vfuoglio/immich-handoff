@@ -108,7 +108,7 @@ Immich's own sharing is the right tool for *showing* photos. Handoff is for *mov
 |---|---|---|---|
 | The photo ends up in the other person's library | No | No (read-only) | **Yes**, a real copy they own |
 | You choose to keep or move your original | n/a | n/a | **Yes**, a move waits for a verified copy |
-| People without Immich can send you photos | Upload links, no review | No | **Yes**, write-only drop box with moderation, wall and gallery |
+| People without Immich can send you photos | Upload links, but no review, no wall, no gallery for the guests | No | **Yes**, write-only drop box with moderation, wall and gallery |
 | Between two servers | Public link only | No | **Yes**, signed, both ways |
 | Photos picked automatically | No | Everything | **Rules** by person, place, date or phrase |
 | Revoke it | Delete the link | Stop sharing | Delete the key in Immich; nothing else is touched |
