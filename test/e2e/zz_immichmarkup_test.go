@@ -49,9 +49,9 @@ func TestImmichMarkup(t *testing.T) {
 	})
 
 	t.Run("the selection bar has a count, a three-dot menu and room beside it", func(t *testing.T) {
-		until(t, ctx, "the bar", `document.querySelector('#control-bar nav') !== null`, 5*time.Second)
+		until(t, ctx, "the bar", `document.querySelector(':is([data-testid=control-bar],#control-bar) nav') !== null`, 5*time.Second)
 		got := js[string](t, ctx, `(() => {
-			const bar = document.querySelector('#control-bar');
+			const bar = document.querySelector(':is([data-testid=control-bar],#control-bar)');
 			const more = bar.querySelector('button[aria-haspopup][id^=context-menu-button]');
 			const count = [...bar.querySelectorAll('p')].map(p => p.textContent.trim()).find(x => /^\d+$/.test(x));
 			return [count, more !== null, bar.querySelector('ul[role=menu]') !== null, more && more.parentElement.parentElement !== null].join(',');
@@ -61,16 +61,16 @@ func TestImmichMarkup(t *testing.T) {
 		}
 		// a second selected photo is counted, and the bar goes when nothing is selected
 		toggle(1)
-		until(t, ctx, "two selected", `[...document.querySelectorAll('#control-bar p')].some(p => p.textContent.trim() === '2')`, 5*time.Second)
-		run(t, ctx, chromedp.Evaluate(`document.querySelector('#control-bar button[aria-label]').click()`, nil)) // the first button closes the selection
-		until(t, ctx, "the bar to go", `document.querySelector('#control-bar') === null || document.querySelector('[data-selected=true]') === null`, 5*time.Second)
+		until(t, ctx, "two selected", `[...document.querySelectorAll(':is([data-testid=control-bar],#control-bar) p')].some(p => p.textContent.trim() === '2')`, 5*time.Second)
+		run(t, ctx, chromedp.Evaluate(`document.querySelector(':is([data-testid=control-bar],#control-bar) button[aria-label]').click()`, nil)) // the first button closes the selection
+		until(t, ctx, "the bar to go", `document.querySelector(':is([data-testid=control-bar],#control-bar)') === null || document.querySelector('[data-selected=true]') === null`, 5*time.Second)
 	})
 
 	t.Run("an item added to the three-dot menu stays and is clicked", func(t *testing.T) {
 		toggle(0)
-		until(t, ctx, "the bar", `document.querySelector('#control-bar ul[role=menu]') !== null`, 5*time.Second)
-		run(t, ctx, chromedp.Evaluate(`(() => { const ul = document.querySelector('#control-bar ul[role=menu]'); const li = ul.querySelector('li[role=menuitem]').cloneNode(true); li.id = 'probe-item'; li.addEventListener('click', () => { window.__probe = (window.__probe || 0) + 1; }); ul.append(li); })()`, nil))
-		run(t, ctx, chromedp.Evaluate(`document.querySelector('#control-bar button[aria-haspopup]').click()`, nil))
+		until(t, ctx, "the bar", `document.querySelector(':is([data-testid=control-bar],#control-bar) ul[role=menu]') !== null`, 5*time.Second)
+		run(t, ctx, chromedp.Evaluate(`(() => { const ul = document.querySelector(':is([data-testid=control-bar],#control-bar) ul[role=menu]'); const li = ul.querySelector('li[role=menuitem]').cloneNode(true); li.id = 'probe-item'; li.addEventListener('click', () => { window.__probe = (window.__probe || 0) + 1; }); ul.append(li); })()`, nil))
+		run(t, ctx, chromedp.Evaluate(`document.querySelector(':is([data-testid=control-bar],#control-bar) button[aria-haspopup]').click()`, nil))
 		until(t, ctx, "the added line to be there", `document.getElementById('probe-item') !== null`, 5*time.Second)
 		run(t, ctx, chromedp.Evaluate(`document.getElementById('probe-item').click()`, nil))
 		until(t, ctx, "the click to be seen", `window.__probe === 1`, 5*time.Second)
@@ -100,8 +100,8 @@ func TestImmichMarkup(t *testing.T) {
 		run(t, phone, input.DispatchTouchEvent(input.TouchStart, []*input.TouchPoint{{X: at[0], Y: at[1]}}))
 		time.Sleep(1200 * time.Millisecond) // a long press selects
 		run(t, phone, input.DispatchTouchEvent(input.TouchEnd, nil))
-		until(t, phone, "the bar", `document.querySelector('#control-bar nav') !== null`, 5*time.Second)
-		if !js[bool](t, phone, `(() => { const n = document.querySelector('#control-bar nav'); return n.scrollWidth <= n.clientWidth && n.getBoundingClientRect().width < 400; })()`) {
+		until(t, phone, "the bar", `document.querySelector(':is([data-testid=control-bar],#control-bar) nav') !== null`, 5*time.Second)
+		if !js[bool](t, phone, `(() => { const n = document.querySelector(':is([data-testid=control-bar],#control-bar) nav'); return n.scrollWidth <= n.clientWidth && n.getBoundingClientRect().width < 400; })()`) {
 			t.Error("the selection bar on a phone no longer fits its own buttons: the script's check for room needs another look")
 		}
 	})

@@ -98,11 +98,12 @@ func TestProvisionCreatesThenIsIdempotentThenRepairs(t *testing.T) {
 		t.Fatalf("first run: failures=%d creates=%d", n, f.creates)
 	}
 	steps := f.current["steps"].([]any)
-	if f.current["trigger"] != "AssetTagged" || len(steps) != 2 {
+	// one step, the webhook: a filter on the tag would miss the photos tagged for a date (a tag inside it) on Immich 3.4+
+	if f.current["trigger"] != "AssetTagged" || len(steps) != 1 {
 		t.Fatalf("unexpected workflow: %v", f.current)
 	}
-	if got := steps[1].(map[string]any)["method"]; got != "immich-plugin-core#webhook" {
-		t.Errorf("step 2 = %v", got)
+	if got := steps[0].(map[string]any)["method"]; got != "immich-plugin-core#webhook" {
+		t.Errorf("step 1 = %v", got)
 	}
 
 	if s.Provision(ctx, wh); f.creates != 1 || f.updates != 0 {

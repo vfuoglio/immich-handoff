@@ -2,7 +2,7 @@
 name: immich-handoff-e2e
 services:
   immich-server:
-    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3.2.0}
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3.4.1}
     environment:
       DB_HOSTNAME: database
       DB_USERNAME: postgres

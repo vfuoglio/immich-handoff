@@ -10,7 +10,7 @@ Your reverse proxy adds one line to Immich's pages. A small script from this app
 
 **What you need**
 
-- Immich behind a reverse proxy that you control and that can change the pages it passes on. The configuration below is for **nginx**, tested against Immich 3.2.0. Another proxy that can rewrite a response can do the same (it only has to add one `<script>` tag); that has not been tried here.
+- Immich behind a reverse proxy that you control and that can change the pages it passes on. The configuration below is for **nginx**, tested against Immich 3.4.1. Another proxy that can rewrite a response can do the same (it only has to add one `<script>` tag); that has not been tried here.
 - The Handoff page on **the same address as Immich, under a path** such as `/handoff/`. This is the second way in [Operations](operations.md#putting-the-page-behind-your-reverse-proxy): the page signs people in with Immich's cookie, and the script finds the page by where it was loaded from, so it needs no setting.
 
 **The configuration.** Add the `map` to the `http` block, and the three marked lines to the `location` that passes Immich's pages on (the `/handoff/` location is the one from [Operations](operations.md#putting-the-page-behind-your-reverse-proxy)):

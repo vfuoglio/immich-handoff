@@ -273,10 +273,14 @@ export function startHandover(app: string, icon: string): void {
     schedule();
   });
 
+  // the selection bar: Immich 3.2 to 3.3 gave it an id, from 3.4 it has a data-testid
+  const BAR = '[data-testid="control-bar"], #control-bar';
+  const barOf = (n: Element): Element | null => n.closest(BAR);
+
   // read when the button is pressed, not when it was made: the selection changes while the button stays
   const inViewer = (): string[] => [assetOfPath(location.pathname) ?? ""].filter(Boolean);
   const inGrid = (): string[] => {
-    const bar = document.querySelector("#control-bar");
+    const bar = document.querySelector(BAR);
     return bar ? (picked.idsFor(countIn([...bar.querySelectorAll("p")].map((p) => p.textContent ?? ""))) ?? []) : [];
   };
 
@@ -287,7 +291,7 @@ export function startHandover(app: string, icon: string): void {
     const one = photo ? inViewer : null;
 
     // the grid: the photos selected, when they can be counted
-    const bar = document.querySelector("#control-bar");
+    const bar = document.querySelector(BAR);
     if (bar) picked.see(tiles());
     else picked.clear();
     const many = bar && inGrid().length > 0 ? inGrid : null;
@@ -303,8 +307,8 @@ export function startHandover(app: string, icon: string): void {
       button.remove();
     }
 
-    for (const m of document.querySelectorAll('#control-bar ul[role="menu"], #immich-asset-viewer ul[role="menu"]')) {
-      const inBar = m.closest("#control-bar") !== null;
+    for (const m of document.querySelectorAll(`:is(${BAR}) ul[role="menu"], #immich-asset-viewer ul[role="menu"]`)) {
+      const inBar = barOf(m) !== null;
       const labelled = m.getAttribute("aria-labelledby");
       const dots = labelled ? document.getElementById(labelled) : null; // the three dots that open this menu
       mountItem(m, dots, inBar ? many : viewer ? one : null);

@@ -2,7 +2,7 @@
 
 A hand-over copies the photo's file and a little more. The rule of thumb: **the file, and the details a person added in Immich (description, rating, location, archived state), travel; edits, albums and other tags do not.**
 
-Everything below was checked against a real Immich 3.2.0 by `test/e2e/carryover_test.go`, which builds each kind of photo in the sender's account, hands it over, and compares the receiver's copy with the original. Run `test/run.sh` and look at the "WHAT IS CARRIED OVER" report to see it again, for example against a newer Immich.
+Everything below was checked against a real Immich 3.4.1 by `test/e2e/carryover_test.go`, which builds each kind of photo in the sender's account, hands it over, and compares the receiver's copy with the original. Run `test/run.sh` and look at the "WHAT IS CARRIED OVER" report to see it again, for example against a newer Immich.
 
 ## What arrives
 
