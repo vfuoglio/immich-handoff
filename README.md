@@ -155,7 +155,7 @@ Then open `http://<your-host>:8080/` on the same hostname you use for Immich, si
 
 ## Tested with
 
-Immich 3.2.0, end to end in Docker: every flow above runs against a real Immich in the project's tests. Tagging from the phone app is tested through the same call the app makes, not on a physical phone.
+Immich 3.4.1, end to end in Docker: every flow above runs against a real Immich in the project's tests (3.2.0 is the oldest version that works: it is the first that tells the app when a tag is added). Tagging from the phone app is tested through the same call the app makes, not on a physical phone.
 
 ## Questions, ideas and bugs
 

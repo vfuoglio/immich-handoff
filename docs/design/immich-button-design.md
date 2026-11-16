@@ -28,7 +28,7 @@ do. The script never holds a key and never tags anything itself.
 | Ids of the photos in a grid | each tile is `[data-thumbnail-focus-container]` with `data-asset="<uuid>"` | a data attribute for Immich's own tests; the thumbnail's address `/api/assets/<uuid>/thumbnail` repeats it |
 | Which tiles are selected | the same tile has `data-selected="true"` | same |
 | How many are selected | the bar's first `<p>` holds the bare number (the second is the words, in the person's language) | a number, so it needs no translation |
-| The selection bar | `#control-bar`, a `nav` inside it | an id |
+| The selection bar | `#control-bar` (Immich 3.2 to 3.3) or `[data-testid="control-bar"]` (3.4 and newer), a `nav` inside it | an id, then a test id: the script looks for both |
 | The viewer's toolbar | `[data-testid="asset-viewer-navbar-actions"]` inside `#immich-asset-viewer` | a test id |
 | The three-dot menus | in both bars, a `button[aria-haspopup][id^="context-menu-button"]` and, beside it in the page all the time, a `ul[role="menu"]` of `li[role="menuitem"]` | ARIA roles |
 
@@ -58,7 +58,7 @@ is a long press. Nothing here depends on the circle: the script only reads `data
   container of the three-dot menu. The toolbar scrolls sideways when it is crowded, so on a phone the button is there,
   further along. Immich redraws the toolbar when the person moves between photos; a `MutationObserver`, as for the
   header link, puts the button back at most once per frame.
-- **Selection bar.** A button is added in the right-hand group of `#control-bar`, before the three-dot menu. On a phone
+- **Selection bar.** A button is added in the right-hand group of the selection bar (`#control-bar`, or `[data-testid="control-bar"]` from Immich 3.4), before the three-dot menu. On a phone
   that bar is nearly full (Immich 3.2.0 at 390 px wide: about 70 px spare, and the button is 40 px, icon only), so
   after adding the button the script checks that the bar did not grow past its width (`scrollWidth > clientWidth`),
   and if it did, takes the button out again and leaves the menu entry as the only way.

@@ -2,7 +2,7 @@
 
 > *For contributors: this is a design note, not a user guide. The guides are in [the documentation index](../README.md).*
 
-Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `IMMICH_VERSION=<tag> test/run.sh` before upgrading.
+Facts verified against a real Immich v3.2.0 (see `test/`); the test suite now runs on v3.4.1, and what changed between them is below. Re-check them with `IMMICH_VERSION=<tag> test/run.sh` before upgrading.
 
 ## Sign-in sessions
 - `POST /auth/login` sets the cookies `immich_access_token` (HttpOnly), `immich_auth_type` (HttpOnly) and `immich_is_authenticated`. Browsers share cookies across ports of one hostname, so an app on `host:8080` receives the cookie of Immich on `host:2283`.
@@ -20,6 +20,7 @@ Facts verified against a real Immich v3.2.0 (see `test/`). Re-check them with `I
 ## Workflows
 - A user can hold several workflows at once (two created with different names both listed).
 - Workflow step config is stored in the owner's account; the webhook step sends `{type, trigger, data:{asset:{id, ownerId, ...}}}`.
+- **The workflow is the webhook alone, with no tag filter.** The core plugin's `assetTagFilter` with `matching: any` let every photo through up to Immich 3.3 (it also passed photos with no tags). 3.4.0 fixed it (immich-app/immich#32008) to pass only photos that carry one of the listed tags *exactly*, so a photo tagged for a date, whose tag is *inside* the share tag (`share/2025-12-31`), stopped waking the app: it waited for the next startup or daily pass. The webhook is only a wake-up (every pass searches by tag), so the filter was dropped; on 3.2 and 3.3 this is what the filter amounted to. Found by `TestWhatIsCarriedOver` ("photos tagged for a date") on 3.4.1.
 
 ## Users
 - A non-admin user can list the server's users with `GET /api/users` (id, email, name, avatar colour). Anything built on this shows every user's email to every signed-in user.

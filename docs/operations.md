@@ -20,7 +20,7 @@ Two ways that work:
 
 **2. A path on the same address.** The page at `https://photos.example.com/handoff/` with Immich at `/`. Tested with nginx (below): styling, live counts, thumbnails, the live-update stream, the Sync button and invitation links all work under the prefix. Keep the trailing slash in the address you share.
 
-A working nginx configuration, tested against Immich 3.2.0:
+A working nginx configuration, tested against Immich 3.4.1:
 
 ```nginx
 server {
