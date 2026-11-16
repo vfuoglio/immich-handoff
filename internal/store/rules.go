@@ -18,6 +18,12 @@ const (
 	RuleSuggested = "suggested" // offered, waiting for the person's answer
 	RuleSent      = "sent"      // the person said yes (or auto sent it)
 	RuleDeclined  = "declined"  // "not these": never offered again by this rule
+	RuleSeen      = "seen"      // a photo that was in a followed album when the rule began: not offered, only remembered
+
+	// What a rule does with what it finds: send it to a service (the first kind of rule), or copy it into the person's own
+	// library (follow an album that was shared with them).
+	RuleKindSend    = "send"
+	RuleKindLibrary = "library"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -37,6 +43,8 @@ type RuleCond struct {
 	Album     *RuleRef  `json:"album,omitempty"`
 	NotAlbums []RuleRef `json:"notAlbums,omitempty"`
 	Phrase    string    `json:"phrase,omitempty"`
+	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
+	AlbumOwner string `json:"albumOwner,omitempty"`
 }
 
 // Rule is one rule of a sender for a service.
@@ -53,14 +61,19 @@ type Rule struct {
 	LastLook  time.Time
 	Problem   string
 	CreatedAt time.Time
+	// Kind is RuleKindSend (the default) or RuleKindLibrary. A library rule has no service: it follows the album in
+	// Cond.Album and copies what others add to it into the owner's library, to Dest ("tag", "plain" or "album", named DestAlbum).
+	Kind      string
+	Dest      string
+	DestAlbum string
 }
 
-const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at`
+const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album`
 
 func scanRule(sc interface{ Scan(...any) error }) (Rule, error) {
 	var r Rule
 	var owner, cond, since, auto, last, created string
-	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created); err != nil {
+	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -80,13 +93,16 @@ func (s *Store) AddRule(ctx context.Context, r Rule) (Rule, error) {
 	if r.Mode == "" {
 		r.Mode = RuleSuggest
 	}
+	if r.Kind == "" {
+		r.Kind = RuleKindSend
+	}
 	r.CreatedAt = time.Now().UTC()
 	if r.Since.IsZero() {
 		r.Since = r.CreatedAt
 	}
 	cond, _ := json.Marshal(r.Cond)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum)
 	return r, err
 }
 
