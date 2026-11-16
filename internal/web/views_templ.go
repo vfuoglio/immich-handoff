@@ -20727,7 +20727,7 @@ func FrameSection(frames []FrameView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1773, "\"></div><div class=\"field\" hx-get=\"fragments/frame-albums\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1773, "\"></div><div class=\"field\" hx-get=\"fragments/frame-albums\" hx-target=\"this\" hx-trigger=\"toggle from:closest details once\" hx-target=\"this\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -22524,7 +22524,7 @@ func RoomSection(rooms []RoomView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1914, "\"></div><div class=\"field\" hx-get=\"fragments/room-albums\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1914, "\"></div><div class=\"field\" hx-get=\"fragments/room-albums\" hx-target=\"this\" hx-trigger=\"toggle from:closest details once\" hx-target=\"this\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -26174,7 +26174,7 @@ func PeerSection(peers []PeerView, invites bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2212, "\"></div><div class=\"field\" hx-get=\"fragments/share-albums?for=immich\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2212, "\"></div><div class=\"field\" hx-get=\"fragments/share-albums?for=immich\" hx-target=\"this\" hx-trigger=\"toggle from:closest details once\" hx-target=\"this\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -26647,7 +26647,7 @@ func PeerRow(p PeerView, id string, open bool) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2251, "\"></div><div class=\"field\" hx-get=\"fragments/share-albums\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2251, "\"></div><div class=\"field\" hx-get=\"fragments/share-albums\" hx-target=\"this\" hx-trigger=\"toggle from:closest details once\" hx-target=\"this\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -27497,7 +27497,7 @@ func SharedRow(a SharedView, id string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2317, "\" hx-trigger=\"load\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2317, "\" hx-target=\"this\" hx-trigger=\"load\" hx-target=\"this\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -28476,7 +28476,7 @@ func RulesBox(s ServiceView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2407, "\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2407, "\" hx-target=\"this\" hx-trigger=\"toggle from:closest details once\" hx-swap=\"innerHTML\"><p class=\"meta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

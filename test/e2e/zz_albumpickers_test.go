@@ -47,7 +47,8 @@ func TestAlbumPickers(t *testing.T) {
 			if (!d) return false;
 			d.open = true;
 			const s = document.querySelector('%s');
-			return !!s && s.options.length > 0;
-		})()`, c.field, c.sel), 20*time.Second)
+			// the list must land in the form's own field (it once went to the notice at the top of the page, which the form targets)
+			return !!s && s.options.length > 0 && !!s.closest('form') && !s.closest('#flash') && !document.querySelector('%s').closest('form').textContent.includes('Loading your albums');
+		})()`, c.field, c.sel, c.field), 20*time.Second)
 	}
 }

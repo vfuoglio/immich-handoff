@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- The list of your albums in the forms that make a client room, a frame and a shared album appeared in the notice at the top of the page, and the form kept saying "Loading your albums...". It now appears in the form.
+
 ## 1.3.0
 
 ### What is new, by what you want to do

@@ -115,7 +115,7 @@ func TestThePhotographerSeesTheirRoomsAndMakesThemOnlyWhenSignedInWithTheHeader(
 	token := strings.Repeat("ab", 32)
 	app, _ := setup(t, withRoom(t, &st, store.Room{Token: token, Name: "Rossi wedding", AlbumName: "Wedding", Password: "x"}))
 	_, page := do(t, "GET", app.URL+"/", "sess=family", nil)
-	for _, want := range []string{"Client rooms", "Rossi wedding", `data-link="room/` + token + `"`, "The client needs the PIN.", "Make a client room", `hx-get="fragments/room-albums"`} {
+	for _, want := range []string{"Client rooms", "Rossi wedding", `data-link="room/` + token + `"`, "The client needs the PIN.", "Make a client room", `hx-get="fragments/room-albums" hx-target="this"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the Services tab lacks %q", want)
 		}
