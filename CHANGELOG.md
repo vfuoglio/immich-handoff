@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.0
+
 ### What is new, by what you want to do
 - **Collect photos from people without Immich.** Drop boxes became events: a gallery for guests with hearts and downloads, a moderator link for a helper, a wall on a screen, a best-of, an event pool where everybody gets everybody's photos, frames, a weekly digest, photos sent by email, and your own title, logo and colours. See [Drop boxes](docs/guides/events.md#drop-boxes-photos-from-people-who-do-not-have-immich).
 - **Deliver a shoot to a client.** Client rooms: marked pictures on a phone, favourites up to a limit, notes, rounds, and the originals released when you decide. See [Client rooms](docs/guides/client-rooms.md#client-rooms-a-shoot-for-a-client-to-look-at-and-choose-from).
