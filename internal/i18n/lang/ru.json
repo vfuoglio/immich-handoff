@@ -1234,7 +1234,6 @@
  "the album's name is too long": "название альбома слишком длинное",
  "it is too late to take these back: they were added more than 15 minutes ago": "слишком поздно отменять: их добавили больше 15 минут назад",
  "none of these copies can be taken back": "ни одну из этих копий нельзя убрать",
- "a copy of this photo is in your trash: restore it in Immich if you want it back": "копия этого фото лежит в вашей корзине: восстановите её в Immich, если хотите вернуть",
  "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.": "В Immich фото, которым с вами поделились, можно скопировать в вашу библиотеку кнопкой «Добавить в мою библиотеку». Выберите, куда пойдут копии.",
  "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.": "Копия занимает столько же места, сколько и фото, а тот, кто поделился, об этом не узнает. В течение 15 минут после добавления «Отменить» снова убирает копии.",
  "{n} photo added to your library": {

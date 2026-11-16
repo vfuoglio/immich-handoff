@@ -205,8 +205,10 @@ func (h *Hub) copyShared(ctx context.Context, sess *immich.API, a *immich.AssetR
 				if aerr != nil {
 					return uuid.Nil, uuid.Nil, false, false, fmt.Errorf("motion clip: %w", aerr)
 				}
-				if cc.IsTrashed {
-					return uuid.Nil, uuid.Nil, false, false, ErrInTrash
+				if cc.IsTrashed { // taken out before (Undo, or the person's own delete) and pressed again: it is wanted back
+					if rerr := sess.RestoreAssets(ctx, []uuid.UUID{up.Id}); rerr != nil {
+						return uuid.Nil, uuid.Nil, false, false, fmt.Errorf("motion clip: %w", rerr)
+					}
 				}
 				if !immich.ChecksumMatches(cc.Checksum, sum) {
 					return uuid.Nil, uuid.Nil, false, false, fmt.Errorf("checksum mismatch on the copy %s of the motion clip", up.Id)
@@ -231,17 +233,19 @@ func (h *Hub) copyShared(ctx context.Context, sess *immich.API, a *immich.AssetR
 	if err != nil {
 		return uuid.Nil, clipID, false, clipNew, err
 	}
-	if cp.IsTrashed {
-		return uuid.Nil, clipID, false, clipNew, ErrInTrash
-	}
 	if !immich.ChecksumMatches(cp.Checksum, sum) {
 		return uuid.Nil, clipID, false, clipNew, fmt.Errorf("checksum mismatch on the copy %s", up.Id)
 	}
+	if cp.IsTrashed {
+		// A copy that was taken out before (Undo, or the person's own delete) and added again is wanted back: Immich
+		// answers "duplicate" with the one in the trash, so restore it, and file it like a new copy.
+		if err := sess.RestoreAssets(ctx, []uuid.UUID{up.Id}); err != nil {
+			return uuid.Nil, clipID, false, clipNew, err
+		}
+		return up.Id, clipID, true, clipNew, nil
+	}
 	return up.Id, clipID, up.Status == immich.AssetMediaStatusCreated, clipNew, nil
 }
-
-// ErrInTrash: a copy of the photo is in the person's trash, so it was not added again; they can restore it in Immich.
-var ErrInTrash = errors.New("a copy of this photo is in your trash: restore it in Immich if you want it back")
 
 // fileCopy puts the destination on a new copy: waits for Immich to read the upload, then tags it (checking the tag
 // stuck) or adds it to the album. It returns a short note when that did not work; the copy is kept either way.

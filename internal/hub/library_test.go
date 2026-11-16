@@ -291,6 +291,18 @@ func (f *libFake) handler() http.Handler {
 		}
 		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
 	})
+	mux.HandleFunc("POST /api/trash/restore/assets", func(w http.ResponseWriter, r *http.Request) {
+		var body struct{ Ids []string }
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for _, id := range body.Ids {
+			if a := f.assets[id]; a != nil && a.owner == who(r) {
+				a.trashed = false
+			}
+		}
+		j(w, 200, map[string]any{"count": len(body.Ids)})
+	})
 	mux.HandleFunc("DELETE /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Ids   []string
@@ -449,13 +461,20 @@ func TestAddToLibraryBringsALivePhotosClipFirstHiddenAndLinksTheStillToIt(t *tes
 	}
 }
 
-func TestAddToLibraryDoesNotBringBackACopyThatIsInTheTrash(t *testing.T) {
+func TestAddToLibraryRestoresACopyThatWasTakenOutAndIsAddedAgain(t *testing.T) {
 	h, f, sess := libSetup(t)
 	a := f.shared("a.jpg", "same-bytes")
 	res, _ := h.AddToLibrary(context.Background(), sess, bob, []string{a.id}, hub.LibraryDest{})
-	f.assets[res.Copies[0].String()].trashed = true
-	if _, err := h.AddToLibrary(context.Background(), sess, bob, []string{a.id}, hub.LibraryDest{}); !errors.Is(err, hub.ErrInTrash) || !hub.IsUserError(err) {
-		t.Fatalf("err = %v, want ErrInTrash", err)
+	f.assets[res.Copies[0].String()].trashed = true // Undo, or bob's own delete
+	again, err := h.AddToLibrary(context.Background(), sess, bob, []string{a.id}, hub.LibraryDest{Kind: hub.LibraryPlain})
+	if err != nil || again.Added != 1 || len(again.Copies) != 1 || again.Copies[0] != res.Copies[0] {
+		t.Fatalf("%+v %v", again, err)
+	}
+	if f.assets[res.Copies[0].String()].trashed {
+		t.Error("the copy in the trash is brought back, not left there")
+	}
+	if n := len(f.bobCopies()); n != 1 {
+		t.Errorf("no second copy: %d", n)
 	}
 }
 

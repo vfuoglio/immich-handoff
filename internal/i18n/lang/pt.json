@@ -1138,7 +1138,6 @@
  "the album's name is too long": "o nome do álbum é demasiado longo",
  "it is too late to take these back: they were added more than 15 minutes ago": "é tarde demais para desfazer: foram adicionadas há mais de 15 minutos",
  "none of these copies can be taken back": "nenhuma destas cópias pode ser desfeita",
- "a copy of this photo is in your trash: restore it in Immich if you want it back": "há uma cópia desta foto no seu lixo: restaure-a no Immich se a quiser de volta",
  "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.": "No Immich, uma foto que alguém partilhou consigo pode ser copiada para a sua própria biblioteca com o botão Adicionar à minha biblioteca. Escolha para onde vão as cópias.",
  "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.": "Uma cópia ocupa tanto espaço como a foto, e quem a partilhou não é avisado. Durante 15 minutos após adicionar, Anular volta a tirar as cópias.",
  "{n} photo added to your library": {
