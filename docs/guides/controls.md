@@ -46,7 +46,7 @@ To hand a photo over **on a day** (a surprise, an anniversary, Christmas morning
 - A photo with both the plain tag and a future date waits for the date. A photo with only the plain tag goes at once, as always.
 - To cancel, take the dated tag off. The receiver is not told that something is on its way.
 - Photos tagged only for a date are **not counted** in the page's "Waiting to go" until their day.
-- Checked against a real Immich 3.2.0: a tag inside `share` (such as `share/2999-01-01`) is also found by a search for `share`, which is why the app skips photos whose day has not come.
+- Checked against a real Immich 3.2.0 and 3.4.1: a tag inside `share` (such as `share/2999-01-01`) is also found by a search for `share`, which is why the app skips photos whose day has not come.
 
 ## Hand-overs that expire
 

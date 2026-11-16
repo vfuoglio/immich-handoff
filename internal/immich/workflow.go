@@ -13,18 +13,20 @@ import (
 // WorkflowSpec describes the one workflow this app owns in a source account.
 type WorkflowSpec struct {
 	Name         string
-	TagID        openapi_types.UUID // fires when this tag is added
+	TagID        openapi_types.UUID // the tag the workflow is about; it is not filtered on (see steps)
 	WebhookURL   string
 	HeaderName   string
 	HeaderSecret string
 }
 
+// steps is one step: the webhook. There is no tag filter on purpose. The webhook is only a wake-up call (every pass
+// searches by tag, so an event for another tag costs one quick search), and a filter on the tag would miss the photos
+// tagged for a date, which carry a tag inside it ("share/2025-12-31"). Immich up to 3.3 let every photo through that
+// filter whatever its tags; 3.4 fixed it to match exactly, which stopped the date tags from waking the app.
 func (w WorkflowSpec) steps() []WorkflowStepDto {
-	filter := map[string]interface{}{"tags": []string{w.TagID.String()}, "matching": "any"}
 	hook := map[string]interface{}{"url": w.WebhookURL, "method": "POST", "headerName": w.HeaderName, "headerValue": w.HeaderSecret}
 	t := true
 	return []WorkflowStepDto{
-		{Method: "immich-plugin-core#assetTagFilter", Config: &filter, Enabled: &t},
 		{Method: "immich-plugin-core#webhook", Config: &hook, Enabled: &t},
 	}
 }

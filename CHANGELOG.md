@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Works with Immich 3.4
+- **The Hand over button in the selection bar.** Immich 3.4 changed how its selection bar is marked (a test id instead of an id), so the button no longer showed up when photos were selected. It looks for both now; the button in the photo viewer was not affected.
+- **Photos tagged for a date arrive on time again.** Immich 3.4 fixed a bug in its workflow tag filter that had let every photo through; a photo tagged `share/2025-12-31` no longer woke the app, so it waited for the next daily pass. The app's workflow no longer filters on the tag (the webhook is only a wake-up), and existing workflows are repaired when the app starts.
+- The tests and the demo run on Immich 3.4.1. The oldest Immich that works is still 3.2.0.
+
 ## 1.3.0
 
 ### What is new, by what you want to do

@@ -110,12 +110,12 @@ func TestHandOverButton(t *testing.T) {
 		toggleTile(t, grid, 0)
 		until(t, grid, "the button in the bar", `document.getElementById('handoff-bar-act') !== null`, 10*time.Second)
 		toggleTile(t, grid, 1)
-		until(t, grid, "two selected", `[...document.querySelectorAll('#control-bar p')].some(p => p.textContent.trim() === '2')`, 5*time.Second)
+		until(t, grid, "two selected", `[...document.querySelectorAll(':is([data-testid=control-bar],#control-bar) p')].some(p => p.textContent.trim() === '2')`, 5*time.Second)
 		ids := js[[]string](t, grid, `[...document.querySelectorAll('[data-thumbnail-focus-container][data-selected=true]')].map(t => t.dataset.asset)`)
 		if len(ids) != 2 {
 			t.Fatalf("selected: %v", ids)
 		}
-		if !js[bool](t, grid, `(() => { const b = document.getElementById('handoff-bar-act'); const more = document.querySelector('#control-bar button[id^=context-menu-button]'); return b.getBoundingClientRect().right <= more.getBoundingClientRect().left + 1 && b.closest('#control-bar') !== null; })()`) {
+		if !js[bool](t, grid, `(() => { const b = document.getElementById('handoff-bar-act'); const more = document.querySelector(':is([data-testid=control-bar],#control-bar) button[id^=context-menu-button]'); return b.getBoundingClientRect().right <= more.getBoundingClientRect().left + 1 && b.closest(':is([data-testid=control-bar],#control-bar)') !== null; })()`) {
 			t.Error("the button is before the three dots, in the bar")
 		}
 		run(t, grid, chromedp.Click(`#handoff-bar-act`, chromedp.ByQuery))
@@ -139,12 +139,12 @@ func TestHandOverButton(t *testing.T) {
 			return true
 		})
 		// the line in Immich's own menu does the same
-		run(t, grid, chromedp.Click(`#control-bar button[id^=context-menu-button]`, chromedp.ByQuery))
-		until(t, grid, "the line in the menu", `document.querySelector('#control-bar li[data-handoff-item]') !== null`, 5*time.Second)
-		if got := js[string](t, grid, `document.querySelector('#control-bar li[data-handoff-item]').textContent.trim()`); got != "Hand over..." {
+		run(t, grid, chromedp.Click(`:is([data-testid=control-bar],#control-bar) button[id^=context-menu-button]`, chromedp.ByQuery))
+		until(t, grid, "the line in the menu", `document.querySelector(':is([data-testid=control-bar],#control-bar) li[data-handoff-item]') !== null`, 5*time.Second)
+		if got := js[string](t, grid, `document.querySelector(':is([data-testid=control-bar],#control-bar) li[data-handoff-item]').textContent.trim()`); got != "Hand over..." {
 			t.Errorf("the line says %q", got)
 		}
-		run(t, grid, chromedp.Click(`#control-bar li[data-handoff-item]`, chromedp.ByQuery))
+		run(t, grid, chromedp.Click(`:is([data-testid=control-bar],#control-bar) li[data-handoff-item]`, chromedp.ByQuery))
 		until(t, grid, "the list", `document.querySelectorAll('#handoff-menu [role=menuitem]').length === 2`, 10*time.Second)
 		// and the viewer's three dots have it too
 		run(t, grid, chromedp.Navigate(address+"/photos/"+ids[0]))
@@ -162,13 +162,13 @@ func TestHandOverButton(t *testing.T) {
 		run(t, phone, input.DispatchTouchEvent(input.TouchStart, []*input.TouchPoint{{X: at[0], Y: at[1]}}))
 		time.Sleep(1200 * time.Millisecond) // a long press selects
 		run(t, phone, input.DispatchTouchEvent(input.TouchEnd, nil))
-		until(t, phone, "the menu line", `document.querySelector('#control-bar li[data-handoff-item]') !== null`, 10*time.Second)
+		until(t, phone, "the menu line", `document.querySelector(':is([data-testid=control-bar],#control-bar) li[data-handoff-item]') !== null`, 10*time.Second)
 		time.Sleep(500 * time.Millisecond)
 		until(t, phone, "the button, with room for it", `document.getElementById('handoff-bar-act') !== null`, 5*time.Second)
 		if !js[bool](t, phone, `getComputedStyle(document.querySelector('#handoff-bar-act span')).display === 'none'`) {
 			t.Error("the words are shown on a phone")
 		}
-		if !js[bool](t, phone, `(() => { const n = document.querySelector('#control-bar nav'); return n.scrollWidth <= n.clientWidth; })()`) {
+		if !js[bool](t, phone, `(() => { const n = document.querySelector(':is([data-testid=control-bar],#control-bar) nav'); return n.scrollWidth <= n.clientWidth; })()`) {
 			t.Error("the bar overflows")
 		}
 	})
