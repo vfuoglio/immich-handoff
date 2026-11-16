@@ -1253,5 +1253,69 @@
   "few": "{n} фото снова убрано из вашей библиотеки",
   "many": "{n} фото снова убрано из вашей библиотеки",
   "other": "{n} фото снова убрано из вашей библиотеки"
+ },
+ "In the album {album}": "В альбоме {album}",
+ "Could not list the albums shared with you": "Не удалось загрузить альбомы, которыми с вами поделились",
+ "Shared by {owner}. Add them to your library?": "Поделился(-ась) {owner}. Добавить их в вашу библиотеку?",
+ "{album}, shared by {owner}": "{album}, поделился(-ась) {owner}",
+ "Adds by itself": "Добавляет само",
+ "You have answered Always {n} times. You can let it add photos by itself from now on.": "Вы ответили «Всегда» {n} раз. Теперь можно разрешить добавлять фото самому.",
+ "Let it add by itself": "Пусть добавляет само",
+ "From now on what is added to this album is copied into your library without asking you. Only photos added from now on are copied this way.": "Отныне то, что добавлено в этот альбом, копируется в вашу библиотеку без вопросов. Так копируются только фото, добавленные с этого момента.",
+ "Stop following this album? The photos already copied stay in your library.": "Перестать следить за этим альбомом? Уже скопированные фото останутся в вашей библиотеке.",
+ "Stop following?": "Перестать следить?",
+ "Stop following": "Перестать следить",
+ "Albums shared with you that you follow": "Альбомы, которыми с вами поделились и за которыми вы следите",
+ "Follow an album shared with me": "Следить за альбомом, которым со мной поделились",
+ "Loading the albums shared with you...": "Загружаются альбомы, которыми с вами поделились...",
+ "Nobody has shared an album with you yet.": "Пока никто не поделился с вами альбомом.",
+ "What others add to the album is offered to you with pictures, to add to your library, and once you have said Always three times you can let it add photos by itself.": "То, что другие добавят в альбом, вам предлагается с картинками, чтобы добавить в библиотеку; когда вы трижды ответите «Всегда», можно разрешить добавлять фото само.",
+ "Which album": "Какой альбом",
+ "Only what is added from now on": "Только то, что добавлено с этого момента",
+ "What is in it now, and what is added": "То, что в нём сейчас, и то, что добавится",
+ "Where the copies go": "Куда идут копии",
+ "the name of the album, when the copies go to one": "название альбома, если копии идут в альбом",
+ "Follow this album": "Следить за этим альбомом",
+ "New in {album}": "Новое в {album}",
+ "Photos added to the album {album}, shared by {owner}.": "Фото, добавленные в альбом {album}, которым поделился(-ась) {owner}.",
+ "Add the ticked photos to my library": "Добавить отмеченные фото в мою библиотеку",
+ "Add the ticked photos, and always": "Добавить отмеченные фото, и всегда",
+ "{name} follows the album {album}, shared by {owner}": "{name} следит за альбомом {album}, которым поделился(-ась) {owner}",
+ "{name} made the album {album} ask first again": "{name} снова сделал(а) так, что альбом {album} сначала спрашивает",
+ "{name} let the album {album} add photos to the library by itself": "{name} разрешил(а) альбому {album} добавлять фото в библиотеку самому",
+ "{name} stopped following the album {album}": "{name} больше не следит за альбомом {album}",
+ "the key the app uses to follow your albums is gone: follow the album again": "ключ, которым приложение следит за вашими альбомами, пропал: подпишитесь на альбом заново",
+ "that album is not shared with you": "этим альбомом с вами не поделились",
+ "you already follow that album": "вы уже следите за этим альбомом",
+ "choose whether to start with what is in the album now, or only with what is added from now on": "выберите: начать с того, что в альбоме сейчас, или только с того, что добавится с этого момента",
+ "{n} new photo in {album}": {
+  "one": "{n} новое фото в {album}",
+  "few": "{n} новых фото в {album}",
+  "many": "{n} новых фото в {album}",
+  "other": "{n} новых фото в {album}"
+ },
+ "{n} photo added to your library from {album} on its own": {
+  "one": "{n} фото из {album} добавлено в вашу библиотеку само",
+  "few": "{n} фото из {album} добавлено в вашу библиотеку само",
+  "many": "{n} фото из {album} добавлено в вашу библиотеку само",
+  "other": "{n} фото из {album} добавлено в вашу библиотеку само"
+ },
+ "{n} new photo in the album {album} you follow. Look at it on the Overview.": {
+  "one": "{n} новое фото в альбоме {album}, за которым вы следите. Посмотрите его в Обзоре.",
+  "few": "{n} новых фото в альбоме {album}, за которым вы следите. Посмотрите их в Обзоре.",
+  "many": "{n} новых фото в альбоме {album}, за которым вы следите. Посмотрите их в Обзоре.",
+  "other": "{n} новых фото в альбоме {album}, за которым вы следите. Посмотрите их в Обзоре."
+ },
+ "{n} photo added to your library from {album}": {
+  "one": "{n} фото из {album} добавлено в вашу библиотеку",
+  "few": "{n} фото из {album} добавлено в вашу библиотеку",
+  "many": "{n} фото из {album} добавлено в вашу библиотеку",
+  "other": "{n} фото из {album} добавлено в вашу библиотеку"
+ },
+ "{n} photo of the album {album} left out of your library": {
+  "one": "{n} фото альбома {album} оставлено вне вашей библиотеки",
+  "few": "{n} фото альбома {album} оставлено вне вашей библиотеки",
+  "many": "{n} фото альбома {album} оставлено вне вашей библиотеки",
+  "other": "{n} фото альбома {album} оставлено вне вашей библиотеки"
  }
 }

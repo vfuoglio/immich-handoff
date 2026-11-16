@@ -964,3 +964,11 @@ func libraryTrigger(l LibraryView) string {
 	}
 	return "click from:#lib-dest-album once"
 }
+
+// reviewTitle is the title of the page that shows what a rule found.
+func reviewTitle(ctx context.Context, d SuggestionReview) string {
+	if d.Library {
+		return t(ctx, "New in {album}", "album", d.Album)
+	}
+	return t(ctx, "Photos for {service}", "service", d.Service)
+}

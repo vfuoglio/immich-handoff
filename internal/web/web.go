@@ -275,6 +275,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules", w.addRule)
 	mux.HandleFunc("POST /rules/pause", w.pauseRule)
 	mux.HandleFunc("POST /rules/delete", w.deleteRule)
+	mux.HandleFunc("GET /fragments/follow-albums", w.followAlbums)
+	mux.HandleFunc("POST /rules/follow", w.followAlbum)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
@@ -627,7 +629,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Push = w.pushView(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
-		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album}
+		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}
 	}
 	w.overview(ctx, me, &d)
 	return d
@@ -701,6 +703,15 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 	}
 	for _, sg := range d.Suggestions {
 		more := sg.Count - len(sg.Thumbs)
+		if sg.Library { // an album shared with the person, followed: the photos are copied into their own library
+			acts := []NeedAction{
+				{Label: t(ctx, "Add to my library"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo in {album}", "{n} new photos in {album}", sg.Count, "album", sg.Album),
+				Text: t(ctx, "Shared by {owner}. Add them to your library?", "owner", sg.Owner), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
+			continue
+		}
 		acts := []NeedAction{
 			{Label: t(ctx, "Send"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
 			{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")}}

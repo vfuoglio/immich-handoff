@@ -252,6 +252,7 @@ type GuideView struct {
 type LibraryView struct {
 	Available   bool
 	Dest, Album string
+	Followed    []FollowedView // the albums shared with the person that a rule follows
 }
 
 type DashboardData struct {
@@ -752,6 +753,84 @@ templ LibraryCard(l LibraryView) {
 		</form>
 		<small class="meta">{ t(ctx, "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.") }</small>
 	</div>
+	<h3>{ t(ctx, "Albums shared with you that you follow") }</h3>
+	for _, f := range l.Followed {
+		<div class="card rule">
+			<p><b>{ t(ctx, "{album}, shared by {owner}", "album", f.Album, "owner", f.Owner) }</b>
+				if f.Paused {
+					<span class="chip warn">{ t(ctx, "Paused") }</span>
+				} else if f.Mode == "auto" {
+					<span class="chip ok">{ t(ctx, "Adds by itself") }</span>
+				} else {
+					<span class="chip">{ t(ctx, "Asks you first") }</span>
+				}
+			</p>
+			<p class="meta">{ f.Dest }</p>
+			if f.Last != "" {
+				<p class="meta">{ t(ctx, "Last looked at {when}.", "when", f.Last) }</p>
+			}
+			if f.Problem != "" {
+				<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", f.Problem) }</p>
+			}
+			if f.Mode != "auto" && f.CanAuto {
+				<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it add photos by itself from now on.", "n", f.Always) }</p>
+			}
+			<p class="row">
+				if f.Mode == "auto" {
+					<button hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+				} else if f.CanAuto {
+					<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on what is added to this album is copied into your library without asking you. Only photos added from now on are copied this way.") }>{ t(ctx, "Let it add by itself") }</button>
+				}
+				<button hx-post="rules/pause" hx-vals={ vals2("rule", f.ID, "paused", pausedValue(f.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+					if f.Paused {
+						{ t(ctx, "Resume this rule") }
+					} else {
+						{ t(ctx, "Pause this rule") }
+					}
+				</button>
+				<button hx-post="rules/delete" hx-vals={ vals("rule", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop following this album? The photos already copied stay in your library.") } data-confirm-title={ t(ctx, "Stop following?") } data-confirm-label={ t(ctx, "Stop following") } data-danger="true">{ t(ctx, "Stop following") }</button>
+			</p>
+		</div>
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Follow an album shared with me") }</summary>
+		<div hx-get="fragments/follow-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<p class="meta">{ t(ctx, "Loading the albums shared with you...") }</p>
+		</div>
+	</details>
+}
+
+// FollowForm is the form that follows an album shared with the person: which one, what to start with, where the copies go.
+templ FollowForm(albums []FollowOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "Nobody has shared an album with you yet.") }</p>
+	} else {
+		<form class="card offer-form" hx-post="rules/follow" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<p class="meta">{ t(ctx, "What others add to the album is offered to you with pictures, to add to your library, and once you have said Always three times you can let it add photos by itself.") }</p>
+			<div class="field">
+				<label for="follow-album">{ t(ctx, "Which album") }</label>
+				<select id="follow-album" name="album_id">
+					for _, a := range albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+			<div class="field">
+				<label><input type="radio" name="history" value="new" checked/> { t(ctx, "Only what is added from now on") }</label>
+				<label><input type="radio" name="history" value="all"/> { t(ctx, "What is in it now, and what is added") }</label>
+			</div>
+			<div class="field">
+				<label for="follow-dest">{ t(ctx, "Where the copies go") }</label>
+				<select id="follow-dest" name="dest">
+					<option value="tag">{ t(ctx, "In my library, tagged with who shared it") }</option>
+					<option value="plain">{ t(ctx, "In my library") }</option>
+					<option value="album">{ t(ctx, "In an album") }</option>
+				</select>
+				<input name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "the name of the album, when the copies go to one") } aria-label={ t(ctx, "The name of a new album") }/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Follow this album") }</button></p>
+		</form>
+	}
 }
 
 // PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
@@ -4131,10 +4210,15 @@ templ RuleCities(cities []string) {
 // SuggestionReviewPage shows every photo a rule found, large enough to judge, with a tick on each. Ticked photos are sent, the
 // others are left out for good.
 templ SuggestionReviewPage(d SuggestionReview) {
-	@Layout(t(ctx, "Photos for {service}", "service", d.Service), d.User) {
+	@Layout(reviewTitle(ctx, d), d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
-		<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
-		<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Library {
+			<h1>{ t(ctx, "New in {album}", "album", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Photos added to the album {album}, shared by {owner}.", "album", d.Album, "owner", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else {
+			<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
+			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		}
 		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 			<input type="hidden" name="rule" value={ d.RuleID }/>
 			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
@@ -4149,9 +4233,14 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				}
 			</ul>
 			<p class="row form-actions">
-				<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Send the ticked photos") }</button>
-				if !d.Phrase {
-					<button type="submit" name="do" value="always">{ t(ctx, "Send the ticked photos, and always") }</button>
+				if d.Library {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked photos to my library") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked photos, and always") }</button>
+				} else {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Send the ticked photos") }</button>
+					if !d.Phrase {
+						<button type="submit" name="do" value="always">{ t(ctx, "Send the ticked photos, and always") }</button>
+					}
 				}
 				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
 			</p>
