@@ -1208,5 +1208,9 @@
   "other": "{n} фото пришло в {box}"
  },
  "Guests": "Гости",
- "into your library, from guests": "в вашу библиотеку, от гостей"
+ "into your library, from guests": "в вашу библиотеку, от гостей",
+ "Choose one of your albums, or type a new name and it is made.": "Выберите один из своих альбомов или введите новое название, и он будет создан.",
+ "No album": "Без альбома",
+ "or the name of a new album": "или название нового альбома",
+ "The name of a new album": "Название нового альбома"
 }

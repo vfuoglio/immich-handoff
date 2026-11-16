@@ -1112,5 +1112,9 @@
  "{who}: {photos} could not be handed over; the originals were kept and it will be retried": "{who}: {photos} no se pudieron entregar; se conservaron los originales y se reintentará",
  "{who}: {photos} refused, the receiver has them in the trash; the originals were kept": "{who}: {photos} rechazadas, el receptor las tiene en la papelera; se conservaron los originales",
  "{who}: {photos} wait for the daily limit": "{who}: {photos} esperan el límite diario",
- "{who}: {photos} wait for the daily limit, until {when}": "{who}: {photos} esperan el límite diario, hasta {when}"
+ "{who}: {photos} wait for the daily limit, until {when}": "{who}: {photos} esperan el límite diario, hasta {when}",
+ "Choose one of your albums, or type a new name and it is made.": "Elige uno de tus álbumes, o escribe un nombre nuevo y se creará.",
+ "No album": "Ningún álbum",
+ "or the name of a new album": "o el nombre de un álbum nuevo",
+ "The name of a new album": "El nombre de un álbum nuevo"
 }

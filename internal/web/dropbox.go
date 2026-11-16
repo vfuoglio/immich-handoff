@@ -648,6 +648,9 @@ func (w *Server) createDropBox(rw http.ResponseWriter, r *http.Request) {
 		p.GuestBook = r.PostFormValue("guestbook") == "1"
 		p.Gallery, p.GalleryDownload, p.GalleryNames = r.PostFormValue("gallery") == "1", r.PostFormValue("gallerydownload") == "1", r.PostFormValue("gallerynames") == "1"
 		p.Album, p.ExtraTag = r.PostFormValue("album"), r.PostFormValue("tag")
+		if strings.TrimSpace(p.Album) == "" { // an album chosen from the list, when no new name was typed
+			p.Album = r.PostFormValue("album_pick")
+		}
 		_, err = w.Hub.CreateDropBox(ctx, me.sess, me.user, p)
 		return err
 	})

@@ -19,7 +19,7 @@ func TestAlbumPickers(t *testing.T) {
 	_, bob, _, _ := bootstrap(t) // the albums are shared with a second person, as real ones are
 	mustOK(t, call(t, "POST", "/albums", keyAuth(alice), map[string]any{"albumName": "Empty one"}, nil), "empty album")
 	mustOK(t, call(t, "POST", "/albums", keyAuth(alice), map[string]any{"albumName": "Shared one", "description": "d", "albumUsers": []map[string]string{{"userId": bob.id, "role": "editor"}}}, nil), "shared album")
-	for _, f := range []string{"room-albums", "frame-albums", "share-albums", "share-albums?for=immich"} {
+	for _, f := range []string{"room-albums", "frame-albums", "share-albums", "share-albums?for=immich", "album-names"} {
 		req, _ := http.NewRequest("GET", "http://localhost:"+port+"/fragments/"+f, nil)
 		req.Header.Set("Cookie", owner)
 		res, err := http.DefaultClient.Do(req)
@@ -38,6 +38,13 @@ func TestAlbumPickers(t *testing.T) {
 	}
 	ctx := browse(t, port, owner, look{})
 	run(t, ctx, chromeNavigate("http://localhost:"+port+"/"))
+	until(t, ctx, "the drop box form lists the person's albums to choose from", `(() => {
+		const d = [...document.querySelectorAll('details.offer')].find(x => x.querySelector('#drop-name'));
+		if (!d) return false;
+		d.open = true;
+		const l = document.querySelector('#drop-album-pick');
+		return !!l && l.options.length > 1 && !!l.closest('form') && !l.closest('#flash');
+	})()`, 20*time.Second)
 	for _, c := range []struct{ what, field, sel string }{
 		{"client room", "#rm-name", "#rm-album"},
 		{"frame", "#fr-name", "#fr-album"},
