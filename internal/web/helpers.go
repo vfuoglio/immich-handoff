@@ -520,6 +520,14 @@ func sceneDir(s SceneStage) string {
 	return "in"
 }
 
+// sceneKind says whether a stage is a service or a drop box.
+func sceneKind(s SceneStage) string {
+	if s.Drop {
+		return "drop"
+	}
+	return "service"
+}
+
 func laneLabel(ctx context.Context, l SceneLane) string {
 	switch l.State {
 	case "broken":
@@ -596,6 +604,18 @@ func sceneOf(ctx context.Context, d *DashboardData, current []*syncer.Service) [
 			out = append(out, st)
 		}
 	}
+	// a drop box: one lane for whoever is sending, named as they send, and the box's total
+	for _, b := range d.DropBoxes {
+		if b.State == "revoked" {
+			continue
+		}
+		state := "flow"
+		if b.State == "paused" {
+			state = "paused"
+		}
+		out = append(out, SceneStage{Service: b.Name, Drop: true, Total: b.Files, Where: t(ctx, "into your library, from guests"),
+			Lanes: []SceneLane{{Name: t(ctx, "Guests"), State: state, PausedBy: "service"}}})
+	}
 	return out
 }
 
@@ -625,7 +645,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival":
 		return "ok"
 	}
 	return ""
@@ -676,7 +696,7 @@ var clientMessages = []string{
 	"Choose what the photo is for", "Could not send the message", "Record a voice message", "Record again", "Stop recording",
 	"The microphone is not available", "Thank you for your message!",
 	"Choose photos first", "Everything here was sent already", "Remove {name}", "Sending {done} of {total}", "Try again", "{n} file", "{n} file could not be sent",
-	"{n} file sent. Thank you!", "Only photos are taken here: {name} was left out",
+	"{n} file sent. Thank you!", "Only photos are taken here: {name} was left out", "A guest",
 }
 
 // clientCatalog is what the page hands its scripts: the language and the translated messages they use.

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LiveEvent } from "./live.ts";
-import { applyEvent, describe, flights, laneState, newFlags, stateText, wholeService } from "./scene.ts";
+import { applyEvent, describe, dropWho, flights, FLIGHT_MS, HIT_AT, laneState, newFlags, plusTiming, stateText, wholeService } from "./scene.ts";
 
 const at = "2026-11-06T21:00:00Z";
 const ev = (e: Partial<LiveEvent> & Pick<LiveEvent, "kind">): LiveEvent => ({ at, service: "club", sender: "Bob", ...e });
@@ -113,4 +113,22 @@ test("a big burst animates only a few tokens, and counts the rest without one", 
   assert.deepEqual(flights(3, 4), { shown: 3, extra: 0 });
   assert.deepEqual(flights(200, 4), { shown: 4, extra: 196 });
   assert.deepEqual(flights(0, 4), { shown: 1, extra: 0 });
+});
+
+test("the +N over a box's total starts before the photos hit, is full as they hit and fades after the total goes up", () => {
+  const w = plusTiming(FLIGHT_MS);
+  const hit = FLIGHT_MS * HIT_AT;
+  assert.ok(w.delay < hit, "it starts before the photos reach the box");
+  assert.ok(hit - w.delay >= 200 && hit - w.delay <= 500, "a fraction of a second before");
+  // fully visible at the hit, and still visible when the total goes up (the end of the flight)
+  assert.ok(w.delay + w.visibleAt * w.duration <= hit + 1, "fully visible by the hit");
+  assert.ok(w.delay + w.fadeFrom * w.duration >= FLIGHT_MS - 1, "it stays until the total has gone up");
+  assert.ok(w.visibleAt < w.fadeFrom && w.fadeFrom < 1, "then it fades out");
+  assert.ok(w.duration - w.fadeFrom * w.duration <= 400, "and quickly");
+});
+
+test("a drop box's lane names the guest who sent, or a guest", () => {
+  assert.equal(dropWho("Mia", "A guest"), "Mia");
+  assert.equal(dropWho("  ", "A guest"), "A guest");
+  assert.equal(dropWho(undefined, "A guest"), "A guest");
 });

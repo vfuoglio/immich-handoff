@@ -499,6 +499,9 @@ dialog.confirm p { margin: 0 0 1.1rem; }
 .gate .big { display: block; font: 800 clamp(2.2rem, 7vw, 3rem)/1 var(--font-display); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
 .gate .big.bump { animation: bump .5s; }
 @keyframes bump { 40% { transform: scale(1.12); color: var(--horizon); } }
+.gate .total { position: relative; }
+.gate .plus-box { position: absolute; left: 0; top: -1.7rem; height: 1.6rem; width: 100%; pointer-events: none; }
+.gate .plus { position: absolute; left: 0; top: 0; font: 800 1.15rem/1.6rem var(--font-display); letter-spacing: -.01em; color: var(--text); text-shadow: 0 0 14px color-mix(in oklab, var(--accent) 70%, transparent); white-space: nowrap; opacity: 0; }
 .gate .cl { display: block; font: 500 .68rem var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .scene-log { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; font-size: .88rem; color: var(--muted); }
 .scene-log li { animation: slide .35s; }

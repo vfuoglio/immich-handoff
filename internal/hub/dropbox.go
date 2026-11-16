@@ -22,6 +22,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
@@ -726,6 +727,72 @@ func (h *Hub) fileDrop(ctx context.Context, api *immich.API, b store.DropBox, id
 	}
 }
 
+// arrivalBurst is how long photos arriving in one box go on being one line of the host's Activity list.
+const arrivalBurst = 10 * time.Minute
+
+type arrivals struct {
+	mu    sync.Mutex
+	boxes map[string]*arrivalCount
+	drops map[string]*dropGroup
+}
+
+// dropGroup is what one guest has sent in the last moment, waiting to be told to the open pages as one drop.
+type dropGroup struct {
+	n     int
+	timer *time.Timer
+}
+
+// dropGroupWait is how long a guest's photos go on being one drop after the last one arrived.
+const dropGroupWait = 1500 * time.Millisecond
+
+type arrivalCount struct {
+	n    int
+	last time.Time
+}
+
+// noteArrival puts what guests send in the box's owner's Activity list as one line for each burst ("12 photos arrived in
+// Mia's birthday"), kept up to date as more arrive, and tells the open pages with one live event for each guest's drop (the
+// photos sent together), so the live scene can fly them into the box. It is a line of the log and a live event only:
+// nobody is notified for each photo.
+func (h *Hub) noteArrival(ctx context.Context, b store.DropBox, guestName string) {
+	h.arrived.mu.Lock()
+	if h.arrived.boxes == nil {
+		h.arrived.boxes = map[string]*arrivalCount{}
+	}
+	a := h.arrived.boxes[b.ID]
+	if a == nil || time.Since(a.last) > arrivalBurst {
+		a = &arrivalCount{}
+		h.arrived.boxes[b.ID] = a
+	}
+	a.n++
+	a.last = time.Now()
+	n := a.n
+	// the photos one guest sends within a moment are one drop
+	key := b.ID + "|" + guestName
+	if h.arrived.drops == nil {
+		h.arrived.drops = map[string]*dropGroup{}
+	}
+	g := h.arrived.drops[key]
+	if g == nil {
+		g = &dropGroup{}
+		h.arrived.drops[key] = g
+		g.timer = time.AfterFunc(dropGroupWait, func() {
+			h.arrived.mu.Lock()
+			count := g.n
+			delete(h.arrived.drops, key)
+			h.arrived.mu.Unlock()
+			h.Bus.Publish(live.Event{Kind: live.Handed, Service: b.Name, Sender: guestName, Count: count}.To(b.OwnerID))
+		})
+	}
+	g.n++
+	g.timer.Reset(dropGroupWait)
+	h.arrived.mu.Unlock()
+	text := i18n.PackN("{n} photo arrived in {box}", "{n} photos arrived in {box}", n, "box", b.Name)
+	if err := h.Store.BumpEvent(ctx, store.Event{Service: b.Name, UserID: b.OwnerID, Kind: "arrival", Text: text}, arrivalBurst); err != nil {
+		h.Log.Warn("could not write the activity log", "err", err)
+	}
+}
+
 // kept does the bookkeeping for a file that is now in the library: the summary's counts, the log, the guest's hourly
 // allowance and the check for a flood. Bytes are counted here unless they already were (a file that waited).
 func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int64, countBytes bool, prompt, guestName string, asset uuid.UUID) {
@@ -738,6 +805,7 @@ func (h *Hub) kept(ctx context.Context, b store.DropBox, who, name string, n int
 		_ = h.Store.AddDropBytes(c, b.ID, n)
 	}
 	_ = h.Store.RecordDropArrival(c, b.ID, who, time.Now())
+	h.noteArrival(c, b, guestName)
 	h.dropEvent(ctx, b.ID, store.DropUploaded, i18n.Pack("{file} arrived ({size} MB)", "file", name, "size", fmt.Sprintf("%.1f", float64(n)/(1<<20))), who)
 	h.checkBurst(ctx, b)
 	g := &h.drop

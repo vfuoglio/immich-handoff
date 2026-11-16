@@ -868,6 +868,11 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
 }
 
+// hasDropBoxes says whether the person has a drop box of their own, which makes them a host the live scene is for.
+func (w *Server) hasDropBoxes(ctx context.Context, me *member) bool {
+	return w.Hub != nil && w.Hub.SelfService() && len(w.dropBoxViews(ctx, me)) > 0
+}
+
 // requireMember is for fragments and streams: sign-in plus taking part in at least one service.
 func (w *Server) requireMember(rw http.ResponseWriter, r *http.Request) *member {
 	me, code, msg := w.authenticate(r)
@@ -960,13 +965,19 @@ func (w *Server) countFragment(rw http.ResponseWriter, r *http.Request) {
 
 // sceneFragment is the live scene again, asked for when the page learns it missed something or the stream came back.
 func (w *Server) sceneFragment(rw http.ResponseWriter, r *http.Request) {
-	me := w.requireMember(rw, r)
+	me, code, msg := w.authenticate(r)
 	if me == nil {
+		http.Error(rw, msg, code)
 		return
 	}
 	d := DashboardData{Services: w.servicesFor(r.Context(), me)}
 	if w.Hub != nil && w.Hub.SelfService() {
 		d.Owned = w.ownedViews(r.Context(), me)
+		d.DropBoxes = w.dropBoxViews(r.Context(), me)
+	}
+	if len(d.Services) == 0 && len(d.DropBoxes) == 0 { // a person with only a drop box is a host too
+		http.Error(rw, "you do not take part in any service", http.StatusForbidden)
+		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	Scene(sceneOf(r.Context(), &d, w.S.Current())).Render(r.Context(), rw)
@@ -1019,7 +1030,7 @@ func (w *Server) events(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// people who take part in a service, and the Immich administrator (who sees everything), may listen
-	if !me.user.IsAdmin && len(w.servicesFor(r.Context(), me)) == 0 {
+	if !me.user.IsAdmin && len(w.servicesFor(r.Context(), me)) == 0 && !w.hasDropBoxes(r.Context(), me) {
 		http.Error(rw, "you do not take part in any service", http.StatusForbidden)
 		return
 	}

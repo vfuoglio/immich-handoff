@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/vfuoglio/immich-handoff/internal/store"
+	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
 func lane(t *testing.T, body, sender string) (state, paused, label string) {
@@ -123,5 +124,17 @@ func TestEachStageSaysWhichWayThePhotosFly(t *testing.T) {
 	sender := get(t, app.URL, "sess=other")
 	if !regexp.MustCompile(`data-stage data-service="[^"]*" data-dir="out"`).MatchString(sender) {
 		t.Errorf("a sender's photos fly out: %.300s", sender)
+	}
+}
+
+func TestADropBoxIsAStageWithOneLaneTheTotalAndAPlaceForThePlusN(t *testing.T) {
+	var sb strings.Builder
+	web.Scene([]web.SceneStage{{Service: "Mia's birthday", Drop: true, Total: 12, Where: "into your library, from guests",
+		Lanes: []web.SceneLane{{Name: "Guests", State: "flow"}}}}).Render(context.Background(), &sb)
+	got := sb.String()
+	for _, want := range []string{`data-kind="drop"`, `data-start="12"`, `data-service="Mia&#39;s birthday"`, `data-plus`, `class="plus-box"`, `data-arrived`, ">12<", "Guests"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the drop box's stage lacks %q: %s", want, got)
+		}
 	}
 }

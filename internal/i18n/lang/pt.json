@@ -172,6 +172,7 @@
  "Go to {view}": "Ir para {view}",
  "Good to know": "Bom saber",
  "Grid": "Grelha",
+ "Guests": "Convidados",
  "Guests may look at the photos and heart them": "Os convidados podem ver as fotos e dar-lhes um coração",
  "Hand over": "Entregar",
  "Hand over a whole album": "Entregar um álbum inteiro",
@@ -772,6 +773,7 @@
  "in your inbox": "na sua caixa de entrada",
  "inbox": "caixa de entrada",
  "into your library": "na sua biblioteca",
+ "into your library, from guests": "para a tua biblioteca, de convidados",
  "joining a pool means every photo you tag goes to everyone in it, and everyone's photos come to you: say that you understand": "entrar num pool significa que cada foto que você marca vai para todos nele, e as fotos de todos vêm para você: diga que entendeu",
  "keeps originals": "mantém os originais",
  "landscape only": "somente paisagem",
@@ -1010,6 +1012,10 @@
  "{n} photo arrived in your Immich": {
   "one": "{n} foto chegou ao seu Immich",
   "other": "{n} fotos chegaram ao seu Immich"
+ },
+ "{n} photo arrived in {box}": {
+  "one": "{n} foto chegou a {box}",
+  "other": "{n} fotos chegaram a {box}"
  },
  "{n} photo chosen": {
   "one": "{n} foto escolhida",
