@@ -261,14 +261,14 @@ func TestTheButtonKnowsWhereThePersonsCopiesGoAndRemembersAChoice(t *testing.T) 
 	var st *store.Store
 	app, _ := setup(t, withClub(t, &st))
 	_, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
-	if !strings.Contains(body, `"library":{"album":"","dest":"tag"}`) {
+	if !strings.Contains(body, `"library":{"album":"","chosen":false,"dest":"tag"}`) {
 		t.Errorf("a tag until they choose: %s", body)
 	}
 	if code, b := postForm(t, app.URL+"/immich/add", "sess=other", "dest=album&album=From+Alice&remember=1&asset="+myPhoto); code != 200 {
 		t.Fatalf("%d %s", code, b)
 	}
 	_, body = do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
-	if !strings.Contains(body, `"library":{"album":"From Alice","dest":"album"}`) {
+	if !strings.Contains(body, `"library":{"album":"From Alice","chosen":true,"dest":"album"}`) {
 		t.Errorf("remembered after a press that asked for it: %s", body)
 	}
 	if code, _ := postForm(t, app.URL+"/immich/add", "sess=other", "dest=plain&asset="+myPhoto); code != 200 {
@@ -289,7 +289,7 @@ func TestAPersonSetsWhereCopiesGoOnTheirPage(t *testing.T) {
 		t.Fatalf("saving: %d", code)
 	}
 	_, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
-	if !strings.Contains(body, `"album":"Trip","dest":"album"`) {
+	if !strings.Contains(body, `"album":"Trip","chosen":true,"dest":"album"`) {
 		t.Errorf("the chosen album: %s", body)
 	}
 	if code, _ := postForm(t, app.URL+"/me/library", "sess=other", "dest=album"); code != 409 {

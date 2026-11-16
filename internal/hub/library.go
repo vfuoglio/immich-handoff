@@ -380,12 +380,18 @@ func (h *Hub) UndoAddToLibrary(ctx context.Context, sess *immich.API, user immic
 // LibraryDefault is where the person's copies go unless the button is told otherwise: what they chose to remember, or a
 // tag naming who shared the photo.
 func (h *Hub) LibraryDefault(ctx context.Context, user uuid.UUID) LibraryDest {
+	d, _ := h.LibraryChoice(ctx, user)
+	return d
+}
+
+// LibraryChoice is LibraryDefault, and whether the person has made the choice (the button asks only until they have).
+func (h *Hub) LibraryChoice(ctx context.Context, user uuid.UUID) (LibraryDest, bool) {
 	if h != nil && h.Store != nil {
 		if p, ok, err := h.Store.LibraryPref(ctx, user); err == nil && ok {
-			return LibraryDest{Kind: p.Dest, Album: p.Album}
+			return LibraryDest{Kind: p.Dest, Album: p.Album}, true
 		}
 	}
-	return LibraryDest{Kind: LibraryTag}
+	return LibraryDest{Kind: LibraryTag}, false
 }
 
 // SetLibraryDefault remembers where the person's copies go.

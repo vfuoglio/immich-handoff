@@ -21,11 +21,67 @@ export interface Offer {
   pending: boolean;
 }
 
+/** Where "Add to my library" puts copies: the person's saved choice (chosen), or the default until they choose. */
+export interface LibraryChoice {
+  dest: string; // "tag", "plain" or "album"
+  album: string;
+  chosen: boolean;
+}
+
 /** What the app sends when the button first shows. */
 export interface Info {
   words: Record<string, string>;
   services: Service[];
   offers?: Offer[];
+  library?: LibraryChoice;
+}
+
+/** Whose a photo is, for the person looking: their own, or someone else's they can see (a shared album, a partner). */
+export type Owner = "mine" | "other";
+
+/** The photos by who owns them; `unknown` are the ones the app has not been asked about yet. */
+export interface Split {
+  mine: string[];
+  others: string[];
+  unknown: string[];
+}
+
+/** Sorts photos by what is known of them, keeping their order. */
+export function splitOwned(ids: string[], known: ReadonlyMap<string, Owner>): Split {
+  const out: Split = { mine: [], others: [], unknown: [] };
+  for (const id of ids) {
+    const who = known.get(id);
+    if (who === "mine") out.mine.push(id);
+    else if (who === "other") out.others.push(id);
+    else out.unknown.push(id);
+  }
+  return out;
+}
+
+/**
+ * Which buttons to show: Hand over when some of the photos are the person's own, Add to my library when some are
+ * someone else's; both for a mix, each acting on its own part. Nothing is shown until every photo is known, so the
+ * wrong button never flashes.
+ */
+export function choose(s: Split): { hand: boolean; add: boolean } {
+  if (s.unknown.length > 0 || s.mine.length + s.others.length === 0) return { hand: false, add: false };
+  return { hand: s.mine.length > 0, add: s.others.length > 0 };
+}
+
+/** The question "which of these are mine?": one `asset` for each photo. */
+export function ownedQuery(ids: string[]): URLSearchParams {
+  const q = new URLSearchParams();
+  for (const id of ids) q.append("asset", id);
+  return q;
+}
+
+/** The form for adding to the library: the photos and where the copies go, and whether to remember that. */
+export function addForm(assets: string[], dest: string, album: string, remember: boolean): URLSearchParams {
+  const form = new URLSearchParams({ dest });
+  if (dest === "album") form.set("album", album);
+  if (remember) form.set("remember", "1");
+  for (const a of assets) form.append("asset", a);
+  return form;
 }
 
 /** The services, the one used last first, so that the usual choice is the first and the one the keyboard lands on. */

@@ -34,6 +34,8 @@ func buttonWords(ctx context.Context) map[string]string {
 		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Handing over...", "Could not hand over", "Ask to join", "Waiting for approval", "Last used", "Forget my choice",
 		"Your original stays in your library", "Your original goes to your trash once the other side has a copy",
 		"You do not send to any service yet.", "Taken off again", "Immich Handoff",
+		"Add to my library", "Adding to your library...", "Could not add", "Where should it go?", "In my library, tagged with who shared it",
+		"In my library", "In an album", "Remember this choice", "Choose an album", "or the name of a new album", "Add here", "Could not list your albums", "Try again",
 	}
 	out := make(map[string]string, len(ids))
 	for _, id := range ids {
@@ -97,9 +99,9 @@ func (w *Server) buttonInfo(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, msg, code)
 		return
 	}
-	def := w.Hub.LibraryDefault(r.Context(), me.user.ID)
+	def, chosen := w.Hub.LibraryChoice(r.Context(), me.user.ID)
 	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me),
-		"library": map[string]string{"dest": def.Kind, "album": def.Album}})
+		"library": map[string]any{"dest": def.Kind, "album": def.Album, "chosen": chosen}})
 }
 
 func (w *Server) buttonSend(rw http.ResponseWriter, r *http.Request) {
