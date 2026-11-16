@@ -955,3 +955,12 @@ func deletionText(ctx context.Context, d string) string {
 
 func receivePermissions() string { return strings.Join(bridge.SharedReceivePermissions, ", ") }
 func twoWayPermissions() string  { return strings.Join(bridge.SharedTwoWayExtra, ", ") }
+
+// libraryTrigger says when the card's list of albums is fetched: at once when the person's choice is an album, otherwise
+// the first time they pick that choice.
+func libraryTrigger(l LibraryView) string {
+	if l.Dest == "album" {
+		return "load"
+	}
+	return "click from:#lib-dest-album once"
+}

@@ -256,3 +256,50 @@ func TestTheNewRoutesFollowTheSwitchOfTheButton(t *testing.T) {
 		}
 	}
 }
+
+func TestTheButtonKnowsWhereThePersonsCopiesGoAndRemembersAChoice(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	_, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
+	if !strings.Contains(body, `"library":{"album":"","dest":"tag"}`) {
+		t.Errorf("a tag until they choose: %s", body)
+	}
+	if code, b := postForm(t, app.URL+"/immich/add", "sess=other", "dest=album&album=From+Alice&remember=1&asset="+myPhoto); code != 200 {
+		t.Fatalf("%d %s", code, b)
+	}
+	_, body = do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
+	if !strings.Contains(body, `"library":{"album":"From Alice","dest":"album"}`) {
+		t.Errorf("remembered after a press that asked for it: %s", body)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add", "sess=other", "dest=plain&asset="+myPhoto); code != 200 {
+		t.Fatal(code)
+	}
+	if _, body = do(t, "GET", app.URL+"/immich/services", "sess=other", nil); !strings.Contains(body, `"dest":"album"`) {
+		t.Errorf("a press that does not say remember changes nothing: %s", body)
+	}
+}
+
+func TestAPersonSetsWhereCopiesGoOnTheirPage(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	if _, page := do(t, "GET", app.URL+"/", "sess=other", nil); !strings.Contains(page, "Add to my library") || !strings.Contains(page, `hx-post="me/library"`) {
+		t.Errorf("the card is on the page")
+	}
+	if code, _ := postForm(t, app.URL+"/me/library", "sess=other", "dest=album&album=&album_pick=Trip"); code != 204 {
+		t.Fatalf("saving: %d", code)
+	}
+	_, body := do(t, "GET", app.URL+"/immich/services", "sess=other", nil)
+	if !strings.Contains(body, `"album":"Trip","dest":"album"`) {
+		t.Errorf("the chosen album: %s", body)
+	}
+	if code, _ := postForm(t, app.URL+"/me/library", "sess=other", "dest=album"); code != 409 {
+		t.Errorf("an album without a name: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/me/library", "", "dest=plain"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	off, _ := setup(t, withClub(t, &st), func(s *web.Server) { s.ButtonOff = true })
+	if code, _ := postForm(t, off.URL+"/me/library", "sess=other", "dest=plain"); code != 404 {
+		t.Errorf("switched off: %d", code)
+	}
+}

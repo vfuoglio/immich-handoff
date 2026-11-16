@@ -516,3 +516,28 @@ func TestUndoAddToLibraryRefusesWhatIsNotTheirsTooOldOrFiledInAnotherAlbum(t *te
 		t.Errorf("an album that is the destination does not protect the copy: %d %v", n, err)
 	}
 }
+
+func TestTheDefaultPlaceForCopiesIsATagUntilThePersonChoosesAndIsRemembered(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	if d := e.h.LibraryDefault(ctx, bobID); d.Kind != hub.LibraryTag || d.Album != "" {
+		t.Fatalf("before any choice: %+v", d)
+	}
+	if err := e.h.SetLibraryDefault(ctx, bobID, hub.LibraryDest{Kind: hub.LibraryAlbum, Album: "  From Ann "}); err != nil {
+		t.Fatal(err)
+	}
+	if d := e.h.LibraryDefault(ctx, bobID); d.Kind != hub.LibraryAlbum || d.Album != "From Ann" {
+		t.Errorf("remembered, trimmed: %+v", d)
+	}
+	if err := e.h.SetLibraryDefault(ctx, bobID, hub.LibraryDest{Kind: hub.LibraryPlain, Album: "left over"}); err != nil {
+		t.Fatal(err)
+	}
+	if d := e.h.LibraryDefault(ctx, bobID); d.Kind != hub.LibraryPlain || d.Album != "" {
+		t.Errorf("an album name does not stay when the choice is not an album: %+v", d)
+	}
+	if err := e.h.SetLibraryDefault(ctx, bobID, hub.LibraryDest{Kind: "nowhere"}); !errors.Is(err, hub.ErrBadLibrary) {
+		t.Errorf("a choice that does not exist: %v", err)
+	}
+	if d := e.h.LibraryDefault(ctx, annID); d.Kind != hub.LibraryTag {
+		t.Errorf("someone else is not affected: %+v", d)
+	}
+}

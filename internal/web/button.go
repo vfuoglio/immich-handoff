@@ -97,7 +97,9 @@ func (w *Server) buttonInfo(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, msg, code)
 		return
 	}
-	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me)})
+	def := w.Hub.LibraryDefault(r.Context(), me.user.ID)
+	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me),
+		"library": map[string]string{"dest": def.Kind, "album": def.Album}})
 }
 
 func (w *Server) buttonSend(rw http.ResponseWriter, r *http.Request) {
@@ -183,6 +185,11 @@ func (w *Server) buttonAdd(rw http.ResponseWriter, r *http.Request) {
 		res, err := w.Hub.AddToLibrary(ctx, me.sess, me.user, assets, dest)
 		if err != nil {
 			return nil, err
+		}
+		if r.PostFormValue("remember") == "1" {
+			if err := w.Hub.SetLibraryDefault(ctx, me.user.ID, dest); err != nil {
+				w.Log.Warn("could not remember where copies go", "user", me.user.Email, "err", err)
+			}
 		}
 		copies := make([]string, 0, len(res.Copies))
 		for _, c := range res.Copies {

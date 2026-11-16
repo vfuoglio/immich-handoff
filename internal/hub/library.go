@@ -13,6 +13,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
 // Where a copy made by "Add to my library" goes in the person's own library.
@@ -374,4 +375,30 @@ func (h *Hub) UndoAddToLibrary(ctx context.Context, sess *immich.API, user immic
 		return 0, err
 	}
 	return removed, nil
+}
+
+// LibraryDefault is where the person's copies go unless the button is told otherwise: what they chose to remember, or a
+// tag naming who shared the photo.
+func (h *Hub) LibraryDefault(ctx context.Context, user uuid.UUID) LibraryDest {
+	if h != nil && h.Store != nil {
+		if p, ok, err := h.Store.LibraryPref(ctx, user); err == nil && ok {
+			return LibraryDest{Kind: p.Dest, Album: p.Album}
+		}
+	}
+	return LibraryDest{Kind: LibraryTag}
+}
+
+// SetLibraryDefault remembers where the person's copies go.
+func (h *Hub) SetLibraryDefault(ctx context.Context, user uuid.UUID, d LibraryDest) error {
+	d, err := checkLibraryDest(d)
+	if err != nil {
+		return err
+	}
+	if h.Store == nil {
+		return nil
+	}
+	if d.Kind != LibraryAlbum {
+		d.Album = ""
+	}
+	return h.Store.SetLibraryPref(ctx, user, store.LibraryPref{Dest: d.Kind, Album: d.Album})
 }
