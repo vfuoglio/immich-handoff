@@ -289,6 +289,35 @@ func (a *API) OwnedAlbums(ctx context.Context) ([]AlbumInfo, error) {
 	return out, nil
 }
 
+// SharedAlbumInfo is an album someone else shared with this account.
+type SharedAlbumInfo struct {
+	ID    openapi_types.UUID
+	Name  string
+	Count int
+	Owner string // the name of the person who owns it
+}
+
+// AlbumsSharedWithMe lists the albums that other people shared with this account (not the account's own).
+func (a *API) AlbumsSharedWithMe(ctx context.Context) ([]SharedAlbumInfo, error) {
+	owned := false
+	r, err := a.c.GetAllAlbumsWithResponse(ctx, &GetAllAlbumsParams{IsOwned: &owned})
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getAllAlbums", r.StatusCode(), r.Body)
+	}
+	out := make([]SharedAlbumInfo, 0, len(*r.JSON200))
+	for _, al := range *r.JSON200 {
+		owner := ""
+		if len(al.AlbumUsers) > 0 { // the first entry is always the album's owner
+			owner = al.AlbumUsers[0].User.Name
+		}
+		out = append(out, SharedAlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, Owner: owner})
+	}
+	return out, nil
+}
+
 // AlbumAssets lists the photos in an album (trashed ones are not included), all pages.
 func (a *API) AlbumAssets(ctx context.Context, album openapi_types.UUID) ([]AssetResponseDto, error) {
 	return a.Search(ctx, MetadataSearchDto{AlbumIds: &[]openapi_types.UUID{album}})

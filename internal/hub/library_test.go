@@ -29,6 +29,7 @@ type libFake struct {
 	assets  map[string]*libAsset
 	visible map[string]map[string]bool // asset id -> people besides the owner who can see it
 	tags    map[string]string          // tag id -> name
+	keys    map[string][]string        // key id -> permissions
 	albums  map[string]*libAlbum
 	uploads []libUpload
 	deleted []string
@@ -48,6 +49,7 @@ type libAsset struct {
 type libAlbum struct {
 	owner, name string
 	members     map[string]bool
+	sharedWith  map[string]bool // people the album is shared with
 }
 
 type libUpload struct {
@@ -59,7 +61,7 @@ type libUpload struct {
 }
 
 func newLibFake() *libFake {
-	return &libFake{assets: map[string]*libAsset{}, visible: map[string]map[string]bool{}, tags: map[string]string{}, albums: map[string]*libAlbum{}}
+	return &libFake{assets: map[string]*libAsset{}, visible: map[string]map[string]bool{}, tags: map[string]string{}, keys: map[string][]string{}, albums: map[string]*libAlbum{}}
 }
 
 // shared adds a photo of ann's that bob can see.
@@ -236,11 +238,66 @@ func (f *libFake) handler() http.Handler {
 		defer f.mu.Unlock()
 		out := []any{}
 		for id, al := range f.albums {
-			if al.owner == who(r) && (r.URL.Query().Get("name") == "" || r.URL.Query().Get("name") == al.name) {
+			mine := al.owner == who(r)
+			if r.URL.Query().Get("isOwned") == "false" { // shared with me
+				if !mine && al.sharedWith[who(r)] {
+					out = append(out, map[string]any{"id": id, "albumName": al.name, "assetCount": len(al.members),
+						"albumUsers": []any{map[string]any{"role": "editor", "user": map[string]any{"id": people[al.owner], "name": names[al.owner], "email": al.owner + "@x.test", "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""}}}})
+				}
+				continue
+			}
+			if mine && (r.URL.Query().Get("name") == "" || r.URL.Query().Get("name") == al.name) {
 				out = append(out, map[string]any{"id": id, "albumName": al.name, "assetCount": len(al.members)})
 			}
 		}
 		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
+		p := who(r)
+		if people[p] == "" {
+			http.Error(w, "no", 401)
+			return
+		}
+		j(w, 200, map[string]any{"id": people[p], "name": names[p], "email": p + "@x.test"})
+	})
+	mux.HandleFunc("POST /api/api-keys", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name        string   `json:"name"`
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		id := uuid.NewString()
+		f.keys[id] = body.Permissions
+		j(w, 201, map[string]any{"id": id, "name": body.Name, "secret": "secret-" + id, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
+			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("GET /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		perms, ok := f.keys[r.PathValue("id")]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": perms, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("PUT /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.keys[r.PathValue("id")] = body.Permissions
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		delete(f.keys, r.PathValue("id"))
+		w.WriteHeader(204)
 	})
 	mux.HandleFunc("POST /api/albums", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
