@@ -73,8 +73,9 @@ test("the buttons are chosen by whose the photos are", () => {
   assert.deepEqual(choose({ mine: ["a"], others: ["b"], unknown: [] }), { hand: true, add: true }, "a mix shows both");
 });
 
-test("nothing shows until every photo is known, or when none can be read", () => {
-  assert.deepEqual(choose({ mine: ["a"], others: [], unknown: ["x"] }), { hand: false, add: false });
+test("photos not answered about yet do not count, and nothing shows while none is known", () => {
+  assert.deepEqual(choose({ mine: ["a"], others: [], unknown: ["x"] }), { hand: true, add: false }, "a showing button stays while the next photo is asked about");
+  assert.deepEqual(choose({ mine: [], others: [], unknown: ["x"] }), { hand: false, add: false });
   assert.deepEqual(choose({ mine: [], others: [], unknown: [] }), { hand: false, add: false });
 });
 

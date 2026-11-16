@@ -60,11 +60,11 @@ export function splitOwned(ids: string[], known: ReadonlyMap<string, Owner>): Sp
 
 /**
  * Which buttons to show: Hand over when some of the photos are the person's own, Add to my library when some are
- * someone else's; both for a mix, each acting on its own part. Nothing is shown until every photo is known, so the
- * wrong button never flashes.
+ * someone else's; both for a mix, each acting on its own part. Photos the app has not answered about yet do not count,
+ * so a button that is showing stays while the next photo of a selection is asked about, and nothing shows while none
+ * is known (the wrong button never flashes).
  */
 export function choose(s: Split): { hand: boolean; add: boolean } {
-  if (s.unknown.length > 0 || s.mine.length + s.others.length === 0) return { hand: false, add: false };
   return { hand: s.mine.length > 0, add: s.others.length > 0 };
 }
 
