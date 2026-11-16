@@ -146,3 +146,114 @@ func TestARuleSaysSoWhenTheAlbumIsNotSharedAnyMore(t *testing.T) {
 		t.Error("the rule shows what is wrong")
 	}
 }
+
+// newlyAdded is a photo of ann's that she adds to the album after bob follows it.
+func (f *libFake) newlyAdded(album, name, data string) *libAsset {
+	p := f.shared(name, data)
+	f.albums[album].members[p.id] = true
+	return p
+}
+
+func TestSendCopiesTheOfferedPhotosIntoTheLibraryAndNotTheseLeavesThemOut(t *testing.T) {
+	h, f, sess, st := followSetup(t)
+	ctx := context.Background()
+	album := f.sharedAlbum("Trip")
+	r, err := h.FollowAlbum(ctx, sess, bob, hub.FollowParams{Album: uuid.MustParse(album), Dest: hub.LibraryDest{Kind: hub.LibraryPlain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := f.newlyAdded(album, "a.jpg", "aaa"), f.newlyAdded(album, "b.jpg", "bbb")
+	if n, _ := h.LookRule(ctx, r); n != 2 {
+		t.Fatalf("two offered: %d", n)
+	}
+	if err := h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerSend, []string{a.id}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.bobCopies(); len(got) != 1 || string(got[0].data) != "aaa" {
+		t.Fatalf("only the ticked photo is copied, into bob's library: %+v", got)
+	}
+	states, _ := st.RulePhotoStates(ctx, r.ID)
+	if states[a.id] != store.RuleSent || states[b.id] != store.RuleDeclined {
+		t.Errorf("the ticked one is sent, the other left out for good: %v", states)
+	}
+	if n, _ := h.LookRule(ctx, r); n != 0 {
+		t.Errorf("a photo that was answered is not offered again: %d", n)
+	}
+	// a decline copies nothing
+	c := f.newlyAdded(album, "c.jpg", "ccc")
+	h.LookRule(ctx, r)
+	if err := h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerDecline, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.bobCopies()) != 1 {
+		t.Error("Not these must copy nothing")
+	}
+	if st, _ := st.RulePhotoStates(ctx, r.ID); st[c.id] != store.RuleDeclined {
+		t.Errorf("declined: %v", st)
+	}
+}
+
+func TestAfterThreeAlwaysTheRuleCopiesWhatIsAddedByItself(t *testing.T) {
+	h, f, sess, st := followSetup(t)
+	ctx := context.Background()
+	album := f.sharedAlbum("Trip")
+	r, _ := h.FollowAlbum(ctx, sess, bob, hub.FollowParams{Album: uuid.MustParse(album), Dest: hub.LibraryDest{Kind: hub.LibraryTag}})
+	if err := h.SetRuleAuto(ctx, bob, r.ID, true); !errors.Is(err, hub.ErrAutoTooSoon) {
+		t.Fatalf("not before three Always: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		f.newlyAdded(album, "p"+string(rune('a'+i))+".jpg", "photo-"+string(rune('a'+i)))
+		h.LookRule(ctx, r)
+		if err := h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerAlways, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(f.bobCopies()) != 3 {
+		t.Fatalf("three Always, three copies: %d", len(f.bobCopies()))
+	}
+	if err := h.SetRuleAuto(ctx, bob, r.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.RuleByID(ctx, r.ID)
+	f.newlyAdded(album, "auto.jpg", "added-after")
+	if n, err := h.LookRule(ctx, got); err != nil || n != 1 {
+		t.Fatalf("one new photo: %d %v", n, err)
+	}
+	if len(f.bobCopies()) != 4 {
+		t.Fatalf("it is copied without asking: %d", len(f.bobCopies()))
+	}
+	if w, _ := st.RulePhotos(ctx, r.ID, store.RuleSuggested); len(w) != 0 {
+		t.Errorf("nothing waits: %+v", w)
+	}
+	for _, c := range f.bobCopies() {
+		if len(c.tags) != 1 || c.tags[0] != "from/Ann" {
+			t.Errorf("each copy is tagged with who shared it: %v", c.tags)
+		}
+	}
+}
+
+func TestStoppingTheLastFollowedAlbumDeletesTheKeyAndAServiceRuleIsUnaffected(t *testing.T) {
+	h, f, sess, st := followSetup(t)
+	ctx := context.Background()
+	album := f.sharedAlbum("Trip")
+	r, _ := h.FollowAlbum(ctx, sess, bob, hub.FollowParams{Album: uuid.MustParse(album), Dest: hub.LibraryDest{Kind: hub.LibraryPlain}})
+	send, err := st.AddRule(ctx, store.Rule{OwnerID: bobID, Service: "family", Cond: store.RuleCond{Phrase: "dog"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.DeleteRuleWith(ctx, sess, bob, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := st.LibraryKey(ctx, bobID); ok {
+		t.Error("the key goes when the last followed album does")
+	}
+	if len(f.keys) != 0 {
+		t.Errorf("it is deleted in the person's Immich: %d keys left", len(f.keys))
+	}
+	if _, err := st.RuleByID(ctx, send.ID); err != nil {
+		t.Error("a rule that sends to a service stays")
+	}
+	if err := h.DeleteRuleWith(ctx, sess, ann, r.ID); !errors.Is(err, hub.ErrNoRule) {
+		t.Errorf("someone else's rule: %v", err)
+	}
+}

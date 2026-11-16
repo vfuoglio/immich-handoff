@@ -64,6 +64,12 @@ type LibraryResult struct {
 // description, rating, location and a live photo's clip, and the owner is not asked or told. Photos that are the
 // person's own are left alone. A photo already copied (the same file) is counted, not copied twice.
 func (h *Hub) AddToLibrary(ctx context.Context, sess *immich.API, user immich.User, assets []string, dest LibraryDest) (LibraryResult, error) {
+	return h.addToLibrary(ctx, sess, user, assets, dest, false)
+}
+
+// addToLibrary is AddToLibrary; quiet leaves out the line of the activity log, for a caller (a rule that follows an album)
+// that writes its own.
+func (h *Hub) addToLibrary(ctx context.Context, sess *immich.API, user immich.User, assets []string, dest LibraryDest, quiet bool) (LibraryResult, error) {
 	var res LibraryResult
 	ids, err := photoIDs(assets)
 	if err != nil {
@@ -105,7 +111,7 @@ func (h *Hub) AddToLibrary(ctx context.Context, sess *immich.API, user immich.Us
 			res.Note = note
 		}
 	}
-	if res.Added > 0 {
+	if res.Added > 0 && !quiet {
 		h.event(ctx, "", user.ID, "library", i18n.PackN("{n} photo added to your library from Immich", "{n} photos added to your library from Immich", res.Added))
 	}
 	return res, nil

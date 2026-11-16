@@ -268,6 +268,6 @@ func (h *Hub) copyForRule(ctx context.Context, r store.Rule, assets []string) er
 	if err != nil {
 		return err
 	}
-	_, err = h.AddToLibrary(ctx, api, me, assets, LibraryDest{Kind: r.Dest, Album: r.DestAlbum})
+	_, err = h.addToLibrary(ctx, api, me, assets, LibraryDest{Kind: r.Dest, Album: r.DestAlbum}, true)
 	return err
 }

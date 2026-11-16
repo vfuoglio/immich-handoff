@@ -225,7 +225,7 @@ func (w *Server) pauseRule(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) deleteRule(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "rule ended", func(ctx context.Context, me *member, _ string) error {
-		return w.Hub.DeleteRule(ctx, me.user, r.PostFormValue("rule"))
+		return w.Hub.DeleteRuleWith(ctx, me.sess, me.user, r.PostFormValue("rule"))
 	})
 }
 
