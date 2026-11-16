@@ -122,7 +122,7 @@ Not ready to install? [`demo/`](demo/README.md) starts a throwaway Immich with t
 You need Immich 3.2.0 or newer and Docker, about five minutes, and these four lines (on Linux; on a Mac use `sed -i ''`):
 
 ```
-git clone --branch v1.2.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
+git clone --branch v1.3.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 docker compose up -d
@@ -134,7 +134,7 @@ Then open `http://<your-host>:8080/` on the same hostname you use for Immich, si
 
 > **Everyone who takes part needs Tags switched on in Immich.** It is off by default, per person. The page notices and offers a **Turn on Tags** button (or do it in Immich: Account Settings, Features, **Tags**). Senders need Tags to add tags to photos, and receivers need them to see the inbox tag on what arrives. Switching them on is not enough: **reload the Immich page (refresh the browser tab) afterwards**, or the tags still do not appear. Without Tags, the app can set tags but people cannot see or use them in Immich.
 
-**Start from a release, not from `main`.** `main` is where the next version is being built and can be ahead of the published image. The latest release is [v1.2.0](https://github.com/vfuoglio/immich-handoff/releases/latest); the [releases page](https://github.com/vfuoglio/immich-handoff/releases) lists newer ones and what changed in each.
+**Start from a release, not from `main`.** `main` is where the next version is being built and can be ahead of the published image. The latest release is [v1.3.0](https://github.com/vfuoglio/immich-handoff/releases/latest); the [releases page](https://github.com/vfuoglio/immich-handoff/releases) lists newer ones and what changed in each.
 
 ## Documentation
 
