@@ -2885,7 +2885,7 @@ templ FrameSection(frames []FrameView) {
 				<label for="fr-name">{ t(ctx, "Name") }</label>
 				<input id="fr-name" name="name" required maxlength="60" placeholder={ t(ctx, "Living room") }/>
 			</div>
-			<div class="field" hx-get="fragments/frame-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/frame-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			<div class="field">
@@ -3173,7 +3173,7 @@ templ RoomSection(rooms []RoomView) {
 				<label for="rm-title">{ t(ctx, "Title the client sees (optional)") }</label>
 				<input id="rm-title" name="title" maxlength="60" placeholder={ t(ctx, "Chiara and Luca, 14 June") }/>
 			</div>
-			<div class="field" hx-get="fragments/room-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/room-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			<div class="field">
@@ -3716,7 +3716,7 @@ templ PeerSection(peers []PeerView, invites bool) {
 				<label for="im-name">{ t(ctx, "What the shared album is called") }</label>
 				<input id="im-name" name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
 			</div>
-			<div class="field" hx-get="fragments/share-albums?for=immich" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/share-albums?for=immich" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			@ShareChoices("immich", false)
@@ -3780,7 +3780,7 @@ templ PeerRow(p PeerView, id string, open bool) {
 							<label for={ "sh-name-" + id }>{ t(ctx, "What the shared album is called") }</label>
 							<input id={ "sh-name-" + id } name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
 						</div>
-						<div class="field" hx-get="fragments/share-albums" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+						<div class="field" hx-get="fragments/share-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
 							<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 						</div>
 						@ShareChoices(id, true)
@@ -3886,7 +3886,7 @@ templ SharedRow(a SharedView, id string) {
 				<p class="meta">{ t(ctx, "If {name} shares the album with other people too, their photos come to your album and yours go to them, through {name}. You are told their names, nothing more, and you never connect to them.", "name", a.Peer) }</p>
 				<form class="offer-form" hx-post="shared/accept" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 					<input type="hidden" name="shared" value={ a.ID }/>
-					<div class="field" hx-get={ "fragments/share-albums?for=" + id } hx-trigger="load" hx-swap="innerHTML">
+					<div class="field" hx-get={ "fragments/share-albums?for=" + id } hx-target="this" hx-trigger="load" hx-target="this" hx-swap="innerHTML">
 						<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 					</div>
 					@ShareChoices(id, false)
@@ -3995,7 +3995,7 @@ templ RulesBox(s ServiceView) {
 		}
 		<details class="offer">
 			<summary>{ t(ctx, "Make a rule") }</summary>
-			<div hx-get={ "fragments/rule-form?service=" + url.QueryEscape(s.Name) } hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<div hx-get={ "fragments/rule-form?service=" + url.QueryEscape(s.Name) } hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your people, places and albums...") }</p>
 			</div>
 		</details>
