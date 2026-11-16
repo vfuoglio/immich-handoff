@@ -16,6 +16,10 @@
 [![Immich 3.2.0+](https://img.shields.io/badge/Immich-3.2.0%2B-4250af)](docs/install.md#before-you-start)
 [![License: MIT](https://img.shields.io/github/license/vfuoglio/immich-handoff)](LICENSE)
 
+**See it in 75 seconds:** a host collects a party's photos from guests with a QR code, then hand over from inside Immich, rules, a client room and sharing between servers. (Music and captions, no sound needed. The photos are public-domain pictures from Wikimedia Commons; the music is "Mister Blues", CC0.)
+
+https://github.com/user-attachments/assets/dbaa040c-3733-4286-99e1-42d5a2360485
+
 <p align="center">
   <img src="docs/images/live-scene.gif" alt="The live scene on the Overview: photos that two senders tagged travel along their lanes and arrive in the receiving library while a counter ticks up to twelve" width="760"><br>
   <sub>The live scene, recorded from the real page: every tagged photo travels along its sender's lane into the library.</sub>
