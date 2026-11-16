@@ -1116,5 +1116,41 @@
  "Choose one of your albums, or type a new name and it is made.": "Elige uno de tus álbumes, o escribe un nombre nuevo y se creará.",
  "No album": "Ningún álbum",
  "or the name of a new album": "o el nombre de un álbum nuevo",
- "The name of a new album": "El nombre de un álbum nuevo"
+ "The name of a new album": "El nombre de un álbum nuevo",
+ "Add to my library": "Añadir a mi biblioteca",
+ "Adding to your library...": "Añadiendo a tu biblioteca...",
+ "Could not add": "No se pudo añadir",
+ "Where should it go?": "¿Dónde debe ir?",
+ "In my library, tagged with who shared it": "En mi biblioteca, con una etiqueta de quién lo compartió",
+ "In my library": "En mi biblioteca",
+ "In an album": "En un álbum",
+ "Remember this choice": "Recordar esta elección",
+ "Choose an album": "Elegir un álbum",
+ "Add here": "Añadir aquí",
+ "Could not list your albums": "No se pudieron cargar tus álbumes",
+ "These photos are already yours": "Estas fotos ya son tuyas",
+ "the copies were made but the album could not be made": "las copias se hicieron, pero no se pudo crear el álbum",
+ "the copies were made but could not be put in the album": "las copias se hicieron, pero no se pudieron poner en el álbum",
+ "the copies were made but could not be tagged": "las copias se hicieron, pero no se pudieron etiquetar",
+ "some of these photos cannot be seen": "algunas de estas fotos no se pueden ver",
+ "choose where the copies go: a tag, your library as it is, or an album": "elige dónde van las copias: una etiqueta, tu biblioteca tal cual o un álbum",
+ "choose an album, or give a new one a name": "elige un álbum o ponle nombre a uno nuevo",
+ "the album's name is too long": "el nombre del álbum es demasiado largo",
+ "it is too late to take these back: they were added more than 15 minutes ago": "es demasiado tarde para deshacerlo: se añadieron hace más de 15 minutos",
+ "none of these copies can be taken back": "ninguna de estas copias se puede deshacer",
+ "a copy of this photo is in your trash: restore it in Immich if you want it back": "hay una copia de esta foto en tu papelera: restáurala en Immich si la quieres de vuelta",
+ "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.": "En Immich, una foto que alguien compartió contigo se puede copiar a tu propia biblioteca con el botón Añadir a mi biblioteca. Elige dónde van las copias.",
+ "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.": "Una copia ocupa tanto espacio como la foto, y quien la compartió no recibe ningún aviso. Durante 15 minutos después de añadir, Deshacer saca las copias otra vez.",
+ "{n} photo added to your library": {
+  "one": "{n} foto añadida a tu biblioteca",
+  "other": "{n} fotos añadidas a tu biblioteca"
+ },
+ "{n} photo added to your library from Immich": {
+  "one": "{n} foto añadida a tu biblioteca desde Immich",
+  "other": "{n} fotos añadidas a tu biblioteca desde Immich"
+ },
+ "{n} photo taken out of your library again": {
+  "one": "{n} foto sacada de tu biblioteca otra vez",
+  "other": "{n} fotos sacadas de tu biblioteca otra vez"
+ }
 }

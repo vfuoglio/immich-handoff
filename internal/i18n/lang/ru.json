@@ -1212,5 +1212,47 @@
  "Choose one of your albums, or type a new name and it is made.": "Выберите один из своих альбомов или введите новое название, и он будет создан.",
  "No album": "Без альбома",
  "or the name of a new album": "или название нового альбома",
- "The name of a new album": "Название нового альбома"
+ "The name of a new album": "Название нового альбома",
+ "Add to my library": "Добавить в мою библиотеку",
+ "Adding to your library...": "Добавляется в вашу библиотеку...",
+ "Could not add": "Не удалось добавить",
+ "Where should it go?": "Куда поместить?",
+ "In my library, tagged with who shared it": "В мою библиотеку, с меткой того, кто поделился",
+ "In my library": "В мою библиотеку",
+ "In an album": "В альбом",
+ "Remember this choice": "Запомнить этот выбор",
+ "Choose an album": "Выбрать альбом",
+ "Add here": "Добавить сюда",
+ "Could not list your albums": "Не удалось загрузить ваши альбомы",
+ "These photos are already yours": "Эти фото уже ваши",
+ "the copies were made but the album could not be made": "копии сделаны, но не удалось создать альбом",
+ "the copies were made but could not be put in the album": "копии сделаны, но не удалось поместить их в альбом",
+ "the copies were made but could not be tagged": "копии сделаны, но не удалось поставить метку",
+ "some of these photos cannot be seen": "некоторые из этих фото нельзя увидеть",
+ "choose where the copies go: a tag, your library as it is, or an album": "выберите, куда пойдут копии: метка, ваша библиотека как есть или альбом",
+ "choose an album, or give a new one a name": "выберите альбом или назовите новый",
+ "the album's name is too long": "название альбома слишком длинное",
+ "it is too late to take these back: they were added more than 15 minutes ago": "слишком поздно отменять: их добавили больше 15 минут назад",
+ "none of these copies can be taken back": "ни одну из этих копий нельзя убрать",
+ "a copy of this photo is in your trash: restore it in Immich if you want it back": "копия этого фото лежит в вашей корзине: восстановите её в Immich, если хотите вернуть",
+ "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.": "В Immich фото, которым с вами поделились, можно скопировать в вашу библиотеку кнопкой «Добавить в мою библиотеку». Выберите, куда пойдут копии.",
+ "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.": "Копия занимает столько же места, сколько и фото, а тот, кто поделился, об этом не узнает. В течение 15 минут после добавления «Отменить» снова убирает копии.",
+ "{n} photo added to your library": {
+  "one": "{n} фото добавлено в вашу библиотеку",
+  "few": "{n} фото добавлено в вашу библиотеку",
+  "many": "{n} фото добавлено в вашу библиотеку",
+  "other": "{n} фото добавлено в вашу библиотеку"
+ },
+ "{n} photo added to your library from Immich": {
+  "one": "{n} фото добавлено в вашу библиотеку из Immich",
+  "few": "{n} фото добавлено в вашу библиотеку из Immich",
+  "many": "{n} фото добавлено в вашу библиотеку из Immich",
+  "other": "{n} фото добавлено в вашу библиотеку из Immich"
+ },
+ "{n} photo taken out of your library again": {
+  "one": "{n} фото снова убрано из вашей библиотеки",
+  "few": "{n} фото снова убрано из вашей библиотеки",
+  "many": "{n} фото снова убрано из вашей библиотеки",
+  "other": "{n} фото снова убрано из вашей библиотеки"
+ }
 }
