@@ -6,6 +6,7 @@
 
 ### Fixed
 - The list of your albums in the forms that make a client room, a frame and a shared album appeared in the notice at the top of the page, and the form kept saying "Loading your albums...". It now appears in the form.
+- The album of a new drop box is chosen from a list of your albums (or a new name is typed), not only typed.
 
 ## 1.3.0
 

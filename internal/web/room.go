@@ -74,6 +74,28 @@ func (w *Server) roomAlbums(rw http.ResponseWriter, r *http.Request) {
 	RoomAlbumSelect(opts).Render(r.Context(), rw)
 }
 
+// albumNames lists the names of the person's own albums for a field that takes an album by name (a new name is made when it is
+// typed); it is asked for when the form is opened.
+func (w *Server) albumNames(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	albums, err := me.sess.OwnedAlbums(r.Context())
+	if err != nil {
+		w.Log.Warn("could not list albums", "user", me.user.Email, "err", err)
+		http.Error(rw, "could not list your albums: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	names := make([]string, 0, len(albums))
+	for _, a := range albums {
+		names = append(names, a.Name)
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	AlbumNameList(names).Render(r.Context(), rw)
+}
+
 func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "room made", func(ctx context.Context, me *member, _ string) error {
 		album, err := uuid.Parse(r.PostFormValue("album"))
