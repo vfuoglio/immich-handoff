@@ -50,3 +50,17 @@ Checked against a real Immich 3.2.0 (`test/e2e`) and, for push, a real Chrome an
 - A key can add or take away permissions of another key only with the owner's own session (`PUT /api-keys/{id}`), which is why the digest and the frame ask the owner when they are turned on and off.
 - A new push subscription can take a few seconds to be known to Google's push service: a push sent at once may be answered `410 Gone`. The app treats `404` and `410` as "forget this device", except for a device made in the last two minutes, which is kept so the test button can be pressed again.
 - Photos taken at the same moment look alike to the best-of rules; they are compared by a small hash of the preview, so the preview must exist first (Immich makes it in the background, seconds after an upload).
+
+## Notes from copying what is shared with a person into their own library (Immich 3.4.1)
+
+Probed on a real Immich with two people, an album one shares with the other (viewer), and partner sharing (the photo owner shares their whole library with the other). "Session" is the person's own sign-in; "key" is a restricted key made in the viewer's account with `user.read album.read asset.read asset.download asset.upload tag.read tag.create tag.asset album.create albumAsset.create`.
+
+- A viewer can read a photo from an album shared with them and a photo of a partner who shares the library, with a session **and** with the restricted key: `GET /assets/{id}` (200; `ownerId` is the owner's, and `exifInfo` carries the description and the rating) and `GET /assets/{id}/original` (200, the same bytes).
+- Uploading those bytes with `POST /assets` creates a new photo that **belongs to the viewer** (201 `created`), with a session and with the key. Nothing needs the owner's help or knowledge.
+- Uploading the same file again answers 200 `duplicate` with the same asset id, so a second press is harmless. The check is per owner: the viewer's copy does not clash with the owner's original.
+- `POST /search/metadata` with `albumIds` of an album shared with the viewer lists its photos (session and key). `GET /albums?shared=true` lists the albums shared with them. This is what following an album needs.
+- A live photo: the hidden clip of a shared live photo can be downloaded by the viewer (200). Copying it works as for a hand-over: upload the clip with `visibility=hidden` (201), then upload the still with `livePhotoVideoId` set to the **new** clip's id (201); the viewer's still is linked to the viewer's own clip. The key needed no permission beyond `asset.upload`.
+- The description and rating are readable by the viewer; the upload does not carry them, so they are written after the upload as for a hand-over (`Details`): to check in the build whether the restricted key needs `asset.update` for it.
+- Not yet tried: creating a tag and tagging the copy with the restricted key (the permissions were granted but not exercised); the album destination (`album.create`, `albumAsset.create`); a viewer on a server with a different default for sharing.
+
+**Conclusion for "Add to my library":** no new key and no service are needed for the button (the person's session is enough), and a restricted key is enough to follow an album. Build as planned.
