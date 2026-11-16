@@ -185,6 +185,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rooms/reply", w.replyToNote)
 	mux.HandleFunc("POST /rooms/round", w.startRound)
 	mux.HandleFunc("GET /fragments/room-albums", w.roomAlbums)
+	mux.HandleFunc("GET /fragments/album-names", w.albumNames)
 	mux.HandleFunc("POST /rooms", w.createRoom)
 	mux.HandleFunc("POST /rooms/pause", w.pauseRoom)
 	mux.HandleFunc("POST /rooms/end", w.endRoom)

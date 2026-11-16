@@ -2435,7 +2435,11 @@ templ DropBoxForm() {
 			<small class="meta wide">{ t(ctx, "Upload: anyone with the link can see the page, and needs the password to send. The whole page: nothing is shown, and nothing can be sent, without the password. A wall you start has its own link and is not covered.") }</small>
 			<div class="field">
 				<label for="drop-album">{ t(ctx, "Put what arrives in this album (optional)") }</label>
-				<input id="drop-album" name="album" maxlength="100"/>
+				<div hx-get="fragments/album-names" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+					<select id="drop-album-pick" name="album_pick"><option value="">{ t(ctx, "No album") }</option></select>
+				</div>
+				<input id="drop-album" name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "or the name of a new album") } aria-label={ t(ctx, "The name of a new album") }/>
+				<small class="meta">{ t(ctx, "Choose one of your albums, or type a new name and it is made.") }</small>
 			</div>
 			<div class="field">
 				<label for="drop-tag">{ t(ctx, "Another tag for what arrives (optional)") }</label>
@@ -2885,7 +2889,7 @@ templ FrameSection(frames []FrameView) {
 				<label for="fr-name">{ t(ctx, "Name") }</label>
 				<input id="fr-name" name="name" required maxlength="60" placeholder={ t(ctx, "Living room") }/>
 			</div>
-			<div class="field" hx-get="fragments/frame-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/frame-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			<div class="field">
@@ -3173,7 +3177,7 @@ templ RoomSection(rooms []RoomView) {
 				<label for="rm-title">{ t(ctx, "Title the client sees (optional)") }</label>
 				<input id="rm-title" name="title" maxlength="60" placeholder={ t(ctx, "Chiara and Luca, 14 June") }/>
 			</div>
-			<div class="field" hx-get="fragments/room-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/room-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			<div class="field">
@@ -3250,6 +3254,16 @@ templ RoomSection(rooms []RoomView) {
 			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make room") }</button></p>
 		</form>
 	</details>
+}
+
+// AlbumNameList is the list of the person's own albums for a field that takes an album by name; a new name is typed beside it.
+templ AlbumNameList(names []string) {
+	<select id="drop-album-pick" name="album_pick">
+		<option value="">{ t(ctx, "No album") }</option>
+		for _, n := range names {
+			<option value={ n }>{ n }</option>
+		}
+	</select>
 }
 
 // RoomAlbumSelect is the list of albums in the form that makes a room.
@@ -3716,7 +3730,7 @@ templ PeerSection(peers []PeerView, invites bool) {
 				<label for="im-name">{ t(ctx, "What the shared album is called") }</label>
 				<input id="im-name" name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
 			</div>
-			<div class="field" hx-get="fragments/share-albums?for=immich" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
+			<div class="field" hx-get="fragments/share-albums?for=immich" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 			</div>
 			@ShareChoices("immich", false)
@@ -3780,7 +3794,7 @@ templ PeerRow(p PeerView, id string, open bool) {
 							<label for={ "sh-name-" + id }>{ t(ctx, "What the shared album is called") }</label>
 							<input id={ "sh-name-" + id } name="name" required maxlength="60" placeholder={ t(ctx, "Summer 2026") }/>
 						</div>
-						<div class="field" hx-get="fragments/share-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-target="this" hx-swap="innerHTML">
+						<div class="field" hx-get="fragments/share-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 							<p class="meta">{ t(ctx, "Loading your albums...") }</p>
 						</div>
 						@ShareChoices(id, true)
