@@ -2,11 +2,6 @@
 
 ## Unreleased
 
-### Works with Immich 3.4
-- **The Hand over button in the selection bar.** Immich 3.4 changed how its selection bar is marked (a test id instead of an id), so the button no longer showed up when photos were selected. It looks for both now; the button in the photo viewer was not affected.
-- **Photos tagged for a date arrive on time again.** Immich 3.4 fixed a bug in its workflow tag filter that had let every photo through; a photo tagged `share/2025-12-31` no longer woke the app, so it waited for the next daily pass. The app's workflow no longer filters on the tag (the webhook is only a wake-up), and existing workflows are repaired when the app starts.
-- The tests and the demo run on Immich 3.4.1. The oldest Immich that works is still 3.2.0.
-
 ## 1.3.0
 
 ### What is new, by what you want to do
@@ -21,6 +16,11 @@
 The details follow, by area.
 
 - **Photos guests send now show in the host's Activity list.** Each burst of photos arriving in a drop box is one line ("12 photos arrived in Mia's birthday") that is kept up to date as more come, in the host's Activity and in the administrator's recent events. It is a line of the log only: nobody is notified for each photo. In the live scene on the Overview each drop box is now a stage of its own: every drop (the photos one guest sends together) flies from the left, named by whoever sent it, into the box, the total goes up by the number of photos and a **+N** fades in over it as they arrive.
+
+### Works with Immich 3.4 (the tests and the demo run on 3.4.1)
+- **The Hand over button works in Immich 3.4's selection bar.** Immich 3.4 marks that bar differently (a test id instead of an id); the button looks for both, so it shows when photos are selected on 3.2, 3.3 and 3.4.
+- **Photos tagged for a date arrive on time on Immich 3.4.** Immich 3.4 fixed a bug in its workflow tag filter that had let every photo through; a photo tagged `share/2025-12-31` would no longer have woken the app and would have waited for the daily pass. The app's workflow does not filter on the tag any more (the webhook is only a wake-up), and workflows made by an earlier version are repaired when the app starts.
+- The oldest Immich that works is still 3.2.0.
 
 ### Look and feel
 - **Two colour schemes, each in light and dark.** The pages come in **Twilight** (the indigo, magenta and orange of the app's icon, unchanged and still the default) and **Immich** (calm blues on near-neutral greys). Everyone chooses from the new palette button in the bar, next to the light/dark button, and the choice is remembered in their own browser. The administrator sets where people start with `THEME` (`twilight` or `immich`) and, if wanted, `THEME_MODE` (`auto`, `light` or `dark`); see [Settings](docs/settings.md). A phone's address bar takes the colour of the scheme. A drop box's own accent colour now also wins over both schemes.
