@@ -3,6 +3,8 @@ package web_test
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -18,6 +20,8 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/web"
 )
+
+var jpegSum = func() string { s := sha1.Sum(jpegBytes); return base64.StdEncoding.EncodeToString(s[:]) }()
 
 const (
 	aliceID  = "aaaaaaaa-0000-0000-0000-000000000001"
@@ -125,7 +129,15 @@ func fakeImmich() http.Handler {
 		if strings.HasPrefix(r.PathValue("id"), "5") {
 			owner = otherID
 		}
-		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts,
+			"type": "IMAGE", "hasMetadata": true, "exifInfo": map[string]any{}, "createdAt": time.Now().UTC().Format(time.RFC3339), "checksum": jpegSum})
+	})
+	// Add to my library: every original is the same small picture (above), and an upload is stored under an id that is "other"'s
+	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		w.Write([]byte(`{"id":"50000000-0000-4000-8000-0000000000aa","status":"created"}`))
 	})
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		j(w, []any{map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}})

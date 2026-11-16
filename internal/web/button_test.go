@@ -150,3 +150,109 @@ func TestRepeatedPressesAreThrottled(t *testing.T) {
 		t.Errorf("the 40th press in a minute: %d, want 429", last)
 	}
 }
+
+func TestTheButtonSaysWhichPhotosArePersonsOwnAndWhichAreSomeoneElsesTheyCanSee(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	code, body := do(t, "GET", app.URL+"/immich/owned?asset="+myPhoto+"&asset="+notMyPhoto+"&asset=not-an-id", "sess=other", nil)
+	if code != 400 {
+		t.Errorf("an id that is not one: %d %s", code, body)
+	}
+	code, body = do(t, "GET", app.URL+"/immich/owned?asset="+myPhoto+"&asset="+notMyPhoto, "sess=other", nil)
+	var got struct{ Mine, Others []string }
+	if err := json.Unmarshal([]byte(body), &got); err != nil || code != 200 {
+		t.Fatalf("%d %s %v", code, body, err)
+	}
+	if len(got.Mine) != 1 || got.Mine[0] != notMyPhoto || len(got.Others) != 1 || got.Others[0] != myPhoto {
+		t.Errorf("the fake says photos starting with 5 are other's: %+v", got)
+	}
+	if code, _ := do(t, "GET", app.URL+"/immich/owned?asset="+myPhoto, "", nil); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/immich/owned", "sess=other", nil); code != 400 {
+		t.Errorf("no photos: %d", code)
+	}
+}
+
+func TestTheButtonListsThePersonsOwnAlbumsForTheChoiceOfAnAlbum(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	code, body := do(t, "GET", app.URL+"/immich/albums", "sess=alice", nil)
+	var got struct {
+		Albums []struct {
+			ID, Name string
+			Count    int
+		}
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil || code != 200 || len(got.Albums) != 2 || got.Albums[0].Name != "To send" || got.Albums[0].Count != 3 {
+		t.Fatalf("%d %s %v", code, body, err)
+	}
+	if code, _ := do(t, "GET", app.URL+"/immich/albums", "", nil); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+}
+
+func TestAddToMyLibraryCopiesWhatThePersonSeesButDoesNotOwnAndSaysSoInWords(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	// myPhoto is alice's: other can see it (the fake shows every photo to everyone), so it is copied
+	code, body := postForm(t, app.URL+"/immich/add", "sess=other", "dest=plain&asset="+myPhoto)
+	var got struct {
+		Added, Already, Skipped int
+		Copies                  []string
+		Message                 string
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil || code != 200 || got.Added != 1 || len(got.Copies) != 1 || !strings.Contains(got.Message, "1 photo added to your library") {
+		t.Fatalf("%d %s %v", code, body, err)
+	}
+	// a photo that is theirs is left alone, and the message says so
+	code, body = postForm(t, app.URL+"/immich/add", "sess=other", "dest=plain&asset="+notMyPhoto)
+	if code != 200 || !strings.Contains(body, `"skipped":1`) || !strings.Contains(body, "already yours") {
+		t.Errorf("own photo: %d %s", code, body)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add", "sess=other", "dest=elsewhere&asset="+myPhoto); code != 409 {
+		t.Errorf("a destination that does not exist: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add", "sess=other", "dest=album&asset="+myPhoto); code != 409 {
+		t.Errorf("an album without a name: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add", "sess=other", "dest=plain"); code != 409 {
+		t.Errorf("nothing chosen: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add", "", "dest=plain&asset="+myPhoto); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if _, german := postForm(t, app.URL+"/immich/add", "sess=other", "dest=elsewhere&asset="+myPhoto); german == "" {
+		t.Error("the refusal has words")
+	}
+}
+
+func TestUndoOfAddToMyLibraryOnlyTakesBackWhatWasJustAdded(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	// the fake says a photo starting with 1 is alice's: never trashed for someone else
+	if code, _ := postForm(t, app.URL+"/immich/add-undo", "sess=other", "asset="+myPhoto); code != 409 {
+		t.Errorf("a photo that is not theirs: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add-undo", "", "asset="+notMyPhoto); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/immich/add-undo", "sess=other", ""); code != 409 {
+		t.Errorf("nothing chosen: %d", code)
+	}
+}
+
+func TestTheNewRoutesFollowTheSwitchOfTheButton(t *testing.T) {
+	var st *store.Store
+	off, _ := setup(t, withClub(t, &st), func(s *web.Server) { s.ButtonOff = true })
+	for _, u := range []string{"/immich/owned?asset=" + myPhoto, "/immich/albums"} {
+		if code, _ := do(t, "GET", off.URL+u, "sess=other", nil); code != 404 {
+			t.Errorf("%s switched off: %d", u, code)
+		}
+	}
+	for _, u := range []string{"/immich/add", "/immich/add-undo"} {
+		if code, _ := postForm(t, off.URL+u, "sess=other", "dest=plain&asset="+myPhoto); code != 404 {
+			t.Errorf("%s switched off: %d", u, code)
+		}
+	}
+}

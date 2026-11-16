@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -107,6 +108,42 @@ func (h *Hub) AddToLibrary(ctx context.Context, sess *immich.API, user immich.Us
 		h.event(ctx, "", user.ID, "library", i18n.PackN("{n} photo added to your library from Immich", "{n} photos added to your library from Immich", res.Added))
 	}
 	return res, nil
+}
+
+// Ownership says which of the photos are the person's own and which are someone else's that they can see (a shared
+// album, a partner's library). A photo that cannot be read is left out of both. It looks at up to HandOverMax photos,
+// a few at a time.
+func (h *Hub) Ownership(ctx context.Context, sess *immich.API, user immich.User, assets []string) (mine, others []string, err error) {
+	ids, err := photoIDs(assets)
+	if err != nil {
+		return nil, nil, err
+	}
+	owned := make([]int, len(ids)) // 0: unreadable, 1: mine, 2: someone else's
+	var wg sync.WaitGroup
+	gate := make(chan struct{}, 8)
+	for i, id := range ids {
+		wg.Add(1)
+		gate <- struct{}{}
+		go func() {
+			defer func() { <-gate; wg.Done() }()
+			if a, err := sess.Asset(ctx, id); err == nil && a != nil {
+				owned[i] = 2
+				if a.OwnerId == user.ID {
+					owned[i] = 1
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	for i, id := range ids {
+		switch owned[i] {
+		case 1:
+			mine = append(mine, id.String())
+		case 2:
+			others = append(others, id.String())
+		}
+	}
+	return mine, others, nil
 }
 
 // photoIDs parses the ids, once each; there must be at least one and at most HandOverMax.
