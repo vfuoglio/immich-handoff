@@ -15,6 +15,9 @@ No. The app makes a named, restricted key in *your* account with your own sign-i
 **Do the people who send need to install anything?**
 No. Senders use Immich as they do now: add a tag, or press the **Hand over...** button if your administrator [added it](find-handoff.md#hand-over-from-inside-immich). Guests without an account use a link or QR code in their browser.
 
+**Can I keep a photo someone shared with me?**
+Yes: the button inside Immich shows **Add to my library** on photos from albums shared with you and from a partner, and copies them into your own library with their description, rating and location (the person who shared them is not told, and a copy takes as much room as the photo). See [Add to my library](find-handoff.md#add-to-my-library-from-inside-immich).
+
 **Does it work with the Immich phone app?**
 Tagging in the app works. The button inside Immich works in a browser, not in the native app. The page also sends photos from a phone: see [Send photos from a phone](guides/phone.md#send-photos-from-a-phone).
 
