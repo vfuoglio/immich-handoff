@@ -669,6 +669,13 @@ var migrations = []string{
 	`ALTER TABLE rules ADD COLUMN kind TEXT NOT NULL DEFAULT 'send';
 	 ALTER TABLE rules ADD COLUMN dest TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE rules ADD COLUMN dest_album TEXT NOT NULL DEFAULT '';`,
+	// the key a person made for following albums shared with them
+	`CREATE TABLE library_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 	// where a person's "Add to my library" copies go by default
 	`CREATE TABLE library_prefs (
 	   user_id TEXT PRIMARY KEY,

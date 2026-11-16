@@ -19,6 +19,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
 // libFake is a small Immich for "Add to my library": photos with owners, who can see what, uploads that are copies
@@ -558,5 +559,55 @@ func TestTheDefaultPlaceForCopiesIsATagUntilThePersonChoosesAndIsRemembered(t *t
 	}
 	if d := e.h.LibraryDefault(ctx, annID); d.Kind != hub.LibraryTag {
 		t.Errorf("someone else is not affected: %+v", d)
+	}
+}
+
+func TestTheKeyForFollowingAlbumsIsMadeOnceWithTheSmallestPermissionsAndNamedForThePerson(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	api, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false)
+	if err != nil || api == nil {
+		t.Fatalf("%v", err)
+	}
+	want := []string{"user.read", "album.read", "asset.read", "asset.download", "asset.upload", "tag.read", "tag.create", "tag.asset"}
+	if got := e.f.lastPerms; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("permissions %v, want %v: it reads what is shared, adds to the person's own library and tags; it cannot delete or update", got, want)
+	}
+	if k, ok, err := e.st.LibraryKey(ctx, bobID); err != nil || !ok || k.Key == "" || k.KeyID == uuid.Nil {
+		t.Errorf("the key is kept: %+v %v %v", k, ok, err)
+	}
+	made := e.f.keyUpdates
+	n := len(e.f.keyPerms)
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false); err != nil || len(e.f.keyPerms) != n {
+		t.Errorf("the second time no key is made: %v, %d keys", err, len(e.f.keyPerms))
+	}
+	// an album destination adds the two permissions to the key that exists, and makes no new key
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, true); err != nil || len(e.f.keyPerms) != n || e.f.keyUpdates == made {
+		t.Errorf("an album destination widens the same key: %v, %d keys, updates %d", err, len(e.f.keyPerms), e.f.keyUpdates)
+	}
+	if _, ok, _ := e.st.LibraryKey(ctx, annID); ok {
+		t.Error("another person has no such key")
+	}
+}
+
+func TestTheKeyForFollowingAlbumsIsDeletedWhenNoRuleUsesItAnyMore(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false); err != nil {
+		t.Fatal(err)
+	}
+	rule, err := e.st.AddRule(ctx, store.Rule{OwnerID: bobID, Kind: store.RuleKindLibrary, Dest: "plain", Cond: store.RuleCond{Album: &store.RuleRef{ID: uuid.NewString(), Name: "Trip"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.h.DropLibraryKeyForTest(ctx, e.sess, bob)
+	if _, ok, _ := e.st.LibraryKey(ctx, bobID); !ok {
+		t.Fatal("a rule still follows an album: the key stays")
+	}
+	e.st.DeleteRule(ctx, rule.ID)
+	e.h.DropLibraryKeyForTest(ctx, e.sess, bob)
+	if _, ok, _ := e.st.LibraryKey(ctx, bobID); ok {
+		t.Error("the last rule is gone: the key goes")
+	}
+	if len(e.f.deletedKeys) != 1 {
+		t.Errorf("the key is deleted in the person's Immich too: %v", e.f.deletedKeys)
 	}
 }
