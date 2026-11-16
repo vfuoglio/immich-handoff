@@ -153,8 +153,9 @@ def build(mode):
     segs.append(compose("s01.mp4", d, full=graphic("g-intro", pages.intro(), d), caps=[("c01", 0.25, 3.55), ("c02", 4.0, d - 0.3)]))
 
     d = D(4)
-    parts = [piece("p3a.mp4", "c03", 5.5, 10.5, 2.6, 1.6, 1.7, 0.5, 0.37), piece("p3b.mp4", "c03", 10.5, 15.5, 1.9, 1.7, 1.75, 0.3, 0.6),
-             piece("p3c.mp4", "c03", 15.5, 19.7, round(d - 4.5, 3), 1.8, 1.9, 0.08, 0.95)]
+    # the useful parts of a long take: the form and its typing, the box appearing, then the QR code (the waiting between is cut)
+    parts = [piece("p3a.mp4", "c03", 6.5, 10.5, 2.3, 1.6, 1.7, 0.5, 0.95), piece("p3b.mp4", "c03", 10.5, 13.5, 1.9, 1.7, 1.75, 0.5, 0.23),
+             piece("p3c.mp4", "c03", 28.0, 32.8, round(d - 4.2, 3), 1.75, 1.9, 0.12, 0.8)]
     segs.append(compose("s03.mp4", d, join("b3.mp4", parts), caps=[("c03", 0.3, d - 0.3)]))
 
     d = D(4)
