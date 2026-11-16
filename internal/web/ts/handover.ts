@@ -139,16 +139,17 @@ export function startHandover(app: string, icon: string): void {
   const asked = new Set<string>();
   const wanted = new Set<string>();
   let askTimer = 0;
-  const askOwners = (ids: string[]): void => {
-    for (const id of ids) if (!owners.has(id) && !asked.has(id)) wanted.add(id);
-    if (wanted.size === 0 || askTimer) return;
-    askTimer = window.setTimeout(async () => {
-      askTimer = 0;
-      const batch = [...wanted].slice(0, 100);
-      for (const id of batch) {
-        wanted.delete(id);
-        asked.add(id);
-      }
+  let inflight: Promise<void> | null = null;
+  /** Asks the app about the photos waiting to be asked about (up to 100 at a time, as the address would get long). */
+  const flushOwners = (): Promise<void> => {
+    if (inflight) return inflight;
+    if (wanted.size === 0) return Promise.resolve();
+    const batch = [...wanted].slice(0, 100);
+    for (const id of batch) {
+      wanted.delete(id);
+      asked.add(id);
+    }
+    inflight = (async () => {
       let answered = false;
       try {
         const res = await fetch(new URL(`immich/owned?${ownedQuery(batch)}`, app), { credentials: "same-origin", headers: { Accept: "application/json" } });
@@ -163,8 +164,25 @@ export function startHandover(app: string, icon: string): void {
       }
       if (!answered) for (const id of batch) owners.set(id, "mine");
       schedule();
-      askOwners([]);
+    })().finally(() => {
+      inflight = null;
+      if (wanted.size > 0) askOwners([]);
+    });
+    return inflight;
+  };
+  const askOwners = (ids: string[]): void => {
+    for (const id of ids) if (!owners.has(id) && !asked.has(id)) wanted.add(id);
+    if (wanted.size === 0 || askTimer) return;
+    askTimer = window.setTimeout(() => {
+      askTimer = 0;
+      void flushOwners();
     }, 250);
+  };
+  /** Waits until every photo asked about has been answered, so a press acts on all the photos selected, not on the ones known so far. */
+  const settle = async (): Promise<void> => {
+    clearTimeout(askTimer);
+    askTimer = 0;
+    for (let round = 0; round < 5 && (wanted.size > 0 || inflight); round++) await flushOwners();
   };
 
   // ---- the list of services ----
@@ -349,7 +367,7 @@ export function startHandover(app: string, icon: string): void {
     if (like) button.style.color = getComputedStyle(like).color; // the text of the bar it sits in, light or dark
     button.addEventListener("click", (e) => {
       e.stopPropagation();
-      void (kind === "add" ? openAdd : openMenu)(button, assets);
+      void settle().then(() => (kind === "add" ? openAdd : openMenu)(button, assets));
     });
     return button;
   };
@@ -396,7 +414,7 @@ export function startHandover(app: string, icon: string): void {
     item.querySelector("svg")?.replaceWith(element("img", { src: icon, alt: "", width: 20, height: 20 }));
     const text = item.querySelector("div div") ?? item.querySelector("div") ?? item;
     text.textContent = word(kind === "add" ? "Add to my library" : "Hand over...");
-    item.addEventListener("click", () => void (kind === "add" ? openAdd : openMenu)(dots ?? item, assets));
+    item.addEventListener("click", () => void settle().then(() => (kind === "add" ? openAdd : openMenu)(dots ?? item, assets)));
     const rule = menu.querySelector("hr");
     menu.insertBefore(item, rule);
   };
