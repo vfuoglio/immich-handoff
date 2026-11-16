@@ -87,6 +87,8 @@ func main() {
 			log.Fatal("film needs a scene name and a directory for the frames")
 		}
 		film(os.Args[2], os.Args[3])
+	case "video":
+		videoMain(os.Args[2:])
 	case "inside":
 		insideShots(os.Args[2])
 	case "rules":
