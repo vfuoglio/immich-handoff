@@ -159,7 +159,7 @@ type memEnv struct {
 	sess *immich.API
 	st   *store.Store
 	push *fakePushService
-	clk  *time.Time
+	clk  *testClock
 }
 
 // memSetup is a hub with a store, push, and an Immich that has memories; the person is bob.
@@ -176,12 +176,12 @@ func memSetup(t *testing.T) *memEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	clk := time.Date(2026, 11, 16, 6, 0, 0, 0, time.UTC)
+	clk := &testClock{t: time.Date(2026, 11, 16, 6, 0, 0, 0, time.UTC)}
 	svc := &fakePushService{fail: map[string]error{}}
-	h := &hub.Hub{Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return clk }}
-	h.Push = &hub.Push{Store: st, Sender: svc, Key: "PUBLIC-KEY", Window: 10 * time.Millisecond, Now: func() time.Time { return clk }}
+	h := &hub.Hub{Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: clk.now}
+	h.Push = &hub.Push{Store: st, Sender: svc, Key: "PUBLIC-KEY", Window: 10 * time.Millisecond, Now: clk.now}
 	t.Cleanup(h.Push.Close)
-	return &memEnv{h: h, f: f, sess: sess, st: st, push: svc, clk: &clk}
+	return &memEnv{h: h, f: f, sess: sess, st: st, push: svc, clk: clk}
 }
 
 func goodMemoryInput() hub.MemoryInput {
@@ -276,7 +276,7 @@ func TestAKeyThatStoppedWorkingIsReplacedWhenTheSettingsAreSavedAgain(t *testing
 
 // --- the daily pass ---
 
-func (e *memEnv) at(t time.Time) { *e.clk = t }
+func (e *memEnv) at(t time.Time) { e.clk.set(t) }
 
 func (e *memEnv) memory(year int, seen bool, photos ...string) {
 	e.f.mu.Lock()
@@ -556,3 +556,12 @@ func TestWithNoDeviceToPushToTheDayIsNotUsedUpSoALaterDeviceStillGetsIt(t *testi
 	e.h.MemoriesMaintenance(ctx)
 	waitFor(t, "the push to the new device", func() bool { return len(e.pushes()) == 1 })
 }
+
+// testClock is the clock of a test: the push goroutines read it while the test moves it.
+type testClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *testClock) now() time.Time  { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *testClock) set(t time.Time) { c.mu.Lock(); c.t = t; c.mu.Unlock() }
