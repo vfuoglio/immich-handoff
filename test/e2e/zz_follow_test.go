@@ -79,7 +79,7 @@ func TestFollowSharedAlbum(t *testing.T) {
 		code, listed = getBody(t, port, "/fragments/follow-albums", cookie)
 		return code == 200 && strings.Contains(listed, album.ID)
 	})
-	form("/rules/follow", url.Values{"album_id": {album.ID}, "history": {"new"}, "dest": {"tag"}})
+	form("/rules/follow", url.Values{"album_id": {album.ID}, "history": {"new"}, "dest": {"plain"}}) // not a tag: TestEventPool counts the photos tagged from/alice in the same Immich
 	if !hasName(keyNames(t, bob), "handoff: library") {
 		t.Fatalf("the key the app made for following albums is in bob's Immich: %v", keyNames(t, bob))
 	}
