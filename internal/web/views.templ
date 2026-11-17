@@ -248,6 +248,12 @@ type GuideView struct {
 }
 
 // DashboardData is everything the main page shows.
+// LibraryView is the person's choice of where "Add to my library" puts copies.
+type LibraryView struct {
+	Available   bool
+	Dest, Album string
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -271,6 +277,7 @@ type DashboardData struct {
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 	Mail       MailView
 	Push       PushView
+	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
 	Rooms      []RoomView
@@ -621,6 +628,9 @@ templ Dashboard(d DashboardData) {
 			if d.Push.Available {
 				@PushCard(d.Push)
 			}
+			if d.Library.Available {
+				@LibraryCard(d.Library)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -722,6 +732,25 @@ templ MailCard(m MailView) {
 			</p>
 		}
 		<small class="meta">{ t(ctx, "Emails go to the address Immich shows for your account, in the language of this page, and arrive a few minutes after things happen, in one email. Every email has a link that stops them.") }</small>
+	</div>
+}
+
+// LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.
+templ LibraryCard(l LibraryView) {
+	<h2>{ t(ctx, "Add to my library") }</h2>
+	<div class="card librarycard">
+		<p>{ t(ctx, "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.") }</p>
+		<form class="limits" hx-post="me/library" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<label><input type="radio" name="dest" value="tag" checked?={ l.Dest == "tag" || l.Dest == "" }/> { t(ctx, "In my library, tagged with who shared it") }</label>
+			<label><input type="radio" name="dest" value="plain" checked?={ l.Dest == "plain" }/> { t(ctx, "In my library") }</label>
+			<label><input id="lib-dest-album" type="radio" name="dest" value="album" checked?={ l.Dest == "album" }/> { t(ctx, "In an album") }</label>
+			<div class="field" hx-get="fragments/album-names?id=lib-album-pick&field=album_pick" hx-target="this" hx-swap="innerHTML" hx-trigger={ libraryTrigger(l) }>
+				<select id="lib-album-pick" name="album_pick"><option value="">{ t(ctx, "Choose an album") }</option></select>
+			</div>
+			<input name="album" maxlength="100" value={ l.Album } autocomplete="off" placeholder={ t(ctx, "or the name of a new album") } aria-label={ t(ctx, "The name of a new album") }/>
+			<button type="submit">{ t(ctx, "Save") }</button>
+		</form>
+		<small class="meta">{ t(ctx, "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.") }</small>
 	</div>
 }
 
@@ -2435,7 +2464,7 @@ templ DropBoxForm() {
 			<small class="meta wide">{ t(ctx, "Upload: anyone with the link can see the page, and needs the password to send. The whole page: nothing is shown, and nothing can be sent, without the password. A wall you start has its own link and is not covered.") }</small>
 			<div class="field">
 				<label for="drop-album">{ t(ctx, "Put what arrives in this album (optional)") }</label>
-				<div hx-get="fragments/album-names" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<div hx-get="fragments/album-names?id=drop-album-pick&field=album_pick" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 					<select id="drop-album-pick" name="album_pick"><option value="">{ t(ctx, "No album") }</option></select>
 				</div>
 				<input id="drop-album" name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "or the name of a new album") } aria-label={ t(ctx, "The name of a new album") }/>
@@ -3257,8 +3286,8 @@ templ RoomSection(rooms []RoomView) {
 }
 
 // AlbumNameList is the list of the person's own albums for a field that takes an album by name; a new name is typed beside it.
-templ AlbumNameList(names []string) {
-	<select id="drop-album-pick" name="album_pick">
+templ AlbumNameList(names []string, id, field string) {
+	<select id={ id } name={ field }>
 		<option value="">{ t(ctx, "No album") }</option>
 		for _, n := range names {
 			<option value={ n }>{ n }</option>

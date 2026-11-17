@@ -108,6 +108,10 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /immich/send", w.buttonSend)
 	mux.HandleFunc("POST /immich/undo", w.buttonUndo)
 	mux.HandleFunc("POST /immich/ask", w.buttonAsk)
+	mux.HandleFunc("GET /immich/owned", w.buttonOwned)
+	mux.HandleFunc("GET /immich/albums", w.buttonAlbums)
+	mux.HandleFunc("POST /immich/add", w.buttonAdd)
+	mux.HandleFunc("POST /immich/add-undo", w.buttonAddUndo)
 	mux.HandleFunc("POST /static/share", w.shareFallback)
 	mux.HandleFunc("GET /send", w.sendPage)
 	mux.HandleFunc("POST /send/start", w.phoneStart)
@@ -244,6 +248,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("POST /me/mail", w.myMail)
+	mux.HandleFunc("POST /me/library", w.myLibrary)
 	mux.HandleFunc("GET /me/push/key", w.pushKey)
 	mux.HandleFunc("POST /me/push", w.pushSubscribe)
 	mux.HandleFunc("POST /me/push/remove", w.pushRemove)
@@ -620,6 +625,10 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	mc := w.Hub.MailCard(ctx, me.user, string(loc(ctx).Lang))
 	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
 	d.Push = w.pushView(ctx, me)
+	if w.Hub != nil && !w.ButtonOff {
+		def := w.Hub.LibraryDefault(ctx, me.user.ID)
+		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album}
+	}
 	w.overview(ctx, me, &d)
 	return d
 }

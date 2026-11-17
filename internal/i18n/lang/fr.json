@@ -1116,5 +1116,40 @@
  "Choose one of your albums, or type a new name and it is made.": "Choisissez un de vos albums, ou tapez un nouveau nom et il sera créé.",
  "No album": "Aucun album",
  "or the name of a new album": "ou le nom d’un nouvel album",
- "The name of a new album": "Le nom d’un nouvel album"
+ "The name of a new album": "Le nom d’un nouvel album",
+ "Add to my library": "Ajouter à ma bibliothèque",
+ "Adding to your library...": "Ajout à votre bibliothèque...",
+ "Could not add": "Impossible d’ajouter",
+ "Where should it go?": "Où doit-elle aller ?",
+ "In my library, tagged with who shared it": "Dans ma bibliothèque, avec une étiquette indiquant qui l’a partagée",
+ "In my library": "Dans ma bibliothèque",
+ "In an album": "Dans un album",
+ "Remember this choice": "Retenir ce choix",
+ "Choose an album": "Choisir un album",
+ "Add here": "Ajouter ici",
+ "Could not list your albums": "Impossible de charger vos albums",
+ "These photos are already yours": "Ces photos sont déjà à vous",
+ "the copies were made but the album could not be made": "les copies ont été faites, mais l’album n’a pas pu être créé",
+ "the copies were made but could not be put in the album": "les copies ont été faites, mais n’ont pas pu être mises dans l’album",
+ "the copies were made but could not be tagged": "les copies ont été faites, mais n’ont pas pu être étiquetées",
+ "some of these photos cannot be seen": "certaines de ces photos ne peuvent pas être vues",
+ "choose where the copies go: a tag, your library as it is, or an album": "choisissez où vont les copies : une étiquette, votre bibliothèque telle quelle ou un album",
+ "choose an album, or give a new one a name": "choisissez un album, ou donnez un nom à un nouveau",
+ "the album's name is too long": "le nom de l’album est trop long",
+ "it is too late to take these back: they were added more than 15 minutes ago": "il est trop tard pour les reprendre : elles ont été ajoutées il y a plus de 15 minutes",
+ "none of these copies can be taken back": "aucune de ces copies ne peut être reprise",
+ "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.": "Dans Immich, une photo que quelqu’un a partagée avec vous peut être copiée dans votre propre bibliothèque avec le bouton Ajouter à ma bibliothèque. Choisissez où vont les copies.",
+ "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.": "Une copie prend autant de place que la photo, et la personne qui l’a partagée n’en est pas informée. Pendant 15 minutes après l’ajout, Annuler retire de nouveau les copies.",
+ "{n} photo added to your library": {
+  "one": "{n} photo ajoutée à votre bibliothèque",
+  "other": "{n} photos ajoutées à votre bibliothèque"
+ },
+ "{n} photo added to your library from Immich": {
+  "one": "{n} photo ajoutée à votre bibliothèque depuis Immich",
+  "other": "{n} photos ajoutées à votre bibliothèque depuis Immich"
+ },
+ "{n} photo taken out of your library again": {
+  "one": "{n} photo retirée de votre bibliothèque",
+  "other": "{n} photos retirées de votre bibliothèque"
+ }
 }

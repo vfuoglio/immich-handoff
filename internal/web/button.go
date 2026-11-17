@@ -34,6 +34,8 @@ func buttonWords(ctx context.Context) map[string]string {
 		"Hand over...", "Hand over to", "Undo", "Open Handoff", "Handing over...", "Could not hand over", "Ask to join", "Waiting for approval", "Last used", "Forget my choice",
 		"Your original stays in your library", "Your original goes to your trash once the other side has a copy",
 		"You do not send to any service yet.", "Taken off again", "Immich Handoff",
+		"Add to my library", "Adding to your library...", "Could not add", "Where should it go?", "In my library, tagged with who shared it",
+		"In my library", "In an album", "Remember this choice", "Choose an album", "or the name of a new album", "Add here", "Could not list your albums", "Try again",
 	}
 	out := make(map[string]string, len(ids))
 	for _, id := range ids {
@@ -97,7 +99,9 @@ func (w *Server) buttonInfo(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, msg, code)
 		return
 	}
-	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me)})
+	def, chosen := w.Hub.LibraryChoice(r.Context(), me.user.ID)
+	writeJSON(rw, map[string]any{"words": buttonWords(r.Context()), "services": w.buttonServices(r.Context(), me), "offers": w.buttonOffers(r.Context(), me),
+		"library": map[string]any{"dest": def.Kind, "album": def.Album, "chosen": chosen}})
 }
 
 func (w *Server) buttonSend(rw http.ResponseWriter, r *http.Request) {
@@ -117,6 +121,106 @@ func (w *Server) buttonUndo(rw http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		return map[string]any{"message": t(ctx, "Taken off again")}, nil
+	})
+}
+
+// buttonOwned says which of the photos the person looks at are theirs and which are someone else's that they can see
+// (a shared album, a partner), so the button offers Add to my library for the second kind. Unreadable ids are left out.
+func (w *Server) buttonOwned(rw http.ResponseWriter, r *http.Request) {
+	if w.ButtonOff || w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	mine, others, err := w.Hub.Ownership(r.Context(), me.sess, me.user, r.URL.Query()["asset"])
+	if err != nil {
+		http.Error(rw, t(r.Context(), "Could not do that: {reason}", "reason", t(r.Context(), err.Error())), http.StatusBadRequest)
+		return
+	}
+	if mine == nil {
+		mine = []string{}
+	}
+	if others == nil {
+		others = []string{}
+	}
+	writeJSON(rw, map[string]any{"mine": mine, "others": others})
+}
+
+// buttonAlbums lists the person's own albums for the choice of an album to put copies in; it is asked for when that
+// choice is opened.
+func (w *Server) buttonAlbums(rw http.ResponseWriter, r *http.Request) {
+	if w.ButtonOff || w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	albums, err := me.sess.OwnedAlbums(r.Context())
+	if err != nil {
+		w.Log.Warn("could not list albums", "user", me.user.Email, "err", err)
+		http.Error(rw, t(r.Context(), "Could not list your albums"), http.StatusBadGateway)
+		return
+	}
+	type album struct {
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+	out := make([]album, 0, len(albums))
+	for _, a := range albums {
+		out = append(out, album{ID: a.ID.String(), Name: a.Name, Count: a.Count})
+	}
+	writeJSON(rw, map[string]any{"albums": out})
+}
+
+// buttonAdd copies photos the person can see but does not own into their own library.
+func (w *Server) buttonAdd(rw http.ResponseWriter, r *http.Request) {
+	w.buttonAct(rw, r, func(ctx context.Context, me *member, _ string, assets []string) (any, error) {
+		dest := hub.LibraryDest{Kind: r.PostFormValue("dest"), Album: r.PostFormValue("album")}
+		res, err := w.Hub.AddToLibrary(ctx, me.sess, me.user, assets, dest)
+		if err != nil {
+			return nil, err
+		}
+		if r.PostFormValue("remember") == "1" {
+			if err := w.Hub.SetLibraryDefault(ctx, me.user.ID, dest); err != nil {
+				w.Log.Warn("could not remember where copies go", "user", me.user.Email, "err", err)
+			}
+		}
+		copies := make([]string, 0, len(res.Copies))
+		for _, c := range res.Copies {
+			copies = append(copies, c.String())
+		}
+		msg := ""
+		switch {
+		case res.Added > 0:
+			msg = n(ctx, "{n} photo added to your library", "{n} photos added to your library", res.Added)
+			if res.Note != "" {
+				msg += " " + t(ctx, res.Note)
+			}
+		case res.Already > 0:
+			msg = t(ctx, "Already in your library")
+		default:
+			msg = t(ctx, "These photos are already yours")
+		}
+		return map[string]any{"added": res.Added, "already": res.Already, "skipped": res.Skipped, "copies": copies, "message": msg}, nil
+	})
+}
+
+// buttonAddUndo takes copies that were just added back out of the library (into Immich's trash).
+func (w *Server) buttonAddUndo(rw http.ResponseWriter, r *http.Request) {
+	w.buttonAct(rw, r, func(ctx context.Context, me *member, _ string, copies []string) (any, error) {
+		gone, err := w.Hub.UndoAddToLibrary(ctx, me.sess, me.user, copies, r.PostFormValue("album"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"removed": gone, "message": n(ctx, "{n} photo taken out of your library again", "{n} photos taken out of your library again", gone)}, nil
 	})
 }
 

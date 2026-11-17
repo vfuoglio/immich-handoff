@@ -105,6 +105,12 @@ def main():
         print(name, "has", len(ids[name]), "photos")
     s, album, _ = call("POST", IMMICH + "/albums", {"albumName": "Holiday", "assetIds": ids["alice"][:7]}, {"Authorization": "Bearer " + tokens["alice"]})
     print("alice's album Holiday:", s)
+    # Alice shares the album with Bob, and shares her whole library with him as a partner: so Bob has photos he can see but
+    # does not own, and the Add to my library button has something to show
+    _, bobme, _ = call("GET", IMMICH + "/users/me", None, {"Authorization": "Bearer " + tokens["bob"]})
+    if isinstance(album, dict) and isinstance(bobme, dict):
+        print("alice shares Holiday with bob:", call("PUT", f"{IMMICH}/albums/{album['id']}/users", {"albumUsers": [{"userId": bobme["id"], "role": "viewer"}]}, {"Authorization": "Bearer " + tokens["alice"]})[0])
+        print("alice shares her library with bob:", call("POST", f"{IMMICH}/partners/{bobme['id']}", None, {"Authorization": "Bearer " + tokens["alice"]})[0])
 
     # a little history in the app: Alice offers "Family album" (open); Bob joins it and hands over five photos
     print("app:", app_post(cookies["alice"], "/services", {"name": "Family album", "tag": "family", "policy": "open", "visibility": "listed"})[0])

@@ -56,6 +56,37 @@ func (w *Server) myMail(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// myLibrary saves where the person's "Add to my library" copies go. The album is a name typed for a new one, or one chosen
+// from the list.
+func (w *Server) myLibrary(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	ctx := r.Context()
+	if w.Hub == nil || w.ButtonOff {
+		http.Error(rw, t(ctx, "Joining from this page is not switched on."), http.StatusNotFound)
+		return
+	}
+	album := strings.TrimSpace(r.PostFormValue("album"))
+	if album == "" {
+		album = r.PostFormValue("album_pick")
+	}
+	if err := w.Hub.SetLibraryDefault(ctx, me.user.ID, hub.LibraryDest{Kind: r.PostFormValue("dest"), Album: album}); err != nil {
+		status := http.StatusInternalServerError
+		if hub.IsUserError(err) {
+			status = http.StatusConflict
+		}
+		w.Log.Warn("saving where copies go failed", "err", err)
+		rw.Header().Set("HX-Reswap", "innerHTML")
+		rw.WriteHeader(status)
+		fmt.Fprint(rw, t(ctx, "Could not do that: {reason}", "reason", t(ctx, err.Error())))
+		return
+	}
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusNoContent)
+}
+
 // unsubscribePage is where the link in a mail leads. It stops nothing by itself (a program that follows links, such as
 // a mail scanner, must not unsubscribe anyone); the button does. A link that was not made by this app is "not found".
 func (w *Server) unsubscribePage(rw http.ResponseWriter, r *http.Request) {

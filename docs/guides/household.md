@@ -29,6 +29,10 @@ What reaches the receiver is the photo's file, its name, its dates and the favou
 
 <p align="center"><img src="../images/dashboard-mobile-dark.png" alt="The page on a phone in dark mode" width="280"></p>
 
+## Keeping a photo someone shared with you
+
+Immich's shared albums and partner sharing let you look at photos, but they stay in the other person's account. With the [button inside Immich](../find-handoff.md#add-to-my-library-from-inside-immich) you can press **Add to my library** on such a photo (or on a whole selection) and get a copy of your own, with its description, rating, location and a live photo's clip. Choose once whether copies go tagged with who shared them, into your library as it is, or into an album; **Undo** takes them out again for 15 minutes. A copy takes as much room as the photo does, and the person who shared it is not told.
+
 ## Joining a service
 
 Under **Services you can send to** you see the services you may join. Joining asks one question that is yours alone to answer, **what should happen to your originals?**

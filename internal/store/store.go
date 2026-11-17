@@ -665,6 +665,12 @@ var migrations = []string{
 	   at       TEXT NOT NULL,
 	   PRIMARY KEY (rule_id, asset_id)
 	 );`,
+	// where a person's "Add to my library" copies go by default
+	`CREATE TABLE library_prefs (
+	   user_id TEXT PRIMARY KEY,
+	   dest    TEXT NOT NULL,
+	   album   TEXT NOT NULL DEFAULT ''
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### What is new
+- **Add to my library.** A button inside Immich's photo viewer, selection bar and menus copies a photo that someone shared with you (an album, or a partner's library) into your own library, with its description, rating, location and a live photo's clip. Choose where copies go (tagged with who shared them, as they are, or an album), and **Undo** for 15 minutes. It answers Immich's most voted sharing request using only Immich's public API. See [Add to my library](docs/find-handoff.md#add-to-my-library-from-inside-immich).
+
 ## 1.3.1
 
 ### Fixed
