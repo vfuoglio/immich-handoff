@@ -1317,5 +1317,94 @@
  "Not these": "Estas não",
  "Always": "Sempre",
  "Suggestion": "Sugestão",
- "Look at them one by one": "Vê-las uma a uma"
+ "Look at them one by one": "Vê-las uma a uma",
+ "{name} stacks photos that belong together": "{name} empilha as fotos que andam juntas",
+ "{n} group of photos stacked on its own": {
+  "one": "{n} grupo de fotos empilhado sozinho",
+  "other": "{n} grupos de fotos empilhados sozinhos"
+ },
+ "{n} group of photos can be stacked. Look at it on the Overview.": {
+  "one": "{n} grupo de fotos pode ser empilhado. Veja-o na Visão geral.",
+  "other": "{n} grupos de fotos podem ser empilhados. Veja-os na Visão geral."
+ },
+ "{n} stack taken apart again": {
+  "one": "{n} pilha desfeita de novo",
+  "other": "{n} pilhas desfeitas de novo"
+ },
+ "{n} photo stacked with the ones it belongs with": {
+  "one": "{n} foto empilhada com as que lhe pertencem",
+  "other": "{n} fotos empilhadas com as que lhes pertencem"
+ },
+ "{n} photo left out of stacking": {
+  "one": "{n} foto deixada de fora do empilhamento",
+  "other": "{n} fotos deixadas de fora do empilhamento"
+ },
+ "{name} made stacking ask first again": "{name} fez com que o empilhamento volte a perguntar primeiro",
+ "{name} let stacking go on by itself for pairs and edits": "{name} deixou que o empilhamento continue sozinho para pares e edições",
+ "{name} stopped stacking photos by rule": "{name} deixou de empilhar fotos por regra",
+ "the key the app uses for stacking is gone: make the rule again": "a chave que a app usa para empilhar desapareceu: faça a regra de novo",
+ "you already have a stacking rule for that": "já tem uma regra de empilhamento para isso",
+ "choose at least one thing to stack: a RAW and its JPEG, an edit and its original, or a burst": "escolha pelo menos uma coisa para empilhar: um RAW com o seu JPEG, uma edição com o seu original ou uma rajada",
+ "the cover is the JPEG, the RAW or the edit": "a capa é o JPEG, o RAW ou a edição",
+ "there is nothing to take apart: the app made no stack in the last 15 minutes": "não há nada a desfazer: a app não fez nenhuma pilha nos últimos 15 minutos",
+ "a rule that only stacks bursts always asks first, because a burst is a guess": "uma regra que só empilha rajadas pergunta sempre primeiro, porque uma rajada é um palpite",
+ "Stack photos that belong together": "Empilhar as fotos que andam juntas",
+ "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.": "A app pode propor empilhar um RAW com o seu JPEG, uma edição com o seu original e os disparos de uma rajada, para que a sua biblioteca mostre uma só foto de cada. Só faz pilhas: nunca altera nem apaga uma foto e deixa em paz as fotos que já estão numa pilha.",
+ "Stacks pairs and edits by itself": "Empilha pares e edições sozinha",
+ "You have answered Always {n} times. You can let it stack pairs and edits by itself from now on; bursts always ask.": "Respondeu Sempre {n} vezes. A partir de agora pode deixá-la empilhar pares e edições sozinha; as rajadas perguntam sempre.",
+ "Take apart the stacks the app made in the last 15 minutes? The photos stay.": "Desfazer as pilhas que a app fez nos últimos 15 minutos? As fotos ficam.",
+ "Undo?": "Anular?",
+ "Take them apart": "Desfazê-las",
+ "Undo the {n} stack just made": {
+  "one": "Desfazer a pilha acabada de fazer",
+  "other": "Desfazer as {n} pilhas acabadas de fazer"
+ },
+ "From now on the pairs and edits that arrive are stacked without asking you. Only photos that arrive from now on are handled this way, and bursts always ask.": "A partir de agora os pares e as edições que chegarem são empilhados sem lhe perguntar. Só as fotos que chegarem daqui em diante são tratadas assim, e as rajadas perguntam sempre.",
+ "Let it stack by itself": "Deixá-la empilhar sozinha",
+ "Stop stacking by this rule? The stacks already made stay.": "Deixar de empilhar com esta regra? As pilhas já feitas ficam.",
+ "Stack photos by a rule": "Empilhar fotos com uma regra",
+ "A RAW and its JPEG": "Um RAW e o seu JPEG",
+ "An edit and its original": "Uma edição e o seu original",
+ "A burst: three or more shots from one camera a moment apart (always asks first)": "Uma rajada: três ou mais disparos de uma câmara com um instante de intervalo (pergunta sempre primeiro)",
+ "The cover of a stack": "A capa de uma pilha",
+ "The JPEG": "O JPEG",
+ "The RAW": "O RAW",
+ "The edit": "A edição",
+ "Only in this folder (optional)": "Só nesta pasta (opcional)",
+ "Leave it empty for your whole library. The folder is the path Immich shows for one of your photos, up to the folder you want.": "Deixe vazio para toda a sua biblioteca. A pasta é o caminho que o Immich mostra para uma das suas fotos, até à pasta que quer.",
+ "Offer me these stacks": "Propor-me estas pilhas",
+ "a RAW with its JPEG": "um RAW com o seu JPEG",
+ "an edit with its original": "uma edição com o seu original",
+ "a burst": "uma rajada",
+ "Stack {things}": "Empilhar {things}",
+ "in {folder}": "em {folder}",
+ "{n} RAW with its JPEG": {
+  "one": "{n} RAW com o seu JPEG",
+  "other": "{n} RAW com os seus JPEG"
+ },
+ "{n} edit with its original": {
+  "one": "{n} edição com o seu original",
+  "other": "{n} edições com os seus originais"
+ },
+ "{n} burst": {
+  "one": "{n} rajada",
+  "other": "{n} rajadas"
+ },
+ "Could not look at your photos": "Não foi possível ver as suas fotos",
+ "Looked at {n} of your photos and found nothing to stack.": "Foram vistas {n} das suas fotos e não se encontrou nada para empilhar.",
+ "Looked at {n} of your photos and found: {found}.": "Foram vistas {n} das suas fotos e encontrou-se: {found}.",
+ "Stack them": "Empilhá-las",
+ "{n} group of photos to stack": {
+  "one": "{n} grupo de fotos para empilhar",
+  "other": "{n} grupos de fotos para empilhar"
+ },
+ "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.": "{found}. É mostrada uma foto de cada grupo. As fotos só são empilhadas, nunca alteradas nem apagadas.",
+ "Look at the groups one by one": "Ver os grupos um a um",
+ "Photos to stack": "Fotos para empilhar",
+ "Each box is a group that would become one stack, the cover first.": "Cada caixa é um grupo que passaria a ser uma pilha, com a capa primeiro.",
+ "Stack the ticked groups": "Empilhar os grupos marcados",
+ "Stack the ticked groups, and always": "Empilhar os grupos marcados, e sempre",
+ "A RAW with its JPEG": "Um RAW com o seu JPEG",
+ "An edit with its original": "Uma edição com o seu original",
+ "A burst": "Uma rajada"
 }

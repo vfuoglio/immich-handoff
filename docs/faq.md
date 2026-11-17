@@ -18,6 +18,9 @@ No. Senders use Immich as they do now: add a tag, or press the **Hand over...** 
 **Can I keep a photo someone shared with me?**
 Yes: the button inside Immich shows **Add to my library** on photos from albums shared with you and from a partner, and copies them into your own library with their description, rating and location (the person who shared them is not told, and a copy takes as much room as the photo). See [Add to my library](find-handoff.md#add-to-my-library-from-inside-immich). To have the new photos of an album shared with you offered to you as they are added, [follow the album](guides/automate.md#following-an-album-shared-with-you).
 
+**Can the app stack my RAW and JPEG files, edits and bursts?**
+Yes: on your page, **Stack photos that belong together** offers to stack a RAW with its JPEG, an edit with its original, and bursts (which always ask first), with the cover you choose. It never changes or deletes a photo and can take its own stacks apart for 15 minutes. See [Stacking photos that belong together](guides/automate.md#stacking-photos-that-belong-together).
+
 **Can the app make albums from the folders of my external library?**
 Yes: on your page, **Albums from my folders** offers an album for each folder, named after it, and puts the photos in it once you say yes. It only adds, never removes or renames. See [Albums from the folders of an external library](guides/automate.md#albums-from-the-folders-of-an-external-library).
 

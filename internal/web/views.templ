@@ -285,6 +285,21 @@ type FoldersView struct {
 	Rules     []FolderRuleView
 }
 
+// StackRuleView is a rule that stacks photos, for the person's page.
+type StackRuleView struct {
+	ID, Words, Mode string
+	Always          int
+	Paused, CanAuto bool
+	Last, Problem   string
+	Undoable        int // stacks the app made that the person can still take apart
+}
+
+// StacksView is the person's "Stack photos" card.
+type StacksView struct {
+	Available bool
+	Rules     []StackRuleView
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -310,6 +325,7 @@ type DashboardData struct {
 	Push       PushView
 	Memories   MemoriesView
 	Folders    FoldersView
+	Stacks     StacksView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
@@ -670,6 +686,9 @@ templ Dashboard(d DashboardData) {
 			if d.Folders.Available {
 				@FoldersCard(d.Folders)
 			}
+			if d.Stacks.Available {
+				@StacksCard(d.Stacks)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -884,6 +903,86 @@ templ FoldersCard(f FoldersView) {
 			</form>
 		</details>
 	</div>
+}
+
+// StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
+templ StacksCard(s StacksView) {
+	<h2>{ t(ctx, "Stack photos that belong together") }</h2>
+	<div class="card stackscard">
+		<p>{ t(ctx, "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.") }</p>
+		for _, r := range s.Rules {
+			<div class="card rule">
+				<p><b>{ r.Words }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Stacks pairs and edits by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it stack pairs and edits by itself from now on; bursts always ask.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					if r.Undoable > 0 {
+						<button hx-post="rules/stack-undo" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Take apart the stacks the app made in the last 15 minutes? The photos stay.") } data-confirm-title={ t(ctx, "Undo?") } data-confirm-label={ t(ctx, "Take them apart") }>{ n(ctx, "Undo the {n} stack just made", "Undo the {n} stacks just made", r.Undoable) }</button>
+					}
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the pairs and edits that arrive are stacked without asking you. Only photos that arrive from now on are handled this way, and bursts always ask.") }>{ t(ctx, "Let it stack by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop stacking by this rule? The stacks already made stay.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Stack photos by a rule") }</summary>
+			<form class="card stack-form" hx-post="rules/stack" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<div class="field">
+					<label><input type="checkbox" name="pair" value="1" checked hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "A RAW and its JPEG") }</label>
+					<label><input type="checkbox" name="edit" value="1" checked hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "An edit and its original") }</label>
+					<label><input type="checkbox" name="burst" value="1" hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "A burst: three or more shots from one camera a moment apart (always asks first)") }</label>
+				</div>
+				<div class="field">
+					<label for="stack-cover">{ t(ctx, "The cover of a stack") }</label>
+					<select id="stack-cover" name="cover" hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML">
+						<option value="jpeg">{ t(ctx, "The JPEG") }</option>
+						<option value="raw">{ t(ctx, "The RAW") }</option>
+						<option value="edited">{ t(ctx, "The edit") }</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="stack-folder">{ t(ctx, "Only in this folder (optional)") }</label>
+					<input id="stack-folder" name="folder" maxlength="500" autocomplete="off" placeholder="/external/photos"
+						hx-get="fragments/stack-check" hx-trigger="keyup changed delay:600ms, change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/>
+					<small class="meta">{ t(ctx, "Leave it empty for your whole library. The folder is the path Immich shows for one of your photos, up to the folder you want.") }</small>
+				</div>
+				<div id="stack-check" class="meta" aria-live="polite"></div>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer me these stacks") }</button></p>
+			</form>
+		</details>
+	</div>
+}
+
+// StackCheck is what the form shows about the rule being made: how many groups of each kind it finds among the person's photos now, or why
+// it cannot.
+templ StackCheck(msg string) {
+	<p>{ msg }</p>
 }
 
 // FolderCheck is what the form shows about the folder being typed: how many of the person's photos are under it and the albums
@@ -4432,7 +4531,10 @@ templ RuleCities(cities []string) {
 templ SuggestionReviewPage(d SuggestionReview) {
 	@Layout(reviewTitle(ctx, d), d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
-		if d.Folder {
+		if d.Stack {
+			<h1>{ t(ctx, "Photos to stack") }</h1>
+			<p class="lead">{ t(ctx, "Each box is a group that would become one stack, the cover first.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Folder {
 			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Library {
@@ -4445,6 +4547,18 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 			<input type="hidden" name="rule" value={ d.RuleID }/>
 			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
+			if d.Stack {
+				for _, g := range d.Groups {
+					<fieldset class="stack-group">
+						<legend><label><input type="checkbox" name="photo" value={ g.Cover } checked/> { stackSignalWords(ctx, g.Signal) }</label></legend>
+						<ul class="review-grid">
+							for _, p := range g.Photos {
+								<li><img src={ p.URL + "?size=large" } alt={ p.Why } width="160" height="160" loading="lazy"/></li>
+							}
+						</ul>
+					</fieldset>
+				}
+			}
 			<ul class="review-grid">
 				for _, p := range d.Photos {
 					<li>
@@ -4456,7 +4570,10 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				}
 			</ul>
 			<p class="row form-actions">
-				if d.Folder {
+				if d.Stack {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Stack the ticked groups") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Stack the ticked groups, and always") }</button>
+				} else if d.Folder {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
 				} else if d.Library {

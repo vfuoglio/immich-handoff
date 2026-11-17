@@ -514,3 +514,39 @@ func StackSentence(c store.RuleCond) string {
 	}
 	return out
 }
+
+// StackWaiting is a group a rule has offered and nobody has answered: how it was found, its cover and all its photos (the cover first).
+type StackWaiting struct {
+	Signal  string
+	Cover   string
+	Members []string
+}
+
+// StackGroupsOf puts the waiting photos of a stacking rule together again into the groups they were offered in, in the order of their covers.
+func StackGroupsOf(photos []store.RulePhoto) []StackWaiting {
+	by := map[string]*StackWaiting{}
+	var keys []string
+	for _, p := range photos {
+		sig, cover := splitStackWhy(p.Why)
+		if cover == "" {
+			continue
+		}
+		g := by[p.Why]
+		if g == nil {
+			g = &StackWaiting{Signal: sig, Cover: cover}
+			by[p.Why] = g
+			keys = append(keys, p.Why)
+		}
+		if p.AssetID == cover {
+			g.Members = append([]string{p.AssetID}, g.Members...)
+		} else {
+			g.Members = append(g.Members, p.AssetID)
+		}
+	}
+	sort.Strings(keys)
+	out := make([]StackWaiting, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, *by[k])
+	}
+	return out
+}

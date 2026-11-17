@@ -132,6 +132,8 @@ func (w *Server) followAlbum(rw http.ResponseWriter, r *http.Request) {
 // SuggestionView is a rule with photos waiting for the person's answer.
 type SuggestionView struct {
 	RuleID, Service, Sentence string
+	Stack                     bool     // the rule stacks photos: Service is empty; Count is the number of groups
+	Signals                   string   // for such a rule: how many groups of each kind, in words
 	Folder                    bool     // the rule makes albums from folders: Service is empty
 	Albums                    []string // the albums the waiting photos would go in, for such a rule
 	Library                   bool     // the rule follows an album shared with the person: Service is empty
@@ -159,6 +161,18 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 		if s.Rule.Kind == "folder" {
 			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
 			v.Albums = albumsOfPhotos(s.Photos)
+		}
+		if s.Rule.Kind == store.RuleKindStack { // a card of groups: one cover for each
+			groups := hub.StackGroupsOf(s.Photos)
+			v.Stack, v.Sentence, v.Count, v.Signals = true, stackWords(ctx, s.Rule.Cond), len(groups), stackSignalsOf(ctx, groups)
+			for i, g := range groups {
+				if i == 8 {
+					break
+				}
+				v.Thumbs = append(v.Thumbs, NeedThumb{URL: "rules/photo/" + s.Rule.ID + "/" + g.Cover, Why: g.Signal})
+			}
+			out = append(out, v)
+			continue
 		}
 		for i, p := range s.Photos {
 			if i == 8 {
@@ -336,6 +350,14 @@ type SuggestionReview struct {
 	Library                         bool   // the rule follows an album shared with the person
 	Album, Owner                    string // for such a rule
 	Folder                          bool   // the rule makes albums from folders (Album is the folder)
+	Stack                           bool   // the rule stacks photos: the page shows Groups
+	Groups                          []StackReviewGroup
+}
+
+// StackReviewGroup is a group of photos the rule would stack: how it was found, the photos with the cover first, and the id to tick it by.
+type StackReviewGroup struct {
+	Signal, Cover string
+	Photos        []RuleReviewPhoto
 }
 
 // RuleReviewPhoto is one photo on the review page.
@@ -359,7 +381,20 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	if sg.Rule.Kind == "folder" {
 		d.Folder, d.Album = true, sg.Rule.Cond.Folder
 	}
+	if sg.Rule.Kind == store.RuleKindStack {
+		d.Stack = true
+		for _, g := range hub.StackGroupsOf(sg.Photos) {
+			rg := StackReviewGroup{Signal: g.Signal, Cover: g.Cover}
+			for _, id := range g.Members {
+				rg.Photos = append(rg.Photos, RuleReviewPhoto{ID: id, URL: "rules/photo/" + sg.Rule.ID + "/" + id, Why: g.Signal})
+			}
+			d.Groups = append(d.Groups, rg)
+		}
+	}
 	for _, p := range sg.Photos {
+		if sg.Rule.Kind == store.RuleKindStack { // shown by group, below
+			break
+		}
 		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
 	}
 	rw.Header().Set("Cache-Control", "no-store")

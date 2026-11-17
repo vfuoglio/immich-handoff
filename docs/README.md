@@ -16,6 +16,7 @@ Start with what you want to do.
 | Show an album on a screen, or a weekly best-of | [Frames and the weekly digest](guides/frames-and-digest.md) |
 | Be told by mail, phone or message | [Be told](guides/notifications.md) |
 | Get a daily message about the memories Immich has for today | [On this day](guides/memories.md) |
+| Stack RAW and JPEG pairs, edits and bursts | [Stacking](guides/automate.md#stacking-photos-that-belong-together) |
 | Make an album for each folder of an external library | [Albums from folders](guides/automate.md#albums-from-the-folders-of-an-external-library) |
 | Find my way around the page | [Finding your way around](guides/the-page.md) |
 
@@ -35,6 +36,6 @@ Start with what you want to do.
 
 ## For contributors
 
-[How it works inside](architecture.md), [Releasing](releasing.md), the [changelog](../CHANGELOG.md), and the design notes in [design/](design/): [bridges](design/bridges-design.md), [albums shared across servers](design/shared-albums-design.md), [rules](design/rules-design.md), [Add to my library and following an album](design/library-design.md), [the daily On this day message](design/memories-design.md), [albums from folders](design/folders-design.md), [the button in Immich's pages](design/immich-button-design.md) and [notes on the Immich behaviour this project relies on](design/immich-api-notes.md).
+[How it works inside](architecture.md), [Releasing](releasing.md), the [changelog](../CHANGELOG.md), and the design notes in [design/](design/): [bridges](design/bridges-design.md), [albums shared across servers](design/shared-albums-design.md), [rules](design/rules-design.md), [Add to my library and following an album](design/library-design.md), [the daily On this day message](design/memories-design.md), [albums from folders](design/folders-design.md), [stacking](design/stacks-design.md), [the button in Immich's pages](design/immich-button-design.md) and [notes on the Immich behaviour this project relies on](design/immich-api-notes.md).
 
 New to the idea? The [project page](../README.md) shows what it does in a minute.

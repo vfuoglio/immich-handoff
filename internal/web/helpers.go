@@ -12,6 +12,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -982,4 +983,15 @@ func folderNames(albums []string) string {
 		return strings.Join(albums, ", ")
 	}
 	return strings.Join(albums[:6], ", ") + ", …"
+}
+
+// stackSignalWords says how a group was found, in the person's language.
+func stackSignalWords(ctx context.Context, signal string) string {
+	switch signal {
+	case hub.SignalPair:
+		return t(ctx, "A RAW with its JPEG")
+	case hub.SignalEdit:
+		return t(ctx, "An edit with its original")
+	}
+	return t(ctx, "A burst")
 }

@@ -1317,5 +1317,94 @@
  "Not these": "Diese nicht",
  "Always": "Immer",
  "Suggestion": "Vorschlag",
- "Look at them one by one": "Einzeln ansehen"
+ "Look at them one by one": "Einzeln ansehen",
+ "{name} stacks photos that belong together": "{name} stapelt zusammengehörende Fotos",
+ "{n} group of photos stacked on its own": {
+  "one": "{n} Fotogruppe von selbst gestapelt",
+  "other": "{n} Fotogruppen von selbst gestapelt"
+ },
+ "{n} group of photos can be stacked. Look at it on the Overview.": {
+  "one": "{n} Fotogruppe kann gestapelt werden. Sieh sie dir in der Übersicht an.",
+  "other": "{n} Fotogruppen können gestapelt werden. Sieh sie dir in der Übersicht an."
+ },
+ "{n} stack taken apart again": {
+  "one": "{n} Stapel wieder aufgelöst",
+  "other": "{n} Stapel wieder aufgelöst"
+ },
+ "{n} photo stacked with the ones it belongs with": {
+  "one": "{n} Foto mit den dazugehörigen gestapelt",
+  "other": "{n} Fotos mit den dazugehörigen gestapelt"
+ },
+ "{n} photo left out of stacking": {
+  "one": "{n} Foto vom Stapeln ausgenommen",
+  "other": "{n} Fotos vom Stapeln ausgenommen"
+ },
+ "{name} made stacking ask first again": "{name} lässt das Stapeln wieder erst fragen",
+ "{name} let stacking go on by itself for pairs and edits": "{name} lässt das Stapeln von Paaren und Bearbeitungen von selbst laufen",
+ "{name} stopped stacking photos by rule": "{name} stapelt Fotos nicht mehr nach Regel",
+ "the key the app uses for stacking is gone: make the rule again": "Der Schlüssel, den die App fürs Stapeln nutzt, ist weg: Lege die Regel neu an",
+ "you already have a stacking rule for that": "Dafür hast du schon eine Stapelregel",
+ "choose at least one thing to stack: a RAW and its JPEG, an edit and its original, or a burst": "Wähle mindestens etwas zum Stapeln: ein RAW mit seinem JPEG, eine Bearbeitung mit ihrem Original oder eine Serie",
+ "the cover is the JPEG, the RAW or the edit": "Das Titelbild ist das JPEG, das RAW oder die Bearbeitung",
+ "there is nothing to take apart: the app made no stack in the last 15 minutes": "Es gibt nichts aufzulösen: Die App hat in den letzten 15 Minuten keinen Stapel angelegt",
+ "a rule that only stacks bursts always asks first, because a burst is a guess": "Eine Regel, die nur Serien stapelt, fragt immer zuerst, weil eine Serie nur eine Vermutung ist",
+ "Stack photos that belong together": "Zusammengehörende Fotos stapeln",
+ "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.": "Die App kann vorschlagen, ein RAW mit seinem JPEG, eine Bearbeitung mit ihrem Original und die Aufnahmen einer Serie zu stapeln, damit deine Bibliothek für jedes nur ein Foto zeigt. Sie legt nur Stapel an: Sie ändert oder löscht nie ein Foto und lässt Fotos, die schon in einem Stapel sind, in Ruhe.",
+ "Stacks pairs and edits by itself": "Stapelt Paare und Bearbeitungen von selbst",
+ "You have answered Always {n} times. You can let it stack pairs and edits by itself from now on; bursts always ask.": "Du hast {n} Mal „Immer“ geantwortet. Du kannst Paare und Bearbeitungen ab jetzt von selbst stapeln lassen; Serien fragen immer.",
+ "Take apart the stacks the app made in the last 15 minutes? The photos stay.": "Die Stapel auflösen, die die App in den letzten 15 Minuten angelegt hat? Die Fotos bleiben.",
+ "Undo?": "Rückgängig?",
+ "Take them apart": "Auflösen",
+ "Undo the {n} stack just made": {
+  "one": "Den gerade angelegten Stapel auflösen",
+  "other": "Die {n} gerade angelegten Stapel auflösen"
+ },
+ "From now on the pairs and edits that arrive are stacked without asking you. Only photos that arrive from now on are handled this way, and bursts always ask.": "Ab jetzt werden Paare und Bearbeitungen, die ankommen, ohne Nachfrage gestapelt. Nur Fotos, die ab jetzt ankommen, werden so behandelt, und Serien fragen immer.",
+ "Let it stack by itself": "Von selbst stapeln lassen",
+ "Stop stacking by this rule? The stacks already made stay.": "Nicht mehr nach dieser Regel stapeln? Die schon angelegten Stapel bleiben.",
+ "Stack photos by a rule": "Fotos nach einer Regel stapeln",
+ "A RAW and its JPEG": "Ein RAW und sein JPEG",
+ "An edit and its original": "Eine Bearbeitung und ihr Original",
+ "A burst: three or more shots from one camera a moment apart (always asks first)": "Eine Serie: drei oder mehr Aufnahmen einer Kamera kurz nacheinander (fragt immer zuerst)",
+ "The cover of a stack": "Das Titelbild eines Stapels",
+ "The JPEG": "Das JPEG",
+ "The RAW": "Das RAW",
+ "The edit": "Die Bearbeitung",
+ "Only in this folder (optional)": "Nur in diesem Ordner (optional)",
+ "Leave it empty for your whole library. The folder is the path Immich shows for one of your photos, up to the folder you want.": "Lass es leer für deine ganze Bibliothek. Der Ordner ist der Pfad, den Immich für eines deiner Fotos zeigt, bis zum gewünschten Ordner.",
+ "Offer me these stacks": "Diese Stapel vorschlagen",
+ "a RAW with its JPEG": "ein RAW mit seinem JPEG",
+ "an edit with its original": "eine Bearbeitung mit ihrem Original",
+ "a burst": "eine Serie",
+ "Stack {things}": "{things} stapeln",
+ "in {folder}": "in {folder}",
+ "{n} RAW with its JPEG": {
+  "one": "{n} RAW mit seinem JPEG",
+  "other": "{n} RAWs mit ihren JPEGs"
+ },
+ "{n} edit with its original": {
+  "one": "{n} Bearbeitung mit ihrem Original",
+  "other": "{n} Bearbeitungen mit ihren Originalen"
+ },
+ "{n} burst": {
+  "one": "{n} Serie",
+  "other": "{n} Serien"
+ },
+ "Could not look at your photos": "Deine Fotos konnten nicht angesehen werden",
+ "Looked at {n} of your photos and found nothing to stack.": "{n} deiner Fotos angesehen und nichts zum Stapeln gefunden.",
+ "Looked at {n} of your photos and found: {found}.": "{n} deiner Fotos angesehen und gefunden: {found}.",
+ "Stack them": "Stapeln",
+ "{n} group of photos to stack": {
+  "one": "{n} Fotogruppe zum Stapeln",
+  "other": "{n} Fotogruppen zum Stapeln"
+ },
+ "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.": "{found}. Von jeder Gruppe wird ein Foto gezeigt. Fotos werden nur gestapelt, nie geändert oder gelöscht.",
+ "Look at the groups one by one": "Die Gruppen einzeln ansehen",
+ "Photos to stack": "Fotos zum Stapeln",
+ "Each box is a group that would become one stack, the cover first.": "Jeder Kasten ist eine Gruppe, die ein Stapel würde, das Titelbild zuerst.",
+ "Stack the ticked groups": "Die markierten Gruppen stapeln",
+ "Stack the ticked groups, and always": "Die markierten Gruppen stapeln, und immer",
+ "A RAW with its JPEG": "Ein RAW mit seinem JPEG",
+ "An edit with its original": "Eine Bearbeitung mit ihrem Original",
+ "A burst": "Eine Serie"
 }

@@ -283,6 +283,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/follow", w.followAlbum)
 	mux.HandleFunc("GET /fragments/folder-check", w.folderCheck)
 	mux.HandleFunc("POST /rules/folder", w.followFolder)
+	mux.HandleFunc("GET /fragments/stack-check", w.stackCheck)
+	mux.HandleFunc("POST /rules/stack", w.followStack)
+	mux.HandleFunc("POST /rules/stack-undo", w.undoStack)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
@@ -635,6 +638,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Push = w.pushView(ctx, me)
 	d.Memories = w.memoriesView(ctx, me)
 	d.Folders = w.folderViews(ctx, me)
+	d.Stacks = w.stackViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
 		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}
@@ -718,6 +722,15 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo in {album}", "{n} new photos in {album}", sg.Count, "album", sg.Album),
 				Text: t(ctx, "Shared by {owner}. Add them to your library?", "owner", sg.Owner), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
+			continue
+		}
+		if sg.Stack { // photos that belong together, to stack
+			acts := []NeedAction{
+				{Label: t(ctx, "Stack them"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} group of photos to stack", "{n} groups of photos to stack", sg.Count),
+				Text: t(ctx, "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.", "found", sg.Signals), Thumbs: sg.Thumbs, More: sg.Count - len(sg.Thumbs), Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at the groups one by one")})
 			continue
 		}
 		if sg.Folder { // albums to make from the folders of an external library

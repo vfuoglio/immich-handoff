@@ -209,8 +209,21 @@ func fakeImmich() http.Handler {
 		}
 		var body struct {
 			OriginalPath string `json:"originalPath"`
+			WithExif     bool   `json:"withExif"`
+			WithStacked  *bool  `json:"withStacked"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
+		if body.WithExif && body.WithStacked != nil { // stacking: the person's photos with their EXIF: a RAW and its JPEG, and a photo alone
+			shot := func(id, name string) map[string]any {
+				m := a(id)
+				m["ownerId"], m["originalPath"], m["createdAt"], m["originalFileName"], m["fileCreatedAt"] = otherID, "/lib/"+name, ts, name, ts
+				m["exifInfo"] = map[string]any{"make": "Canon", "model": "R5", "dateTimeOriginal": ts}
+				return m
+			}
+			j(w, map[string]any{"assets": map[string]any{"items": []any{
+				shot("55555555-0000-4000-8000-0000000000b1", "IMG_7.CR2"), shot("55555555-0000-4000-8000-0000000000b2", "IMG_7.JPG")}, "count": 2, "total": 2, "facets": []any{}}})
+			return
+		}
 		if strings.HasPrefix(body.OriginalPath, "/external/photos/") { // the person's photos of an external library
 			own := func(id, path string) map[string]any {
 				m := a(id)

@@ -5,6 +5,9 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -129,4 +132,103 @@ func TestStackingSpike(t *testing.T) {
 		t.Errorf("the key cannot delete a photo: %d", c)
 	}
 	_ = lib
+}
+
+// TestStacking: a person stacks the photos that belong together on a real Immich. The form says what it finds, the rule offers the
+// groups, nothing is stacked before the answer, Send makes the stacks (the JPEG is the cover of a pair, a photo of another folder with
+// the same name is left alone), Undo takes the app's stacks apart again, and stopping the rule deletes the key.
+func TestStacking(t *testing.T) {
+	_, bob, _, _ := bootstrap(t)
+	stackLibrary(t, bob)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 97)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "RULES_CHECK_MINUTES=0.1", "RULES_SETTLE_MINUTES=0.02")
+	cookie := loginCookie(t, "bob@e2e.test")
+	form := func(path string, v url.Values) {
+		t.Helper()
+		if code, body := postBody(t, port, path, cookie, v); code != 204 {
+			t.Fatalf("%s: HTTP %d %.300s", path, code, body)
+		}
+	}
+	asset := func(path string) (id string, stackCount int, primary string) {
+		var res struct {
+			Assets struct {
+				Items []struct {
+					ID string `json:"id"`
+				} `json:"items"`
+			} `json:"assets"`
+		}
+		call(t, "POST", "/search/metadata", keyAuth(bob), map[string]any{"originalPath": path}, &res)
+		if len(res.Assets.Items) != 1 {
+			t.Fatalf("the photo %s: %d found", path, len(res.Assets.Items))
+		}
+		var a struct {
+			Stack *struct {
+				AssetCount     int    `json:"assetCount"`
+				PrimaryAssetID string `json:"primaryAssetId"`
+			} `json:"stack"`
+		}
+		call(t, "GET", "/assets/"+res.Assets.Items[0].ID, keyAuth(bob), nil, &a)
+		if a.Stack != nil {
+			return res.Assets.Items[0].ID, a.Stack.AssetCount, a.Stack.PrimaryAssetID
+		}
+		return res.Assets.Items[0].ID, 0, ""
+	}
+
+	code, body := getBody(t, port, "/fragments/stack-check?pair=1&edit=1&burst=1&cover=jpeg&folder="+url.QueryEscape("/external/stacks"), cookie)
+	if code != 200 || !strings.Contains(body, "Looked at 11 of your photos") || !strings.Contains(body, "1 RAW with its JPEG") || !strings.Contains(body, "1 edit with its original") || !strings.Contains(body, "1 burst") {
+		t.Fatalf("the form's check: %d %.400s", code, body)
+	}
+	form("/rules/stack", url.Values{"pair": {"1"}, "edit": {"1"}, "burst": {"1"}, "cover": {"jpeg"}, "folder": {"/external/stacks"}})
+	if !hasName(keyNames(t, bob), "handoff: stacks") {
+		t.Fatalf("the key the app made is in bob's Immich: %v", keyNames(t, bob))
+	}
+	var rule string
+	eventually(t, "the groups are offered", 90*time.Second, func() bool {
+		body := page(t, port, cookie)
+		m := regexp.MustCompile(`rules/review/([0-9a-f-]{36})`).FindStringSubmatch(body)
+		if m == nil || !strings.Contains(body, "3 groups of photos to stack") {
+			return false
+		}
+		rule = m[1]
+		return true
+	})
+	if _, n, _ := asset("/external/stacks/trip/IMG_1001.JPG"); n != 0 {
+		t.Fatal("nothing is stacked before the answer")
+	}
+	if _, review := getBody(t, port, "/rules/review/"+rule, cookie); !strings.Contains(review, "A RAW with its JPEG") || !strings.Contains(review, "A burst") || !strings.Contains(review, "An edit with its original") {
+		t.Errorf("the review page shows the three groups")
+	}
+	form("/rules/answer", url.Values{"rule": {rule}, "do": {"send"}})
+	eventually(t, "the stacks exist", 60*time.Second, func() bool {
+		_, n, _ := asset("/external/stacks/trip/IMG_1001.JPG")
+		return n == 2
+	})
+	jpg, _, primary := asset("/external/stacks/trip/IMG_1001.JPG")
+	if primary != jpg {
+		t.Errorf("the JPEG is the cover of the pair")
+	}
+	if _, n, _ := asset("/external/stacks/trip/IMG_1002-edited.jpg"); n != 2 {
+		t.Errorf("the edit is stacked with its original: %d", n)
+	}
+	if _, n, _ := asset("/external/stacks/burst/DSC_0102.jpg"); n != 3 {
+		t.Errorf("the burst is stacked: %d", n)
+	}
+	for _, p := range []string{"/external/stacks/other/IMG_1001.JPG", "/external/stacks/pairs/DSC_0200.jpg", "/external/stacks/alone/IMG_2000.jpg"} {
+		if _, n, _ := asset(p); n != 0 {
+			t.Errorf("%s is not in any group: %d", p, n)
+		}
+	}
+	if !strings.Contains(page(t, port, cookie), "Undo the 3 stacks just made") {
+		t.Error("the page offers to take them apart")
+	}
+	form("/rules/stack-undo", url.Values{"rule": {rule}})
+	eventually(t, "the stacks are taken apart", 30*time.Second, func() bool {
+		_, a, _ := asset("/external/stacks/trip/IMG_1001.JPG")
+		_, b, _ := asset("/external/stacks/burst/DSC_0102.jpg")
+		return a == 0 && b == 0
+	})
+
+	form("/rules/delete", url.Values{"rule": {rule}})
+	eventually(t, "the key is gone", 20*time.Second, func() bool { return !hasName(keyNames(t, bob), "handoff: stacks") })
 }
