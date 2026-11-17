@@ -1,19 +1,25 @@
 name: ci
-# CI runs when something is merged toward main, not on every change in develop:
-#   - a pull request (develop into main) and pushes to main
+# CI runs when something is about to reach main, not on every change in develop:
+#   - a pull request into main (the release pull request); main is not tested again when it is merged
+#   - once a day on develop, if it changed (develop-check.yml)
 #   - by hand: Actions, ci, Run workflow, on any branch
-#   - from the release workflow, which runs the same checks first
+#   - from the release and nightly workflows, which run the same checks first
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        description: "Branch or commit to test; empty means the one that started the run"
+        type: string
+        default: ""
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - name: Generated code (Immich client, templates, the page's script bundle) is up to date
@@ -34,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -54,6 +61,7 @@ jobs:
         group: [browser, core, hub, bridge]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - name: End-to-end tests against a throwaway Immich

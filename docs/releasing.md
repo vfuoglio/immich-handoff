@@ -2,6 +2,12 @@
 
 For the maintainer. A release is a git tag; everything else is done by the release workflow (`.github/workflows/release.yml`).
 
+## How work flows
+
+- **`develop` is where work happens.** Small things (documentation, tests, translations, typos) go straight onto `develop` with no pull request. A feature or a risky change may still use a branch and a pull request into `develop`, if you want a second look; none is required.
+- **A pull request into `main` is the release.** It is the only pull request that is needed, and CI runs on it. `main` is not tested again when it is merged, and nothing else pushes to it.
+- **`develop` is tested once a day** (`.github/workflows/develop-check.yml`, about 05:37 UTC), only if it has a commit from the last day, so a problem appears within a day and not on the day of a release. By hand: Actions, **develop-check**, Run workflow.
+
 ## What a release produces
 
 - the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and, if it is the highest version released so far, `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag, and not `X.Y` or `latest`)
@@ -25,20 +31,24 @@ Without them the release fails at the Docker Hub login, before anything is publi
 
 ## Checklist
 
+One path, in this order. Everything that names the release is done on `develop` **before** the pull request, so there is one pull request and no change after the tag.
+
 1. **Changelog.** In `CHANGELOG.md` rename `## Unreleased` content to `## X.Y.Z` (and leave an empty `## Unreleased` above it). The release fails without a section for the version being released.
 2. **Compose file.** If the minor version changed, update the image tag in `docker-compose.yml` (`:X.Y`).
-3. **Test.** CI must be green on `main`. Locally: `go test ./...` and `test/run.sh`. The release workflow runs both again before it builds anything.
-4. **Try the workflow first when it changed.** In GitHub: Actions, **release**, **Run workflow**, version `0.0.0-test`. It runs the same checks and publishes only the image tag `0.0.0-test`: no `latest`, no GitHub Release. Pull it and look at it, then delete that version from the package page.
-5. **Tag and push.**
+3. **Documentation pointer.** Change the version in the clone command in `README.md` and `docs/install.md` (`git clone --branch vX.Y.Z`, and the "latest release is" wording) to the version you are about to tag. Tags are made right after the merge, so the pointer is true within minutes. People are told to start from a release and never from `main`.
+4. **Test.** Locally: `go test ./...` and `test/run.sh`. The release workflow runs both again before it builds anything.
+5. **Try the workflow first when it changed.** In GitHub: Actions, **release**, **Run workflow**, version `0.0.0-test`. It runs the same checks and publishes only the image tag `0.0.0-test`: no `latest`, no GitHub Release. Pull it and look at it, then delete that version from the package page.
+6. **One pull request, `develop` into `main`.** Wait for CI to be green, merge it.
+7. **Tag and push,** from the merged `main`.
    ```
    git tag -a vX.Y.Z -m "X.Y.Z"
    git push origin vX.Y.Z
    ```
    GitHub starts no tag-triggered run when more than three tags are pushed at once; use the manual run with the version in that case (it publishes the image but not the GitHub Release).
-6. **Watch the run.** Steps: tests, version check, changelog check, build and smoke test for both architectures, publish, create the release.
-7. **First release only: check both images are public.** On Docker Hub the repository must be Public. On GitHub, open the repository's Packages, `immich-handoff`, Package settings, and check the visibility is Public (a package that a workflow creates may start private) and that it is linked to the repository.
-8. **Check it from outside.** From a machine that is not logged in to either registry: `docker run --rm vfuoglio/immich-handoff:X.Y.Z --version` and the same with `ghcr.io/vfuoglio/immich-handoff:X.Y.Z` both print `X.Y.Z`.
-9. **Point the documentation at the new release.** After the release exists, change the version in the clone command in `README.md` and `docs/install.md` (`git clone --branch vX.Y.Z`, and the "latest release is" wording). People are told to start from a release and never from `main`, so these must name a tag that exists. Do this in a small change after tagging, not before.
+8. **Watch the run.** Steps: tests, version check, changelog check, build and smoke test for both architectures, publish, create the release.
+9. **First release only: check both images are public.** On Docker Hub the repository must be Public. On GitHub, open the repository's Packages, `immich-handoff`, Package settings, and check the visibility is Public (a package that a workflow creates may start private) and that it is linked to the repository.
+10. **Check it from outside.** From a machine that is not logged in to either registry: `docker run --rm vfuoglio/immich-handoff:X.Y.Z --version` and the same with `ghcr.io/vfuoglio/immich-handoff:X.Y.Z` both print `X.Y.Z`.
+11. **Bring `main` back into `develop`** if it has a merge commit that `develop` lacks (`git switch develop && git merge main && git push`).
 
 ## What the workflow checks before it publishes
 
@@ -80,7 +90,7 @@ The signature is stored as a tag next to the image (`sha256-<digest>.sig`), the 
 
 ## Dependency updates
 
-Dependabot (`.github/dependabot.yml`) opens a pull request each Monday into `develop`, one for each kind: the GitHub Actions, the program's Go modules, the screenshot tool's modules, and the base images in the `Dockerfile`. The actions in `.github/workflows` are pinned by commit hash, with the version in a comment, so a changed action is always a change you see in a pull request; Dependabot updates the hash and the comment together. Read the notes in the pull request, check that CI is green, and merge it into `develop` like any other change. After a change to the release workflow, run the manual `0.0.0-test` release before the next real tag.
+Dependabot (`.github/dependabot.yml`) opens a pull request each Monday into `develop` (CI does not run on pull requests into `develop`, so check the change locally with `go generate ./... && go test ./...`, or start develop-check by hand, before merging), one for each kind: the GitHub Actions, the program's Go modules, the screenshot tool's modules, and the base images in the `Dockerfile`. The actions in `.github/workflows` are pinned by commit hash, with the version in a comment, so a changed action is always a change you see in a pull request; Dependabot updates the hash and the comment together. Read the notes in the pull request, check that CI is green, and merge it into `develop` like any other change. After a change to the release workflow, run the manual `0.0.0-test` release before the next real tag.
 
 ## Patching an older version
 
@@ -97,7 +107,7 @@ The release workflow runs on any tag, so this works from the branch. It moves th
 
 ## A bad release
 
-Do not move or delete a tag people may have pulled. Fix forward: release the next patch. If a published image is dangerous, delete that version from the package page, and say so in the changelog.
+**Never put a release over a tag that exists.** Do not move, delete or re-create a tag people may have pulled, even a minute after it was made: the old image stays on the registries as an orphan and the first pull may already have happened. Fix forward: release the next patch. If you are not sure the release is right, tag a release candidate first (`vX.Y.Z-rc1`; it gets only its own image tag, never `X.Y` or `latest`), look at it, and tag the final version only when it is good. If a published image is dangerous, delete that version from the package page, and say so in the changelog.
 
 ## Badges
 
