@@ -83,6 +83,10 @@ type Hub struct {
 	GroupMax int
 	// RulesEvery is how often rules look for photos (RULES_CHECK_MINUTES; zero: ten minutes).
 	RulesEvery time.Duration
+	// MemoriesEvery is how often the "On this day" messages are looked at (MEMORIES_CHECK_MINUTES; zero: ten minutes).
+	// ImmichURL is Immich's address as people's browsers see it (PUBLIC_IMMICH_URL), for the link into a memory.
+	MemoriesEvery time.Duration
+	ImmichURL     string
 	// RulesSettle is how long a photo is in Immich before a rule offers it (RULES_SETTLE_MINUTES; zero: five minutes).
 	RulesSettle time.Duration
 

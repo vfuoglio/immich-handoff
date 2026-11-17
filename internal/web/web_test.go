@@ -3,6 +3,8 @@ package web_test
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -18,6 +20,8 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"github.com/vfuoglio/immich-handoff/internal/web"
 )
+
+var jpegSum = func() string { s := sha1.Sum(jpegBytes); return base64.StdEncoding.EncodeToString(s[:]) }()
 
 const (
 	aliceID  = "aaaaaaaa-0000-0000-0000-000000000001"
@@ -46,12 +50,28 @@ func fakeImmich() http.Handler {
 		w.Header().Set("Content-Disposition", `attachment; filename="../../IMG_0042.jpg"`)
 		w.Write(jpegBytes)
 	})
+	// the person's pictures, and their "on this day" memory (one old memory with one photo of theirs) for any day but the 1st of January
+	mux.HandleFunc("GET /api/assets/{id}/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(jpegBytes)
+	})
+	mux.HandleFunc("GET /api/memories", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("for") == "2026-01-01" {
+			j(w, []any{})
+			return
+		}
+		j(w, []any{map[string]any{"id": "cccccccc-0000-4000-8000-000000000001", "type": "on_this_day", "data": map[string]any{"year": 2020},
+			"assets": []any{map[string]any{"id": notMyPhoto}}, "memoryAt": ts, "createdAt": ts, "isSaved": false, "ownerId": otherID}})
+	})
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
 			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},
 			"k-alice": {aliceID, "Alice"}, "k-family": {familyID, "Family"},
 		}
 		key := r.Header.Get("x-api-key")
+		if strings.HasPrefix(key, "lib-") { // the key the app made for following albums: it is "other"'s
+			key = "sess=other"
+		}
 		if key == "" {
 			key = strings.TrimSpace(r.Header.Get("Cookie"))
 			if i := strings.Index(key, "; handoff-lang="); i >= 0 { // Immich ignores a cookie that is not its own
@@ -106,6 +126,11 @@ func fakeImmich() http.Handler {
 			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
 			return
 		}
+		if r.URL.Query().Get("isOwned") == "false" && strings.Contains(r.Header.Get("Cookie"), "sess=other") { // albums shared with "other" (by alice)
+			j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999990", "albumName": "Trip", "assetCount": 4,
+				"albumUsers": []any{map[string]any{"role": "editor", "user": map[string]any{"id": aliceID, "name": "Alice", "email": "alice@x.test", "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""}}}}})
+			return
+		}
 		if r.URL.Query().Get("name") == "" && r.URL.Query().Get("isOwned") == "true" && strings.Contains(r.Header.Get("Cookie"), "sess=alice") {
 			j(w, []any{
 				map[string]any{"id": "99999999-9999-4999-8999-999999999991", "albumName": "To send", "assetCount": 3},
@@ -125,7 +150,29 @@ func fakeImmich() http.Handler {
 		if strings.HasPrefix(r.PathValue("id"), "5") {
 			owner = otherID
 		}
-		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts})
+		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts,
+			"type": "IMAGE", "hasMetadata": true, "exifInfo": map[string]any{}, "createdAt": time.Now().UTC().Format(time.RFC3339), "checksum": jpegSum})
+	})
+	// the key for following albums is made in "other"'s account; it is named for the person and starts with lib-
+	mux.HandleFunc("POST /api/api-keys", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name        string   `json:"name"`
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		id := "bbbbbbbb-0000-4000-8000-000000000001"
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		json.NewEncoder(w).Encode(map[string]any{"id": id, "name": body.Name, "secret": "lib-secret", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
+			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	// Add to my library: every original is the same small picture (above), and an upload is stored under an id that is "other"'s
+	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		w.Write([]byte(`{"id":"50000000-0000-4000-8000-0000000000aa","status":"created"}`))
 	})
 	mux.HandleFunc("PUT /api/tags", func(w http.ResponseWriter, r *http.Request) {
 		j(w, []any{map[string]any{"id": "33333333-3333-3333-3333-333333333333", "name": "share", "value": "share", "createdAt": ts, "updatedAt": ts}})
@@ -159,6 +206,34 @@ func fakeImmich() http.Handler {
 	mux.HandleFunc("POST /api/search/metadata", func(w http.ResponseWriter, r *http.Request) {
 		a := func(id string) map[string]any {
 			return map[string]any{"id": id, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts}
+		}
+		var body struct {
+			OriginalPath string `json:"originalPath"`
+			WithExif     bool   `json:"withExif"`
+			WithStacked  *bool  `json:"withStacked"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if body.WithExif && body.WithStacked != nil { // stacking: the person's photos with their EXIF: a RAW and its JPEG, and a photo alone
+			shot := func(id, name string) map[string]any {
+				m := a(id)
+				m["ownerId"], m["originalPath"], m["createdAt"], m["originalFileName"], m["fileCreatedAt"] = otherID, "/lib/"+name, ts, name, ts
+				m["exifInfo"] = map[string]any{"make": "Canon", "model": "R5", "dateTimeOriginal": ts}
+				return m
+			}
+			j(w, map[string]any{"assets": map[string]any{"items": []any{
+				shot("55555555-0000-4000-8000-0000000000b1", "IMG_7.CR2"), shot("55555555-0000-4000-8000-0000000000b2", "IMG_7.JPG")}, "count": 2, "total": 2, "facets": []any{}}})
+			return
+		}
+		if strings.HasPrefix(body.OriginalPath, "/external/photos/") { // the person's photos of an external library
+			own := func(id, path string) map[string]any {
+				m := a(id)
+				m["ownerId"], m["originalPath"], m["createdAt"] = otherID, path, ts
+				return m
+			}
+			j(w, map[string]any{"assets": map[string]any{"items": []any{
+				own("55555555-0000-4000-8000-0000000000a1", "/external/photos/2025-02/paris/a.jpg"), own("55555555-0000-4000-8000-0000000000a2", "/external/photos/2025-02/paris/b.jpg"),
+				own("55555555-0000-4000-8000-0000000000a3", "/external/photos/2025-02/rome/c.jpg")}, "count": 3, "total": 3, "facets": []any{}}})
+			return
 		}
 		j(w, map[string]any{"assets": map[string]any{"items": []any{a("11111111-1111-1111-1111-111111111111"), a("22222222-2222-2222-2222-222222222222")}, "count": 2, "total": 2, "facets": []any{}}})
 	})

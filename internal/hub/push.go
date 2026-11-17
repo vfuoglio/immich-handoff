@@ -79,7 +79,8 @@ const newDeviceGrace = 2 * time.Minute
 const perDeviceHour = 30
 
 // pushNeeds are the kinds a device set to "only what needs me" is told.
-func pushNeeds(kind string) bool { return needsKinds[kind] || kind == "refused" }
+// A message the person asked for ("On this day") reaches a device whatever its mode: it exists only because they turned it on.
+func pushNeeds(kind string) bool { return needsKinds[kind] || kind == "refused" || kind == memoryKind }
 
 // Ready reports whether pushes can be sent at all.
 func (p *Push) Ready() bool { return p != nil && p.Store != nil && p.Sender != nil && p.Key != "" }

@@ -60,6 +60,22 @@ type MailView struct {
 	Email     string
 }
 
+// MemoriesView is the person's "On this day" card.
+type MemoriesView struct {
+	Available bool // this install can send them: push or email is set up
+	Push      bool // push can carry it
+	Email     bool // email can carry it
+	On        bool
+	At        string // "08:00"
+	TZ        string
+	ByPush    bool
+	ByEmail   bool
+	Pictures  bool
+	Address   string // where the email goes
+	Broken    bool   // the key stopped working
+	Devices   int    // devices that can be pushed to
+}
+
 // ServiceView is one service as the signed-in user takes part in it.
 type ServiceView struct {
 	Name     string
@@ -248,6 +264,42 @@ type GuideView struct {
 }
 
 // DashboardData is everything the main page shows.
+// LibraryView is the person's choice of where "Add to my library" puts copies.
+type LibraryView struct {
+	Available   bool
+	Dest, Album string
+	Followed    []FollowedView // the albums shared with the person that a rule follows
+}
+
+// FolderRuleView is a rule that makes albums from the folders of an external library, for the person's page.
+type FolderRuleView struct {
+	ID, Folder, Words, Mode string
+	Always                  int
+	Paused, CanAuto         bool
+	Last, Problem           string
+}
+
+// FoldersView is the person's "Albums from my folders" card.
+type FoldersView struct {
+	Available bool
+	Rules     []FolderRuleView
+}
+
+// StackRuleView is a rule that stacks photos, for the person's page.
+type StackRuleView struct {
+	ID, Words, Mode string
+	Always          int
+	Paused, CanAuto bool
+	Last, Problem   string
+	Undoable        int // stacks the app made that the person can still take apart
+}
+
+// StacksView is the person's "Stack photos" card.
+type StacksView struct {
+	Available bool
+	Rules     []StackRuleView
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -271,6 +323,10 @@ type DashboardData struct {
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 	Mail       MailView
 	Push       PushView
+	Memories   MemoriesView
+	Folders    FoldersView
+	Stacks     StacksView
+	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
 	Rooms      []RoomView
@@ -621,6 +677,18 @@ templ Dashboard(d DashboardData) {
 			if d.Push.Available {
 				@PushCard(d.Push)
 			}
+			if d.Library.Available {
+				@LibraryCard(d.Library)
+			}
+			if d.Memories.Available {
+				@MemoriesCard(d.Memories)
+			}
+			if d.Folders.Available {
+				@FoldersCard(d.Folders)
+			}
+			if d.Stacks.Available {
+				@StacksCard(d.Stacks)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -723,6 +791,365 @@ templ MailCard(m MailView) {
 		}
 		<small class="meta">{ t(ctx, "Emails go to the address Immich shows for your account, in the language of this page, and arrive a few minutes after things happen, in one email. Every email has a link that stops them.") }</small>
 	</div>
+}
+
+// MemoriesCard is where a person turns on a daily message about the memories Immich has for the day.
+templ MemoriesCard(m MemoriesView) {
+	<h2>{ t(ctx, "On this day") }</h2>
+	<div class="card memoriescard">
+		if m.On && m.Broken {
+			<p class="bad-note">{ t(ctx, "The key the app made in your Immich is gone, so no message can be sent. Save to make a new one.") }</p>
+		} else if m.On {
+			<p>{ t(ctx, "Every day at {time} you get a message when Immich has memories for that day that you have not watched yet.", "time", m.At) }</p>
+		} else {
+			<p>{ t(ctx, "Get a message each day when Immich has memories for that day from your old photos, with a link to open them or to send the photos to someone.") }</p>
+		}
+		<form class="limits" hx-post="me/memories" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="action" value="on"/>
+			<input type="hidden" name="tz" value={ m.TZ } data-timezone/>
+			<label>{ t(ctx, "Time of day") } <input type="time" name="at" value={ m.At } required/></label>
+			if m.Push {
+				<label><input type="checkbox" name="push" value="1" checked?={ m.ByPush || !m.On }/> { t(ctx, "A notification on my devices") }</label>
+			}
+			if m.Email {
+				<label><input type="checkbox" name="email" value="1" checked?={ m.ByEmail }/> { t(ctx, "An email") }</label>
+				<label><input type="checkbox" name="pictures" value="1" checked?={ m.Pictures || !m.On }/> { t(ctx, "With up to three pictures in the email") }</label>
+			}
+			if m.On {
+				<button type="submit">{ t(ctx, "Save") }</button>
+			} else {
+				<button class="primary" type="submit">{ t(ctx, "Turn on") }</button>
+			}
+		</form>
+		if m.On {
+			<p class="row">
+				<button hx-post="me/memories" hx-vals='{"action":"off"}' hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn off") }</button>
+			</p>
+		}
+		if m.Push && m.Devices == 0 {
+			<small class="meta">{ t(ctx, "A notification needs a device: turn on notifications on this device above.") }</small>
+		}
+		<small class="meta">{ t(ctx, "The app makes a key in your Immich that can read your memories and look at pictures, and nothing else; you can see it and delete it there. Turning this off deletes it. Nobody else sees your memories.") }</small>
+	</div>
+}
+
+// FoldersCard makes albums from the folders of the person's external library: the rules they have, and the form that makes one.
+templ FoldersCard(f FoldersView) {
+	<h2>{ t(ctx, "Albums from my folders") }</h2>
+	<div class="card folderscard">
+		<p>{ t(ctx, "If part of your library is an external library (folders on the server), the app can offer an album for each folder, named after it, and put the photos in it. It only adds: nothing is ever removed, renamed or deleted.") }</p>
+		for _, r := range f.Rules {
+			<div class="card rule">
+				<p><b>{ r.Folder }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Makes albums by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				<p class="meta">{ r.Words }</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it make the albums by itself from now on.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the photos that come to this folder are put in albums without asking you. Only photos that arrive from now on are handled this way.") }>{ t(ctx, "Let it make albums by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop making albums from this folder? The albums already made stay as they are.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make albums from a folder") }</summary>
+			<form class="card folder-form" hx-post="rules/folder" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<div class="field">
+					<label for="folder-path">{ t(ctx, "The folder, as Immich knows it") }</label>
+					<input id="folder-path" name="folder" maxlength="500" autocomplete="off" placeholder="/external/photos" required
+						hx-get="fragments/folder-check" hx-trigger="keyup changed delay:600ms, change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/>
+					<small class="meta">{ t(ctx, "Immich only lets its administrator list libraries, so type the folder: it is the path Immich shows for one of your photos from the library, up to the folder you want.") }</small>
+				</div>
+				<div class="field">
+					<label for="folder-level">{ t(ctx, "Which folder is an album") }</label>
+					<select id="folder-level" name="level" hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML">
+						<option value="0">{ t(ctx, "The folder each photo is in") }</option>
+						<option value="1">{ t(ctx, "The first folder below the one above") }</option>
+						<option value="2">{ t(ctx, "The second folder below the one above") }</option>
+						<option value="3">{ t(ctx, "The third folder below the one above") }</option>
+					</select>
+				</div>
+				<div class="field">
+					<label><input type="radio" name="naming" value="last" checked hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/> { t(ctx, "Name it after the folder") }</label>
+					<label><input type="radio" name="naming" value="parent" hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/> { t(ctx, "Name it after the folder and the one above it") }</label>
+				</div>
+				<div id="folder-check" class="meta" aria-live="polite"></div>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer me these albums") }</button></p>
+			</form>
+		</details>
+	</div>
+}
+
+// StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
+templ StacksCard(s StacksView) {
+	<h2>{ t(ctx, "Stack photos that belong together") }</h2>
+	<div class="card stackscard">
+		<p>{ t(ctx, "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.") }</p>
+		for _, r := range s.Rules {
+			<div class="card rule">
+				<p><b>{ r.Words }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Stacks pairs and edits by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it stack pairs and edits by itself from now on; bursts always ask.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					if r.Undoable > 0 {
+						<button hx-post="rules/stack-undo" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Take apart the stacks the app made in the last 15 minutes? The photos stay.") } data-confirm-title={ t(ctx, "Undo?") } data-confirm-label={ t(ctx, "Take them apart") }>{ n(ctx, "Undo the {n} stack just made", "Undo the {n} stacks just made", r.Undoable) }</button>
+					}
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the pairs and edits that arrive are stacked without asking you. Only photos that arrive from now on are handled this way, and bursts always ask.") }>{ t(ctx, "Let it stack by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop stacking by this rule? The stacks already made stay.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Stack photos by a rule") }</summary>
+			<form class="card stack-form" hx-post="rules/stack" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<div class="field">
+					<label><input type="checkbox" name="pair" value="1" checked hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "A RAW and its JPEG") }</label>
+					<label><input type="checkbox" name="edit" value="1" checked hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "An edit and its original") }</label>
+					<label><input type="checkbox" name="burst" value="1" hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/> { t(ctx, "A burst: three or more shots from one camera a moment apart (always asks first)") }</label>
+				</div>
+				<div class="field">
+					<label for="stack-cover">{ t(ctx, "The cover of a stack") }</label>
+					<select id="stack-cover" name="cover" hx-get="fragments/stack-check" hx-trigger="change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML">
+						<option value="jpeg">{ t(ctx, "The JPEG") }</option>
+						<option value="raw">{ t(ctx, "The RAW") }</option>
+						<option value="edited">{ t(ctx, "The edit") }</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="stack-folder">{ t(ctx, "Only in this folder (optional)") }</label>
+					<input id="stack-folder" name="folder" maxlength="500" autocomplete="off" placeholder="/external/photos"
+						hx-get="fragments/stack-check" hx-trigger="keyup changed delay:600ms, change" hx-include="closest form" hx-target="#stack-check" hx-swap="innerHTML"/>
+					<small class="meta">{ t(ctx, "Leave it empty for your whole library. The folder is the path Immich shows for one of your photos, up to the folder you want.") }</small>
+				</div>
+				<div id="stack-check" class="meta" aria-live="polite"></div>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer me these stacks") }</button></p>
+			</form>
+		</details>
+	</div>
+}
+
+// StackCheck is what the form shows about the rule being made: how many groups of each kind it finds among the person's photos now, or why
+// it cannot.
+templ StackCheck(msg string) {
+	<p>{ msg }</p>
+}
+
+// FolderCheck is what the form shows about the folder being typed: how many of the person's photos are under it and the albums
+// it would make, or why it cannot.
+templ FolderCheck(msg string, albums []string, more int) {
+	<p>{ msg }</p>
+	if len(albums) > 0 {
+		<ul class="plain">
+			for _, a := range albums {
+				<li>{ a }</li>
+			}
+			if more > 0 {
+				<li>{ n(ctx, "and {n} more album", "and {n} more albums", more) }</li>
+			}
+		</ul>
+	}
+}
+
+// MemoriesPageView is the page a message leads to: the day's memories, to send photos on.
+type MemoriesPageView struct {
+	User     string
+	Day      string
+	Groups   []MemoryGroupView
+	Services []string
+}
+
+// MemoryGroupView is one year of the day.
+type MemoryGroupView struct {
+	Label  string
+	Photos []string // asset ids
+}
+
+// MemoriesPage lists the photos of a day's memories and lets the person hand some over to a service they send to.
+templ MemoriesPage(d MemoriesPageView) {
+	@Layout(t(ctx, "On this day"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "On this day") }</h1>
+		<p class="lead">{ t(ctx, "Tick the photos to hand over, and choose where to send them.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if len(d.Groups) == 0 {
+			<p class="meta">{ t(ctx, "Immich has no memories for this day.") }</p>
+		} else {
+			<form hx-post="memories/send" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				for _, g := range d.Groups {
+					<h2>{ g.Label }</h2>
+					<ul class="review-grid">
+						for _, p := range g.Photos {
+							<li>
+								<label>
+									<img src={ "memories/" + d.Day + "/photo/" + p + "?size=large" } alt="" width="240" height="240" loading="lazy"/>
+									<span class="meta"><input type="checkbox" name="photo" value={ p }/></span>
+								</label>
+							</li>
+						}
+					</ul>
+				}
+				if len(d.Services) == 0 {
+					<p class="meta">{ t(ctx, "You do not send to any service yet. Join or make one on your page first.") }</p>
+				} else {
+					<p class="row form-actions">
+						<select name="service" aria-label={ t(ctx, "Where to send them") }>
+							for _, s := range d.Services {
+								<option value={ s }>{ s }</option>
+							}
+						</select>
+						<button class="primary" type="submit">{ t(ctx, "Hand over the ticked photos") }</button>
+					</p>
+				}
+			</form>
+		}
+	}
+}
+
+// LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.
+templ LibraryCard(l LibraryView) {
+	<h2>{ t(ctx, "Add to my library") }</h2>
+	<div class="card librarycard">
+		<p>{ t(ctx, "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.") }</p>
+		<form class="limits" hx-post="me/library" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<label><input type="radio" name="dest" value="tag" checked?={ l.Dest == "tag" || l.Dest == "" }/> { t(ctx, "In my library, tagged with who shared it") }</label>
+			<label><input type="radio" name="dest" value="plain" checked?={ l.Dest == "plain" }/> { t(ctx, "In my library") }</label>
+			<label><input id="lib-dest-album" type="radio" name="dest" value="album" checked?={ l.Dest == "album" }/> { t(ctx, "In an album") }</label>
+			<div class="field" hx-get="fragments/album-names?id=lib-album-pick&field=album_pick" hx-target="this" hx-swap="innerHTML" hx-trigger={ libraryTrigger(l) }>
+				<select id="lib-album-pick" name="album_pick"><option value="">{ t(ctx, "Choose an album") }</option></select>
+			</div>
+			<input name="album" maxlength="100" value={ l.Album } autocomplete="off" placeholder={ t(ctx, "or the name of a new album") } aria-label={ t(ctx, "The name of a new album") }/>
+			<button type="submit">{ t(ctx, "Save") }</button>
+		</form>
+		<small class="meta">{ t(ctx, "A copy takes as much room as the photo does, and the person who shared it is not told. For 15 minutes after adding, Undo takes the copies out again.") }</small>
+	</div>
+	<h3>{ t(ctx, "Albums shared with you that you follow") }</h3>
+	for _, f := range l.Followed {
+		<div class="card rule">
+			<p><b>{ t(ctx, "{album}, shared by {owner}", "album", f.Album, "owner", f.Owner) }</b>
+				if f.Paused {
+					<span class="chip warn">{ t(ctx, "Paused") }</span>
+				} else if f.Mode == "auto" {
+					<span class="chip ok">{ t(ctx, "Adds by itself") }</span>
+				} else {
+					<span class="chip">{ t(ctx, "Asks you first") }</span>
+				}
+			</p>
+			<p class="meta">{ f.Dest }</p>
+			if f.Last != "" {
+				<p class="meta">{ t(ctx, "Last looked at {when}.", "when", f.Last) }</p>
+			}
+			if f.Problem != "" {
+				<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", f.Problem) }</p>
+			}
+			if f.Mode != "auto" && f.CanAuto {
+				<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it add photos by itself from now on.", "n", f.Always) }</p>
+			}
+			<p class="row">
+				if f.Mode == "auto" {
+					<button hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+				} else if f.CanAuto {
+					<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on what is added to this album is copied into your library without asking you. Only photos added from now on are copied this way.") }>{ t(ctx, "Let it add by itself") }</button>
+				}
+				<button hx-post="rules/pause" hx-vals={ vals2("rule", f.ID, "paused", pausedValue(f.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+					if f.Paused {
+						{ t(ctx, "Resume this rule") }
+					} else {
+						{ t(ctx, "Pause this rule") }
+					}
+				</button>
+				<button hx-post="rules/delete" hx-vals={ vals("rule", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop following this album? The photos already copied stay in your library.") } data-confirm-title={ t(ctx, "Stop following?") } data-confirm-label={ t(ctx, "Stop following") } data-danger="true">{ t(ctx, "Stop following") }</button>
+			</p>
+		</div>
+	}
+	<details class="offer">
+		<summary>{ t(ctx, "Follow an album shared with me") }</summary>
+		<div hx-get="fragments/follow-albums" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+			<p class="meta">{ t(ctx, "Loading the albums shared with you...") }</p>
+		</div>
+	</details>
+}
+
+// FollowForm is the form that follows an album shared with the person: which one, what to start with, where the copies go.
+templ FollowForm(albums []FollowOption) {
+	if len(albums) == 0 {
+		<p class="meta">{ t(ctx, "Nobody has shared an album with you yet.") }</p>
+	} else {
+		<form class="card offer-form" hx-post="rules/follow" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<p class="meta">{ t(ctx, "What others add to the album is offered to you with pictures, to add to your library, and once you have said Always three times you can let it add photos by itself.") }</p>
+			<div class="field">
+				<label for="follow-album">{ t(ctx, "Which album") }</label>
+				<select id="follow-album" name="album_id">
+					for _, a := range albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+			<div class="field">
+				<label><input type="radio" name="history" value="new" checked/> { t(ctx, "Only what is added from now on") }</label>
+				<label><input type="radio" name="history" value="all"/> { t(ctx, "What is in it now, and what is added") }</label>
+			</div>
+			<div class="field">
+				<label for="follow-dest">{ t(ctx, "Where the copies go") }</label>
+				<select id="follow-dest" name="dest">
+					<option value="tag">{ t(ctx, "In my library, tagged with who shared it") }</option>
+					<option value="plain">{ t(ctx, "In my library") }</option>
+					<option value="album">{ t(ctx, "In an album") }</option>
+				</select>
+				<input name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "the name of the album, when the copies go to one") } aria-label={ t(ctx, "The name of a new album") }/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Follow this album") }</button></p>
+		</form>
+	}
 }
 
 // PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
@@ -2435,7 +2862,7 @@ templ DropBoxForm() {
 			<small class="meta wide">{ t(ctx, "Upload: anyone with the link can see the page, and needs the password to send. The whole page: nothing is shown, and nothing can be sent, without the password. A wall you start has its own link and is not covered.") }</small>
 			<div class="field">
 				<label for="drop-album">{ t(ctx, "Put what arrives in this album (optional)") }</label>
-				<div hx-get="fragments/album-names" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<div hx-get="fragments/album-names?id=drop-album-pick&field=album_pick" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 					<select id="drop-album-pick" name="album_pick"><option value="">{ t(ctx, "No album") }</option></select>
 				</div>
 				<input id="drop-album" name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "or the name of a new album") } aria-label={ t(ctx, "The name of a new album") }/>
@@ -3257,8 +3684,8 @@ templ RoomSection(rooms []RoomView) {
 }
 
 // AlbumNameList is the list of the person's own albums for a field that takes an album by name; a new name is typed beside it.
-templ AlbumNameList(names []string) {
-	<select id="drop-album-pick" name="album_pick">
+templ AlbumNameList(names []string, id, field string) {
+	<select id={ id } name={ field }>
 		<option value="">{ t(ctx, "No album") }</option>
 		for _, n := range names {
 			<option value={ n }>{ n }</option>
@@ -4102,13 +4529,36 @@ templ RuleCities(cities []string) {
 // SuggestionReviewPage shows every photo a rule found, large enough to judge, with a tick on each. Ticked photos are sent, the
 // others are left out for good.
 templ SuggestionReviewPage(d SuggestionReview) {
-	@Layout(t(ctx, "Photos for {service}", "service", d.Service), d.User) {
+	@Layout(reviewTitle(ctx, d), d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
-		<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
-		<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Stack {
+			<h1>{ t(ctx, "Photos to stack") }</h1>
+			<p class="lead">{ t(ctx, "Each box is a group that would become one stack, the cover first.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Folder {
+			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Library {
+			<h1>{ t(ctx, "New in {album}", "album", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Photos added to the album {album}, shared by {owner}.", "album", d.Album, "owner", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else {
+			<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
+			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		}
 		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 			<input type="hidden" name="rule" value={ d.RuleID }/>
 			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
+			if d.Stack {
+				for _, g := range d.Groups {
+					<fieldset class="stack-group">
+						<legend><label><input type="checkbox" name="photo" value={ g.Cover } checked/> { stackSignalWords(ctx, g.Signal) }</label></legend>
+						<ul class="review-grid">
+							for _, p := range g.Photos {
+								<li><img src={ p.URL + "?size=large" } alt={ p.Why } width="160" height="160" loading="lazy"/></li>
+							}
+						</ul>
+					</fieldset>
+				}
+			}
 			<ul class="review-grid">
 				for _, p := range d.Photos {
 					<li>
@@ -4120,9 +4570,20 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				}
 			</ul>
 			<p class="row form-actions">
-				<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Send the ticked photos") }</button>
-				if !d.Phrase {
-					<button type="submit" name="do" value="always">{ t(ctx, "Send the ticked photos, and always") }</button>
+				if d.Stack {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Stack the ticked groups") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Stack the ticked groups, and always") }</button>
+				} else if d.Folder {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
+				} else if d.Library {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked photos to my library") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked photos, and always") }</button>
+				} else {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Send the ticked photos") }</button>
+					if !d.Phrase {
+						<button type="submit" name="do" value="always">{ t(ctx, "Send the ticked photos, and always") }</button>
+					}
 				}
 				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
 			</p>

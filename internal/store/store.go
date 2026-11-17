@@ -665,6 +665,63 @@ var migrations = []string{
 	   at       TEXT NOT NULL,
 	   PRIMARY KEY (rule_id, asset_id)
 	 );`,
+	// a rule can follow an album shared with the person and copy what is added to their library (kind "library")
+	`ALTER TABLE rules ADD COLUMN kind TEXT NOT NULL DEFAULT 'send';
+	 ALTER TABLE rules ADD COLUMN dest TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE rules ADD COLUMN dest_album TEXT NOT NULL DEFAULT '';`,
+	// the key a person made for following albums shared with them
+	`CREATE TABLE library_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
+	// where a person's "Add to my library" copies go by default
+	`CREATE TABLE library_prefs (
+	   user_id TEXT PRIMARY KEY,
+	   dest    TEXT NOT NULL,
+	   album   TEXT NOT NULL DEFAULT ''
+	 );`,
+	// a person's "On this day" messages: when, where, in which language, and the key they made for it (sealed)
+	`CREATE TABLE memory_prefs (
+	   user_id    TEXT PRIMARY KEY,
+	   name       TEXT NOT NULL DEFAULT '',
+	   lang       TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL DEFAULT '08:00',
+	   tz         TEXT NOT NULL DEFAULT '',
+	   by_push    INTEGER NOT NULL DEFAULT 1,
+	   by_email   INTEGER NOT NULL DEFAULT 0,
+	   pictures   INTEGER NOT NULL DEFAULT 1,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   last_day   TEXT NOT NULL DEFAULT '',
+	   broken     INTEGER NOT NULL DEFAULT 0,
+	   created_at TEXT NOT NULL
+	 );`,
+	// the address an "On this day" email goes to (their Immich account's, read when they turned it on)
+	`ALTER TABLE memory_prefs ADD COLUMN address TEXT NOT NULL DEFAULT '';`,
+	// albums made from the folders of an external library: when a rule finished its first full look, and the person's key for it
+	`ALTER TABLE rules ADD COLUMN caught_up TEXT NOT NULL DEFAULT '';`,
+	`CREATE TABLE folder_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
+	// stacking by rule: the person's key for it, and the stacks the app made (to take them apart again within a short while)
+	`CREATE TABLE stack_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
+	`CREATE TABLE stacks_made (
+	   stack_id TEXT PRIMARY KEY,
+	   rule_id  TEXT NOT NULL,
+	   user_id  TEXT NOT NULL,
+	   assets   TEXT NOT NULL,
+	   at       TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -20,6 +20,18 @@ setting and needs no key or token in the page. The app checks the person from th
 pages, and does the tagging itself. A state-changing request carries the header `X-Requested-With`, as the app's forms
 do. The script never holds a key and never tags anything itself.
 
+The routes are `GET services` (what the person can do and the words), `GET owned?asset=...` (which of the photos are the
+person's own and which are someone else's they can see), `GET albums` (their own albums, for the choice of an album),
+`POST send` and `POST undo` (Hand over), `POST ask` (ask to join) and `POST add` and `POST add-undo` (Add to my library).
+
+**Hand over and Add to my library.** The script asks `owned` once for each photo (up to 100 at a time, after the selection
+settles, the answers kept) and shows Hand over for photos that are the person's own and Add to my library for the others;
+a mix shows both, each acting on its own part. A button that is showing stays while the next photo of a selection is asked
+about, and a press waits for the answer about every selected photo. The first press of Add asks where the copies go;
+once the person has chosen to remember it, a press adds at once. The copy is made by the app with the person's own session
+(they can read what is shared with them and upload to themselves), checked by checksum, and Undo is limited to copies
+the person owns, made in the last 15 minutes and not filed by them in another album.
+
 ## What the script can read
 
 | Need | Where it is (Immich 3.2.0) | Stable how |
@@ -92,7 +104,7 @@ also forbids the header link, and the button then is simply not there.
   is the only request, made once when the first bar or toolbar shows).
 - Guess: a selection that cannot be counted, a person who is not known to the app, an app that cannot be reached on the
   same address, or any piece of Immich's markup not found, each hide the button.
-- Hold or show a key, or ask the app for more than the person's own services and own photos.
+- Hold or show a key, or ask the app for more than the person's own services and the photos they can see.
 
 ## How it is held to this
 

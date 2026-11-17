@@ -230,6 +230,15 @@ func run(log *slog.Logger) error {
 			h.RulesSettle = time.Duration(m * float64(time.Minute))
 		}
 		go h.RulesLoop(ctx)
+		if v := env("MEMORIES_CHECK_MINUTES", ""); v != "" {
+			m, err := strconv.ParseFloat(v, 64)
+			if err != nil || m < 0.1 || m > 1440 {
+				return errors.New("MEMORIES_CHECK_MINUTES must be a number of minutes, from 0.1 to 1440")
+			}
+			h.MemoriesEvery = time.Duration(m * float64(time.Minute))
+		}
+		h.ImmichURL = os.Getenv("PUBLIC_IMMICH_URL")
+		go h.MemoriesLoop(ctx)
 		switch strings.ToLower(strings.TrimSpace(os.Getenv("SHARED_ALBUMS_ENABLE"))) {
 		case "1", "true", "on", "yes":
 			h.Share = true

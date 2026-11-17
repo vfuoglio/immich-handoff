@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +75,8 @@ func (w *Server) roomAlbums(rw http.ResponseWriter, r *http.Request) {
 	RoomAlbumSelect(opts).Render(r.Context(), rw)
 }
 
+var safeName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,40}$`)
+
 // albumNames lists the names of the person's own albums for a field that takes an album by name (a new name is made when it is
 // typed); it is asked for when the form is opened.
 func (w *Server) albumNames(rw http.ResponseWriter, r *http.Request) {
@@ -93,7 +96,14 @@ func (w *Server) albumNames(rw http.ResponseWriter, r *http.Request) {
 		names = append(names, a.Name)
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	AlbumNameList(names).Render(r.Context(), rw)
+	id, field := "drop-album-pick", "album_pick"
+	if v := r.URL.Query().Get("id"); safeName.MatchString(v) {
+		id = v
+	}
+	if v := r.URL.Query().Get("field"); safeName.MatchString(v) {
+		field = v
+	}
+	AlbumNameList(names, id, field).Render(r.Context(), rw)
 }
 
 func (w *Server) createRoom(rw http.ResponseWriter, r *http.Request) {

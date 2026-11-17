@@ -12,6 +12,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -645,7 +646,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library":
 		return "ok"
 	}
 	return ""
@@ -955,3 +956,42 @@ func deletionText(ctx context.Context, d string) string {
 
 func receivePermissions() string { return strings.Join(bridge.SharedReceivePermissions, ", ") }
 func twoWayPermissions() string  { return strings.Join(bridge.SharedTwoWayExtra, ", ") }
+
+// libraryTrigger says when the card's list of albums is fetched: at once when the person's choice is an album, otherwise
+// the first time they pick that choice.
+func libraryTrigger(l LibraryView) string {
+	if l.Dest == "album" {
+		return "load"
+	}
+	return "click from:#lib-dest-album once"
+}
+
+// reviewTitle is the title of the page that shows what a rule found.
+func reviewTitle(ctx context.Context, d SuggestionReview) string {
+	if d.Folder {
+		return t(ctx, "Albums from {folder}", "folder", d.Album)
+	}
+	if d.Library {
+		return t(ctx, "New in {album}", "album", d.Album)
+	}
+	return t(ctx, "Photos for {service}", "service", d.Service)
+}
+
+// folderNames lists the albums of a suggestion in a few words: the first few, then how many more.
+func folderNames(albums []string) string {
+	if len(albums) <= 6 {
+		return strings.Join(albums, ", ")
+	}
+	return strings.Join(albums[:6], ", ") + ", …"
+}
+
+// stackSignalWords says how a group was found, in the person's language.
+func stackSignalWords(ctx context.Context, signal string) string {
+	switch signal {
+	case hub.SignalPair:
+		return t(ctx, "A RAW with its JPEG")
+	case hub.SignalEdit:
+		return t(ctx, "An edit with its original")
+	}
+	return t(ctx, "A burst")
+}

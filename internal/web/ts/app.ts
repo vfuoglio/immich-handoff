@@ -124,6 +124,20 @@ function fillInvites(scope: ParentNode): void {
     input.value = new URL(input.dataset.link ?? "./", document.baseURI).href;
   });
 }
+// The person's own time zone goes with the forms that need it (the On this day messages are sent in it).
+function fillZones(root: ParentNode): void {
+  let zone = "";
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    // no zone to give: the server's is used
+  }
+  if (!zone) return;
+  root.querySelectorAll<HTMLInputElement>("input[data-timezone]").forEach((i) => {
+    i.value = zone;
+  });
+}
+document.addEventListener("DOMContentLoaded", () => fillZones(document));
 document.addEventListener("DOMContentLoaded", () => fillInvites(document));
 document.addEventListener("htmx:afterSwap", (e) => {
   const target = e.target;

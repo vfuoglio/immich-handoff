@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -274,7 +275,7 @@ func (n *Notifier) buildMail(d Destination, batch []stamped) ([]byte, error) {
 }
 
 // assemble writes the whole message: headers, a text part and an HTML part. extra are more headers, in order.
-func assemble(from string, to []string, subject, text, html string, extra [][2]string) ([]byte, error) {
+func assemble(from string, to []string, subject, text, html string, extra [][2]string, inline ...Inline) ([]byte, error) {
 	id := make([]byte, 12)
 	_, _ = rand.Read(id)
 	boundary := hex.EncodeToString(id) + "handoff"
@@ -305,19 +306,63 @@ func assemble(from string, to []string, subject, text, html string, extra [][2]s
 	if err := mw.SetBoundary(boundary); err != nil {
 		return nil, err
 	}
-	for _, part := range []struct{ typ, body string }{{"text/plain", text}, {"text/html", html}} {
+	writeText := func(mw *multipart.Writer, typ, body string) error {
 		pw, err := mw.CreatePart(textproto.MIMEHeader{
-			"Content-Type":              {part.typ + "; charset=utf-8"},
+			"Content-Type":              {typ + "; charset=utf-8"},
 			"Content-Transfer-Encoding": {"quoted-printable"},
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 		qw := quotedprintable.NewWriter(pw)
-		if _, err := qw.Write([]byte(part.body)); err != nil {
+		if _, err := qw.Write([]byte(body)); err != nil {
+			return err
+		}
+		return qw.Close()
+	}
+	if err := writeText(mw, "text/plain", text); err != nil {
+		return nil, err
+	}
+	if len(inline) == 0 {
+		if err := writeText(mw, "text/html", html); err != nil {
 			return nil, err
 		}
-		if err := qw.Close(); err != nil {
+	} else {
+		// the page and its pictures travel together: multipart/related, the pictures named by Content-ID in the page
+		rb := hex.EncodeToString(id) + "related"
+		pw, err := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {`multipart/related; boundary="` + rb + `"`}})
+		if err != nil {
+			return nil, err
+		}
+		rw := multipart.NewWriter(pw)
+		if err := rw.SetBoundary(rb); err != nil {
+			return nil, err
+		}
+		if err := writeText(rw, "text/html", html); err != nil {
+			return nil, err
+		}
+		for _, in := range inline {
+			ip, err := rw.CreatePart(textproto.MIMEHeader{
+				"Content-Type":              {in.Type},
+				"Content-Transfer-Encoding": {"base64"},
+				"Content-ID":                {"<" + in.CID + ">"},
+				"Content-Disposition":       {"inline"},
+			})
+			if err != nil {
+				return nil, err
+			}
+			enc := base64.StdEncoding.EncodeToString(in.Data)
+			for len(enc) > 76 {
+				if _, err := ip.Write([]byte(enc[:76] + "\r\n")); err != nil {
+					return nil, err
+				}
+				enc = enc[76:]
+			}
+			if _, err := ip.Write([]byte(enc + "\r\n")); err != nil {
+				return nil, err
+			}
+		}
+		if err := rw.Close(); err != nil {
 			return nil, err
 		}
 	}
@@ -333,6 +378,14 @@ type PersonalMail struct {
 	Subject, Text string
 	HTML          string
 	Headers       map[string]string // more headers, such as List-Unsubscribe
+	Inline        []Inline          // pictures the HTML shows with <img src="cid:...">
+}
+
+// Inline is a picture sent inside a mail, named by its Content-ID.
+type Inline struct {
+	CID  string // what the HTML calls it, without "cid:"
+	Type string // "image/jpeg"
+	Data []byte
 }
 
 // PeopleMailReady reports whether a mail server is set aside for writing to the people taking part.
@@ -376,7 +429,7 @@ func (n *Notifier) SendPersonal(p PersonalMail) error {
 		extra = append(extra, [2]string{k, v})
 	}
 	sort.Slice(extra, func(i, j int) bool { return extra[i][0] < extra[j][0] })
-	body, err := assemble(d.Mail.From, []string{rcpt.String()}, p.Subject, p.Text, p.HTML, extra)
+	body, err := assemble(d.Mail.From, []string{rcpt.String()}, p.Subject, p.Text, p.HTML, extra, p.Inline...)
 	if err != nil {
 		return err
 	}

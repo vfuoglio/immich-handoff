@@ -1,0 +1,30 @@
+name: develop-check
+# develop is not tested on every push. Once a day, if it has a commit from the last 24 hours, the whole CI runs on it,
+# so a problem shows up within a day and not on the day of a release. By hand: Actions, develop-check, Run workflow.
+# Scheduled runs happen only for the workflow file on the default branch. See docs/releasing.md.
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: develop }
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          recent="$(git log -1 --since='25 hours ago' --format=%H)"
+          if [ "$EVENT" = workflow_dispatch ] || [ -n "$recent" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; echo "develop has no commit in the last day; nothing to test" >> "$GITHUB_STEP_SUMMARY"; fi
+  ci:
+    needs: changed
+    if: needs.changed.outputs.run == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: develop

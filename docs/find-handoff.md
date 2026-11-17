@@ -64,6 +64,8 @@ With the same one line in your proxy, the script also adds a **Hand over...** bu
 - in the **bar that appears when photos are selected**, before the three dots, for the selected photos;
 - as a **Hand over...** line in the three-dot menu of both.
 
+For a photo that is **not the person's own** (one from an album shared with them, or from a partner who shares their library) the same places show **Add to my library** instead: [see below](#add-to-my-library-from-inside-immich). A selection that mixes both kinds shows both buttons, each acting on its own part.
+
 It opens a small list of **the services the person sends to**, each with whether the original stays or goes to the trash, and a note when photos will wait (the owner paused the service, the person paused their own sending, or a daily limit is reached). Choosing one hands the photos over exactly as if the service's tag had been put on them: the same pass, limits, quiet hours and taking back apply. A message in Immich's page says "3 photos handed over to Holiday" with **Undo** (it takes the tag off, so a pass that has not taken them yet leaves them) and a link to the app. ![A message in Immich's page: one photo handed over to Family album, with Undo and a link to the app](images/immich-button-done.jpg)
 
 The service used last is offered first (kept in that browser only; **Forget my choice** clears it), and services whose owner decides appear under **Ask to join**, so a person can ask without leaving Immich. Words come in the person's language.
@@ -73,9 +75,22 @@ The service used last is offered first (kept in that browser only; **Forget my c
 **What it does not do.**
 
 - It offers a button only when it can find its place and, for several photos, when it can be sure which are selected. Immich draws only the photos near the screen, so after **Select all** on a long timeline the number Immich shows can be larger than what the script has seen; then the button is not shown rather than guess. Choose photos one screen at a time, or tag them as before.
-- It only hands over the person's **own** photos (at most 200 at a time); a photo from someone else's shared album is refused with a plain message.
+- **Hand over** is only for the person's **own** photos (at most 200 at a time); a photo from someone else's shared album is not handed over, it gets **Add to my library** instead.
 - It sends nothing until a service is chosen.
 - It does not work in the Immich phone app, only in a browser.
+
+## Add to my library, from inside Immich
+
+Immich keeps every photo in the account that uploaded it, so a photo someone shared with you can be looked at but is not yours: if the owner deletes it or stops sharing, it is gone. **Add to my library** copies it into your own library. It works for photos in **albums shared with you** and for photos of a **partner** who shares their library with you, and it needs no service and no one's permission: the app does it with your own Immich sign-in.
+
+- **What is copied:** the file, its name and dates, the description and rating, the location, the archived state, and for a live photo the clip, linked to your own copy. The photo is a real photo of yours, and the person who shared it is not asked or told. (This is the same thing as downloading it and uploading it again; the original is never touched.)
+- **Where it goes**, your choice the first time, and you can change it on the Overview page of the app (**Add to my library**): in your library tagged with who shared it (`from/<their name>`), in your library as it is, or in an album of yours (one you pick from the list, or a new name).
+- **A photo that is already yours** is left alone, and pressing twice does not make a second copy.
+- **Undo** takes the copies out again for 15 minutes after they were added: they go to Immich's trash, from where they can be restored. A copy you have since put in an album of your own stays.
+- **A copy takes as much room as the photo does.** Adding a whole shared album doubles what it uses on the server.
+- **To have an album's new photos offered to you automatically,** [follow the album](guides/automate.md#following-an-album-shared-with-you).
+
+It shows in Immich for everyone who is signed in, including people who send to no service. It uses the same address, switch and limits as the **Hand over...** button below (at most 200 photos at a time).
 
 **Switching it off.** `IMMICH_BUTTON_ACTIONS=false` keeps only the link in the header ([settings](settings.md)); the app then answers nothing for the button. If the app cannot be reached on the same address, or Immich's markup is not what the script looks for, the button is simply not there and the header link stays.
 
