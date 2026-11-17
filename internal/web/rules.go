@@ -4,11 +4,13 @@ import (
 	"context"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
 // RuleView is one rule on a service's row.
@@ -130,8 +132,10 @@ func (w *Server) followAlbum(rw http.ResponseWriter, r *http.Request) {
 // SuggestionView is a rule with photos waiting for the person's answer.
 type SuggestionView struct {
 	RuleID, Service, Sentence string
-	Library                   bool   // the rule follows an album shared with the person: Service is empty
-	Album, Owner              string // for such a rule
+	Folder                    bool     // the rule makes albums from folders: Service is empty
+	Albums                    []string // the albums the waiting photos would go in, for such a rule
+	Library                   bool     // the rule follows an album shared with the person: Service is empty
+	Album, Owner              string   // for such a rule
 	Count                     int
 	Thumbs                    []NeedThumb
 	Always                    int
@@ -151,6 +155,10 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
 		if s.Rule.Kind == "library" && s.Rule.Cond.Album != nil {
 			v.Library, v.Album, v.Owner = true, s.Rule.Cond.Album.Name, s.Rule.Cond.AlbumOwner
+		}
+		if s.Rule.Kind == "folder" {
+			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
+			v.Albums = albumsOfPhotos(s.Photos)
 		}
 		for i, p := range s.Photos {
 			if i == 8 {
@@ -327,6 +335,7 @@ type SuggestionReview struct {
 	Phrase                          bool
 	Library                         bool   // the rule follows an album shared with the person
 	Album, Owner                    string // for such a rule
+	Folder                          bool   // the rule makes albums from folders (Album is the folder)
 }
 
 // RuleReviewPhoto is one photo on the review page.
@@ -346,6 +355,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
 	if sg.Rule.Kind == "library" && sg.Rule.Cond.Album != nil {
 		d.Library, d.Album, d.Owner = true, sg.Rule.Cond.Album.Name, sg.Rule.Cond.AlbumOwner
+	}
+	if sg.Rule.Kind == "folder" {
+		d.Folder, d.Album = true, sg.Rule.Cond.Folder
 	}
 	for _, p := range sg.Photos {
 		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
@@ -376,6 +388,112 @@ func (w *Server) autoRule(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) lookBackRule(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "rule looked back", func(ctx context.Context, me *member, _ string) error {
 		_, err := w.Hub.LookBack(ctx, me.user, r.PostFormValue("rule"))
+		return err
+	})
+}
+
+// albumsOfPhotos lists, once each and in order, the albums a rule's waiting photos would go in (the reason each carries).
+func albumsOfPhotos(photos []store.RulePhoto) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range photos {
+		if p.Why != "" && !seen[p.Why] {
+			seen[p.Why] = true
+			out = append(out, p.Why)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// folderViews are the person's rules that make albums from folders, for their page.
+func (w *Server) folderViews(ctx context.Context, me *member) FoldersView {
+	if w.Hub == nil || !w.Hub.SelfService() {
+		return FoldersView{}
+	}
+	v := FoldersView{Available: true}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return v
+	}
+	l := loc(ctx)
+	for _, r := range rules {
+		if r.Kind != "folder" {
+			continue
+		}
+		fv := FolderRuleView{ID: r.ID, Folder: r.Cond.Folder, Words: folderWords(ctx, r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			fv.Last = l.Stamp(r.LastLook.Local())
+		}
+		v.Rules = append(v.Rules, fv)
+	}
+	return v
+}
+
+// folderWords says how a folder rule reads its folders, in the person's language.
+func folderWords(ctx context.Context, c store.RuleCond) string {
+	var level string
+	switch c.Level {
+	case 0:
+		level = t(ctx, "An album for the folder each photo is in")
+	case 1:
+		level = t(ctx, "An album for the first folder below it")
+	case 2:
+		level = t(ctx, "An album for the second folder below it")
+	default:
+		level = t(ctx, "An album for the third folder below it")
+	}
+	if c.Naming == hub.NameParent {
+		return level + ", " + t(ctx, "named after the folder and the one above it")
+	}
+	return level + ", " + t(ctx, "named after the folder")
+}
+
+// folderCheck tells the form how many of the person's photos are under the folder it has so far, and the albums that would make.
+func (w *Server) folderCheck(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	ctx := r.Context()
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	q := r.URL.Query()
+	if strings.TrimSpace(q.Get("folder")) == "" {
+		return
+	}
+	level, _ := strconv.Atoi(q.Get("level"))
+	count, plan, err := w.Hub.CountFolderPhotos(ctx, me.sess, me.user, hub.FolderSpec{Prefix: q.Get("folder"), Depth: level, Naming: q.Get("naming")})
+	switch {
+	case err != nil && hub.IsUserError(err):
+		FolderCheck(t(ctx, err.Error()), nil, 0).Render(ctx, rw)
+	case err != nil:
+		w.Log.Warn("could not look under a folder", "user", me.user.Email, "err", err)
+		FolderCheck(t(ctx, "Could not look under that folder"), nil, 0).Render(ctx, rw)
+	case count == 0:
+		FolderCheck(t(ctx, hub.ErrNoFolderPh.Error()), nil, 0).Render(ctx, rw)
+	default:
+		var names []string
+		for _, a := range plan.Albums {
+			names = append(names, t(ctx, "{name} ({photos})", "name", a.Name, "photos", n(ctx, "{n} photo", "{n} photos", len(a.Photos))))
+		}
+		more := 0
+		if len(names) > 12 {
+			more, names = len(names)-12, names[:12]
+		}
+		FolderCheck(t(ctx, "Found {n} of your photos under that folder, making {albums} albums:", "n", count, "albums", len(plan.Albums)), names, more).Render(ctx, rw)
+	}
+}
+
+// followFolder makes a rule that makes albums from a folder.
+func (w *Server) followFolder(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "folder rule made", func(ctx context.Context, me *member, _ string) error {
+		level, _ := strconv.Atoi(r.PostFormValue("level"))
+		_, err := w.Hub.FollowFolder(ctx, me.sess, me.user, hub.FolderSpec{Prefix: r.PostFormValue("folder"), Depth: level, Naming: r.PostFormValue("naming")})
 		return err
 	})
 }

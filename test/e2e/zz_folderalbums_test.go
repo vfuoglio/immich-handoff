@@ -6,6 +6,8 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -137,4 +139,99 @@ func TestFolderAlbumsSpike(t *testing.T) {
 	call(t, "POST", "/api-keys", map[string]string{"Authorization": "Bearer " + bob.token}, map[string]any{"name": "spike-" + fmt.Sprint(time.Now().UnixNano()), "permissions": []string{"library.read", "asset.read"}}, &limited)
 	code = call(t, "GET", "/libraries", map[string]string{"x-api-key": limited.Secret}, nil, nil)
 	t.Logf("GET /libraries with a key of library.read and asset.read: HTTP %d", code)
+}
+
+// TestFolderAlbums: a person makes albums from the folders of their external library on a real Immich. The form says what it
+// finds, the rule offers the albums with their names, nothing is made before the answer, Send makes them (an album of that name
+// the person already has is used, not made again), the photo directly in the folder is left alone, and stopping the rule
+// deletes the key the app made.
+func TestFolderAlbums(t *testing.T) {
+	_, bob, _, _ := bootstrap(t)
+	externalLibrary(t, bob)
+	bin := buildApp(t)
+	port := fmt.Sprint(atoi(appPort) + 95)
+	launchApp(t, bin, port, "HANDOFF_STORE_KEY=an-e2e-store-key-0123456789", "DATA_DIR="+t.TempDir(), "RULES_CHECK_MINUTES=0.1", "RULES_SETTLE_MINUTES=0.02")
+	cookie := loginCookie(t, "bob@e2e.test")
+	form := func(path string, v url.Values) {
+		t.Helper()
+		if code, body := postBody(t, port, path, cookie, v); code != 204 {
+			t.Fatalf("%s: HTTP %d %.300s", path, code, body)
+		}
+	}
+	albums := func() map[string]int {
+		var list []struct {
+			Name       string `json:"albumName"`
+			AssetCount int    `json:"assetCount"`
+		}
+		call(t, "GET", "/albums", keyAuth(bob), nil, &list)
+		out := map[string]int{}
+		for _, a := range list {
+			out[a.Name] += a.AssetCount
+		}
+		return out
+	}
+
+	// an album of that name that bob already has
+	var rome struct {
+		ID string `json:"id"`
+	}
+	mustOK(t, call(t, "POST", "/albums", keyAuth(bob), map[string]any{"albumName": "rome"}, &rome), "bob's own album named rome")
+
+	// the form says what it finds as the folder is typed
+	code, body := getBody(t, port, "/fragments/folder-check?folder="+url.QueryEscape("/external/photos")+"&level=0&naming=last", cookie)
+	if code != 200 || !strings.Contains(body, "Found 6 of your photos") || !strings.Contains(body, "making 3 albums") || !strings.Contains(body, "paris (3 photos)") {
+		t.Fatalf("the form's check: %d %.400s", code, body)
+	}
+	if _, body := getBody(t, port, "/fragments/folder-check?folder="+url.QueryEscape("/external/photos-old")+"&level=0&naming=last", cookie); !strings.Contains(body, "Found 1 of your photos") {
+		t.Errorf("the folder next to it is its own: %.300s", body)
+	}
+
+	form("/rules/folder", url.Values{"folder": {"/external/photos"}, "level": {"0"}, "naming": {"last"}})
+	if !hasName(keyNames(t, bob), "handoff: folders") {
+		t.Fatalf("the key the app made is in bob's Immich: %v", keyNames(t, bob))
+	}
+	var rule string
+	eventually(t, "the albums are offered", 90*time.Second, func() bool {
+		body := page(t, port, cookie)
+		m := regexp.MustCompile(`rules/review/([0-9a-f-]{36})`).FindStringSubmatch(body)
+		if m == nil || !strings.Contains(body, "5 photos for 3 albums from your folders") {
+			return false
+		}
+		rule = m[1]
+		return true
+	})
+	offered := page(t, port, cookie)
+	for _, want := range []string{"Albums: Summer trip, paris, rome", "Make the albums"} {
+		if !strings.Contains(offered, want) {
+			t.Errorf("the card lacks %q", want)
+		}
+	}
+	if got := albums(); got["paris"] != 0 || got["Summer trip"] != 0 {
+		t.Errorf("nothing is made before the answer: %v", got)
+	}
+	form("/rules/answer", url.Values{"rule": {rule}, "do": {"send"}})
+	eventually(t, "the albums have their photos", 60*time.Second, func() bool {
+		got := albums()
+		return got["paris"] == 3 && got["rome"] == 1 && got["Summer trip"] == 1
+	})
+	var list []struct {
+		Name string `json:"albumName"`
+	}
+	call(t, "GET", "/albums", keyAuth(bob), nil, &list)
+	n := 0
+	for _, a := range list {
+		if a.Name == "rome" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the album bob already had is used, not made again: %d albums named rome", n)
+	}
+	if got := albums(); got["photos"] != 0 { // other tests leave albums of their own in the shared Immich: only the folder's would matter
+		t.Errorf("the photo directly in the folder has no album: %v", got)
+	}
+
+	// stopping the rule deletes the key
+	form("/rules/delete", url.Values{"rule": {rule}})
+	eventually(t, "the key is gone", 20*time.Second, func() bool { return !hasName(keyNames(t, bob), "handoff: folders") })
 }

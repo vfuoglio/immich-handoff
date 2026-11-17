@@ -271,6 +271,20 @@ type LibraryView struct {
 	Followed    []FollowedView // the albums shared with the person that a rule follows
 }
 
+// FolderRuleView is a rule that makes albums from the folders of an external library, for the person's page.
+type FolderRuleView struct {
+	ID, Folder, Words, Mode string
+	Always                  int
+	Paused, CanAuto         bool
+	Last, Problem           string
+}
+
+// FoldersView is the person's "Albums from my folders" card.
+type FoldersView struct {
+	Available bool
+	Rules     []FolderRuleView
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -295,6 +309,7 @@ type DashboardData struct {
 	Mail       MailView
 	Push       PushView
 	Memories   MemoriesView
+	Folders    FoldersView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
@@ -652,6 +667,9 @@ templ Dashboard(d DashboardData) {
 			if d.Memories.Available {
 				@MemoriesCard(d.Memories)
 			}
+			if d.Folders.Available {
+				@FoldersCard(d.Folders)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -794,6 +812,94 @@ templ MemoriesCard(m MemoriesView) {
 		}
 		<small class="meta">{ t(ctx, "The app makes a key in your Immich that can read your memories and look at pictures, and nothing else; you can see it and delete it there. Turning this off deletes it. Nobody else sees your memories.") }</small>
 	</div>
+}
+
+// FoldersCard makes albums from the folders of the person's external library: the rules they have, and the form that makes one.
+templ FoldersCard(f FoldersView) {
+	<h2>{ t(ctx, "Albums from my folders") }</h2>
+	<div class="card folderscard">
+		<p>{ t(ctx, "If part of your library is an external library (folders on the server), the app can offer an album for each folder, named after it, and put the photos in it. It only adds: nothing is ever removed, renamed or deleted.") }</p>
+		for _, r := range f.Rules {
+			<div class="card rule">
+				<p><b>{ r.Folder }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Makes albums by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				<p class="meta">{ r.Words }</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it make the albums by itself from now on.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the photos that come to this folder are put in albums without asking you. Only photos that arrive from now on are handled this way.") }>{ t(ctx, "Let it make albums by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop making albums from this folder? The albums already made stay as they are.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make albums from a folder") }</summary>
+			<form class="card folder-form" hx-post="rules/folder" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<div class="field">
+					<label for="folder-path">{ t(ctx, "The folder, as Immich knows it") }</label>
+					<input id="folder-path" name="folder" maxlength="500" autocomplete="off" placeholder="/external/photos" required
+						hx-get="fragments/folder-check" hx-trigger="keyup changed delay:600ms, change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/>
+					<small class="meta">{ t(ctx, "Immich only lets its administrator list libraries, so type the folder: it is the path Immich shows for one of your photos from the library, up to the folder you want.") }</small>
+				</div>
+				<div class="field">
+					<label for="folder-level">{ t(ctx, "Which folder is an album") }</label>
+					<select id="folder-level" name="level" hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML">
+						<option value="0">{ t(ctx, "The folder each photo is in") }</option>
+						<option value="1">{ t(ctx, "The first folder below the one above") }</option>
+						<option value="2">{ t(ctx, "The second folder below the one above") }</option>
+						<option value="3">{ t(ctx, "The third folder below the one above") }</option>
+					</select>
+				</div>
+				<div class="field">
+					<label><input type="radio" name="naming" value="last" checked hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/> { t(ctx, "Name it after the folder") }</label>
+					<label><input type="radio" name="naming" value="parent" hx-get="fragments/folder-check" hx-trigger="change" hx-include="closest form" hx-target="#folder-check" hx-swap="innerHTML"/> { t(ctx, "Name it after the folder and the one above it") }</label>
+				</div>
+				<div id="folder-check" class="meta" aria-live="polite"></div>
+				<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer me these albums") }</button></p>
+			</form>
+		</details>
+	</div>
+}
+
+// FolderCheck is what the form shows about the folder being typed: how many of the person's photos are under it and the albums
+// it would make, or why it cannot.
+templ FolderCheck(msg string, albums []string, more int) {
+	<p>{ msg }</p>
+	if len(albums) > 0 {
+		<ul class="plain">
+			for _, a := range albums {
+				<li>{ a }</li>
+			}
+			if more > 0 {
+				<li>{ n(ctx, "and {n} more album", "and {n} more albums", more) }</li>
+			}
+		</ul>
+	}
 }
 
 // MemoriesPageView is the page a message leads to: the day's memories, to send photos on.
@@ -4326,7 +4432,10 @@ templ RuleCities(cities []string) {
 templ SuggestionReviewPage(d SuggestionReview) {
 	@Layout(reviewTitle(ctx, d), d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
-		if d.Library {
+		if d.Folder {
+			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Library {
 			<h1>{ t(ctx, "New in {album}", "album", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Photos added to the album {album}, shared by {owner}.", "album", d.Album, "owner", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else {
@@ -4347,7 +4456,10 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				}
 			</ul>
 			<p class="row form-actions">
-				if d.Library {
+				if d.Folder {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
+				} else if d.Library {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked photos to my library") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked photos, and always") }</button>
 				} else {

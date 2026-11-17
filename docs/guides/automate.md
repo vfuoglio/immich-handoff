@@ -49,6 +49,23 @@ An album someone shared with you can be **followed**: what they add to it is off
 
 How it works: [the design note](../design/library-design.md).
 
+## Albums from the folders of an external library
+
+If part of your Immich is an **external library** (folders on the server that Immich reads in place), its photos are not in any album. The app can offer an album for each folder, named after it, and put the photos in it. On the Overview, under **Albums from my folders**, open **Make albums from a folder** and fill in:
+
+- **The folder, as Immich knows it**, such as `/external/photos`. Immich lets only its administrator list libraries, so you type it: it is the path Immich shows for one of your photos from the library, up to the folder you want. As you type, the form says how many of your photos it finds under that folder and which albums it would make. Only your own photos count, and `/external/photos` does not also take `/external/photos-old`.
+- **Which folder is an album.** By default the folder each photo is in. Or the first, second or third folder below the one you typed, so `/photos/2025-02/paris/a.jpg` goes in `paris`, `2025-02`, or `paris` again. A photo with no folder at that level (directly in the folder you typed, say) has no album and is left alone.
+- **The name.** After the folder (`paris`) or after the folder and the one above it (`2025-02 / paris`). With the first, two folders with the same name in different places make **one** album; the second keeps them apart.
+
+Then the rule works like the others:
+
+- **It asks first.** What is there now waits on the Overview as **N photos for M albums from your folders**, with the album names, and **Make the albums**, **Not these** and **Always**; the card links to a page where you can look at the photos one by one, each with its album. After you have answered **Always** three times you can let the rule **make albums by itself** for photos that arrive from then on.
+- **It only adds.** An album of yours with that name is used; otherwise it is made. Nothing is ever removed from an album, renamed or deleted. If you rename a folder, the new name makes a new album and the old one stays.
+- **A big folder takes its time.** The first look at a folder of hundreds of thousands of photos is spread over several passes (at most 500 new photos each); after that a pass only lists what came to Immich since the last one.
+- **A key of your own.** The first time, the app makes a key named `handoff: folders` with your own sign-in. It can read your photos and your albums and make an album and put photos in it, and it cannot change, share or delete an album, or touch a photo. You can delete it in Immich whenever you like (the rule then says so), and the app deletes it when you stop your last folder rule.
+
+How it works, and what Immich does with an external library: [the design note](../design/folders-design.md).
+
 ## Handing over from inside Immich
 
 If your administrator has put the Handoff button in Immich's pages ([Make Handoff easy to find](../find-handoff.md#hand-over-from-inside-immich)), you can hand photos over without tags: open a photo, or select several, and press **Hand over...** in the toolbar (or choose **Hand over...** in the three-dot menu). Pick the service; Immich's page then says how many photos were handed over, with **Undo** for a moment. The list shows only services you send to from this page, says whether your original stays or goes to your trash, and warns when photos will wait (a pause, a daily limit). The service you used last is first in the list; **Forget my choice** clears it. A service whose owner decides is listed under **Ask to join**; pressing it asks, and the list then says **Waiting for approval**. Only your own photos can be handed over, up to 200 at once. It does the same as putting the tag on, so everything above about limits, quiet hours and taking back applies.

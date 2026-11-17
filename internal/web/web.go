@@ -281,6 +281,8 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/delete", w.deleteRule)
 	mux.HandleFunc("GET /fragments/follow-albums", w.followAlbums)
 	mux.HandleFunc("POST /rules/follow", w.followAlbum)
+	mux.HandleFunc("GET /fragments/folder-check", w.folderCheck)
+	mux.HandleFunc("POST /rules/folder", w.followFolder)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
 	mux.HandleFunc("POST /join", w.join)
@@ -632,6 +634,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
 	d.Push = w.pushView(ctx, me)
 	d.Memories = w.memoriesView(ctx, me)
+	d.Folders = w.folderViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
 		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}
@@ -715,6 +718,15 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo in {album}", "{n} new photos in {album}", sg.Count, "album", sg.Album),
 				Text: t(ctx, "Shared by {owner}. Add them to your library?", "owner", sg.Owner), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
+			continue
+		}
+		if sg.Folder { // albums to make from the folders of an external library
+			acts := []NeedAction{
+				{Label: t(ctx, "Make the albums"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} photo for {albums} album from your folders", "{n} photos for {albums} albums from your folders", sg.Count, "albums", len(sg.Albums)),
+				Text: t(ctx, "Albums: {names}. Photos are only added, nothing is removed.", "names", folderNames(sg.Albums)), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 			continue
 		}
 		acts := []NeedAction{

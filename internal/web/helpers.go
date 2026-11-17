@@ -967,8 +967,19 @@ func libraryTrigger(l LibraryView) string {
 
 // reviewTitle is the title of the page that shows what a rule found.
 func reviewTitle(ctx context.Context, d SuggestionReview) string {
+	if d.Folder {
+		return t(ctx, "Albums from {folder}", "folder", d.Album)
+	}
 	if d.Library {
 		return t(ctx, "New in {album}", "album", d.Album)
 	}
 	return t(ctx, "Photos for {service}", "service", d.Service)
+}
+
+// folderNames lists the albums of a suggestion in a few words: the first few, then how many more.
+func folderNames(albums []string) string {
+	if len(albums) <= 6 {
+		return strings.Join(albums, ", ")
+	}
+	return strings.Join(albums[:6], ", ") + ", …"
 }

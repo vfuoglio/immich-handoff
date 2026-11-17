@@ -16,6 +16,7 @@ Start with what you want to do.
 | Show an album on a screen, or a weekly best-of | [Frames and the weekly digest](guides/frames-and-digest.md) |
 | Be told by mail, phone or message | [Be told](guides/notifications.md) |
 | Get a daily message about the memories Immich has for today | [On this day](guides/memories.md) |
+| Make an album for each folder of an external library | [Albums from folders](guides/automate.md#albums-from-the-folders-of-an-external-library) |
 | Find my way around the page | [Finding your way around](guides/the-page.md) |
 
 ## Run it and look things up

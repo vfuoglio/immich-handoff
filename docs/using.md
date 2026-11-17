@@ -15,6 +15,7 @@ The guides are organised by what you want to do. Each opens with who it is for, 
 | **Show an album on a screen**, or get a weekly best-of | [Frames and the weekly digest](guides/frames-and-digest.md) |
 | **Be told what happens** by mail, phone or message | [Be told](guides/notifications.md) |
 | **Be told about today's memories** | [On this day](guides/memories.md) |
+| **Make albums from the folders of an external library** | [Albums from folders](guides/automate.md#albums-from-the-folders-of-an-external-library) |
 | **Find my way around the page**, or look up a word | [Finding your way around the page](guides/the-page.md) |
 
 Running the installation instead? See the [documentation index](README.md).
