@@ -86,6 +86,16 @@ var Optional = map[Permission]string{
 	"stack.create": "photos that arrive as a stack arrive as separate photos",
 }
 
+// LibraryPermissions are what the key for following albums shared with a person needs: to read and download what is shared
+// with them, add it to their own library, and tag it; and, when the copies go to an album, to make and fill it.
+func LibraryPermissions(album bool) []Permission {
+	p := perms("user.read", "album.read", "asset.read", "asset.download", "asset.upload", "tag.read", "tag.create", "tag.asset")
+	if album {
+		p = append(p, perms("album.create", "albumAsset.create")...)
+	}
+	return p
+}
+
 func perms(names ...string) []Permission {
 	out := make([]Permission, len(names))
 	for i, n := range names {

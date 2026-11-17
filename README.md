@@ -38,7 +38,7 @@ Immich keeps every photo in the account that uploaded it. Shared albums and link
 | **Deliver a shoot to a client** | A room the client opens on a phone: favourites, notes, rounds, and you release the originals when you decide | [Client rooms](docs/guides/client-rooms.md) |
 | **Share an album with a friend on another server** | Photos both ways between two Immich servers, signed, with no echo; works even if your friend does not run Handoff | [Albums shared with other servers](docs/guides/shared-albums.md) |
 | **Stop tagging by hand** | A **Hand over...** button inside Immich, and rules that suggest photos of named people, places and dates | [Rules](docs/guides/automate.md) and [the button](docs/find-handoff.md#hand-over-from-inside-immich) |
-| **Keep a photo someone shared with me** | An **Add to my library** button inside Immich copies a photo from a shared album or a partner into your own library, with its details, and Undo for 15 minutes | [Add to my library](docs/find-handoff.md#add-to-my-library-from-inside-immich) |
+| **Keep a photo someone shared with me** | An **Add to my library** button inside Immich copies a photo from a shared album or a partner into your own library, with its details, and Undo for 15 minutes; or follow an album and have what is added offered to you | [Add to my library](docs/find-handoff.md#add-to-my-library-from-inside-immich) and [following an album](docs/guides/automate.md#following-an-album-shared-with-you) |
 
 A *service* is simply a named place photos are handed to ("Holiday 2026"); its owner decides who may send.
 

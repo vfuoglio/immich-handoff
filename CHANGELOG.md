@@ -4,6 +4,7 @@
 
 ### What is new
 - **Add to my library.** A button inside Immich's photo viewer, selection bar and menus copies a photo that someone shared with you (an album, or a partner's library) into your own library, with its description, rating, location and a live photo's clip. Choose where copies go (tagged with who shared them, as they are, or an album), and **Undo** for 15 minutes. It answers Immich's most voted sharing request using only Immich's public API. See [Add to my library](docs/find-handoff.md#add-to-my-library-from-inside-immich).
+- **Follow an album shared with you.** The new photos of an album someone shared with you are offered to you, with pictures, to add to your library, and once you have answered *Always* three times the album can add them by itself. It uses a key of your own that can read what is shared with you and add to your library, and that you can delete at any time. See [Following an album shared with you](docs/guides/automate.md#following-an-album-shared-with-you).
 
 ## 1.3.1
 

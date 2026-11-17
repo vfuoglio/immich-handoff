@@ -1151,5 +1151,59 @@
  "{n} photo taken out of your library again": {
   "one": "{n} photo retirée de votre bibliothèque",
   "other": "{n} photos retirées de votre bibliothèque"
+ },
+ "In the album {album}": "Dans l’album {album}",
+ "Could not list the albums shared with you": "Impossible de charger les albums partagés avec vous",
+ "Shared by {owner}. Add them to your library?": "Partagé par {owner}. Les ajouter à votre bibliothèque ?",
+ "{album}, shared by {owner}": "{album}, partagé par {owner}",
+ "Adds by itself": "Ajoute tout seul",
+ "You have answered Always {n} times. You can let it add photos by itself from now on.": "Vous avez répondu « Toujours » {n} fois. Vous pouvez le laisser ajouter des photos tout seul à partir de maintenant.",
+ "Let it add by itself": "Le laisser ajouter tout seul",
+ "From now on what is added to this album is copied into your library without asking you. Only photos added from now on are copied this way.": "À partir de maintenant, ce qui est ajouté à cet album est copié dans votre bibliothèque sans vous demander. Seules les photos ajoutées à partir de maintenant sont copiées ainsi.",
+ "Stop following this album? The photos already copied stay in your library.": "Ne plus suivre cet album ? Les photos déjà copiées restent dans votre bibliothèque.",
+ "Stop following?": "Ne plus suivre ?",
+ "Stop following": "Ne plus suivre",
+ "Albums shared with you that you follow": "Albums partagés avec vous que vous suivez",
+ "Follow an album shared with me": "Suivre un album partagé avec moi",
+ "Loading the albums shared with you...": "Chargement des albums partagés avec vous...",
+ "Nobody has shared an album with you yet.": "Personne n’a encore partagé d’album avec vous.",
+ "What others add to the album is offered to you with pictures, to add to your library, and once you have said Always three times you can let it add photos by itself.": "Ce que d’autres ajoutent à l’album vous est proposé avec des images, à ajouter à votre bibliothèque, et quand vous aurez dit « Toujours » trois fois vous pourrez le laisser ajouter des photos tout seul.",
+ "Which album": "Quel album",
+ "Only what is added from now on": "Seulement ce qui est ajouté à partir de maintenant",
+ "What is in it now, and what is added": "Ce qui y est maintenant, et ce qui s’ajoute",
+ "Where the copies go": "Où vont les copies",
+ "the name of the album, when the copies go to one": "le nom de l’album, quand les copies vont dans un album",
+ "Follow this album": "Suivre cet album",
+ "New in {album}": "Nouveau dans {album}",
+ "Photos added to the album {album}, shared by {owner}.": "Photos ajoutées à l’album {album}, partagé par {owner}.",
+ "Add the ticked photos to my library": "Ajouter les photos cochées à ma bibliothèque",
+ "Add the ticked photos, and always": "Ajouter les photos cochées, et toujours",
+ "{name} follows the album {album}, shared by {owner}": "{name} suit l’album {album}, partagé par {owner}",
+ "{name} made the album {album} ask first again": "{name} a fait redemander d’abord pour l’album {album}",
+ "{name} let the album {album} add photos to the library by itself": "{name} a laissé l’album {album} ajouter des photos à la bibliothèque tout seul",
+ "{name} stopped following the album {album}": "{name} ne suit plus l’album {album}",
+ "the key the app uses to follow your albums is gone: follow the album again": "la clé avec laquelle l’application suit vos albums a disparu : suivez à nouveau l’album",
+ "that album is not shared with you": "cet album n’est pas partagé avec vous",
+ "you already follow that album": "vous suivez déjà cet album",
+ "choose whether to start with what is in the album now, or only with what is added from now on": "choisissez de commencer avec ce qui est dans l’album maintenant, ou seulement avec ce qui s’ajoute à partir de maintenant",
+ "{n} new photo in {album}": {
+  "one": "{n} nouvelle photo dans {album}",
+  "other": "{n} nouvelles photos dans {album}"
+ },
+ "{n} photo added to your library from {album} on its own": {
+  "one": "{n} photo de {album} ajoutée toute seule à votre bibliothèque",
+  "other": "{n} photos de {album} ajoutées toutes seules à votre bibliothèque"
+ },
+ "{n} new photo in the album {album} you follow. Look at it on the Overview.": {
+  "one": "{n} nouvelle photo dans l’album {album} que vous suivez. Regardez-la dans l’Aperçu.",
+  "other": "{n} nouvelles photos dans l’album {album} que vous suivez. Regardez-les dans l’Aperçu."
+ },
+ "{n} photo added to your library from {album}": {
+  "one": "{n} photo de {album} ajoutée à votre bibliothèque",
+  "other": "{n} photos de {album} ajoutées à votre bibliothèque"
+ },
+ "{n} photo of the album {album} left out of your library": {
+  "one": "{n} photo de l’album {album} laissée hors de votre bibliothèque",
+  "other": "{n} photos de l’album {album} laissées hors de votre bibliothèque"
  }
 }

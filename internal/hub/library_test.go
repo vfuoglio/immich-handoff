@@ -19,6 +19,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
 // libFake is a small Immich for "Add to my library": photos with owners, who can see what, uploads that are copies
@@ -28,6 +29,7 @@ type libFake struct {
 	assets  map[string]*libAsset
 	visible map[string]map[string]bool // asset id -> people besides the owner who can see it
 	tags    map[string]string          // tag id -> name
+	keys    map[string][]string        // key id -> permissions
 	albums  map[string]*libAlbum
 	uploads []libUpload
 	deleted []string
@@ -47,6 +49,7 @@ type libAsset struct {
 type libAlbum struct {
 	owner, name string
 	members     map[string]bool
+	sharedWith  map[string]bool // people the album is shared with
 }
 
 type libUpload struct {
@@ -58,7 +61,7 @@ type libUpload struct {
 }
 
 func newLibFake() *libFake {
-	return &libFake{assets: map[string]*libAsset{}, visible: map[string]map[string]bool{}, tags: map[string]string{}, albums: map[string]*libAlbum{}}
+	return &libFake{assets: map[string]*libAsset{}, visible: map[string]map[string]bool{}, tags: map[string]string{}, keys: map[string][]string{}, albums: map[string]*libAlbum{}}
 }
 
 // shared adds a photo of ann's that bob can see.
@@ -235,11 +238,66 @@ func (f *libFake) handler() http.Handler {
 		defer f.mu.Unlock()
 		out := []any{}
 		for id, al := range f.albums {
-			if al.owner == who(r) && (r.URL.Query().Get("name") == "" || r.URL.Query().Get("name") == al.name) {
+			mine := al.owner == who(r)
+			if r.URL.Query().Get("isOwned") == "false" { // shared with me
+				if !mine && al.sharedWith[who(r)] {
+					out = append(out, map[string]any{"id": id, "albumName": al.name, "assetCount": len(al.members),
+						"albumUsers": []any{map[string]any{"role": "editor", "user": map[string]any{"id": people[al.owner], "name": names[al.owner], "email": al.owner + "@x.test", "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""}}}})
+				}
+				continue
+			}
+			if mine && (r.URL.Query().Get("name") == "" || r.URL.Query().Get("name") == al.name) {
 				out = append(out, map[string]any{"id": id, "albumName": al.name, "assetCount": len(al.members)})
 			}
 		}
 		j(w, 200, out)
+	})
+	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
+		p := who(r)
+		if people[p] == "" {
+			http.Error(w, "no", 401)
+			return
+		}
+		j(w, 200, map[string]any{"id": people[p], "name": names[p], "email": p + "@x.test"})
+	})
+	mux.HandleFunc("POST /api/api-keys", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name        string   `json:"name"`
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		id := uuid.NewString()
+		f.keys[id] = body.Permissions
+		j(w, 201, map[string]any{"id": id, "name": body.Name, "secret": "secret-" + id, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
+			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("GET /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		perms, ok := f.keys[r.PathValue("id")]
+		if !ok {
+			http.Error(w, "no", 404)
+			return
+		}
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": perms, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("PUT /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.keys[r.PathValue("id")] = body.Permissions
+		j(w, 200, map[string]any{"id": r.PathValue("id"), "name": "k", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts})
+	})
+	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		delete(f.keys, r.PathValue("id"))
+		w.WriteHeader(204)
 	})
 	mux.HandleFunc("POST /api/albums", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -558,5 +616,55 @@ func TestTheDefaultPlaceForCopiesIsATagUntilThePersonChoosesAndIsRemembered(t *t
 	}
 	if d := e.h.LibraryDefault(ctx, annID); d.Kind != hub.LibraryTag {
 		t.Errorf("someone else is not affected: %+v", d)
+	}
+}
+
+func TestTheKeyForFollowingAlbumsIsMadeOnceWithTheSmallestPermissionsAndNamedForThePerson(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	api, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false)
+	if err != nil || api == nil {
+		t.Fatalf("%v", err)
+	}
+	want := []string{"user.read", "album.read", "asset.read", "asset.download", "asset.upload", "tag.read", "tag.create", "tag.asset"}
+	if got := e.f.lastPerms; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("permissions %v, want %v: it reads what is shared, adds to the person's own library and tags; it cannot delete or update", got, want)
+	}
+	if k, ok, err := e.st.LibraryKey(ctx, bobID); err != nil || !ok || k.Key == "" || k.KeyID == uuid.Nil {
+		t.Errorf("the key is kept: %+v %v %v", k, ok, err)
+	}
+	made := e.f.keyUpdates
+	n := len(e.f.keyPerms)
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false); err != nil || len(e.f.keyPerms) != n {
+		t.Errorf("the second time no key is made: %v, %d keys", err, len(e.f.keyPerms))
+	}
+	// an album destination adds the two permissions to the key that exists, and makes no new key
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, true); err != nil || len(e.f.keyPerms) != n || e.f.keyUpdates == made {
+		t.Errorf("an album destination widens the same key: %v, %d keys, updates %d", err, len(e.f.keyPerms), e.f.keyUpdates)
+	}
+	if _, ok, _ := e.st.LibraryKey(ctx, annID); ok {
+		t.Error("another person has no such key")
+	}
+}
+
+func TestTheKeyForFollowingAlbumsIsDeletedWhenNoRuleUsesItAnyMore(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	if _, err := e.h.EnsureLibraryKeyForTest(ctx, e.sess, bob, false); err != nil {
+		t.Fatal(err)
+	}
+	rule, err := e.st.AddRule(ctx, store.Rule{OwnerID: bobID, Kind: store.RuleKindLibrary, Dest: "plain", Cond: store.RuleCond{Album: &store.RuleRef{ID: uuid.NewString(), Name: "Trip"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.h.DropLibraryKeyForTest(ctx, e.sess, bob)
+	if _, ok, _ := e.st.LibraryKey(ctx, bobID); !ok {
+		t.Fatal("a rule still follows an album: the key stays")
+	}
+	e.st.DeleteRule(ctx, rule.ID)
+	e.h.DropLibraryKeyForTest(ctx, e.sess, bob)
+	if _, ok, _ := e.st.LibraryKey(ctx, bobID); ok {
+		t.Error("the last rule is gone: the key goes")
+	}
+	if len(e.f.deletedKeys) != 1 {
+		t.Errorf("the key is deleted in the person's Immich too: %v", e.f.deletedKeys)
 	}
 }

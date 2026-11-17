@@ -323,12 +323,23 @@ func (h *Hub) PauseRule(ctx context.Context, user uuid.UUID, id string, paused b
 
 // DeleteRule ends a rule. Photos already handed over stay where they are.
 func (h *Hub) DeleteRule(ctx context.Context, user immich.User, id string) error {
+	return h.DeleteRuleWith(ctx, nil, user, id)
+}
+
+// DeleteRuleWith is DeleteRule, with the person's own session when there is one: ending the last rule that follows an
+// album then also deletes the key the app made for it in their Immich.
+func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.User, id string) error {
 	r, err := h.ruleOf(ctx, user.ID, id)
 	if err != nil {
 		return err
 	}
 	if err := h.Store.DeleteRule(ctx, r.ID); err != nil {
 		return err
+	}
+	if r.Kind == store.RuleKindLibrary {
+		h.dropLibraryKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped following the album {album}", "name", user.Name, "album", r.Cond.Album.Name))
+		return nil
 	}
 	h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} ended a rule for {service}: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
 	return nil

@@ -41,9 +41,97 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	return out
 }
 
+// FollowedView is an album shared with the person that a rule follows, for their page.
+type FollowedView struct {
+	ID, Album, Owner, Dest, Mode string
+	Always                       int
+	Paused, CanAuto              bool
+	Last, Problem                string
+}
+
+// destWords says where a rule's copies go, in the person's language.
+func destWords(ctx context.Context, dest, album string) string {
+	switch dest {
+	case "plain":
+		return t(ctx, "In my library")
+	case "album":
+		return t(ctx, "In the album {album}", "album", album)
+	}
+	return t(ctx, "In my library, tagged with who shared it")
+}
+
+func (w *Server) followedViews(ctx context.Context, me *member) []FollowedView {
+	if w.Hub == nil {
+		return nil
+	}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return nil
+	}
+	l := loc(ctx)
+	var out []FollowedView
+	for _, r := range rules {
+		if r.Kind != "library" || r.Cond.Album == nil {
+			continue
+		}
+		v := FollowedView{ID: r.ID, Album: r.Cond.Album.Name, Owner: r.Cond.AlbumOwner, Dest: destWords(ctx, r.Dest, r.DestAlbum), Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			v.Last = l.Stamp(r.LastLook.Local())
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// FollowOption is an album shared with the person, in the form that follows one.
+type FollowOption struct{ ID, Label string }
+
+// followAlbums lists the albums other people shared with the person, for the form that follows one; it is asked for when the
+// form is opened.
+func (w *Server) followAlbums(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	albums, err := w.Hub.SharedAlbumsFor(r.Context(), me.sess)
+	if err != nil {
+		w.Log.Warn("could not list the albums shared with a person", "user", me.user.Email, "err", err)
+		http.Error(rw, t(r.Context(), "Could not list the albums shared with you"), http.StatusBadGateway)
+		return
+	}
+	opts := make([]FollowOption, 0, len(albums))
+	for _, a := range albums {
+		opts = append(opts, FollowOption{ID: a.ID.String(), Label: albumLabel(r.Context(), a.Name, a.Count) + " \u00b7 " + a.Owner})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	FollowForm(opts).Render(r.Context(), rw)
+}
+
+func (w *Server) followAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "album followed", func(ctx context.Context, me *member, _ string) error {
+		id, err := uuid.Parse(r.PostFormValue("album_id"))
+		if err != nil {
+			return hub.ErrAlbumNotShared
+		}
+		album := strings.TrimSpace(r.PostFormValue("album"))
+		if album == "" {
+			album = r.PostFormValue("album_pick")
+		}
+		_, err = w.Hub.FollowAlbum(ctx, me.sess, me.user, hub.FollowParams{Album: id, History: r.PostFormValue("history"), Dest: hub.LibraryDest{Kind: r.PostFormValue("dest"), Album: album}})
+		return err
+	})
+}
+
 // SuggestionView is a rule with photos waiting for the person's answer.
 type SuggestionView struct {
 	RuleID, Service, Sentence string
+	Library                   bool   // the rule follows an album shared with the person: Service is empty
+	Album, Owner              string // for such a rule
 	Count                     int
 	Thumbs                    []NeedThumb
 	Always                    int
@@ -61,6 +149,9 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 	var out []SuggestionView
 	for _, s := range list {
 		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
+		if s.Rule.Kind == "library" && s.Rule.Cond.Album != nil {
+			v.Library, v.Album, v.Owner = true, s.Rule.Cond.Album.Name, s.Rule.Cond.AlbumOwner
+		}
 		for i, p := range s.Photos {
 			if i == 8 {
 				break
@@ -225,7 +316,7 @@ func (w *Server) pauseRule(rw http.ResponseWriter, r *http.Request) {
 
 func (w *Server) deleteRule(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "rule ended", func(ctx context.Context, me *member, _ string) error {
-		return w.Hub.DeleteRule(ctx, me.user, r.PostFormValue("rule"))
+		return w.Hub.DeleteRuleWith(ctx, me.sess, me.user, r.PostFormValue("rule"))
 	})
 }
 
@@ -234,6 +325,8 @@ type SuggestionReview struct {
 	User, RuleID, Service, Sentence string
 	Photos                          []RuleReviewPhoto
 	Phrase                          bool
+	Library                         bool   // the rule follows an album shared with the person
+	Album, Owner                    string // for such a rule
 }
 
 // RuleReviewPhoto is one photo on the review page.
@@ -251,6 +344,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
+	if sg.Rule.Kind == "library" && sg.Rule.Cond.Album != nil {
+		d.Library, d.Album, d.Owner = true, sg.Rule.Cond.Album.Name, sg.Rule.Cond.AlbumOwner
+	}
 	for _, p := range sg.Photos {
 		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
 	}

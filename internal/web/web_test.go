@@ -56,6 +56,9 @@ func fakeImmich() http.Handler {
 			"k-alice": {aliceID, "Alice"}, "k-family": {familyID, "Family"},
 		}
 		key := r.Header.Get("x-api-key")
+		if strings.HasPrefix(key, "lib-") { // the key the app made for following albums: it is "other"'s
+			key = "sess=other"
+		}
 		if key == "" {
 			key = strings.TrimSpace(r.Header.Get("Cookie"))
 			if i := strings.Index(key, "; handoff-lang="); i >= 0 { // Immich ignores a cookie that is not its own
@@ -110,6 +113,11 @@ func fakeImmich() http.Handler {
 			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
 			return
 		}
+		if r.URL.Query().Get("isOwned") == "false" && strings.Contains(r.Header.Get("Cookie"), "sess=other") { // albums shared with "other" (by alice)
+			j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999990", "albumName": "Trip", "assetCount": 4,
+				"albumUsers": []any{map[string]any{"role": "editor", "user": map[string]any{"id": aliceID, "name": "Alice", "email": "alice@x.test", "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""}}}}})
+			return
+		}
 		if r.URL.Query().Get("name") == "" && r.URL.Query().Get("isOwned") == "true" && strings.Contains(r.Header.Get("Cookie"), "sess=alice") {
 			j(w, []any{
 				map[string]any{"id": "99999999-9999-4999-8999-999999999991", "albumName": "To send", "assetCount": 3},
@@ -132,6 +140,20 @@ func fakeImmich() http.Handler {
 		j(w, map[string]any{"id": r.PathValue("id"), "ownerId": owner, "tags": []any{}, "originalFileName": "x.jpg", "fileCreatedAt": ts, "fileModifiedAt": ts,
 			"type": "IMAGE", "hasMetadata": true, "exifInfo": map[string]any{}, "createdAt": time.Now().UTC().Format(time.RFC3339), "checksum": jpegSum})
 	})
+	// the key for following albums is made in "other"'s account; it is named for the person and starts with lib-
+	mux.HandleFunc("POST /api/api-keys", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name        string   `json:"name"`
+			Permissions []string `json:"permissions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		id := "bbbbbbbb-0000-4000-8000-000000000001"
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		json.NewEncoder(w).Encode(map[string]any{"id": id, "name": body.Name, "secret": "lib-secret", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
+			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
+	})
+	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
 	// Add to my library: every original is the same small picture (above), and an upload is stored under an id that is "other"'s
 	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
