@@ -83,16 +83,16 @@ func (e AssetMediaStatus) Valid() bool {
 
 // Defines values for AssetOrder.
 const (
-	Asc  AssetOrder = "asc"
-	Desc AssetOrder = "desc"
+	AssetOrderAsc  AssetOrder = "asc"
+	AssetOrderDesc AssetOrder = "desc"
 )
 
 // Valid indicates whether the value is a known member of the AssetOrder enum.
 func (e AssetOrder) Valid() bool {
 	switch e {
-	case Asc:
+	case AssetOrderAsc:
 		return true
-	case Desc:
+	case AssetOrderDesc:
 		return true
 	default:
 		return false
@@ -168,6 +168,42 @@ func (e BulkIdErrorReason) Valid() bool {
 	case BulkIdErrorReasonUnknown:
 		return true
 	case BulkIdErrorReasonValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemorySearchOrder.
+const (
+	MemorySearchOrderAsc    MemorySearchOrder = "asc"
+	MemorySearchOrderDesc   MemorySearchOrder = "desc"
+	MemorySearchOrderRandom MemorySearchOrder = "random"
+)
+
+// Valid indicates whether the value is a known member of the MemorySearchOrder enum.
+func (e MemorySearchOrder) Valid() bool {
+	switch e {
+	case MemorySearchOrderAsc:
+		return true
+	case MemorySearchOrderDesc:
+		return true
+	case MemorySearchOrderRandom:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryType.
+const (
+	OnThisDay MemoryType = "on_this_day"
+)
+
+// Valid indicates whether the value is a known member of the MemoryType enum.
+func (e MemoryType) Valid() bool {
+	switch e {
+	case OnThisDay:
 		return true
 	default:
 		return false
@@ -1516,6 +1552,98 @@ type MemoriesUpdate struct {
 	SidebarWeb *bool `json:"sidebarWeb,omitempty"`
 }
 
+// MemoryCreateDto defines model for MemoryCreateDto.
+type MemoryCreateDto struct {
+	// AssetIds Asset IDs to associate with memory
+	AssetIds *[]openapi_types.UUID `json:"assetIds,omitempty"`
+	Data     OnThisDayDto          `json:"data"`
+
+	// HideAt Date when memory should be hidden
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	HideAt *time.Time `json:"hideAt,omitempty"`
+
+	// IsSaved Is memory saved
+	IsSaved *bool `json:"isSaved,omitempty"`
+
+	// MemoryAt Memory date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	MemoryAt time.Time `json:"memoryAt"`
+
+	// SeenAt Date when memory was seen
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	SeenAt *time.Time `json:"seenAt,omitempty"`
+
+	// ShowAt Date when memory should be shown
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ShowAt *time.Time `json:"showAt,omitempty"`
+
+	// Type Memory type
+	Type MemoryType `json:"type"`
+}
+
+// MemoryResponseDto defines model for MemoryResponseDto.
+type MemoryResponseDto struct {
+	Assets []AssetResponseDto `json:"assets"`
+
+	// CreatedAt Creation date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	CreatedAt time.Time    `json:"createdAt"`
+	Data      OnThisDayDto `json:"data"`
+
+	// DeletedAt Deletion date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+
+	// HideAt Date when memory should be hidden
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	HideAt *time.Time `json:"hideAt,omitempty"`
+
+	// Id Memory ID
+	Id openapi_types.UUID `json:"id"`
+
+	// IsSaved Is memory saved
+	IsSaved bool `json:"isSaved"`
+
+	// MemoryAt Memory date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	MemoryAt time.Time `json:"memoryAt"`
+
+	// OwnerId Owner user ID
+	OwnerId openapi_types.UUID `json:"ownerId"`
+
+	// SeenAt Date when memory was seen
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	SeenAt *time.Time `json:"seenAt,omitempty"`
+
+	// ShowAt Date when memory should be shown
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	ShowAt *time.Time `json:"showAt,omitempty"`
+
+	// Type Memory type
+	Type MemoryType `json:"type"`
+
+	// UpdatedAt Last update date
+	//
+	// Example: 2024-01-01T00:00:00.000Z
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// MemorySearchOrder Sort order
+type MemorySearchOrder string
+
+// MemoryType Memory type
+type MemoryType string
+
 // MetadataSearchDto defines model for MetadataSearchDto.
 type MetadataSearchDto struct {
 	// AlbumIds Filter by album IDs
@@ -1723,6 +1851,12 @@ type NumberFilterNullable struct {
 	Lte   *float64   `json:"lte,omitempty"`
 	Ne    *float64   `json:"ne,omitempty"`
 	NotIn *[]float64 `json:"notIn,omitempty"`
+}
+
+// OnThisDayDto defines model for OnThisDayDto.
+type OnThisDayDto struct {
+	// Year Year for on this day memory
+	Year int `json:"year"`
 }
 
 // PeopleResponse defines model for PeopleResponse.
@@ -2652,6 +2786,32 @@ type ViewAssetParams struct {
 	Slug   *string         `form:"slug,omitempty" json:"slug,omitempty"`
 }
 
+// SearchMemoriesParams defines parameters for SearchMemories.
+type SearchMemoriesParams struct {
+	// For Filter by date
+	For *openapi_types.Date `form:"for,omitempty" json:"for,omitempty"`
+
+	// Id Memory ID
+	Id *openapi_types.UUID `form:"id,omitempty" json:"id,omitempty"`
+
+	// IsSaved Filter by saved status
+	IsSaved *bool `form:"isSaved,omitempty" json:"isSaved,omitempty"`
+
+	// IsTrashed Include trashed memories
+	IsTrashed *bool `form:"isTrashed,omitempty" json:"isTrashed,omitempty"`
+
+	// IsUpcoming Filter by memories that have not been shown yet
+	IsUpcoming *bool              `form:"isUpcoming,omitempty" json:"isUpcoming,omitempty"`
+	Order      *MemorySearchOrder `form:"order,omitempty" json:"order,omitempty"`
+
+	// Page Page number
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// Size Number of memories to return
+	Size *int        `form:"size,omitempty" json:"size,omitempty"`
+	Type *MemoryType `form:"type,omitempty" json:"type,omitempty"`
+}
+
 // GetAllPeopleParams defines parameters for GetAllPeople.
 type GetAllPeopleParams struct {
 	// ClosestAssetId Closest asset ID for similarity search
@@ -2753,6 +2913,9 @@ type DeleteAssetsJSONRequestBody = AssetBulkDeleteDto
 
 // UploadAssetMultipartRequestBody defines body for UploadAsset for multipart/form-data ContentType.
 type UploadAssetMultipartRequestBody = AssetMediaCreateDto
+
+// CreateMemoryJSONRequestBody defines body for CreateMemory for application/json ContentType.
+type CreateMemoryJSONRequestBody = MemoryCreateDto
 
 // SearchAssetsJSONRequestBody defines body for SearchAssets for application/json ContentType.
 type SearchAssetsJSONRequestBody = MetadataSearchDto
@@ -3041,6 +3204,38 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
 	ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SearchMemories Retrieve memories
+	//
+	// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
+	//
+	// Corresponds with GET /memories (the `SearchMemories` operationId).
+	SearchMemories(ctx context.Context, params *SearchMemoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateMemoryWithBody Create a memory
+	//
+	// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /memories (the `CreateMemory` operationId).
+	CreateMemoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateMemory Create a memory
+	//
+	// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /memories (the `CreateMemory` operationId).
+	CreateMemory(ctx context.Context, body CreateMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteMemory Delete a memory
+	//
+	// Delete a specific memory by its ID.
+	//
+	// Corresponds with DELETE /memories/{id} (the `DeleteMemory` operationId).
+	DeleteMemory(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAllPeople Get all people
 	//
@@ -3729,6 +3924,78 @@ func (c *Client) DownloadAsset(ctx context.Context, id openapi_types.UUID, param
 // Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
 func (c *Client) ViewAsset(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewViewAssetRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SearchMemories Retrieve memories
+//
+// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
+//
+// Corresponds with GET /memories (the `SearchMemories` operationId).
+func (c *Client) SearchMemories(ctx context.Context, params *SearchMemoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSearchMemoriesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateMemoryWithBody Create a memory
+//
+// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /memories (the `CreateMemory` operationId).
+func (c *Client) CreateMemoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateMemory Create a memory
+//
+// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /memories (the `CreateMemory` operationId).
+func (c *Client) CreateMemory(ctx context.Context, body CreateMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteMemory Delete a memory
+//
+// Delete a specific memory by its ID.
+//
+// Corresponds with DELETE /memories/{id} (the `DeleteMemory` operationId).
+func (c *Client) DeleteMemory(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteMemoryRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -5239,6 +5506,230 @@ func NewViewAssetRequest(server string, id openapi_types.UUID, params *ViewAsset
 	return req, nil
 }
 
+// NewSearchMemoriesRequest constructs an http.Request for the SearchMemories method
+func NewSearchMemoriesRequest(server string, params *SearchMemoriesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/memories")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.For != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "for", *params.For, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Id != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "id", *params.Id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsSaved != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isSaved", *params.IsSaved, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsTrashed != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isTrashed", *params.IsTrashed, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsUpcoming != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isUpcoming", *params.IsUpcoming, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Order != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "order", *params.Order, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Size != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "size", *params.Size, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateMemoryRequest calls the generic CreateMemory builder with application/json body
+func NewCreateMemoryRequest(server string, body CreateMemoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateMemoryRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateMemoryRequestWithBody constructs an http.Request for the CreateMemory method, with any body, and a specified content type
+func NewCreateMemoryRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/memories")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteMemoryRequest constructs an http.Request for the DeleteMemory method
+func NewDeleteMemoryRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/memories/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAllPeopleRequest constructs an http.Request for the GetAllPeople method
 func NewGetAllPeopleRequest(server string, params *GetAllPeopleParams) (*http.Request, error) {
 	var err error
@@ -6731,6 +7222,42 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /assets/{id}/thumbnail (the `ViewAsset` operationId).
 	ViewAssetWithResponse(ctx context.Context, id openapi_types.UUID, params *ViewAssetParams, reqEditors ...RequestEditorFn) (*ViewAssetResponse, error)
 
+	// SearchMemoriesWithResponse Retrieve memories
+	//
+	// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /memories (the `SearchMemories` operationId).
+	SearchMemoriesWithResponse(ctx context.Context, params *SearchMemoriesParams, reqEditors ...RequestEditorFn) (*SearchMemoriesResponse, error)
+
+	// CreateMemoryWithBodyWithResponse Create a memory
+	//
+	// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /memories (the `CreateMemory` operationId).
+	CreateMemoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryResponse, error)
+
+	// CreateMemoryWithResponse Create a memory
+	//
+	// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /memories (the `CreateMemory` operationId).
+	CreateMemoryWithResponse(ctx context.Context, body CreateMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryResponse, error)
+
+	// DeleteMemoryWithResponse Delete a memory
+	//
+	// Delete a specific memory by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /memories/{id} (the `DeleteMemory` operationId).
+	DeleteMemoryWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteMemoryResponse, error)
+
 	// GetAllPeopleWithResponse Get all people
 	//
 	// Retrieve a list of all people.
@@ -7661,6 +8188,122 @@ func (r ViewAssetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ViewAssetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SearchMemoriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]MemoryResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SearchMemoriesResponse) GetJSON200() *[]MemoryResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SearchMemoriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SearchMemoriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SearchMemoriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SearchMemoriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateMemoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *MemoryResponseDto
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateMemoryResponse) GetJSON201() *MemoryResponseDto {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateMemoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateMemoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateMemoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateMemoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteMemoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteMemoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteMemoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteMemoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteMemoryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9030,6 +9673,66 @@ func (c *ClientWithResponses) ViewAssetWithResponse(ctx context.Context, id open
 	return ParseViewAssetResponse(rsp)
 }
 
+// SearchMemoriesWithResponse Retrieve memories
+//
+// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /memories (the `SearchMemories` operationId).
+func (c *ClientWithResponses) SearchMemoriesWithResponse(ctx context.Context, params *SearchMemoriesParams, reqEditors ...RequestEditorFn) (*SearchMemoriesResponse, error) {
+	rsp, err := c.SearchMemories(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSearchMemoriesResponse(rsp)
+}
+
+// CreateMemoryWithBodyWithResponse Create a memory
+//
+// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /memories (the `CreateMemory` operationId).
+func (c *ClientWithResponses) CreateMemoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryResponse, error) {
+	rsp, err := c.CreateMemoryWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryResponse(rsp)
+}
+
+// CreateMemoryWithResponse Create a memory
+//
+// Create a new memory by providing a name, description, and a list of asset IDs to include in the memory.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /memories (the `CreateMemory` operationId).
+func (c *ClientWithResponses) CreateMemoryWithResponse(ctx context.Context, body CreateMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryResponse, error) {
+	rsp, err := c.CreateMemory(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryResponse(rsp)
+}
+
+// DeleteMemoryWithResponse Delete a memory
+//
+// Delete a specific memory by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /memories/{id} (the `DeleteMemory` operationId).
+func (c *ClientWithResponses) DeleteMemoryWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteMemoryResponse, error) {
+	rsp, err := c.DeleteMemory(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteMemoryResponse(rsp)
+}
+
 // GetAllPeopleWithResponse Get all people
 //
 // Retrieve a list of all people.
@@ -9941,6 +10644,74 @@ func ParseViewAssetResponse(rsp *http.Response) (*ViewAssetResponse, error) {
 	}
 
 	response := &ViewAssetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseSearchMemoriesResponse parses an HTTP response from a SearchMemoriesWithResponse call
+func ParseSearchMemoriesResponse(rsp *http.Response) (*SearchMemoriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SearchMemoriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []MemoryResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateMemoryResponse parses an HTTP response from a CreateMemoryWithResponse call
+func ParseCreateMemoryResponse(rsp *http.Response) (*CreateMemoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateMemoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest MemoryResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteMemoryResponse parses an HTTP response from a DeleteMemoryWithResponse call
+func ParseDeleteMemoryResponse(rsp *http.Response) (*DeleteMemoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteMemoryResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -682,6 +682,22 @@ var migrations = []string{
 	   dest    TEXT NOT NULL,
 	   album   TEXT NOT NULL DEFAULT ''
 	 );`,
+	// a person's "On this day" messages: when, where, in which language, and the key they made for it (sealed)
+	`CREATE TABLE memory_prefs (
+	   user_id    TEXT PRIMARY KEY,
+	   name       TEXT NOT NULL DEFAULT '',
+	   lang       TEXT NOT NULL DEFAULT '',
+	   at         TEXT NOT NULL DEFAULT '08:00',
+	   tz         TEXT NOT NULL DEFAULT '',
+	   by_push    INTEGER NOT NULL DEFAULT 1,
+	   by_email   INTEGER NOT NULL DEFAULT 0,
+	   pictures   INTEGER NOT NULL DEFAULT 1,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   last_day   TEXT NOT NULL DEFAULT '',
+	   broken     INTEGER NOT NULL DEFAULT 0,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

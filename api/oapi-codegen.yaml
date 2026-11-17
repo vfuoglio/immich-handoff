@@ -49,3 +49,6 @@ output-options:
     - searchSmart
     - getSearchSuggestions
     - getPersonThumbnail
+    - searchMemories
+    - createMemory
+    - deleteMemory
