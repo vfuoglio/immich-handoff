@@ -12,6 +12,10 @@ services:
       IMMICH_MACHINE_LEARNING_ENABLED: "false"
     ports:
       - "${E2E_PORT:-2284}:2283"
+    volumes:
+      # a small folder tree for the tests of albums made from the folders of an external library (read-only; the
+      # administrator makes the library over the API, with /external/photos as its import path)
+      - ./external-photos:/external:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets Immich's workflow webhook reach the app running on the host
     depends_on:

@@ -1,0 +1,140 @@
+//go:build e2e
+
+// Named to sort last, like the other zz_ tests: it leaves an external library, albums and photos in the shared Immich.
+package e2e
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/vfuoglio/immich-handoff/internal/hub"
+	"github.com/vfuoglio/immich-handoff/internal/immich"
+)
+
+// externalLibrary makes bob an external library over the mounted folder tree (test/external-photos, at /external in the
+// container), scans it and waits until every file is an asset. It returns the library's id; asked twice it reuses it.
+func externalLibrary(t *testing.T, bob user) string {
+	t.Helper()
+	var login struct {
+		AccessToken string `json:"accessToken"`
+	}
+	mustOK(t, call(t, "POST", "/auth/login", nil, map[string]string{"email": "admin@e2e.test", "password": "Passw0rd!x"}, &login), "admin login")
+	admin := map[string]string{"Authorization": "Bearer " + login.AccessToken}
+	var libs []struct {
+		ID          string   `json:"id"`
+		OwnerID     string   `json:"ownerId"`
+		ImportPaths []string `json:"importPaths"`
+	}
+	call(t, "GET", "/libraries", admin, nil, &libs)
+	id := ""
+	for _, l := range libs {
+		if l.OwnerID == bob.id && len(l.ImportPaths) == 2 {
+			id = l.ID
+		}
+	}
+	if id == "" {
+		var made struct {
+			ID string `json:"id"`
+		}
+		mustOK(t, call(t, "POST", "/libraries", admin, map[string]any{"ownerId": bob.id, "name": "e2e folders", "importPaths": []string{"/external/photos", "/external/photos-old"}}, &made), "make the library")
+		id = made.ID
+		mustOK(t, call(t, "POST", "/libraries/"+id+"/scan", admin, nil, nil), "scan the library")
+	}
+	eventually(t, "the library's files are assets", 120*time.Second, func() bool {
+		return len(searchPaths(t, bob, map[string]any{"libraryId": id})) >= 7
+	})
+	return id
+}
+
+// searchPaths lists the original paths of the assets a metadata search finds for bob, every page, sorted.
+func searchPaths(t *testing.T, u user, body map[string]any) []string {
+	t.Helper()
+	var out []string
+	for page := 1; page < 1000; page++ {
+		body["page"], body["size"] = page, 250
+		var res struct {
+			Assets struct {
+				Items []struct {
+					OriginalPath string `json:"originalPath"`
+				} `json:"items"`
+				NextPage *string `json:"nextPage"`
+			} `json:"assets"`
+		}
+		call(t, "POST", "/search/metadata", keyAuth(u), body, &res)
+		for _, a := range res.Assets.Items {
+			out = append(out, a.OriginalPath)
+		}
+		if res.Assets.NextPage == nil || *res.Assets.NextPage == "" {
+			break
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestFolderAlbumsSpike: what Immich stores for an external library, as the notes in docs/design/immich-api-notes.md say.
+// It checks, on the real stack, the facts the folder albums are built on.
+func TestFolderAlbumsSpike(t *testing.T) {
+	_, bob, _, _ := bootstrap(t)
+	lib := externalLibrary(t, bob)
+	all := searchPaths(t, bob, map[string]any{"libraryId": lib})
+	t.Logf("the library's assets carry these paths:\n  %s", strings.Join(all, "\n  "))
+	for _, p := range all {
+		if !strings.HasPrefix(p, "/external/photos") {
+			t.Errorf("an asset path outside the import paths: %s", p)
+		}
+	}
+	// the prefix search: a trailing slash keeps /external/photos apart from /external/photos-old
+	both := searchPaths(t, bob, map[string]any{"originalPath": "/external/photos"})
+	slash := searchPaths(t, bob, map[string]any{"originalPath": "/external/photos/"})
+	t.Logf("originalPath=/external/photos: %d assets; with a trailing slash: %d", len(both), len(slash))
+	// the dry run: the albums the finder would make from the real library, for the three ways of reading the folders
+	api, err := immich.New(baseURL, immich.Auth{APIKey: bob.key}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	me, err := api.Me(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var h hub.Hub
+	dry := func(s hub.FolderSpec) hub.FolderPlan {
+		plan, err := h.DryRunFolders(context.Background(), api, uuid.UUID(me.ID), s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("dry run %+v:\n%s", s, plan)
+		return plan
+	}
+	if plan := dry(hub.FolderSpec{Prefix: "/external/photos"}); len(plan.Albums) != 3 || plan.Albums[1].Name != "paris" || len(plan.Albums[1].Photos) != 3 || plan.Loose != 1 {
+		t.Errorf("by the folder a photo is in: %+v", plan)
+	}
+	if plan := dry(hub.FolderSpec{Prefix: "/external/photos", Depth: 1}); len(plan.Albums) != 3 || plan.Albums[0].Name != "2025-02" || len(plan.Albums[0].Photos) != 3 {
+		t.Errorf("by the first folder: %+v", plan)
+	}
+	if plan := dry(hub.FolderSpec{Prefix: "/external/photos", Naming: hub.NameParent}); len(plan.Albums) != 4 {
+		t.Errorf("with the parent in the name the two Paris folders are two albums: %+v", plan)
+	}
+	if plan := dry(hub.FolderSpec{Prefix: "/external/photos-old"}); len(plan.Albums) != 1 || plan.Albums[0].Name != "2019" {
+		t.Errorf("the folder next to it is its own: %+v", plan)
+	}
+	if plan, _ := h.DryRunFolders(context.Background(), api, uuid.UUID(me.ID), hub.FolderSpec{Prefix: "/external/PHOTOS"}); len(plan.Albums) != 0 {
+		t.Errorf("the case matters: %+v", plan)
+	}
+
+	// the libraries the person's own key can list
+	code := call(t, "GET", "/libraries", keyAuth(bob), nil, nil)
+	t.Logf("GET /libraries with bob's key (all permissions): HTTP %d", code)
+	var limited struct {
+		Secret string `json:"secret"`
+	}
+	call(t, "POST", "/api-keys", map[string]string{"Authorization": "Bearer " + bob.token}, map[string]any{"name": "spike-" + fmt.Sprint(time.Now().UnixNano()), "permissions": []string{"library.read", "asset.read"}}, &limited)
+	code = call(t, "GET", "/libraries", map[string]string{"x-api-key": limited.Secret}, nil, nil)
+	t.Logf("GET /libraries with a key of library.read and asset.read: HTTP %d", code)
+}

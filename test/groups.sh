@@ -4,7 +4,7 @@
 # cannot be left out of CI by accident.
 E2E_GROUPS="browser core hub bridge"
 E2E_GROUP_browser='^(TestBrowser|TestDropBoxGuests|TestDropBoxGuestPage|TestDropBoxExtras|TestDropBoxWallBestOfAndHandingOn|TestFrame|TestDropBoxWholePagePassword|TestEvent|TestSend|TestRoom|TestRoomRounds|TestAlbumPickers)$'
-E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents|TestDropBox|TestDropBoxTools|TestEventPool|TestFollowSharedAlbum)$'
+E2E_GROUP_core='^(TestWhatIsCarriedOver|TestEndToEnd|TestAlbum|TestRoutes|TestHubServices|TestInvitations|TestAdmin|TestLiveEvents|TestDropBox|TestDropBoxTools|TestEventPool|TestFollowSharedAlbum|TestFolderAlbumsSpike)$'
 E2E_GROUP_hub='^(TestAlbumWatch|TestSelfService|TestLinkHealth|TestCopyMode|TestBackupAndRestore|TestPauseAndLimits|TestTakeBackAndExpiry|TestReceiverDeleteSwitch|TestMailToPeople|TestPushDevices|TestWeeklyDigest|TestPhotosByEmail|TestRulesImmichRules|TestRules|TestImmichMarkup|TestHandOverButton|TestAddToMyLibrary|TestOnThisDay)$'
 # starts a second Immich of its own (the receiver's server) next to the one every group has, so it has a group to itself
 E2E_GROUP_bridge='^(TestBridge|TestSharedAlbumImmichRules|TestSharedAlbumsTwoServers)$'
