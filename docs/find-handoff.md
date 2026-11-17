@@ -88,6 +88,7 @@ Immich keeps every photo in the account that uploaded it, so a photo someone sha
 - **A photo that is already yours** is left alone, and pressing twice does not make a second copy.
 - **Undo** takes the copies out again for 15 minutes after they were added: they go to Immich's trash, from where they can be restored. A copy you have since put in an album of your own stays.
 - **A copy takes as much room as the photo does.** Adding a whole shared album doubles what it uses on the server.
+- **To have an album's new photos offered to you automatically,** [follow the album](guides/automate.md#following-an-album-shared-with-you).
 
 It shows in Immich for everyone who is signed in, including people who send to no service. It uses the same address, switch and limits as the **Hand over...** button below (at most 200 photos at a time).
 
