@@ -1317,5 +1317,18 @@
   "few": "{n} фото альбома {album} оставлено вне вашей библиотеки",
   "many": "{n} фото альбома {album} оставлено вне вашей библиотеки",
   "other": "{n} фото альбома {album} оставлено вне вашей библиотеки"
- }
+ },
+ "On this day:": "В этот день:",
+ "{n} year ago": {
+  "one": "{n} год назад",
+  "few": "{n} года назад",
+  "many": "{n} лет назад",
+  "other": "{n} года назад"
+ },
+ "On this day: {years}": "В этот день: {years}",
+ "Your Immich has memories for today: {years}.": "В вашем Immich есть воспоминания на сегодня: {years}.",
+ "Open the memory": "Открыть воспоминание",
+ "You get this because you turned on On this day messages in Immich Handoff.": "Вы получаете это, потому что включили сообщения «В этот день» в Immich Handoff.",
+ "Change or stop them": "Изменить или остановить",
+ "Your On this day messages stopped: the key the app made in your Immich is gone. Turn them off and on again to make a new one.": "Сообщения «В этот день» остановились: ключ, который приложение создало в вашем Immich, пропал. Выключите их и включите снова, чтобы создать новый."
 }

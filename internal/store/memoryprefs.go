@@ -18,8 +18,9 @@ type MemoryPref struct {
 	At       string // the time of day, "08:00"
 	TZ       string // an IANA time zone name; empty is the server's
 	Push     bool
-	Email    bool
-	Pictures bool // thumbnails in the email
+	Email    bool   // by email, to Address
+	Address  string // their Immich account's address, read when they turned it on
+	Pictures bool   // thumbnails in the email
 	KeyID    uuid.UUID
 	Key      string
 	LastDay  string // the day (in their zone) a message was last sent for, "2026-11-16"
@@ -27,14 +28,14 @@ type MemoryPref struct {
 	Created  time.Time
 }
 
-const memoryCols = `user_id, name, lang, at, tz, by_push, by_email, pictures, key_id, key_enc, last_day, broken, created_at`
+const memoryCols = `user_id, name, lang, at, tz, by_push, by_email, pictures, key_id, key_enc, last_day, broken, created_at, address`
 
 func (s *Store) scanMemoryPref(sc interface{ Scan(...any) error }) (MemoryPref, error) {
 	var p MemoryPref
 	var id, kid, created string
 	var enc []byte
 	var push, email, pics, broken int
-	if err := sc.Scan(&id, &p.Name, &p.Lang, &p.At, &p.TZ, &push, &email, &pics, &kid, &enc, &p.LastDay, &broken, &created); err != nil {
+	if err := sc.Scan(&id, &p.Name, &p.Lang, &p.At, &p.TZ, &push, &email, &pics, &kid, &enc, &p.LastDay, &broken, &created, &p.Address); err != nil {
 		return p, err
 	}
 	p.UserID, _ = uuid.Parse(id)
@@ -87,13 +88,13 @@ func (s *Store) SetMemoryPref(ctx context.Context, p MemoryPref) error {
 	if created.IsZero() {
 		created = time.Now()
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO memory_prefs (`+memoryCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO memory_prefs (`+memoryCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	  ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, lang = excluded.lang, at = excluded.at, tz = excluded.tz,
-	    by_push = excluded.by_push, by_email = excluded.by_email, pictures = excluded.pictures,
+	    by_push = excluded.by_push, address = excluded.address, by_email = excluded.by_email, pictures = excluded.pictures,
 	    key_id = excluded.key_id, key_enc = excluded.key_enc,
 	    broken = CASE WHEN memory_prefs.key_id = excluded.key_id THEN memory_prefs.broken ELSE 0 END`,
 		p.UserID.String(), p.Name, p.Lang, p.At, p.TZ, b2i(p.Push), b2i(p.Email), b2i(p.Pictures), p.KeyID.String(), enc,
-		p.LastDay, b2i(p.Broken), created.UTC().Format(time.RFC3339Nano))
+		p.LastDay, b2i(p.Broken), created.UTC().Format(time.RFC3339Nano), p.Address)
 	return err
 }
 

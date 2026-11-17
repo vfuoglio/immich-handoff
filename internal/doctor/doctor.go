@@ -81,6 +81,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	notifications(r, in)
 	sharedAlbums(r, in)
 	rulesSettings(r, in)
+	memoriesSettings(r, in)
 	buttonSettings(r, in)
 	mailIn(ctx, r, in)
 	if !immichReachable(ctx, r, in) {
@@ -675,6 +676,24 @@ func rulesSettings(r *Report, in Input) {
 		if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.01 || m > 1440 {
 			r.add(Fail, "RULES_SETTLE_MINUTES must be a number of minutes from 0.01 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 5).")
 		}
+	}
+}
+
+// memoriesSettings checks MEMORIES_CHECK_MINUTES, which the app refuses to start with when it is not a number of minutes from 0.1 to 1440,
+// and says what the link in an On this day message needs.
+func memoriesSettings(r *Report, in Input) {
+	v := firstOf(in.Env, "MEMORIES_CHECK_MINUTES")
+	if v == "" {
+		return
+	}
+	r.section("On this day")
+	if m, err := strconv.ParseFloat(v, 64); err != nil || m < 0.1 || m > 1440 {
+		r.add(Fail, "MEMORIES_CHECK_MINUTES must be a number of minutes from 0.1 to 1440, and the app will not start with "+v, "Fix it or remove it (the default is 10).")
+		return
+	}
+	r.add(OK, "On this day messages are looked at every "+v+" minutes", "")
+	if firstOf(in.Env, "PUBLIC_IMMICH_URL") == "" {
+		r.add(Warn, "PUBLIC_IMMICH_URL is not set, so a message has no link into Immich's memory", "Set it to Immich's address as people's browsers see it.")
 	}
 }
 

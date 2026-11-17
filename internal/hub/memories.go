@@ -1,15 +1,20 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -27,6 +32,9 @@ var (
 	ErrMemoriesNotOn    = errors.New("the messages are not turned on for you")
 	ErrMemoriesNoSender = errors.New("neither push notifications nor email are set up on this app")
 )
+
+// memoryKind is the kind of line a message is sent as; devices take it whatever their mode.
+const memoryKind = "memory"
 
 var memoryTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 
@@ -114,7 +122,10 @@ func (h *Hub) SetMemories(ctx context.Context, sess *immich.API, user immich.Use
 		p.KeyID, p.Key = id, secret
 		p.Broken = false
 	}
-	p.UserID, p.Name = user.ID, user.Name
+	if in.Email && strings.TrimSpace(user.Email) == "" {
+		return ErrNoMailAddress
+	}
+	p.UserID, p.Name, p.Address = user.ID, user.Name, strings.TrimSpace(user.Email)
 	p.At, p.TZ, p.Lang = in.At, in.TZ, in.Lang
 	p.Push, p.Email, p.Pictures = in.Push, in.Email, in.Pictures
 	if err := h.Store.SetMemoryPref(ctx, p); err != nil {
@@ -150,4 +161,227 @@ func (h *Hub) StopMemories(ctx context.Context, sess *immich.API, user immich.Us
 // memoriesAPI is the client that acts with the person's key for their memories.
 func (h *Hub) memoriesAPI(p store.MemoryPref) (*immich.API, error) {
 	return h.Connect(p.Key)
+}
+
+// --- the daily pass ---
+
+// memoriesEvery is how often the messages are looked at (MEMORIES_CHECK_MINUTES, default 10).
+func (h *Hub) memoriesEvery() time.Duration {
+	if h.MemoriesEvery > 0 {
+		return h.MemoriesEvery
+	}
+	return 10 * time.Minute
+}
+
+// memoryPictures is the most thumbnails one message carries.
+const memoryPictures = 3
+
+// MemoriesLoop looks at everyone's messages every few minutes until the context ends.
+func (h *Hub) MemoriesLoop(ctx context.Context) {
+	t := time.NewTicker(h.memoriesEvery())
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			h.MemoriesMaintenance(ctx)
+		}
+	}
+}
+
+// MemoriesMaintenance sends, to each person whose time has come today, the message about today's memories.
+func (h *Hub) MemoriesMaintenance(ctx context.Context) {
+	if h.Store == nil || !h.SelfService() {
+		return
+	}
+	list, err := h.Store.MemoryPrefs(ctx)
+	if err != nil {
+		return
+	}
+	for _, p := range list {
+		if ctx.Err() != nil {
+			return
+		}
+		h.memoryFor(ctx, p)
+	}
+}
+
+// memoryZone is the person's time zone, or the server's when theirs is empty or unknown.
+func memoryZone(name string) *time.Location {
+	if name != "" {
+		if l, err := time.LoadLocation(name); err == nil {
+			return l
+		}
+	}
+	return time.Local
+}
+
+// memoryDue says which day it is for the person and whether their time has come.
+func memoryDue(p store.MemoryPref, now time.Time) (day string, due bool) {
+	n := now.In(memoryZone(p.TZ))
+	day = n.Format("2006-01-02")
+	var hh, mm int
+	if _, err := fmt.Sscanf(p.At, "%d:%d", &hh, &mm); err != nil {
+		hh, mm = 8, 0
+	}
+	at := time.Date(n.Year(), n.Month(), n.Day(), hh, mm, 0, 0, n.Location())
+	return day, !n.Before(at)
+}
+
+// memoryFor does one person's day: when their time has come and nothing was sent today, it asks Immich for today's
+// memories, leaves out the ones they already watched, and tells them about the rest. A day with nothing to tell is
+// done as well; a day that failed is tried again on the next pass.
+func (h *Hub) memoryFor(ctx context.Context, p store.MemoryPref) {
+	if p.Broken {
+		return
+	}
+	now := h.now()
+	day, due := memoryDue(p, now)
+	if !due || p.LastDay == day {
+		return
+	}
+	api, err := h.memoriesAPI(p)
+	if err != nil {
+		h.Log.Debug("on this day: no client", "err", err)
+		return
+	}
+	local := now.In(memoryZone(p.TZ))
+	mems, err := api.MemoriesFor(ctx, local)
+	if err != nil {
+		if immich.IsAuthError(err) { // the key was deleted or revoked: say so once, then leave them alone
+			_ = h.Store.MarkMemoryBroken(ctx, p.UserID, true)
+			h.event(ctx, "", p.UserID, "broken", i18n.Pack("Your On this day messages stopped: the key the app made in your Immich is gone. Turn them off and on again to make a new one."))
+			return
+		}
+		h.Log.Debug("on this day: could not read the memories", "err", err)
+		return
+	}
+	var fresh []immich.Memory
+	for _, m := range mems {
+		if !m.Seen && len(m.Photos) > 0 && local.Year()-m.Year > 0 {
+			fresh = append(fresh, m)
+		}
+	}
+	if len(fresh) == 0 {
+		_ = h.Store.MarkMemorySent(ctx, p.UserID, day)
+		return
+	}
+	if h.tellMemories(ctx, api, p, local, fresh) {
+		_ = h.Store.MarkMemorySent(ctx, p.UserID, day)
+	}
+}
+
+// yearsAgo is "3 years ago, 5 years ago", as a message that is put in the reader's language when it is read.
+func yearsAgo(day time.Time, mems []immich.Memory) string {
+	parts := make([]string, 0, len(mems))
+	for _, m := range mems {
+		n := day.Year() - m.Year
+		parts = append(parts, i18n.PackN("{n} year ago", "{n} years ago", n))
+	}
+	return i18n.PackJoin(", ", parts...)
+}
+
+// pickPhotos chooses up to n photos, the oldest year first, one from each year before a second from any.
+func pickPhotos(mems []immich.Memory, n int) []uuid.UUID {
+	var out []uuid.UUID
+	for round := 0; len(out) < n; round++ {
+		more := false
+		for _, m := range mems {
+			if round < len(m.Photos) {
+				more = true
+				if len(out) < n {
+					out = append(out, uuid.UUID(m.Photos[round]))
+				}
+			}
+		}
+		if !more {
+			break
+		}
+	}
+	return out
+}
+
+// memoryLink is where "Open the memory" goes: the memory in Immich when the app knows Immich's address, else this app's page.
+func (h *Hub) memoryLink(first immich.Memory) string {
+	if base := strings.TrimRight(h.ImmichURL, "/"); base != "" {
+		return base + "/memory?id=" + uuid.UUID(first.ID).String()
+	}
+	return ""
+}
+
+// tellMemories sends the message on the channels the person chose and says whether it counts as sent.
+func (h *Hub) tellMemories(ctx context.Context, api *immich.API, p store.MemoryPref, day time.Time, mems []immich.Memory) bool {
+	years := yearsAgo(day, mems)
+	link := h.memoryLink(mems[0])
+	sent := false
+	if p.Push && h.Push.Ready() {
+		text := i18n.PackJoin(" ", i18n.Pack("On this day:"), years)
+		var links func(uuid.UUID) []ActionLink
+		if link != "" {
+			links = func(uuid.UUID) []ActionLink { return []ActionLink{{Label: "Open the memory", URL: link}} }
+		}
+		h.Push.TellLinks(ctx, []uuid.UUID{p.UserID}, memoryKind, text, links)
+		sent = true
+	}
+	if p.Email && p.Address != "" && h.People.Ready() {
+		if err := h.People.Sender.SendPersonal(h.composeMemoryMail(ctx, api, p, years, link, pickPhotos(mems, memoryPictures))); err != nil {
+			h.Log.Warn("on this day: could not send the email", "err", err) // never the address
+		} else {
+			sent = true
+		}
+	}
+	if sent { // a line in Activity, and no second message about it
+		_ = h.Store.AddEvent(context.WithoutCancel(ctx), store.Event{UserID: p.UserID, Kind: memoryKind, Text: i18n.PackJoin(" ", i18n.Pack("On this day:"), years)})
+	}
+	return sent
+}
+
+var memoryHTML = template.Must(template.New("memory").Parse(`<!doctype html><html lang="{{.Lang}}"><body style="margin:0;background:#f4f3fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1b2e">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px">
+<p style="margin:0 0 12px">{{.Greeting}}</p>
+<p style="margin:0 0 16px;font-size:18px"><strong>{{.Intro}}</strong></p>
+{{range .Pictures}}<p style="margin:0 0 12px"><img src="cid:{{.}}" alt="" style="max-width:100%;border-radius:8px"></p>
+{{end}}{{if .Memory}}<p style="margin:16px 0"><a href="{{.Memory}}" style="background:#5b4bd6;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;display:inline-block">{{.OpenMemory}}</a></p>
+{{end}}<p style="margin:16px 0 0;color:#6b6894;font-size:12px">{{.Why}} <a href="{{.Manage}}" style="color:#6b6894">{{.Stop}}</a></p>
+</div></body></html>
+`))
+
+// composeMemoryMail writes one person's message in their language, with the thumbnails inside it when they want them.
+func (h *Hub) composeMemoryMail(ctx context.Context, api *immich.API, p store.MemoryPref, years, link string, photos []uuid.UUID) notify.PersonalMail {
+	lang, _ := i18n.Supported(p.Lang)
+	l := i18n.For(lang)
+	when := l.Unpack(years)
+	manage := strings.TrimRight(h.AppURL, "/") + "/"
+
+	var inline []notify.Inline
+	var cids []string
+	if p.Pictures {
+		for i, id := range photos {
+			data, typ, err := api.Thumbnail(ctx, id, false)
+			if err != nil || len(data) == 0 {
+				continue // the message goes without that picture
+			}
+			cid := fmt.Sprintf("memory-%d@handoff", i+1)
+			inline = append(inline, notify.Inline{CID: cid, Type: typ, Data: data})
+			cids = append(cids, cid)
+		}
+	}
+	d := struct {
+		Lang, Greeting, Intro, OpenMemory, Memory, Why, Stop, Manage string
+		Pictures                                                     []string
+	}{
+		Lang: string(lang), Greeting: l.T("Hi {name},", "name", p.Name), Intro: l.T("Your Immich has memories for today: {years}.", "years", when),
+		OpenMemory: l.T("Open the memory"), Memory: link,
+		Why: l.T("You get this because you turned on On this day messages in Immich Handoff."), Stop: l.T("Change or stop them"), Manage: manage, Pictures: cids,
+	}
+	var htmlBody bytes.Buffer
+	_ = memoryHTML.Execute(&htmlBody, d)
+	var text strings.Builder
+	text.WriteString(d.Greeting + "\n\n" + d.Intro + "\n")
+	if link != "" {
+		text.WriteString("\n" + d.OpenMemory + ": " + link + "\n")
+	}
+	text.WriteString("\n-- \n" + d.Why + "\n" + d.Stop + ": " + manage + "\n")
+	return notify.PersonalMail{To: p.Address, Name: p.Name, Subject: l.T("On this day: {years}", "years", when), Text: text.String(), HTML: htmlBody.String(), Inline: inline}
 }

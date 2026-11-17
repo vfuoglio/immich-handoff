@@ -698,6 +698,8 @@ var migrations = []string{
 	   broken     INTEGER NOT NULL DEFAULT 0,
 	   created_at TEXT NOT NULL
 	 );`,
+	// the address an "On this day" email goes to (their Immich account's, read when they turned it on)
+	`ALTER TABLE memory_prefs ADD COLUMN address TEXT NOT NULL DEFAULT '';`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

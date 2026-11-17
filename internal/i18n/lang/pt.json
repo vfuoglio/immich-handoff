@@ -1205,5 +1205,16 @@
  "{n} photo of the album {album} left out of your library": {
   "one": "{n} foto do álbum {album} deixada fora da sua biblioteca",
   "other": "{n} fotos do álbum {album} deixadas fora da sua biblioteca"
- }
+ },
+ "On this day:": "Neste dia:",
+ "{n} year ago": {
+  "one": "há {n} ano",
+  "other": "há {n} anos"
+ },
+ "On this day: {years}": "Neste dia: {years}",
+ "Your Immich has memories for today: {years}.": "O seu Immich tem memórias para hoje: {years}.",
+ "Open the memory": "Abrir a memória",
+ "You get this because you turned on On this day messages in Immich Handoff.": "Recebe isto porque ativou as mensagens «Neste dia» no Immich Handoff.",
+ "Change or stop them": "Alterá-las ou parar",
+ "Your On this day messages stopped: the key the app made in your Immich is gone. Turn them off and on again to make a new one.": "As suas mensagens «Neste dia» pararam: a chave que a app criou no seu Immich desapareceu. Desative-as e ative-as de novo para criar uma nova."
 }

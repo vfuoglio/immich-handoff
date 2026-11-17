@@ -67,3 +67,27 @@ func TestTheHandOverButtonSwitchIsCheckedOnlyWhenSet(t *testing.T) {
 		}
 	}
 }
+
+func TestTheOnThisDayIntervalIsCheckedOnlyWhenSet(t *testing.T) {
+	check := func(env map[string]string) (string, *Report) {
+		var buf bytes.Buffer
+		r := &Report{W: &buf}
+		memoriesSettings(r, Input{Env: func(k string) string { return env[k] }})
+		return buf.String(), r
+	}
+	if out, r := check(nil); out != "" || r.Fails != 0 || r.Warns != 0 {
+		t.Errorf("unset is fine and says nothing: %q", out)
+	}
+	if _, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "soon"}); r.Fails != 1 {
+		t.Error("not a number")
+	}
+	if _, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "2000"}); r.Fails != 1 {
+		t.Error("too long")
+	}
+	if out, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "5"}); r.Fails != 0 || r.Warns != 1 || !strings.Contains(out, "PUBLIC_IMMICH_URL") {
+		t.Errorf("fine, but the link needs Immich's address: %s", out)
+	}
+	if _, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "5", "PUBLIC_IMMICH_URL": "https://photos.example"}); r.Fails != 0 || r.Warns != 0 {
+		t.Error("all set")
+	}
+}

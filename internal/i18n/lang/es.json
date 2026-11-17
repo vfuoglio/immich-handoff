@@ -1205,5 +1205,16 @@
  "{n} photo of the album {album} left out of your library": {
   "one": "{n} foto del álbum {album} dejada fuera de tu biblioteca",
   "other": "{n} fotos del álbum {album} dejadas fuera de tu biblioteca"
- }
+ },
+ "On this day:": "Un día como hoy:",
+ "{n} year ago": {
+  "one": "hace {n} año",
+  "other": "hace {n} años"
+ },
+ "On this day: {years}": "Un día como hoy: {years}",
+ "Your Immich has memories for today: {years}.": "Tu Immich tiene recuerdos para hoy: {years}.",
+ "Open the memory": "Abrir el recuerdo",
+ "You get this because you turned on On this day messages in Immich Handoff.": "Recibes esto porque activaste los mensajes «Un día como hoy» en Immich Handoff.",
+ "Change or stop them": "Cambiarlos o detenerlos",
+ "Your On this day messages stopped: the key the app made in your Immich is gone. Turn them off and on again to make a new one.": "Tus mensajes «Un día como hoy» se detuvieron: la clave que la app creó en tu Immich ya no existe. Desactívalos y vuelve a activarlos para crear otra."
 }

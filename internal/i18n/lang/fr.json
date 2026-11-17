@@ -1205,5 +1205,16 @@
  "{n} photo of the album {album} left out of your library": {
   "one": "{n} photo de l’album {album} laissée hors de votre bibliothèque",
   "other": "{n} photos de l’album {album} laissées hors de votre bibliothèque"
- }
+ },
+ "On this day:": "Ce jour-là :",
+ "{n} year ago": {
+  "one": "il y a {n} an",
+  "other": "il y a {n} ans"
+ },
+ "On this day: {years}": "Ce jour-là : {years}",
+ "Your Immich has memories for today: {years}.": "Votre Immich a des souvenirs pour aujourd'hui : {years}.",
+ "Open the memory": "Ouvrir le souvenir",
+ "You get this because you turned on On this day messages in Immich Handoff.": "Vous recevez ceci parce que vous avez activé les messages « Ce jour-là » dans Immich Handoff.",
+ "Change or stop them": "Les modifier ou les arrêter",
+ "Your On this day messages stopped: the key the app made in your Immich is gone. Turn them off and on again to make a new one.": "Vos messages « Ce jour-là » se sont arrêtés : la clé que l'appli avait créée dans votre Immich a disparu. Désactivez-les puis réactivez-les pour en créer une nouvelle."
 }

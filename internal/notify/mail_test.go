@@ -603,3 +603,58 @@ func TestTheWaitForPeopleDefaultsToFiveMinutesAndCannotBeZero(t *testing.T) {
 func decodeSubject(p parsedMail) (string, error) {
 	return new(mime.WordDecoder).DecodeHeader(p.header.Get("Subject"))
 }
+
+func TestAMailCanCarryPicturesInsideItThatItsPageShowsByContentID(t *testing.T) {
+	f := newFakeSMTP(t, nil, false, false)
+	var log bytes.Buffer
+	n := newMailNotifier(t, nil, &log, peopleDest(f))
+	pic := []byte("\xff\xd8\xff-not-really-a-picture-but-bytes-\x00\x01\x02")
+	err := n.SendPersonal(PersonalMail{To: "bob@example.com", Subject: "x", Text: "plain", HTML: `<img src="cid:one">`,
+		Inline: []Inline{{CID: "one", Type: "image/jpeg", Data: pic}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := mail.ReadMessage(strings.NewReader(f.wait(t, 1)[0].data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, params, _ := mime.ParseMediaType(m.Header.Get("Content-Type"))
+	mr := multipart.NewReader(m.Body, params["boundary"])
+	var sawText, sawHTML, sawPic bool
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		ct, p2, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
+		switch ct {
+		case "text/plain":
+			sawText = true
+		case "multipart/related":
+			rr := multipart.NewReader(part, p2["boundary"])
+			for {
+				sub, err := rr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				switch sct, _, _ := mime.ParseMediaType(sub.Header.Get("Content-Type")); sct {
+				case "text/html":
+					b, _ := io.ReadAll(quotedprintable.NewReader(sub))
+					sawHTML = strings.Contains(string(b), `cid:one`)
+				case "image/jpeg":
+					b, _ := io.ReadAll(base64.NewDecoder(base64.StdEncoding, sub))
+					sawPic = bytes.Equal(b, pic) && sub.Header.Get("Content-Id") == "<one>"
+				}
+			}
+		}
+	}
+	if !sawText || !sawHTML || !sawPic {
+		t.Errorf("text %v, page %v, picture by its Content-ID %v", sawText, sawHTML, sawPic)
+	}
+}

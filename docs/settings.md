@@ -9,7 +9,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `IMMICH_NETWORK` | `immich_default` | Docker network Immich runs on (used by `docker-compose.yml`). |
 | `IMMICH_BASE_URL` | `http://immich-server:2283` | Address of Immich as seen from this container. |
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app (not your browser). |
-| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos. |
+| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos, and the link into a memory in an [On this day](guides/notifications.md) message. |
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
 | `BACKUP_EVERY` | `24h` | How often the app makes a backup of its data on its own: a time such as `12h` (one hour at the least), or `off`. See [Automatic backups](operations.md#automatic-backups). |
 | `BACKUP_KEEP` | `7` | How many automatic backups to keep; older ones are removed. Backups you asked for are never removed. |
@@ -23,6 +23,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `SHARED_ALBUMS_EVERY_MINUTES` | `3` | How often each shared album ([Albums shared with other servers](guides/shared-albums.md#albums-shared-with-other-servers)) is looked at for new photos, from `0.1` to `1440` minutes. Photos reach the other server within about this time; **Sync now** looks at once. |
 | `SHARED_ALBUMS_MAX_MB` | `2048` | The largest single file a shared album carries, in megabytes; a larger one is left out with a reason shown on the album's row, and a server also refuses what is larger than its own limit. |
 | `RULES_CHECK_MINUTES` | `10` | How often each [rule](guides/automate.md#rules-photos-by-who-where-and-when) looks for new matching photos, from `0.1` to `1440` minutes. Rules need people to be able to join from the page (a data file). |
+| `MEMORIES_CHECK_MINUTES` | `10` | How often the app looks at who is due their daily [On this day](guides/notifications.md) message, from `0.1` to `1440` minutes. Each person picks their own time of day; this only sets how finely the app notices it. |
 | `RULES_SETTLE_MINUTES` | `5` | How long a photo must have been in Immich before a rule offers it (so that Immich has had time to find its faces), from `0.01` to `1440` minutes. A rule that sends by itself waits six times as long. |
 | `IMMICH_BUTTON_ACTIONS` | on | `false` keeps only the link in Immich's header and takes away the **Hand over...** and **Add to my library** buttons that [the same script](find-handoff.md#hand-over-from-inside-immich) adds to Immich's photo viewer, selection bar and menus. |
 | `PHONE_UPLOAD_WAITING_MB` | `4096` | The most one person may have waiting at a time when they [send photos from a phone](guides/phone.md#send-photos-from-a-phone). It counts what each unfinished file will weigh once whole, so a person is refused when they start a file, not half way. Needs the data folder. |
