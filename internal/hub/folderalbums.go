@@ -85,14 +85,16 @@ type FolderAlbum struct {
 
 // FolderPlan is what a spec would make, and what it leaves out.
 type FolderPlan struct {
-	Albums []FolderAlbum
-	Loose  int // photos directly in the prefix (or shallower than the level asked for): no folder, no album
+	Albums   []FolderAlbum
+	Loose    int         // photos directly in the prefix (or shallower than the level asked for): no folder, no album
+	LooseIDs []uuid.UUID // the same photos, so that a rule can remember it has looked at them
 }
 
 // PathAsset is a photo with the path Immich keeps for it.
 type PathAsset struct {
-	ID   uuid.UUID
-	Path string
+	ID      uuid.UUID
+	Path    string
+	Created time.Time // when it came to Immich
 }
 
 // albumFolder is the folder a photo's album is made from: relative to the prefix, or "" when the photo has none at that level.
@@ -167,12 +169,14 @@ func PlanFolders(s FolderSpec, assets []PathAsset) (FolderPlan, error) {
 		if !ok {
 			if strings.HasPrefix(a.Path, s.query()) {
 				plan.Loose++
+				plan.LooseIDs = append(plan.LooseIDs, a.ID)
 			}
 			continue
 		}
 		name := s.albumName(folder)
 		if name == "" {
 			plan.Loose++
+			plan.LooseIDs = append(plan.LooseIDs, a.ID)
 			continue
 		}
 		al := byName[name]
@@ -235,7 +239,7 @@ func (h *Hub) FolderPhotos(ctx context.Context, api *immich.API, me uuid.UUID, s
 		if a.OwnerId != me || a.IsTrashed || !strings.HasPrefix(a.OriginalPath, s.query()) {
 			continue
 		}
-		out = append(out, PathAsset{ID: a.Id, Path: a.OriginalPath})
+		out = append(out, PathAsset{ID: a.Id, Path: a.OriginalPath, Created: a.CreatedAt})
 	}
 	return out, nil
 }

@@ -24,6 +24,8 @@ const (
 	// library (follow an album that was shared with them).
 	RuleKindSend    = "send"
 	RuleKindLibrary = "library"
+	// RuleKindFolder makes albums from the folders of the person's external library (Cond.Folder, Level and Naming).
+	RuleKindFolder = "folder"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -45,6 +47,10 @@ type RuleCond struct {
 	Phrase    string    `json:"phrase,omitempty"`
 	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
 	AlbumOwner string `json:"albumOwner,omitempty"`
+	// Folder, Level and Naming say which folders of an external library become albums, for a rule of kind folder.
+	Folder string `json:"folder,omitempty"`
+	Level  int    `json:"level,omitempty"`
+	Naming string `json:"naming,omitempty"`
 }
 
 // Rule is one rule of a sender for a service.
@@ -66,14 +72,17 @@ type Rule struct {
 	Kind      string
 	Dest      string
 	DestAlbum string
+	// CaughtUp is when a rule of kind folder finished its first full look at the folder (zero: not yet). From then on it only
+	// lists the photos that came to Immich after it, which is what keeps a pass cheap in a very large library.
+	CaughtUp time.Time
 }
 
-const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album`
+const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album, caught_up`
 
 func scanRule(sc interface{ Scan(...any) error }) (Rule, error) {
 	var r Rule
-	var owner, cond, since, auto, last, created string
-	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum); err != nil {
+	var owner, cond, since, auto, last, created, caught string
+	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum, &caught); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -82,6 +91,7 @@ func scanRule(sc interface{ Scan(...any) error }) (Rule, error) {
 	r.AutoSince, _ = time.Parse(time.RFC3339Nano, auto)
 	r.LastLook, _ = time.Parse(time.RFC3339Nano, last)
 	r.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	r.CaughtUp, _ = time.Parse(time.RFC3339Nano, caught)
 	return r, nil
 }
 
@@ -101,8 +111,8 @@ func (s *Store) AddRule(ctx context.Context, r Rule) (Rule, error) {
 		r.Since = r.CreatedAt
 	}
 	cond, _ := json.Marshal(r.Cond)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum, tstr(r.CaughtUp))
 	return r, err
 }
 
@@ -274,4 +284,10 @@ func (s *Store) RuleSentAssets(ctx context.Context, owner uuid.UUID, service str
 		out[id] = true
 	}
 	return out, rows.Err()
+}
+
+// MarkRuleCaughtUp records that a rule of kind folder has looked at everything in its folder up to that moment.
+func (s *Store) MarkRuleCaughtUp(ctx context.Context, id string, at time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE rules SET caught_up = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), id)
+	return err
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -37,5 +38,30 @@ func TestARuleThatFollowsAnAlbumKeepsItsKindAndWhereCopiesGo(t *testing.T) {
 	}
 	if states, _ := st.RulePhotoStates(ctx, follow.ID); states["a"] != RuleSeen {
 		t.Errorf("a photo that was there already is remembered, not offered: %v", states)
+	}
+}
+
+func TestAFolderRuleKeepsItsFolderAndWhenItFinishedItsFirstLook(t *testing.T) {
+	st, err := open(t, t.TempDir(), "folder-rule-secret-1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	owner := uuid.New()
+	r, err := st.AddRule(ctx, Rule{OwnerID: owner, Kind: RuleKindFolder, Cond: RuleCond{Folder: "/external/photos", Level: 2, Naming: "parent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.RuleByID(ctx, r.ID)
+	if err != nil || got.Kind != RuleKindFolder || got.Cond.Folder != "/external/photos" || got.Cond.Level != 2 || got.Cond.Naming != "parent" || !got.CaughtUp.IsZero() {
+		t.Fatalf("%+v %v", got, err)
+	}
+	at := time.Now().UTC().Truncate(time.Second)
+	if err := st.MarkRuleCaughtUp(ctx, r.ID, at); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = st.RuleByID(ctx, r.ID); !got.CaughtUp.Equal(at) {
+		t.Errorf("caught up at %v, want %v", got.CaughtUp, at)
 	}
 }

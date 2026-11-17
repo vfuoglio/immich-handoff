@@ -124,7 +124,7 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 	if len(yes) > 0 {
 		// a photo another rule of this person's for the same service has sent is not sent twice
 		var already map[string]bool
-		if r.Kind != store.RuleKindLibrary {
+		if r.Kind == store.RuleKindSend {
 			already, _ = h.Store.RuleSentAssets(ctx, r.OwnerID, r.Service)
 		}
 		var fresh []string
@@ -156,6 +156,15 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 		}
 		return nil
 	}
+	if r.Kind == store.RuleKindFolder {
+		switch {
+		case len(yes) > 0:
+			h.event(ctx, "", user.ID, "folder", i18n.PackN("{n} photo put in albums made from your folders", "{n} photos put in albums made from your folders", len(yes)))
+		case len(no) > 0:
+			h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} photo left out of the albums made from your folders", "{n} photos left out of the albums made from your folders", len(no)))
+		}
+		return nil
+	}
 	switch {
 	case len(yes) > 0:
 		h.event(ctx, r.Service, user.ID, "rule", i18n.PackN("{n} photo sent to {service} by a rule: {rule}", "{n} photos sent to {service} by a rule: {rule}", len(yes), "service", r.Service, "rule", RuleSentence(r.Cond)))
@@ -169,6 +178,9 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) error {
 	if r.Kind == store.RuleKindLibrary { // a followed album: the photos are copied into the person's own library
 		return h.copyForRule(ctx, r, assets)
+	}
+	if r.Kind == store.RuleKindFolder { // the photos are put in the albums they were offered for
+		return h.folderForRule(ctx, r, assets)
 	}
 	return h.tagFor(ctx, r.OwnerID, r.Service, assets, true, "a rule sent photos")
 }
@@ -252,6 +264,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the album {album} ask first again", "name", user.Name, "album", r.Cond.Album.Name))
 			return nil
 		}
+		if r.Kind == store.RuleKindFolder {
+			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the albums from {folder} ask first again", "name", user.Name, "folder", r.Cond.Folder))
+			return nil
+		}
 		h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service} ask first again: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
 		return nil
 	}
@@ -266,6 +282,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	}
 	if r.Kind == store.RuleKindLibrary {
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the album {album} add photos to the library by itself", "name", user.Name, "album", r.Cond.Album.Name))
+		return nil
+	}
+	if r.Kind == store.RuleKindFolder {
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the albums from {folder} be made by themselves", "name", user.Name, "folder", r.Cond.Folder))
 		return nil
 	}
 	h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} let a rule for {service} send by itself: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))

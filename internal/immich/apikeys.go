@@ -199,3 +199,8 @@ func PoolPermissionsFor(album, canDelete bool) []Permission {
 	}
 	return out
 }
+
+// FolderPermissions are what the key for albums made from the folders of an external library needs: to read the person's photos
+// (their paths are in what a search returns) and the albums they own, and to make an album and put photos in it. It cannot change,
+// share or delete an album, or touch a photo.
+var FolderPermissions = perms("user.read", "asset.read", "album.read", "album.create", "albumAsset.create")

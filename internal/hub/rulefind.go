@@ -171,6 +171,9 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	if r.Kind == store.RuleKindLibrary {
 		return h.lookLibrary(ctx, r)
 	}
+	if r.Kind == store.RuleKindFolder {
+		return h.lookFolder(ctx, r)
+	}
 	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
 	if err != nil {
 		return 0, err
@@ -285,7 +288,7 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 	if err != nil {
 		return 0, err
 	}
-	if r.Kind == store.RuleKindLibrary { // a followed album is looked at whole every time: there is nothing older to look back at
+	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder { // these look at everything there is: there is nothing older to look back at
 		return 0, ErrNothingOlder
 	}
 	if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {

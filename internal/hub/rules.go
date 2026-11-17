@@ -341,6 +341,11 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped following the album {album}", "name", user.Name, "album", r.Cond.Album.Name))
 		return nil
 	}
+	if r.Kind == store.RuleKindFolder {
+		h.dropFolderKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped making albums from the folders under {folder}", "name", user.Name, "folder", r.Cond.Folder))
+		return nil
+	}
 	h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} ended a rule for {service}: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
 	return nil
 }

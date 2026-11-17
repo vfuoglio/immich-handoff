@@ -700,6 +700,14 @@ var migrations = []string{
 	 );`,
 	// the address an "On this day" email goes to (their Immich account's, read when they turned it on)
 	`ALTER TABLE memory_prefs ADD COLUMN address TEXT NOT NULL DEFAULT '';`,
+	// albums made from the folders of an external library: when a rule finished its first full look, and the person's key for it
+	`ALTER TABLE rules ADD COLUMN caught_up TEXT NOT NULL DEFAULT '';`,
+	`CREATE TABLE folder_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
