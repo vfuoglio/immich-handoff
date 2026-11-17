@@ -3351,6 +3351,13 @@ type ClientInterface interface {
 	// Corresponds with POST /stacks (the `CreateStack` operationId).
 	CreateStack(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteStack Delete a stack
+	//
+	// Delete a specific stack by its ID.
+	//
+	// Corresponds with DELETE /stacks/{id} (the `DeleteStack` operationId).
+	DeleteStack(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetStack Retrieve a stack
 	//
 	// Retrieve a specific stack by its ID.
@@ -4250,6 +4257,23 @@ func (c *Client) CreateStackWithBody(ctx context.Context, contentType string, bo
 // Corresponds with POST /stacks (the `CreateStack` operationId).
 func (c *Client) CreateStack(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateStackRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteStack Delete a stack
+//
+// Delete a specific stack by its ID.
+//
+// Corresponds with DELETE /stacks/{id} (the `DeleteStack` operationId).
+func (c *Client) DeleteStack(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteStackRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -6282,6 +6306,40 @@ func NewCreateStackRequestWithBody(server string, contentType string, body io.Re
 	return req, nil
 }
 
+// NewDeleteStackRequest constructs an http.Request for the DeleteStack method
+func NewDeleteStackRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/stacks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetStackRequest constructs an http.Request for the GetStack method
 func NewGetStackRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -7383,6 +7441,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /stacks (the `CreateStack` operationId).
 	CreateStackWithResponse(ctx context.Context, body CreateStackJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateStackResponse, error)
+
+	// DeleteStackWithResponse Delete a stack
+	//
+	// Delete a specific stack by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /stacks/{id} (the `DeleteStack` operationId).
+	DeleteStackWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteStackResponse, error)
 
 	// GetStackWithResponse Retrieve a stack
 	//
@@ -8706,6 +8773,40 @@ func (r CreateStackResponse) ContentType() string {
 	return ""
 }
 
+type DeleteStackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteStackResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteStackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteStackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteStackResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetStackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9943,6 +10044,21 @@ func (c *ClientWithResponses) CreateStackWithResponse(ctx context.Context, body 
 	return ParseCreateStackResponse(rsp)
 }
 
+// DeleteStackWithResponse Delete a stack
+//
+// Delete a specific stack by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /stacks/{id} (the `DeleteStack` operationId).
+func (c *ClientWithResponses) DeleteStackWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteStackResponse, error) {
+	rsp, err := c.DeleteStack(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteStackResponse(rsp)
+}
+
 // GetStackWithResponse Retrieve a stack
 //
 // Retrieve a specific stack by its ID.
@@ -10954,6 +11070,22 @@ func ParseCreateStackResponse(rsp *http.Response) (*CreateStackResponse, error) 
 		}
 		response.JSON201 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseDeleteStackResponse parses an HTTP response from a DeleteStackWithResponse call
+func ParseDeleteStackResponse(rsp *http.Response) (*DeleteStackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteStackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

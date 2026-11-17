@@ -204,3 +204,7 @@ func PoolPermissionsFor(album, canDelete bool) []Permission {
 // (their paths are in what a search returns) and the albums they own, and to make an album and put photos in it. It cannot change,
 // share or delete an album, or touch a photo.
 var FolderPermissions = perms("user.read", "asset.read", "album.read", "album.create", "albumAsset.create")
+
+// StackPermissions are what the key for stacking by rule needs: to search the person's photos (with their EXIF), to make a stack, to
+// read it and to take it apart again (the undo). It cannot delete or change a photo.
+var StackPermissions = perms("user.read", "asset.read", "stack.read", "stack.create", "stack.update", "stack.delete")

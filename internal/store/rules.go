@@ -26,6 +26,8 @@ const (
 	RuleKindLibrary = "library"
 	// RuleKindFolder makes albums from the folders of the person's external library (Cond.Folder, Level and Naming).
 	RuleKindFolder = "folder"
+	// RuleKindStack stacks the person's photos that belong together: a RAW and its JPEG, an edit and its original, a burst.
+	RuleKindStack = "stack"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -51,6 +53,10 @@ type RuleCond struct {
 	Folder string `json:"folder,omitempty"`
 	Level  int    `json:"level,omitempty"`
 	Naming string `json:"naming,omitempty"`
+	// Signals and Cover say what a rule of kind stack groups ("pair", "edit", "burst") and which photo is the cover of a stack;
+	// Folder, when set, limits it to that folder.
+	Signals []string `json:"signals,omitempty"`
+	Cover   string   `json:"cover,omitempty"`
 }
 
 // Rule is one rule of a sender for a service.

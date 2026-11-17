@@ -53,7 +53,8 @@ type StackPhoto struct {
 	Path        string // the original path
 	Taken       time.Time
 	Make, Model string
-	Stacked     bool // already in a stack
+	Stacked     bool      // already in a stack
+	Created     time.Time // when it came to Immich
 }
 
 // StackGroup is photos that belong in one stack, the cover first.
@@ -269,7 +270,7 @@ func clusters(sorted []StackPhoto, gap time.Duration) [][]StackPhoto {
 
 // StackPhotoFrom is a search result as the grouping needs it (it cannot tell whether the photo is stacked: see StackPhotos).
 func StackPhotoFrom(a immich.AssetResponseDto) StackPhoto {
-	p := StackPhoto{ID: a.Id, Path: a.OriginalPath, Taken: a.FileCreatedAt}
+	p := StackPhoto{ID: a.Id, Path: a.OriginalPath, Taken: a.FileCreatedAt, Created: a.CreatedAt}
 	if a.ExifInfo != nil {
 		if a.ExifInfo.DateTimeOriginal != nil {
 			p.Taken = *a.ExifInfo.DateTimeOriginal

@@ -547,6 +547,18 @@ func (a *API) CreateStack(ctx context.Context, ids []openapi_types.UUID) (*Stack
 	return r.JSON201, nil
 }
 
+// DeleteStack takes a stack apart: the photos stay, each alone again. A stack that is not there any more is not an error.
+func (a *API) DeleteStack(ctx context.Context, id openapi_types.UUID) error {
+	r, err := a.c.DeleteStackWithResponse(ctx, id)
+	if err != nil {
+		return err
+	}
+	if c := r.StatusCode(); c < 200 || c > 299 {
+		return statusErr("deleteStack", c, r.Body)
+	}
+	return nil
+}
+
 // IsNotFound reports whether Immich answered that the thing is not there.
 func IsNotFound(err error) bool {
 	var he *HTTPError

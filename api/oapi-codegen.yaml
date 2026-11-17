@@ -52,3 +52,4 @@ output-options:
     - searchMemories
     - createMemory
     - deleteMemory
+    - deleteStack

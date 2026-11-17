@@ -92,6 +92,22 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 	for _, p := range photos {
 		waiting[p.AssetID] = true
 	}
+	if r.Kind == store.RuleKindStack && only != nil { // a group is answered whole: ticking one of its photos ticks them all
+		whys := map[string]bool{}
+		for _, id := range only {
+			for _, p := range photos {
+				if p.AssetID == id {
+					whys[p.Why] = true
+				}
+			}
+		}
+		only = []string{}
+		for _, p := range photos {
+			if whys[p.Why] {
+				only = append(only, p.AssetID)
+			}
+		}
+	}
 	var yes, no []string
 	switch answer {
 	case AnswerDecline:
@@ -156,6 +172,15 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 		}
 		return nil
 	}
+	if r.Kind == store.RuleKindStack {
+		switch {
+		case len(yes) > 0:
+			h.event(ctx, "", user.ID, "stack", i18n.PackN("{n} photo stacked with the ones it belongs with", "{n} photos stacked with the ones they belong with", len(yes)))
+		case len(no) > 0:
+			h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} photo left out of stacking", "{n} photos left out of stacking", len(no)))
+		}
+		return nil
+	}
 	if r.Kind == store.RuleKindFolder {
 		switch {
 		case len(yes) > 0:
@@ -181,6 +206,9 @@ func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) er
 	}
 	if r.Kind == store.RuleKindFolder { // the photos are put in the albums they were offered for
 		return h.folderForRule(ctx, r, assets)
+	}
+	if r.Kind == store.RuleKindStack { // the groups the photos belong to are stacked, the cover first
+		return h.stackForRule(ctx, r, assets)
 	}
 	return h.tagFor(ctx, r.OwnerID, r.Service, assets, true, "a rule sent photos")
 }
@@ -268,11 +296,18 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the albums from {folder} ask first again", "name", user.Name, "folder", r.Cond.Folder))
 			return nil
 		}
+		if r.Kind == store.RuleKindStack {
+			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made stacking ask first again", "name", user.Name))
+			return nil
+		}
 		h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service} ask first again: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
 		return nil
 	}
 	if r.Cond.Phrase != "" {
 		return ErrAutoPhrase
+	}
+	if r.Kind == store.RuleKindStack && onlyBursts(r.Cond) {
+		return ErrBurstOnly
 	}
 	if r.Always < alwaysToAuto {
 		return ErrAutoTooSoon
@@ -288,6 +323,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the albums from {folder} be made by themselves", "name", user.Name, "folder", r.Cond.Folder))
 		return nil
 	}
+	if r.Kind == store.RuleKindStack {
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let stacking go on by itself for pairs and edits", "name", user.Name))
+		return nil
+	}
 	h.event(ctx, r.Service, user.ID, "rule", i18n.Pack("{name} let a rule for {service} send by itself: {rule}", "name", user.Name, "service", r.Service, "rule", RuleSentence(r.Cond)))
 	return nil
 }
@@ -295,5 +334,5 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 // CanAuto says whether a rule may be let go on by itself: it has been answered Always often enough, it is not automatic yet and
 // has no phrase.
 func CanAuto(r store.Rule) bool {
-	return r.Mode != store.RuleAuto && r.Always >= alwaysToAuto && r.Cond.Phrase == ""
+	return r.Mode != store.RuleAuto && r.Always >= alwaysToAuto && r.Cond.Phrase == "" && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
 }
