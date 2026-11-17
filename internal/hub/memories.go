@@ -31,6 +31,7 @@ var (
 	ErrMemoryNoChannel  = errors.New("choose push or email, or there is nobody to tell")
 	ErrMemoriesNotOn    = errors.New("the messages are not turned on for you")
 	ErrMemoriesNoSender = errors.New("neither push notifications nor email are set up on this app")
+	ErrBadMemoryDay     = errors.New("that is not a day")
 )
 
 // memoryKind is the kind of line a message is sent as; devices take it whatever their mode.
@@ -302,30 +303,40 @@ func pickPhotos(mems []immich.Memory, n int) []uuid.UUID {
 	return out
 }
 
-// memoryLink is where "Open the memory" goes: the memory in Immich when the app knows Immich's address, else this app's page.
-func (h *Hub) memoryLink(first immich.Memory) string {
+// MemoryDayLayout is how a day is written in the address of the page that lists a day's memories.
+const MemoryDayLayout = "2006-01-02"
+
+// memoryLinks are the two things a message offers: opening the memory in Immich (when the app knows Immich's address) and
+// sending its photos on from this app's page (when it knows its own).
+func (h *Hub) memoryLinks(first immich.Memory, day time.Time) []ActionLink {
+	var out []ActionLink
 	if base := strings.TrimRight(h.ImmichURL, "/"); base != "" {
-		return base + "/memory?id=" + uuid.UUID(first.ID).String()
+		out = append(out, ActionLink{Label: "Open the memory", URL: base + "/memory?id=" + uuid.UUID(first.ID).String()})
 	}
-	return ""
+	if base := strings.TrimRight(h.AppURL, "/"); base != "" {
+		out = append(out, ActionLink{Label: "Send to someone", URL: base + "/memories/" + day.Format(MemoryDayLayout)})
+	}
+	return out
 }
 
 // tellMemories sends the message on the channels the person chose and says whether it counts as sent.
 func (h *Hub) tellMemories(ctx context.Context, api *immich.API, p store.MemoryPref, day time.Time, mems []immich.Memory) bool {
 	years := yearsAgo(day, mems)
-	link := h.memoryLink(mems[0])
+	links := h.memoryLinks(mems[0], day)
 	sent := false
 	if p.Push && h.Push.Ready() {
-		text := i18n.PackJoin(" ", i18n.Pack("On this day:"), years)
-		var links func(uuid.UUID) []ActionLink
-		if link != "" {
-			links = func(uuid.UUID) []ActionLink { return []ActionLink{{Label: "Open the memory", URL: link}} }
+		if devs, err := h.Store.PushSubs(ctx, p.UserID); err == nil && len(devs) > 0 { // with no device the message would go nowhere
+			text := i18n.PackJoin(" ", i18n.Pack("On this day:"), years)
+			var forPush func(uuid.UUID) []ActionLink
+			if len(links) > 0 {
+				forPush = func(uuid.UUID) []ActionLink { return links }
+			}
+			h.Push.TellLinks(ctx, []uuid.UUID{p.UserID}, memoryKind, text, forPush)
+			sent = true
 		}
-		h.Push.TellLinks(ctx, []uuid.UUID{p.UserID}, memoryKind, text, links)
-		sent = true
 	}
 	if p.Email && p.Address != "" && h.People.Ready() {
-		if err := h.People.Sender.SendPersonal(h.composeMemoryMail(ctx, api, p, years, link, pickPhotos(mems, memoryPictures))); err != nil {
+		if err := h.People.Sender.SendPersonal(h.composeMemoryMail(ctx, api, p, years, links, pickPhotos(mems, memoryPictures))); err != nil {
 			h.Log.Warn("on this day: could not send the email", "err", err) // never the address
 		} else {
 			sent = true
@@ -342,13 +353,13 @@ var memoryHTML = template.Must(template.New("memory").Parse(`<!doctype html><htm
 <p style="margin:0 0 12px">{{.Greeting}}</p>
 <p style="margin:0 0 16px;font-size:18px"><strong>{{.Intro}}</strong></p>
 {{range .Pictures}}<p style="margin:0 0 12px"><img src="cid:{{.}}" alt="" style="max-width:100%;border-radius:8px"></p>
-{{end}}{{if .Memory}}<p style="margin:16px 0"><a href="{{.Memory}}" style="background:#5b4bd6;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;display:inline-block">{{.OpenMemory}}</a></p>
+{{end}}{{if .Buttons}}<p style="margin:16px 0">{{range .Buttons}}<a href="{{.URL}}" style="background:#5b4bd6;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;display:inline-block;margin:0 8px 8px 0">{{.Label}}</a>{{end}}</p>
 {{end}}<p style="margin:16px 0 0;color:#6b6894;font-size:12px">{{.Why}} <a href="{{.Manage}}" style="color:#6b6894">{{.Stop}}</a></p>
 </div></body></html>
 `))
 
 // composeMemoryMail writes one person's message in their language, with the thumbnails inside it when they want them.
-func (h *Hub) composeMemoryMail(ctx context.Context, api *immich.API, p store.MemoryPref, years, link string, photos []uuid.UUID) notify.PersonalMail {
+func (h *Hub) composeMemoryMail(ctx context.Context, api *immich.API, p store.MemoryPref, years string, links []ActionLink, photos []uuid.UUID) notify.PersonalMail {
 	lang, _ := i18n.Supported(p.Lang)
 	l := i18n.For(lang)
 	when := l.Unpack(years)
@@ -367,21 +378,81 @@ func (h *Hub) composeMemoryMail(ctx context.Context, api *immich.API, p store.Me
 			cids = append(cids, cid)
 		}
 	}
+	type button struct{ Label, URL string }
+	var buttons []button
+	for _, a := range links {
+		buttons = append(buttons, button{l.T(a.Label), a.URL})
+	}
 	d := struct {
-		Lang, Greeting, Intro, OpenMemory, Memory, Why, Stop, Manage string
-		Pictures                                                     []string
+		Lang, Greeting, Intro, Why, Stop, Manage string
+		Pictures                                 []string
+		Buttons                                  []button
 	}{
 		Lang: string(lang), Greeting: l.T("Hi {name},", "name", p.Name), Intro: l.T("Your Immich has memories for today: {years}.", "years", when),
-		OpenMemory: l.T("Open the memory"), Memory: link,
-		Why: l.T("You get this because you turned on On this day messages in Immich Handoff."), Stop: l.T("Change or stop them"), Manage: manage, Pictures: cids,
+		Buttons: buttons,
+		Why:     l.T("You get this because you turned on On this day messages in Immich Handoff."), Stop: l.T("Change or stop them"), Manage: manage, Pictures: cids,
 	}
 	var htmlBody bytes.Buffer
 	_ = memoryHTML.Execute(&htmlBody, d)
 	var text strings.Builder
 	text.WriteString(d.Greeting + "\n\n" + d.Intro + "\n")
-	if link != "" {
-		text.WriteString("\n" + d.OpenMemory + ": " + link + "\n")
+	for _, b := range d.Buttons {
+		text.WriteString("\n" + b.Label + ": " + b.URL + "\n")
 	}
 	text.WriteString("\n-- \n" + d.Why + "\n" + d.Stop + ": " + manage + "\n")
 	return notify.PersonalMail{To: p.Address, Name: p.Name, Subject: l.T("On this day: {years}", "years", when), Text: text.String(), HTML: htmlBody.String(), Inline: inline}
+}
+
+// --- the page a message leads to ---
+
+// MemoriesOfDay lists the "on this day" memories Immich has for a day, with the person's own session: what the page
+// "Send to someone" shows. The day is the one in the message.
+func (h *Hub) MemoriesOfDay(ctx context.Context, sess *immich.API, day string) (time.Time, []immich.Memory, error) {
+	d, err := time.Parse(MemoryDayLayout, day)
+	if err != nil {
+		return time.Time{}, nil, ErrBadMemoryDay
+	}
+	mems, err := sess.MemoriesFor(ctx, d)
+	if err != nil {
+		return d, nil, err
+	}
+	out := mems[:0]
+	for _, m := range mems {
+		if len(m.Photos) > 0 {
+			out = append(out, m)
+		}
+	}
+	return d, out, nil
+}
+
+// MemoryPhoto checks that a photo is in one of the person's memories for the day, so the page shows no other.
+func (h *Hub) MemoryPhoto(ctx context.Context, sess *immich.API, day, asset string) (uuid.UUID, error) {
+	id, err := uuid.Parse(asset)
+	if err != nil {
+		return uuid.Nil, ErrNotYourPhotos
+	}
+	_, mems, err := h.MemoriesOfDay(ctx, sess, day)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	for _, m := range mems {
+		for _, p := range m.Photos {
+			if p == id {
+				return id, nil
+			}
+		}
+	}
+	return uuid.Nil, ErrNotYourPhotos
+}
+
+// PushDevices is how many devices of the person can be pushed to.
+func (h *Hub) PushDevices(ctx context.Context, user uuid.UUID) int {
+	if h.Store == nil || !h.Push.Ready() {
+		return 0
+	}
+	subs, err := h.Store.PushSubs(ctx, user)
+	if err != nil {
+		return 0
+	}
+	return len(subs)
 }

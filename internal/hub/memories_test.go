@@ -311,6 +311,7 @@ func memAt(h, m int) time.Time { return time.Date(2026, 11, 16, h, m, 0, 0, time
 
 func TestAMessageIsSentOnceADayWhenTheTimeHasComeAndNotBefore(t *testing.T) {
 	e, ctx := memSetup(t), context.Background()
+	e.h.AppURL, e.h.ImmichURL = "https://handoff.example", "https://photos.example"
 	e.bobOn(t, goodMemoryInput())
 	e.memory(2023, false, "p1", "p2")
 
@@ -328,6 +329,11 @@ func TestAMessageIsSentOnceADayWhenTheTimeHasComeAndNotBefore(t *testing.T) {
 	}
 	if got := e.asked(); len(got) != 1 || got[0] != "2026-11-16" {
 		t.Errorf("asked for today only: %v", got)
+	}
+	acts, _ := e.pushes()[0].raw["actions"].([]any)
+	urls, _ := e.pushes()[0].raw["urls"].(map[string]any)
+	if len(acts) != 2 || urls["a0"] == nil || !strings.HasPrefix(urls["a0"].(string), "https://photos.example/memory?id=") || urls["a1"] != "https://handoff.example/memories/2026-11-16" {
+		t.Errorf("two buttons, the memory in Immich and Send to someone: %v %v", acts, urls)
 	}
 	// later the same day, nothing more, and Immich is not asked again
 	e.at(memAt(18, 0))
@@ -457,7 +463,7 @@ func TestTheEmailCarriesUpToThreePicturesInsideItWhenAskedForAndNoneWhenNot(t *t
 	v, _ := vault.New("a-test-store-key-0123456789")
 	m := &fakeMailer{ready: true}
 	e.h.People = &hub.People{Store: e.st, Sender: m, Vault: v, AppURL: "https://app.example", Window: time.Hour}
-	e.h.ImmichURL = "https://photos.example"
+	e.h.ImmichURL, e.h.AppURL = "https://photos.example", "https://handoff.example"
 	t.Cleanup(e.h.People.Close)
 	in := goodMemoryInput()
 	in.Push, in.Email, in.Lang = false, true, "de"
@@ -486,6 +492,9 @@ func TestTheEmailCarriesUpToThreePicturesInsideItWhenAskedForAndNoneWhenNot(t *t
 	}
 	if !strings.Contains(got.Text, "https://photos.example/memory?id=") || !strings.Contains(got.HTML, "https://photos.example/memory?id=") {
 		t.Errorf("a link into the oldest memory: %s", got.Text)
+	}
+	if !strings.Contains(got.Text, "https://handoff.example/memories/2026-11-16") || !strings.Contains(got.HTML, "An jemanden senden") {
+		t.Errorf("and one to send the photos on, in German: %s", got.Text)
 	}
 
 	// without pictures
@@ -528,3 +537,22 @@ func TestAnEmailThatCannotBeSentIsTriedAgainOnTheNextPassWhenItIsTheOnlyChannel(
 }
 
 func hubUser(name, email string) immich.User { return immich.User{ID: bobID, Name: name, Email: email} }
+
+func TestWithNoDeviceToPushToTheDayIsNotUsedUpSoALaterDeviceStillGetsIt(t *testing.T) {
+	e, ctx := memSetup(t), context.Background()
+	if err := e.h.SetMemories(ctx, e.sess, bob, goodMemoryInput()); err != nil { // push chosen, but no device yet
+		t.Fatal(err)
+	}
+	e.memory(2022, false, "a")
+	e.at(memAt(8, 5))
+	e.h.MemoriesMaintenance(ctx)
+	if p, _, _ := e.st.MemoryPref(ctx, bobID); p.LastDay != "" {
+		t.Fatal("nothing could be sent, so the day is not done")
+	}
+	if _, err := e.h.PushSubscribe(ctx, bobID, device(t, bobPhone, "en", store.MailAll)); err != nil {
+		t.Fatal(err)
+	}
+	e.at(memAt(9, 0))
+	e.h.MemoriesMaintenance(ctx)
+	waitFor(t, "the push to the new device", func() bool { return len(e.pushes()) == 1 })
+}

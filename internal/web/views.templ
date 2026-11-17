@@ -60,6 +60,22 @@ type MailView struct {
 	Email     string
 }
 
+// MemoriesView is the person's "On this day" card.
+type MemoriesView struct {
+	Available bool // this install can send them: push or email is set up
+	Push      bool // push can carry it
+	Email     bool // email can carry it
+	On        bool
+	At        string // "08:00"
+	TZ        string
+	ByPush    bool
+	ByEmail   bool
+	Pictures  bool
+	Address   string // where the email goes
+	Broken    bool   // the key stopped working
+	Devices   int    // devices that can be pushed to
+}
+
 // ServiceView is one service as the signed-in user takes part in it.
 type ServiceView struct {
 	Name     string
@@ -278,6 +294,7 @@ type DashboardData struct {
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
 	Mail       MailView
 	Push       PushView
+	Memories   MemoriesView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
@@ -632,6 +649,9 @@ templ Dashboard(d DashboardData) {
 			if d.Library.Available {
 				@LibraryCard(d.Library)
 			}
+			if d.Memories.Available {
+				@MemoriesCard(d.Memories)
+			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
 			<h1>
@@ -734,6 +754,100 @@ templ MailCard(m MailView) {
 		}
 		<small class="meta">{ t(ctx, "Emails go to the address Immich shows for your account, in the language of this page, and arrive a few minutes after things happen, in one email. Every email has a link that stops them.") }</small>
 	</div>
+}
+
+// MemoriesCard is where a person turns on a daily message about the memories Immich has for the day.
+templ MemoriesCard(m MemoriesView) {
+	<h2>{ t(ctx, "On this day") }</h2>
+	<div class="card memoriescard">
+		if m.On && m.Broken {
+			<p class="bad-note">{ t(ctx, "The key the app made in your Immich is gone, so no message can be sent. Save to make a new one.") }</p>
+		} else if m.On {
+			<p>{ t(ctx, "Every day at {time} you get a message when Immich has memories for that day that you have not watched yet.", "time", m.At) }</p>
+		} else {
+			<p>{ t(ctx, "Get a message each day when Immich has memories for that day from your old photos, with a link to open them or to send the photos to someone.") }</p>
+		}
+		<form class="limits" hx-post="me/memories" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="action" value="on"/>
+			<input type="hidden" name="tz" value={ m.TZ } data-timezone/>
+			<label>{ t(ctx, "Time of day") } <input type="time" name="at" value={ m.At } required/></label>
+			if m.Push {
+				<label><input type="checkbox" name="push" value="1" checked?={ m.ByPush || !m.On }/> { t(ctx, "A notification on my devices") }</label>
+			}
+			if m.Email {
+				<label><input type="checkbox" name="email" value="1" checked?={ m.ByEmail }/> { t(ctx, "An email") }</label>
+				<label><input type="checkbox" name="pictures" value="1" checked?={ m.Pictures || !m.On }/> { t(ctx, "With up to three pictures in the email") }</label>
+			}
+			if m.On {
+				<button type="submit">{ t(ctx, "Save") }</button>
+			} else {
+				<button class="primary" type="submit">{ t(ctx, "Turn on") }</button>
+			}
+		</form>
+		if m.On {
+			<p class="row">
+				<button hx-post="me/memories" hx-vals='{"action":"off"}' hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Turn off") }</button>
+			</p>
+		}
+		if m.Push && m.Devices == 0 {
+			<small class="meta">{ t(ctx, "A notification needs a device: turn on notifications on this device above.") }</small>
+		}
+		<small class="meta">{ t(ctx, "The app makes a key in your Immich that can read your memories and look at pictures, and nothing else; you can see it and delete it there. Turning this off deletes it. Nobody else sees your memories.") }</small>
+	</div>
+}
+
+// MemoriesPageView is the page a message leads to: the day's memories, to send photos on.
+type MemoriesPageView struct {
+	User     string
+	Day      string
+	Groups   []MemoryGroupView
+	Services []string
+}
+
+// MemoryGroupView is one year of the day.
+type MemoryGroupView struct {
+	Label  string
+	Photos []string // asset ids
+}
+
+// MemoriesPage lists the photos of a day's memories and lets the person hand some over to a service they send to.
+templ MemoriesPage(d MemoriesPageView) {
+	@Layout(t(ctx, "On this day"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "On this day") }</h1>
+		<p class="lead">{ t(ctx, "Tick the photos to hand over, and choose where to send them.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if len(d.Groups) == 0 {
+			<p class="meta">{ t(ctx, "Immich has no memories for this day.") }</p>
+		} else {
+			<form hx-post="memories/send" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				for _, g := range d.Groups {
+					<h2>{ g.Label }</h2>
+					<ul class="review-grid">
+						for _, p := range g.Photos {
+							<li>
+								<label>
+									<img src={ "memories/" + d.Day + "/photo/" + p + "?size=large" } alt="" width="240" height="240" loading="lazy"/>
+									<span class="meta"><input type="checkbox" name="photo" value={ p }/></span>
+								</label>
+							</li>
+						}
+					</ul>
+				}
+				if len(d.Services) == 0 {
+					<p class="meta">{ t(ctx, "You do not send to any service yet. Join or make one on your page first.") }</p>
+				} else {
+					<p class="row form-actions">
+						<select name="service" aria-label={ t(ctx, "Where to send them") }>
+							for _, s := range d.Services {
+								<option value={ s }>{ s }</option>
+							}
+						</select>
+						<button class="primary" type="submit">{ t(ctx, "Hand over the ticked photos") }</button>
+					</p>
+				}
+			</form>
+		}
+	}
 }
 
 // LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.

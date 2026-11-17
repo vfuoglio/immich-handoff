@@ -249,6 +249,10 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
 	mux.HandleFunc("POST /me/mail", w.myMail)
 	mux.HandleFunc("POST /me/library", w.myLibrary)
+	mux.HandleFunc("POST /me/memories", w.myMemories)
+	mux.HandleFunc("GET /memories/{day}", w.memoriesPage)
+	mux.HandleFunc("GET /memories/{day}/photo/{asset}", w.memoriesPhoto)
+	mux.HandleFunc("POST /memories/send", w.memoriesSend)
 	mux.HandleFunc("GET /me/push/key", w.pushKey)
 	mux.HandleFunc("POST /me/push", w.pushSubscribe)
 	mux.HandleFunc("POST /me/push/remove", w.pushRemove)
@@ -627,6 +631,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	mc := w.Hub.MailCard(ctx, me.user, string(loc(ctx).Lang))
 	d.Mail = MailView{Available: mc.Available, On: mc.On, Mode: mc.Mode, Email: mc.Email}
 	d.Push = w.pushView(ctx, me)
+	d.Memories = w.memoriesView(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
 		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}

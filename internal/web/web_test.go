@@ -50,6 +50,19 @@ func fakeImmich() http.Handler {
 		w.Header().Set("Content-Disposition", `attachment; filename="../../IMG_0042.jpg"`)
 		w.Write(jpegBytes)
 	})
+	// the person's pictures, and their "on this day" memory (one old memory with one photo of theirs) for any day but the 1st of January
+	mux.HandleFunc("GET /api/assets/{id}/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(jpegBytes)
+	})
+	mux.HandleFunc("GET /api/memories", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("for") == "2026-01-01" {
+			j(w, []any{})
+			return
+		}
+		j(w, []any{map[string]any{"id": "cccccccc-0000-4000-8000-000000000001", "type": "on_this_day", "data": map[string]any{"year": 2020},
+			"assets": []any{map[string]any{"id": notMyPhoto}}, "memoryAt": ts, "createdAt": ts, "isSaved": false, "ownerId": otherID}})
+	})
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
 			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},

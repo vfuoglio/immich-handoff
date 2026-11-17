@@ -24,6 +24,10 @@ If the person who runs the app has turned it on (see [Notifications on devices](
 
 The card lists your devices. Each can have its own choice, **Send a test notification** shows that it works, and **Remove** stops it (it also stops when you clear the browser's data for the site). Things that happen within about ten seconds come as one notification. On an iPhone or iPad, add the page to the Home Screen first and turn it on from there.
 
+## A daily message about memories
+
+The **On this day** card sends one message a day about the memories Immich has for you: see [On this day](memories.md).
+
 ## Answering from a message
 
 A mail or notification about something you can answer carries buttons, so you do not have to open the page:

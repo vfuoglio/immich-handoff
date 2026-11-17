@@ -18,6 +18,9 @@ No. Senders use Immich as they do now: add a tag, or press the **Hand over...** 
 **Can I keep a photo someone shared with me?**
 Yes: the button inside Immich shows **Add to my library** on photos from albums shared with you and from a partner, and copies them into your own library with their description, rating and location (the person who shared them is not told, and a copy takes as much room as the photo). See [Add to my library](find-handoff.md#add-to-my-library-from-inside-immich). To have the new photos of an album shared with you offered to you as they are added, [follow the album](guides/automate.md#following-an-album-shared-with-you).
 
+**Can I get a message on the days Immich has memories for me?**
+Yes: the **On this day** card on your page sends one message a day, at the time you choose, by notification or email, when Immich has memories for that day that you have not watched yet, with up to three pictures in the email and a link to send those photos on. It reads your memories with a key of your own that can do nothing else. See [On this day](guides/memories.md).
+
 **Does it work with the Immich phone app?**
 Tagging in the app works. The button inside Immich works in a browser, not in the native app. The page also sends photos from a phone: see [Send photos from a phone](guides/phone.md#send-photos-from-a-phone).
 
