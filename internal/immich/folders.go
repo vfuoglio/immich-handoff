@@ -25,3 +25,21 @@ func FolderOf(path string) string {
 	}
 	return ""
 }
+
+// StackSearch lists the photos (not videos) of this account that stacking looks at, with their EXIF, every page. folder, when not
+// empty, is a folder with a trailing slash ("/external/photos/"); with createdAfter set, only photos that reached Immich after it.
+// With stacked false a photo that is in a stack is left out, the cover too; with it true every photo is listed. A result never says
+// which stack a photo is in (its stack field is empty in a search), so a caller that needs to know asks both ways and compares. It
+// needs asset.read.
+func (a *API) StackSearch(ctx context.Context, folder string, createdAfter time.Time, stacked bool) ([]AssetResponseDto, error) {
+	yes := true
+	img := IMAGE
+	dto := MetadataSearchDto{WithExif: &yes, WithStacked: &stacked, Type: &img}
+	if folder != "" {
+		dto.OriginalPath = &folder
+	}
+	if !createdAfter.IsZero() {
+		dto.CreatedAfter = &createdAfter
+	}
+	return a.Search(ctx, dto)
+}

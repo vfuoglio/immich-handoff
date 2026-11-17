@@ -22,6 +22,11 @@ import (
 // externalLibrary makes bob an external library over the mounted folder tree (test/external-photos, at /external in the
 // container), scans it and waits until every file is an asset. It returns the library's id; asked twice it reuses it.
 func externalLibrary(t *testing.T, bob user) string {
+	return externalLibraryAt(t, bob, []string{"/external/photos", "/external/photos-old"}, 7)
+}
+
+// externalLibraryAt is externalLibrary for any import paths: it waits until at least n files are assets.
+func externalLibraryAt(t *testing.T, bob user, paths []string, n int) string {
 	t.Helper()
 	var login struct {
 		AccessToken string `json:"accessToken"`
@@ -36,7 +41,7 @@ func externalLibrary(t *testing.T, bob user) string {
 	call(t, "GET", "/libraries", admin, nil, &libs)
 	id := ""
 	for _, l := range libs {
-		if l.OwnerID == bob.id && len(l.ImportPaths) == 2 {
+		if l.OwnerID == bob.id && strings.Join(l.ImportPaths, ",") == strings.Join(paths, ",") {
 			id = l.ID
 		}
 	}
@@ -44,12 +49,12 @@ func externalLibrary(t *testing.T, bob user) string {
 		var made struct {
 			ID string `json:"id"`
 		}
-		mustOK(t, call(t, "POST", "/libraries", admin, map[string]any{"ownerId": bob.id, "name": "e2e folders", "importPaths": []string{"/external/photos", "/external/photos-old"}}, &made), "make the library")
+		mustOK(t, call(t, "POST", "/libraries", admin, map[string]any{"ownerId": bob.id, "name": "e2e " + paths[0], "importPaths": paths}, &made), "make the library")
 		id = made.ID
 		mustOK(t, call(t, "POST", "/libraries/"+id+"/scan", admin, nil, nil), "scan the library")
 	}
 	eventually(t, "the library's files are assets", 120*time.Second, func() bool {
-		return len(searchPaths(t, bob, map[string]any{"libraryId": id})) >= 7
+		return len(searchPaths(t, bob, map[string]any{"libraryId": id})) >= n
 	})
 	return id
 }
