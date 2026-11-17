@@ -116,9 +116,10 @@ func TestFollowSharedAlbum(t *testing.T) {
 	last, lastName := photo("by-itself")
 	addToAlbum(last)
 	eventually(t, "the photo is copied without asking", 90*time.Second, func() bool { return bobHas(lastName) })
-	if strings.Contains(page(t, port, cookie), "1 new photo in "+albumName) {
-		t.Error("nothing waits when the rule copies by itself")
-	}
+	// the copy is in Immich a moment before the rule writes down that it sent it
+	eventually(t, "nothing waits when the rule copies by itself", 30*time.Second, func() bool {
+		return !strings.Contains(page(t, port, cookie), "1 new photo in "+albumName)
+	})
 
 	// stopping the album deletes the key
 	form("/rules/delete", url.Values{"rule": {rule}})
