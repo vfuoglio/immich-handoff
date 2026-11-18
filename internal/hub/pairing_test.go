@@ -42,7 +42,7 @@ func offered(t *testing.T, e *env, ctx context.Context) (store.Pairing, string) 
 // ann says yes and sends Leo back.
 func accepted(t *testing.T, e *env, ctx context.Context, p store.Pairing) {
 	t.Helper()
-	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}); err != nil {
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 0); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -88,14 +88,14 @@ func TestOnlyTheInvitedPersonCanSayYesAndOnlyWithRealNamedPeople(t *testing.T) {
 	e, ctx := pairingEnv(t)
 	p, _ := offered(t, e, ctx)
 	stranger := immich.User{ID: uuid.New(), Name: "Eve"}
-	if err := e.h.AcceptPairing(ctx, e.ann, stranger, p.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrNoPairing) {
+	if err := e.h.AcceptPairing(ctx, e.ann, stranger, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrNoPairing) {
 		t.Errorf("a stranger cannot see it: %v", err)
 	}
-	if err := e.h.AcceptPairing(ctx, e.sess, bob, p.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrNoPairing) {
+	if err := e.h.AcceptPairing(ctx, e.sess, bob, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrNoPairing) {
 		t.Errorf("the starter cannot say the other person's yes: %v", err)
 	}
 	for name, people := range map[string][]uuid.UUID{"none": nil, "a stranger's person": {uuid.New()}, "twice": {leo, leo}} {
-		if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, people); err == nil || !hub.IsUserError(err) {
+		if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, people, 0); err == nil || !hub.IsUserError(err) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -109,7 +109,7 @@ func TestOnlyTheInvitedPersonCanSayYesAndOnlyWithRealNamedPeople(t *testing.T) {
 		t.Errorf("a pairing's pool is joined only by saying yes to the pairing: %v", err)
 	}
 	accepted(t, e, ctx, p)
-	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrPairingState) {
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrPairingState) {
 		t.Errorf("a yes is given once: %v", err)
 	}
 }
@@ -325,7 +325,7 @@ func TestDecliningAnInvitationStopsItWithoutJoiningAnything(t *testing.T) {
 	if got.State != store.PairingStopped || got.Note == "" {
 		t.Errorf("%+v", got)
 	}
-	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrPairingState) {
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrPairingState) {
 		t.Errorf("it cannot be accepted after: %v", err)
 	}
 }
@@ -339,14 +339,14 @@ func TestAnInvitationNobodyAnsweredLapsesAndCannotBeAccepted(t *testing.T) {
 	if got.State != store.PairingStopped {
 		t.Fatalf("lapsed after a week: %+v", got)
 	}
-	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrPairingState) {
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrPairingState) {
 		t.Errorf("%v", err)
 	}
 	// and a yes that comes first but too late is refused as lapsed and stops it too
 	e2, ctx2 := pairingEnv(t)
 	p2, _ := offered(t, e2, ctx2)
 	e2.h.Now = func() time.Time { return time.Now().Add(8 * 24 * time.Hour) }
-	if err := e2.h.AcceptPairing(ctx2, e2.ann, ann, p2.ID, []uuid.UUID{leo}); !errors.Is(err, hub.ErrPairingLapsed) {
+	if err := e2.h.AcceptPairing(ctx2, e2.ann, ann, p2.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrPairingLapsed) {
 		t.Errorf("%v", err)
 	}
 	if got, _ := e2.st.PairingByID(ctx2, p2.ID); got.State != store.PairingStopped {
@@ -455,5 +455,42 @@ func TestAPairingsPoolNameIsRecognisedAndNothingElseIs(t *testing.T) {
 		if got := hub.IsPairingName(name); got != want {
 			t.Errorf("%q: %v", name, got)
 		}
+	}
+}
+
+func TestEachPersonOfAPairingChoosesTheirOwnWaitAndABadWaitMakesNothing(t *testing.T) {
+	e, ctx := pairingEnv(t)
+	for _, n := range []int{-1, 61} {
+		if _, _, err := e.h.StartPairing(ctx, e.sess, bob, hub.PairingParams{With: ann, People: []uuid.UUID{nora}, SettleMinutes: n}); !errors.Is(err, hub.ErrBadSettle) || !hub.IsUserError(err) {
+			t.Errorf("%d minutes: %v", n, err)
+		}
+	}
+	if svcs, _ := e.st.Services(ctx); len(svcs) != 0 {
+		t.Fatalf("a bad wait is refused before anything is made: %+v", svcs)
+	}
+	p, _, err := e.h.StartPairing(ctx, e.sess, bob, hub.PairingParams{With: ann, People: []uuid.UUID{nora}, SettleMinutes: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ruleOfUser(t, e, ctx, bobID).SettleMinutes; got != 2 {
+		t.Errorf("the starter's rule waits two minutes: %d", got)
+	}
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 61); !errors.Is(err, hub.ErrBadSettle) {
+		t.Errorf("a bad wait on the yes: %v", err)
+	}
+	if links, _ := e.st.Links(ctx); len(links) != 0 {
+		t.Errorf("a refused yes joins nobody: %+v", links)
+	}
+	if got, _ := e.st.PairingByID(ctx, p.ID); got.State != store.PairingInvited {
+		t.Errorf("and it still waits: %+v", got)
+	}
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 10); err != nil {
+		t.Fatal(err)
+	}
+	if got := ruleOfUser(t, e, ctx, annID).SettleMinutes; got != 10 {
+		t.Errorf("the other person's own choice is on their own rule: %d", got)
+	}
+	if got := ruleOfUser(t, e, ctx, bobID).SettleMinutes; got != 2 {
+		t.Errorf("and the starter's stays: %d", got)
 	}
 }

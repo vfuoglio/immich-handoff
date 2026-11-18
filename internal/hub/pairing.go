@@ -60,6 +60,8 @@ func (h *Hub) lockedService(ctx context.Context, service string) error {
 type PairingParams struct {
 	With   immich.User // the other person (id, name and email, as the server lists them)
 	People []uuid.UUID // the people in the starter's own library whose photos go to the other person
+	// SettleMinutes is how long a photo waits before the starter's rules offer it: 0 is the usual wait, otherwise 1 to 60.
+	SettleMinutes int
 }
 
 // StartPairing makes the private pool and the starter's rules, and an invitation for the other person. Nothing is made for the
@@ -74,6 +76,9 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 	}
 	if err := h.checkPairingPeople(ctx, sess, p.People); err != nil {
 		return none, "", err
+	}
+	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes { // before anything is made
+		return none, "", ErrBadSettle
 	}
 	if err := h.pairingRoom(ctx, a.ID); err != nil {
 		return none, "", err
@@ -106,7 +111,7 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 		undo()
 		return none, "", err
 	}
-	if err := h.addPairingRules(ctx, sess, a, pr, p.People); err != nil {
+	if err := h.addPairingRules(ctx, sess, a, pr, p.People, p.SettleMinutes); err != nil {
 		undo()
 		return none, "", err
 	}
@@ -121,7 +126,7 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 
 // AcceptPairing is the other person's yes: they join the pool with their own key, choose which of their own people go back, and
 // both sides' rules start looking from this moment on. Only the person the pairing was offered to can accept it.
-func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User, id string, people []uuid.UUID) error {
+func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User, id string, people []uuid.UUID, settle int) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
@@ -142,6 +147,9 @@ func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User
 	if err := h.checkPairingPeople(ctx, sess, people); err != nil {
 		return err
 	}
+	if settle < 0 || settle > maxSettleMinutes { // before they join anything
+		return ErrBadSettle
+	}
 	if err := h.pairingRoom(ctx, b.ID); err != nil {
 		return err
 	}
@@ -153,7 +161,7 @@ func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User
 	if err := h.JoinWith(ctx, sess, b, p.Service, svc.Invite, syncer.ModeCopy, true); err != nil {
 		return err
 	}
-	if err := h.addPairingRules(ctx, sess, b, p, people); err != nil {
+	if err := h.addPairingRules(ctx, sess, b, p, people, settle); err != nil {
 		if lerr := h.Leave(ctx, sess, b, p.Service); lerr != nil { // takes the key and the link back, and the rules made so far
 			h.Log.Warn("pairing: could not undo the join", "pairing", p.ID, "err", lerr)
 		}
@@ -402,9 +410,9 @@ func (h *Hub) checkPairingPeople(ctx context.Context, sess *immich.API, ids []uu
 }
 
 // addPairingRules makes one rule per chosen person for the person's own side, marks each as the pairing's, and sends nothing yet.
-func (h *Hub) addPairingRules(ctx context.Context, sess *immich.API, user immich.User, p store.Pairing, people []uuid.UUID) error {
+func (h *Hub) addPairingRules(ctx context.Context, sess *immich.API, user immich.User, p store.Pairing, people []uuid.UUID, settle int) error {
 	for _, id := range people {
-		r, err := h.addRule(ctx, sess, user, RuleParams{Service: p.Service, People: []uuid.UUID{id}})
+		r, err := h.addRule(ctx, sess, user, RuleParams{Service: p.Service, People: []uuid.UUID{id}, SettleMinutes: settle})
 		if err != nil {
 			return err
 		}

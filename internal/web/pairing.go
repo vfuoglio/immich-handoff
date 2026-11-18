@@ -30,6 +30,7 @@ type PairingView struct {
 	Note             string // why it stopped, in the reader's language
 	Expires          string // while it waits for a yes: when the offer lapses
 	Link             string // for the starter, while it waits: the page the other person opens
+	WaitMin          int    // the person's own wait before their rules offer a photo, when they chose one (0: the usual)
 	Rules            []PairRuleView
 }
 
@@ -40,6 +41,7 @@ type PairRuleView struct{ ID, Name string }
 type PairingPageView struct {
 	ID, Starter, Theirs, Expires string
 	People                       []PersonOption // the people in the reader's own library, to choose from
+	WaitMin                      int            // the app's usual wait before a rule offers a photo, in minutes, for the form to say
 }
 
 func peopleWords(names []string) string { return strings.Join(names, ", ") }
@@ -95,9 +97,13 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 				it.Link = "pair/" + p.ID
 			}
 		}
-		if p.State == store.PairingActive || p.State == store.PairingPaused {
+		if p.State != store.PairingStopped {
 			if rules, err := w.Hub.PairingRules(ctx, me.user.ID, p.ID); err == nil {
 				for _, r := range rules {
+					it.WaitMin = r.SettleMinutes // each person makes their rules with one wait
+					if p.State == store.PairingInvited {
+						continue // nothing to look back at before the yes
+					}
 					var names []string
 					for _, x := range r.Cond.People {
 						names = append(names, x.Name)
@@ -132,7 +138,7 @@ func (w *Server) pairForm(rw http.ResponseWriter, r *http.Request) {
 		opts = append(opts, PersonOption{ID: uuid.UUID(p.ID).String(), Name: p.Name})
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	PairForm(opts).Render(r.Context(), rw)
+	PairForm(opts, w.waitMinutes()).Render(r.Context(), rw)
 }
 
 func (w *Server) startPairing(rw http.ResponseWriter, r *http.Request) {
@@ -147,7 +153,11 @@ func (w *Server) startPairing(rw http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return hub.ErrNoSuchPerson
 		}
-		_, _, err = w.Hub.StartPairing(ctx, me.sess, me.user, hub.PairingParams{With: other, People: ids(r, "person")})
+		settle, err := settleOf(r)
+		if err != nil {
+			return err
+		}
+		_, _, err = w.Hub.StartPairing(ctx, me.sess, me.user, hub.PairingParams{With: other, People: ids(r, "person"), SettleMinutes: settle})
 		return err
 	})
 }
@@ -157,7 +167,11 @@ func (w *Server) acceptPairing(rw http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			return err
 		}
-		return w.Hub.AcceptPairing(ctx, me.sess, me.user, r.PostFormValue("pairing"), ids(r, "person"))
+		settle, err := settleOf(r)
+		if err != nil {
+			return err
+		}
+		return w.Hub.AcceptPairing(ctx, me.sess, me.user, r.PostFormValue("pairing"), ids(r, "person"), settle)
 	})
 }
 
@@ -214,7 +228,7 @@ func (w *Server) pairingPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, theirs, _ := w.Hub.PairingPeople(ctx, me.user.ID, p.ID)
-	v := PairingPageView{ID: p.ID, Starter: p.AName, Theirs: peopleWords(theirs), Expires: loc(ctx).Stamp(p.ExpiresAt.Local())}
+	v := PairingPageView{ID: p.ID, Starter: p.AName, Theirs: peopleWords(theirs), Expires: loc(ctx).Stamp(p.ExpiresAt.Local()), WaitMin: w.waitMinutes()}
 	if people, err := me.sess.People(ctx); err == nil {
 		for _, x := range people {
 			v.People = append(v.People, PersonOption{ID: uuid.UUID(x.ID).String(), Name: x.Name})

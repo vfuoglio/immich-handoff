@@ -4515,16 +4515,7 @@ templ RuleForm(v RuleChoicesView) {
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
 		</div>
-		<div class="field">
-			<label for="rule-settle">{ t(ctx, "Wait before offering a photo") }</label>
-			<select id="rule-settle" name="settle">
-				<option value="0">{ t(ctx, "The usual wait ({n} min)", "n", v.WaitMin) }</option>
-				for _, m := range []int{1, 2, 5, 10, 15, 30} {
-					<option value={ fmt.Sprint(m) }>{ t(ctx, "{n} min", "n", m) }</option>
-				}
-			</select>
-			<small class="meta">{ t(ctx, "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.") }</small>
-		</div>
+		@WaitField(v.WaitMin)
 		if len(v.Others) > 0 {
 			<fieldset class="targets">
 				<legend>{ t(ctx, "Make the same rule for these services too") }</legend>
@@ -4646,6 +4637,9 @@ templ PairingItem(it PairingView) {
 		if it.Mine != "" {
 			<p class="meta">{ t(ctx, "You send photos of {people}.", "people", it.Mine) }</p>
 		}
+		if it.WaitMin > 0 {
+			<p class="meta">{ t(ctx, "Waits {n} min before offering a photo.", "n", it.WaitMin) }</p>
+		}
 		if it.Theirs != "" {
 			<p class="meta">{ t(ctx, "{other} sends photos of {people}.", "other", it.Other, "people", it.Theirs) }</p>
 		} else if it.State == "invited" && it.Starter {
@@ -4695,7 +4689,7 @@ templ PairingItem(it PairingView) {
 }
 
 // PairForm is the form that offers a sharing: the other person's email as Immich knows it, and which of the person's own people go to them.
-templ PairForm(people []PersonOption) {
+templ PairForm(people []PersonOption, waitMin int) {
 	<form class="card offer-form pick-form" hx-post="pairings" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 		<div class="field">
 			<label for="pair-email">{ t(ctx, "Email of the person") }</label>
@@ -4710,6 +4704,7 @@ templ PairForm(people []PersonOption) {
 				}
 			</fieldset>
 			<p class="meta">{ t(ctx, "These photos go to them. They choose which of their own people come back to you. Nothing is sent until they say yes, and only photos that arrive after that.") }</p>
+			@WaitField(waitMin)
 			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer to share these photos") }</button></p>
 		} else {
 			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to share. Name people in Immich and come back.") }</p>
@@ -4743,6 +4738,7 @@ templ PairingPage(v PairingPageView, user string) {
 							<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
 						}
 					</fieldset>
+					@WaitField(v.WaitMin)
 					<p class="row form-actions">
 						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
 						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
@@ -4756,4 +4752,19 @@ templ PairingPage(v PairingPageView, user string) {
 		</div>
 		<p><a href="../">{ t(ctx, "Not now: open your own page") }</a></p>
 	}
+}
+
+// WaitField is the choice of how long a photo waits in Immich before a rule offers it: Immich never says when it has finished finding
+// the faces in a photo, so each rule's maker decides between seeing new photos sooner and being sure everyone in them has been found.
+templ WaitField(usual int) {
+	<div class="field">
+		<label for="rule-settle">{ t(ctx, "Wait before offering a photo") }</label>
+		<select id="rule-settle" name="settle">
+			<option value="0">{ t(ctx, "The usual wait ({n} min)", "n", usual) }</option>
+			for _, m := range []int{1, 2, 5, 10, 15, 30} {
+				<option value={ fmt.Sprint(m) }>{ t(ctx, "{n} min", "n", m) }</option>
+			}
+		</select>
+		<small class="meta">{ t(ctx, "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.") }</small>
+	</div>
 }

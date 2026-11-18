@@ -10,6 +10,9 @@
 - **Albums from the folders of an external library.** On your page, give a folder of your external library and the app offers an album for each folder, named after it (or after it and its parent), at the level you choose, and puts the photos in it once you say yes; after three *Always* it can do it by itself. It only adds: nothing is removed, renamed or deleted. It uses a key of your own (`handoff: folders`) that can read your photos and albums and make and fill an album, and that you can delete at any time. See [Albums from the folders of an external library](docs/guides/automate.md#albums-from-the-folders-of-an-external-library).
 - **Stacking photos that belong together.** On your page, a rule offers to stack a RAW with its JPEG, an edit with its original, and (always asking first) the shots of a burst, with the cover you choose (the JPEG, the RAW or the edit). It only stacks, leaves photos already in a stack alone, and for 15 minutes can take apart the stacks it made. After three *Always* it can stack pairs and edits by itself. It uses a key of your own (`handoff: stacks`) that can search your photos and make and take apart stacks, and that you can delete at any time. See [Stacking photos that belong together](docs/guides/automate.md#stacking-photos-that-belong-together).
 
+### Fixed
+- The rules were shown in English in every other language: the form that makes a rule, the rules box, the review page, the lines in your Activity and the messages that say why a rule was refused. They are now in German, Spanish, French, Italian, Portuguese and Russian. The pages for drop boxes, client rooms and shared albums across servers are still English on the owner's side.
+
 ## 1.3.1
 
 ### Fixed

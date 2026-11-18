@@ -252,7 +252,7 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
-	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries, WaitMin: max(1, int((w.Hub.RuleWait()+30*time.Second)/time.Minute))}
+	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries, WaitMin: w.waitMinutes()}
 	for _, p := range c.People {
 		v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
 	}
@@ -328,15 +328,15 @@ func (w *Server) addRule(rw http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		p := hub.RuleParams{Service: service, People: ids(r, "person"), NotPeople: ids(r, "notperson"), After: r.PostFormValue("after"), Before: r.PostFormValue("before"),
 			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase"), Also: r.PostForm["also"]}
-		if n, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("settle"))); err == nil {
-			p.SettleMinutes = n
-		} else if r.PostFormValue("settle") != "" {
-			return hub.ErrBadSettle
+		n, err := settleOf(r)
+		if err != nil {
+			return err
 		}
+		p.SettleMinutes = n
 		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
 			p.Album = id
 		}
-		_, err := w.Hub.AddRule(ctx, me.sess, me.user, p)
+		_, err = w.Hub.AddRule(ctx, me.sess, me.user, p)
 		return err
 	})
 }
@@ -546,3 +546,20 @@ func (w *Server) followFolder(rw http.ResponseWriter, r *http.Request) {
 		return err
 	})
 }
+
+// settleOf reads the wait a person chose for the rules they are making: empty is the usual wait (0), anything else must be a whole
+// number of minutes (the hub says whether it is in range).
+func settleOf(r *http.Request) (int, error) {
+	v := strings.TrimSpace(r.PostFormValue("settle"))
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, hub.ErrBadSettle
+	}
+	return n, nil
+}
+
+// waitMinutes is the app's usual wait before a rule offers a photo, in whole minutes, for a form to say.
+func (w *Server) waitMinutes() int { return max(1, int((w.Hub.RuleWait()+30*time.Second)/time.Minute)) }
