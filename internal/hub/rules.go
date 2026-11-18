@@ -103,6 +103,9 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 	if !h.SelfService() {
 		return store.Rule{}, ErrNotJoined
 	}
+	if err := h.lockedService(ctx, p.Service); err != nil { // a pairing's pool takes only the pairing's own rules
+		return store.Rule{}, err
+	}
 	link, err := h.senderLink(ctx, user.ID, p.Service)
 	if err != nil {
 		return store.Rule{}, err
@@ -318,6 +321,9 @@ func (h *Hub) PauseRule(ctx context.Context, user uuid.UUID, id string, paused b
 	if err != nil {
 		return err
 	}
+	if r.Pairing != "" && !isPairingOp(ctx) {
+		return ErrLockedByPairing
+	}
 	return h.Store.SetRulePaused(ctx, r.ID, paused)
 }
 
@@ -332,6 +338,9 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 	r, err := h.ruleOf(ctx, user.ID, id)
 	if err != nil {
 		return err
+	}
+	if r.Pairing != "" && !isPairingOp(ctx) {
+		return ErrLockedByPairing
 	}
 	if err := h.Store.DeleteRule(ctx, r.ID); err != nil {
 		return err

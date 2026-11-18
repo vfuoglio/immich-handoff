@@ -322,6 +322,9 @@ func (h *Hub) JoinWith(ctx context.Context, sess *immich.API, user immich.User, 
 	if svc == nil || !(svc.AllowJoin || svc.NeedsApproval) {
 		return ErrNotJoinable
 	}
+	if err := h.lockedService(ctx, service); err != nil { // a pairing's pool is joined only by the person it was offered to, through AcceptPairing
+		return err
+	}
 	if svc.Pool {
 		if svc.Ended(h.now()) {
 			return ErrPoolEnded
@@ -445,6 +448,9 @@ func workflowName(service string) string {
 func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, service string) error {
 	if !h.SelfService() {
 		return ErrNotJoined
+	}
+	if err := h.lockedService(ctx, service); err != nil {
+		return err
 	}
 	links, err := h.Store.Links(ctx)
 	if err != nil {

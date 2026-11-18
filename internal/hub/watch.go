@@ -28,7 +28,7 @@ func (h *Hub) senderLink(ctx context.Context, user uuid.UUID, service string) (*
 			return &l, nil
 		}
 	}
-	return nil, ErrNotJoined
+	return h.poolOwnerLink(ctx, user, service)
 }
 
 // LinkAlbum makes everything in one of the person's own albums be handed over to the service, now and
@@ -37,6 +37,9 @@ func (h *Hub) senderLink(ctx context.Context, user uuid.UUID, service string) (*
 func (h *Hub) LinkAlbum(ctx context.Context, sess *immich.API, user immich.User, service string, album uuid.UUID) error {
 	if !h.SelfService() {
 		return ErrNotJoined
+	}
+	if err := h.lockedService(ctx, service); err != nil {
+		return err
 	}
 	link, err := h.senderLink(ctx, user.ID, service)
 	if err != nil {
@@ -79,6 +82,9 @@ func (h *Hub) LinkAlbum(ctx context.Context, sess *immich.API, user immich.User,
 func (h *Hub) UnlinkAlbum(ctx context.Context, user immich.User, service string) error {
 	if !h.SelfService() {
 		return ErrNotJoined
+	}
+	if err := h.lockedService(ctx, service); err != nil {
+		return err
 	}
 	link, err := h.senderLink(ctx, user.ID, service)
 	if err != nil {

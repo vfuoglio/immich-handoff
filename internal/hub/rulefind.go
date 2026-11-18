@@ -248,6 +248,7 @@ func (h *Hub) RulesMaintenance(ctx context.Context) {
 	if h.Store == nil || !h.SelfService() {
 		return
 	}
+	h.ExpirePairings(ctx)
 	list, err := h.Store.AllRules(ctx)
 	if err != nil {
 		return

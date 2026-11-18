@@ -157,6 +157,7 @@ func (h *Hub) AdminRemoveMember(ctx context.Context, admin immich.User, linkID s
 	if err := h.Store.ForgetLinkKey(ctx, link.ID); err != nil {
 		return err
 	}
+	h.pairingStoppedByAdmin(ctx, link.Service)
 	h.event(ctx, link.Service, link.ImmichUserID, "removed", i18n.Pack("{name} was removed from {service} by an administrator; their key in Immich stays until they clean up", "name", link.Name, "service", link.Service))
 	h.tell(notify.Info, fmt.Sprintf("%s was removed from %q by an administrator (%s).", link.Name, link.Service, admin.Name))
 	h.Log.Info("member removed by an administrator", "service", link.Service, "member", link.Email, "admin", admin.Email)
@@ -192,6 +193,9 @@ func (h *Hub) AdminRemoveService(ctx context.Context, admin immich.User, name st
 	}
 	if err := h.Store.RemoveService(ctx, name); err != nil { // also marks every member's link orphaned
 		return err
+	}
+	if svc.Pairing != "" { // the sharing ends with its pool, and so do both sides' rules
+		_ = h.Store.RemovePairing(ctx, svc.Pairing)
 	}
 	note := i18n.Pack("An administrator ({admin}) removed the service {service} on {date}. Nothing is handed over any more and your photos were not touched.", "admin", admin.Name, "service", name, "date", i18n.Day(time.Now()))
 	for _, l := range links {

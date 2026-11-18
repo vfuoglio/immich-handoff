@@ -116,6 +116,9 @@ func (h *Hub) ReconnectService(ctx context.Context, sess *immich.API, owner immi
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
+	if err := h.lockedService(ctx, name); err != nil {
+		return err
+	}
 	stored, err := h.Store.Services(ctx)
 	if err != nil {
 		return err

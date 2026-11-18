@@ -49,7 +49,9 @@ A small record, `pairing`, holds the two people, the pool's service and the two 
 2. **Consent.** The other person gets the invitation link or QR code, opens it, and sees plainly that photos of the named people go **both ways**. They pick which of **their own** named people go back (face names are per Immich account: the person named in one library is named again in the other's), say yes, and join the pool. Their rule is made with their own key. Nothing is made for them before they say yes.
 3. **The card.** Both see one card, "You and Sam: Anna and Rex", with pause, stop, look-back (older photos as suggestions, never sent without a yes) and the automatic switch below.
 4. **Locked pieces.** The pool and the rules carry the pairing's id and **cannot be edited or deleted from Services or Rules**; the card is the only place. That is what keeps a pairing from being left half broken (one side deleting its rule and the pool still open).
-5. **Stop.** Either person can stop it. Sending stops, and the pool and both rules are removed together; **every copy stays** where it is, as with leaving a pool today. Nothing is ever deleted from anyone's library.
+5. **Stop.** Either person can stop it, and sending stops at once. **Every copy stays** where it is, as with leaving a pool today, and nothing is ever deleted from anyone's library. What is taken apart at that moment depends on who stops it, because a key in Immich can only be deleted by its owner's own sign-in:
+   - **The starter stops it:** the pool, its key and workflow, both sides' rules and the record go at once. The other person sees the service as removed and cleans up their own key with the usual *Clean up*.
+   - **The other person stops it (or declines, or lets the invitation lapse):** their own key, workflow and rules go at once, the pairing is marked stopped with the reason, and the starter's pool and rules are paused. They wait for the starter's next visit, where one press of *Stop* takes their side apart.
 
 History: only photos that arrive from now on; the look-back button is the one way to older ones, always as suggestions.
 
