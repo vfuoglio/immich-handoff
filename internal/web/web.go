@@ -90,6 +90,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /backup", w.backupStatus)
 	mux.HandleFunc("GET /backup/{id}", w.backupStatus)
 	mux.HandleFunc("GET /{$}", w.dashboard)
+	mux.HandleFunc("GET /pair/{id}", w.pairingPage)
+	mux.HandleFunc("GET /fragments/pair-form", w.pairForm)
+	mux.HandleFunc("POST /pairings", w.startPairing)
+	mux.HandleFunc("POST /pairings/accept", w.acceptPairing)
+	mux.HandleFunc("POST /pairings/pause", w.pausePairing)
+	mux.HandleFunc("POST /pairings/stop", w.stopPairing)
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
@@ -332,7 +338,7 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		r = r.WithContext(withTheme(context.WithValue(i18n.With(r.Context(), i18n.For(lang)), versionKey{}, w.Version), w.Theme, w.ThemeMode))
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
-		if strings.HasPrefix(r.URL.Path, "/invite/") {
+		if strings.HasPrefix(r.URL.Path, "/invite/") || strings.HasPrefix(r.URL.Path, "/pair/") {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
 		}
 		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
@@ -477,9 +483,10 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 		joined, _ = w.Hub.Joined(ctx, m.user.ID)
 	}
 	var out []ServiceView
+	pools := w.pairingPools(ctx, m.user.ID)
 	for _, svc := range w.S.Current() {
 		if a := m.account(svc, "sender"); a != nil {
-			v := ServiceView{Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
+			v := ServiceView{Pairing: pools[svc.Label()], Name: svc.Label(), Role: "sender", Tag: svc.Tag, From: len(svc.Senders), To: len(svc.Receivers),
 				CanLeave: joined[svc.Label()], Paused: svc.Broken, Copy: svc.CopiesFor(a), CanWatch: joined[svc.Label()], Watch: a.WatchAlbumName, RuleList: w.ruleViews(ctx, m, svc.Label()),
 				CanPause: joined[svc.Label()], MinePaused: a.Paused, Limit: limitText(ctx, svc.LimitPhotos, svc.LimitMB), Account: a.Name, Rules: w.rulesText(ctx, svc)}
 			switch {
@@ -503,7 +510,7 @@ func (w *Server) servicesFor(ctx context.Context, m *member) []ServiceView {
 			out = append(out, v)
 		}
 		if m.account(svc, "receiver") != nil {
-			out = append(out, ServiceView{Name: svc.Label(), Role: "receiver", Tag: svc.InboxTag, From: len(svc.Senders), To: len(svc.Receivers),
+			out = append(out, ServiceView{Pairing: pools[svc.Label()], Name: svc.Label(), Role: "receiver", Tag: svc.InboxTag, From: len(svc.Senders), To: len(svc.Receivers),
 				Paused: svc.Broken, Copy: svc.Copies(), Album: svc.Album, Stopped: svc.Paused, Owned: svc.OwnerID == m.user.ID})
 		}
 	}
@@ -539,7 +546,11 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 	if err != nil {
 		return nil
 	}
+	pools := w.pairingPools(ctx, me.user.ID)
 	for _, o := range owned {
+		if pools[o.Service.Label()] {
+			continue // a sharing's pool is on the sharing's card
+		}
 		ov := OwnedView{Name: o.Service.Label(), Tag: o.Service.Tag, Policy: "approval", Broken: o.Service.Broken, Invite: w.Hub.InviteOf(o.Service), Album: o.Service.Album,
 			Paused: o.Service.Paused, LimitPhotos: o.Service.LimitPhotos, LimitMB: o.Service.LimitMB,
 			LifetimeDays: o.Service.LifetimeDays, DeleteOK: w.Hub.ReceiverDelete, QuietLargeMB: o.Service.Quiet.LargeMB, AcceptRating: o.Service.Accept.MinRating, AcceptPhotos: o.Service.Accept.PhotosOnly,
@@ -624,7 +635,11 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Templates = w.templateViews(ctx, me)
 	d.Orphaned, _ = w.Hub.Orphaned(ctx, me.user.ID)
 	if broken, err := w.Hub.BrokenFor(ctx, me.user.ID); err == nil {
+		pools := w.pairingPools(ctx, me.user.ID)
 		for _, b := range broken {
+			if pools[b.Service] {
+				continue
+			}
 			d.Broken = append(d.Broken, BrokenView{b.Service, b.Note})
 		}
 	}
@@ -639,6 +654,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Memories = w.memoriesView(ctx, me)
 	d.Folders = w.folderViews(ctx, me)
 	d.Stacks = w.stackViews(ctx, me)
+	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
 		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}
@@ -658,7 +674,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	d.Suggestions = w.suggestionViews(ctx, me)
 	d.Needs = needsOf(ctx, d)
 	d.Gist = needsGist(ctx, len(d.Needs))
-	d.Scene = sceneOf(ctx, d, w.S.Current())
+	d.Scene = sceneOf(ctx, d, w.visibleServices(ctx, me))
 	d.ShowNumber = len(d.Services) > 0
 	if d.TagsOff {
 		return // the page is switched off until Tags are on, and so is the guide
@@ -709,7 +725,11 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", b.Service), Primary: true}}})
 	}
 	for _, name := range d.Orphaned {
-		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: name,
+		title := name
+		if hub.IsPairingName(name) { // the pool of a photo sharing has a generated name
+			title = t(ctx, "Photo sharing")
+		}
+		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: title,
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
 	}
@@ -791,7 +811,7 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		}
 	}
 	for _, s := range d.Services {
-		if s.Role != "sender" {
+		if s.Role != "sender" || s.Pairing {
 			continue
 		}
 		switch {
@@ -888,6 +908,11 @@ func (w *Server) invite(rw http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		Notice(t(r.Context(), "Invitation"), t(r.Context(), "This invitation is not valid any more. Ask the person who sent it for a new link."), true).Render(r.Context(), rw)
+		return
+	}
+	if p, err := w.Hub.Store.PairingOfService(r.Context(), offer.Service.Label()); err == nil { // the pool of a pairing is joined only by saying yes to the pairing
+		rw.Header().Set("Location", "../pair/"+p.ID)
+		rw.WriteHeader(http.StatusSeeOther)
 		return
 	}
 	d := w.dashboardData(r.Context(), me)
@@ -1031,7 +1056,7 @@ func (w *Server) sceneFragment(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	Scene(sceneOf(r.Context(), &d, w.S.Current())).Render(r.Context(), rw)
+	Scene(sceneOf(r.Context(), &d, w.visibleServices(r.Context(), me))).Render(r.Context(), rw)
 }
 
 // numbersFragment is the Overview's three numbers and the week's chart, asked for when the page opens and again

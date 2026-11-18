@@ -155,6 +155,9 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 	var out []SuggestionView
 	for _, s := range list {
 		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
+		if s.Rule.Pairing != "" { // the pool has a generated name: the card says who the photos are for
+			v.Service = w.pairingOther(ctx, me.user.ID, s.Rule.Pairing, v.Service)
+		}
 		if s.Rule.Kind == "library" && s.Rule.Cond.Album != nil {
 			v.Library, v.Album, v.Owner = true, s.Rule.Cond.Album.Name, s.Rule.Cond.AlbumOwner
 		}
@@ -375,6 +378,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
+	if sg.Rule.Pairing != "" {
+		d.Service = w.pairingOther(r.Context(), me.user.ID, sg.Rule.Pairing, d.Service)
+	}
 	if sg.Rule.Kind == "library" && sg.Rule.Cond.Album != nil {
 		d.Library, d.Album, d.Owner = true, sg.Rule.Cond.Album.Name, sg.Rule.Cond.AlbumOwner
 	}

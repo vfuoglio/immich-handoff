@@ -449,3 +449,11 @@ func TestAnAdministratorRemovingAPairingsPoolOrMemberEndsTheSharing(t *testing.T
 		}
 	}
 }
+
+func TestAPairingsPoolNameIsRecognisedAndNothingElseIs(t *testing.T) {
+	for name, want := range map[string]bool{"pair-0a1b2c3d": true, "pair-0A1B2C3D": true, "pair-0a1b2c3": false, "pair-0a1b2c3dd": false, "pair-0a1b2c3g": false, "pair-": false, "trip": false, "Pair-0a1b2c3d": false, "": false} {
+		if got := hub.IsPairingName(name); got != want {
+			t.Errorf("%q: %v", name, got)
+		}
+	}
+}

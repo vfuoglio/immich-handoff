@@ -104,6 +104,7 @@ type ServiceView struct {
 	Stopped    bool   // receiver: the owner paused this service
 	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
 	Account    string // sender: the name this person's account goes by in the service (what live events call them)
+	Pairing    bool   // the service is the private pool of a photo sharing between two people: it is shown on that sharing's card only
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -326,6 +327,7 @@ type DashboardData struct {
 	Memories   MemoriesView
 	Folders    FoldersView
 	Stacks     StacksView
+	Pairings   PairingsView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
@@ -676,6 +678,9 @@ templ Dashboard(d DashboardData) {
 			}
 			if d.Push.Available {
 				@PushCard(d.Push)
+			}
+			if d.Pairings.Available {
+				@PairingsCard(d.Pairings)
 			}
 			if d.Library.Available {
 				@LibraryCard(d.Library)
@@ -4588,5 +4593,152 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
 			</p>
 		</form>
+	}
+}
+
+// PairingsCard is the card for sharing the photos of chosen people with another person, both ways.
+templ PairingsCard(p PairingsView) {
+	<h2>{ t(ctx, "Share photos with someone") }</h2>
+	<div class="card pairingscard">
+		<p>{ t(ctx, "Share the photos of the people you choose with another person on this Immich server, and get theirs back, without remembering to send anything. Each of you keeps your own copy, and either of you can pause or stop it whenever you like. Photos already copied stay where they are.") }</p>
+		for _, it := range p.Items {
+			@PairingItem(it)
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Offer to share photos") }</summary>
+			<div hx-get="fragments/pair-form" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your people...") }</p>
+			</div>
+		</details>
+	</div>
+}
+
+// PairingItem is one sharing: who with, who sends whom, and what the person can do about it.
+templ PairingItem(it PairingView) {
+	<div class="card rule pairing" id={ "pairing-" + it.ID }>
+		<p><b>{ t(ctx, "You and {other}", "other", it.Other) }</b>
+			switch it.State {
+				case "invited":
+					<span class="chip warn">{ t(ctx, "Waiting for a yes") }</span>
+				case "paused":
+					<span class="chip warn">{ t(ctx, "Paused") }</span>
+				case "stopped":
+					<span class="chip bad">{ t(ctx, "Stopped") }</span>
+				default:
+					<span class="chip ok">{ t(ctx, "Sharing") }</span>
+			}
+		</p>
+		if it.Mine != "" {
+			<p class="meta">{ t(ctx, "You send photos of {people}.", "people", it.Mine) }</p>
+		}
+		if it.Theirs != "" {
+			<p class="meta">{ t(ctx, "{other} sends photos of {people}.", "other", it.Other, "people", it.Theirs) }</p>
+		} else if it.State == "invited" && it.Starter {
+			<p class="meta">{ t(ctx, "{other} has not chosen who to send back yet.", "other", it.Other) }</p>
+		}
+		switch it.State {
+			case "invited":
+				if it.Starter {
+					<p>{ t(ctx, "Waiting for {other} to say yes. The offer lapses on {when}.", "other", it.Other, "when", it.Expires) }</p>
+					<div class="field">
+						<label for={ "pair-" + it.ID }>{ t(ctx, "Give this link to the other person") }</label>
+						<div class="row">
+							<input id={ "pair-" + it.ID } class="invite" readonly data-link={ it.Link }/>
+							<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+							<button type="button" class="show-qr" data-for={ "pair-" + it.ID } data-alt={ t(ctx, "QR code of the invitation link") }>{ t(ctx, "QR code") }</button>
+						</div>
+						<div class="qr" id={ "qr-pair-" + it.ID } hidden></div>
+					</div>
+					<p class="row">
+						<button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Cancel the offer to {other}?", "other", it.Other) } data-confirm-title={ t(ctx, "Cancel?") } data-confirm-label={ t(ctx, "Cancel the offer") } data-danger="true">{ t(ctx, "Cancel the offer") }</button>
+					</p>
+				} else {
+					<p>{ t(ctx, "{other} offered to share photos with you, both ways.", "other", it.Other) }</p>
+					<p class="row"><a class="button primary" href={ "pair/" + it.ID }>{ t(ctx, "Look at the offer") }</a></p>
+				}
+			case "stopped":
+				<p class="meta">{ it.Note }</p>
+				if it.Starter {
+					<p class="row"><button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Remove this sharing") }</button></p>
+				}
+			default:
+				<p class="row">
+					<button hx-post="pairings/pause" hx-vals={ vals2("pairing", it.ID, "paused", pausedValue(it.State == "paused")) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if it.State == "paused" {
+							{ t(ctx, "Resume sharing") }
+						} else {
+							{ t(ctx, "Pause sharing") }
+						}
+					</button>
+					<button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sharing photos with {other}? The photos already copied stay where they are, and nothing is deleted.", "other", it.Other) } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop sharing") }</button>
+				</p>
+				for _, r := range it.Rules {
+					<p class="row"><button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Suggest older photos of {people}", "people", r.Name) }</button></p>
+				}
+		}
+	</div>
+}
+
+// PairForm is the form that offers a sharing: the other person's email as Immich knows it, and which of the person's own people go to them.
+templ PairForm(people []PersonOption) {
+	<form class="card offer-form pick-form" hx-post="pairings" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="pair-email">{ t(ctx, "Email of the person") }</label>
+			<input id="pair-email" name="email" type="email" required maxlength="200" autocomplete="off"/>
+			<small class="meta">{ t(ctx, "They need an account on this Immich server. Use the email Immich knows them by.") }</small>
+		</div>
+		if len(people) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "Photos of") }</legend>
+				for _, p := range people {
+					<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
+				}
+			</fieldset>
+			<p class="meta">{ t(ctx, "These photos go to them. They choose which of their own people come back to you. Nothing is sent until they say yes, and only photos that arrive after that.") }</p>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer to share these photos") }</button></p>
+		} else {
+			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to share. Name people in Immich and come back.") }</p>
+		}
+	</form>
+}
+
+// PairingPage is what the other person sees before they say yes, and what saying yes means.
+templ PairingPage(v PairingPageView, user string) {
+	@Layout("Immich Handoff", user) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<section class="invite-hero">
+			<h1>{ t(ctx, "{name} would like to share photos with you", "name", v.Starter) }</h1>
+			<p class="lead">
+				if v.Theirs != "" {
+					{ t(ctx, "{name} offers to copy photos of {people} into your library, and asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
+				} else {
+					{ t(ctx, "{name} offers to copy photos into your library, and asks for photos of the people you choose in return.", "name", v.Starter) }
+				}
+			</p>
+		</section>
+		<div class="invite-card card">
+			<p>{ t(ctx, "Only photos that arrive after you say yes are shared, in both directions. Each of you keeps your own copy, so shared photos use disk in both libraries and count against each person's Immich quota.") }</p>
+			<p>{ t(ctx, "You can pause or stop whenever you like. Photos already copied stay where they are, and nothing is ever deleted from anyone's library.") }</p>
+			<form class="pick-form" hx-post="pairings/accept" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="pairing" value={ v.ID }/>
+				if len(v.People) > 0 {
+					<fieldset class="targets">
+						<legend>{ t(ctx, "Photos of your people to send to {name}", "name", v.Starter) }</legend>
+						for _, p := range v.People {
+							<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
+						}
+					</fieldset>
+					<p class="row form-actions">
+						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
+						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
+					</p>
+				} else {
+					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to send back. Name people in Immich and come back to this page.") }</p>
+					<p class="row"><button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button></p>
+				}
+			</form>
+			<p class="meta">{ t(ctx, "This invitation lapses on {when}.", "when", v.Expires) }</p>
+		</div>
+		<p><a href="../">{ t(ctx, "Not now: open your own page") }</a></p>
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -270,6 +271,34 @@ func (h *Hub) PairingsFor(ctx context.Context, user uuid.UUID) ([]store.Pairing,
 	return h.Store.PairingsOf(ctx, user)
 }
 
+// PairingFor finds a pairing the person is one of the two in (ErrNoPairing for anyone else).
+func (h *Hub) PairingFor(ctx context.Context, user uuid.UUID, id string) (store.Pairing, error) {
+	return h.pairingOf(ctx, user, id)
+}
+
+// PairingPeople names the people that go each way, as the two chose them: mine are the ones the person sends, theirs the ones the other
+// person sends. Names only; a face is shown to the person it belongs to and nobody else.
+func (h *Hub) PairingPeople(ctx context.Context, user uuid.UUID, id string) (mine, theirs []string, err error) {
+	p, err := h.pairingOf(ctx, user, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	rules, err := h.Store.RulesOfPairing(ctx, p.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, r := range rules {
+		for _, x := range r.Cond.People {
+			if r.OwnerID == user {
+				mine = append(mine, x.Name)
+			} else {
+				theirs = append(theirs, x.Name)
+			}
+		}
+	}
+	return mine, theirs, nil
+}
+
 // PairingRules lists the rules of a pairing that belong to the person: their own side.
 func (h *Hub) PairingRules(ctx context.Context, user uuid.UUID, id string) ([]store.Rule, error) {
 	p, err := h.pairingOf(ctx, user, id)
@@ -428,4 +457,15 @@ func (h *Hub) poolOwnerLink(ctx context.Context, user uuid.UUID, service string)
 		}
 	}
 	return nil, ErrNotJoined
+}
+
+// IsPairingName says whether a service name is one a pairing generated for its pool ("pair-" and eight hexadecimal digits), which no
+// person ever typed and no page should show as it is.
+func IsPairingName(name string) bool {
+	rest, ok := strings.CutPrefix(name, "pair-")
+	if !ok || len(rest) != 8 {
+		return false
+	}
+	_, err := hex.DecodeString(rest)
+	return err == nil
 }

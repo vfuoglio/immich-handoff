@@ -503,7 +503,7 @@ func (d DashboardData) Receiving() []ServiceView { return d.byRole("receiver", t
 func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 	var out []ServiceView
 	for _, s := range d.Services {
-		if s.Role == role && !(notOwned && s.Owned) {
+		if s.Role == role && !(notOwned && s.Owned) && !s.Pairing {
 			out = append(out, s)
 		}
 	}
@@ -646,7 +646,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library", "pairing":
 		return "ok"
 	}
 	return ""
