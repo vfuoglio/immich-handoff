@@ -84,14 +84,18 @@ type Rule struct {
 	// Pairing is the id of the pairing this rule belongs to (empty: an ordinary rule). A rule of a pairing cannot be changed or
 	// deleted by hand: the pairing's card is the only place.
 	Pairing string
+	// SettleMinutes is how long a photo must have been in Immich before this rule offers it, and a sixth of how long before it sends
+	// one by itself (zero: the app's usual wait, RULES_SETTLE_MINUTES). Immich never says that it has finished looking for faces, so
+	// this is the person's choice between seeing new photos sooner and being sure a second person in them has been found.
+	SettleMinutes int
 }
 
-const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album, caught_up, pairing`
+const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album, caught_up, pairing, settle_minutes`
 
 func scanRule(sc interface{ Scan(...any) error }) (Rule, error) {
 	var r Rule
 	var owner, cond, since, auto, last, created, caught string
-	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum, &caught, &r.Pairing); err != nil {
+	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum, &caught, &r.Pairing, &r.SettleMinutes); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -120,8 +124,8 @@ func (s *Store) AddRule(ctx context.Context, r Rule) (Rule, error) {
 		r.Since = r.CreatedAt
 	}
 	cond, _ := json.Marshal(r.Cond)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum, tstr(r.CaughtUp), r.Pairing)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum, tstr(r.CaughtUp), r.Pairing, r.SettleMinutes)
 	return r, err
 }
 

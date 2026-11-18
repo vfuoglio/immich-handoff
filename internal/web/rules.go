@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -21,6 +22,7 @@ type RuleView struct {
 	Last, Problem      string
 	Phrase             bool
 	CanAuto            bool // answered Always often enough, and may be let go on by itself
+	WaitMin            int  // the rule's own wait before it offers a photo, in minutes (0: the app's usual wait)
 }
 
 func (w *Server) ruleViews(ctx context.Context, me *member, service string) []RuleView {
@@ -34,7 +36,7 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	l := loc(ctx)
 	out := make([]RuleView, 0, len(rules))
 	for _, r := range rules {
-		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != "", CanAuto: hub.CanAuto(r)}
+		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != "", CanAuto: hub.CanAuto(r), WaitMin: r.SettleMinutes}
 		if !r.LastLook.IsZero() {
 			v.Last = l.Stamp(r.LastLook.Local())
 		}
@@ -229,6 +231,7 @@ type RuleChoicesView struct {
 	City    []string
 	Picked  string   // the chosen country, when the cities are listed
 	Others  []string // the person's other services, to make the same rule for
+	WaitMin int      // the app's usual wait before a rule offers a photo, in minutes, for the form to say
 }
 
 // PersonOption is a named person in the form.
@@ -249,7 +252,7 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
-	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries}
+	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries, WaitMin: max(1, int((w.Hub.RuleWait()+30*time.Second)/time.Minute))}
 	for _, p := range c.People {
 		v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
 	}
@@ -325,6 +328,11 @@ func (w *Server) addRule(rw http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		p := hub.RuleParams{Service: service, People: ids(r, "person"), NotPeople: ids(r, "notperson"), After: r.PostFormValue("after"), Before: r.PostFormValue("before"),
 			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase"), Also: r.PostForm["also"]}
+		if n, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("settle"))); err == nil {
+			p.SettleMinutes = n
+		} else if r.PostFormValue("settle") != "" {
+			return hub.ErrBadSettle
+		}
 		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
 			p.Album = id
 		}

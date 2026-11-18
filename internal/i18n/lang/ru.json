@@ -1611,5 +1611,12 @@
  "The invitation lapsed before {name} said yes": "Приглашение истекло, прежде чем {name} согласился(ась)",
  "{name} declined the invitation": "{name} отклонил(а) приглашение",
  "{name} stopped sharing photos with you": "{name} прекратил(а) обмен фотографиями с вами",
- "An administrator removed someone from this sharing": "Администратор удалил кого-то из этого обмена"
+ "An administrator removed someone from this sharing": "Администратор удалил кого-то из этого обмена",
+ "Wait before offering a photo": "Ожидание перед предложением фото",
+ "The usual wait ({n} min)": "Обычное ожидание ({n} мин)",
+ "{n} min": "{n} мин",
+ "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.": "Immich ищет лица на фото чуть позже его появления. Короткое ожидание показывает новые фото раньше, но человек, найденный с опозданием, может отсутствовать, когда фото предлагается. Правило, которое отправляет само, ждёт в шесть раз дольше.",
+ "Waits {n} min before offering a photo.": "Ждёт {n} мин, прежде чем предложить фото.",
+ "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there {n} min, within this service's limits and quiet hours. You can still take a hand-over back.": "Это правило само отправляет фотографии, попавшие в Immich после его включения, когда они пробыли там {n} мин, в рамках лимитов и тихих часов этого сервиса. Передачу по-прежнему можно забрать назад.",
+ "the wait before a photo is offered can be from 1 to 60 minutes": "ожидание перед предложением фото может быть от 1 до 60 минут"
 }

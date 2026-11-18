@@ -4416,7 +4416,12 @@ templ RulesBox(s ServiceView) {
 				if r.Problem != "" {
 					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
 				}
-				if r.Mode == "auto" {
+				if r.WaitMin > 0 {
+					<p class="meta">{ t(ctx, "Waits {n} min before offering a photo.", "n", r.WaitMin) }</p>
+				}
+				if r.Mode == "auto" && r.WaitMin > 0 {
+					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there {n} min, within this service's limits and quiet hours. You can still take a hand-over back.", "n", 6*r.WaitMin) }</p>
+				} else if r.Mode == "auto" {
 					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there half an hour, within this service's limits and quiet hours. You can still take a hand-over back.") }</p>
 				} else if r.CanAuto {
 					<p class="meta">{ t(ctx, "You have answered Always to this rule {n} times. You can let it send by itself from now on.", "n", r.Always) }</p>
@@ -4509,6 +4514,16 @@ templ RuleForm(v RuleChoicesView) {
 			<label for="rule-phrase">{ t(ctx, "That look like (optional)") }</label>
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
+		</div>
+		<div class="field">
+			<label for="rule-settle">{ t(ctx, "Wait before offering a photo") }</label>
+			<select id="rule-settle" name="settle">
+				<option value="0">{ t(ctx, "The usual wait ({n} min)", "n", v.WaitMin) }</option>
+				for _, m := range []int{1, 2, 5, 10, 15, 30} {
+					<option value={ fmt.Sprint(m) }>{ t(ctx, "{n} min", "n", m) }</option>
+				}
+			</select>
+			<small class="meta">{ t(ctx, "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.") }</small>
 		</div>
 		if len(v.Others) > 0 {
 			<fieldset class="targets">

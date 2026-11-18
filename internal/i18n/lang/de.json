@@ -1465,5 +1465,12 @@
  "The invitation lapsed before {name} said yes": "Die Einladung ist verfallen, bevor {name} Ja gesagt hat",
  "{name} declined the invitation": "{name} hat die Einladung abgelehnt",
  "{name} stopped sharing photos with you": "{name} hat das Teilen von Fotos mit dir beendet",
- "An administrator removed someone from this sharing": "Ein Administrator hat jemanden aus diesem Teilen entfernt"
+ "An administrator removed someone from this sharing": "Ein Administrator hat jemanden aus diesem Teilen entfernt",
+ "Wait before offering a photo": "Wartezeit, bevor ein Foto angeboten wird",
+ "The usual wait ({n} min)": "Die übliche Wartezeit ({n} Min.)",
+ "{n} min": "{n} Min.",
+ "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.": "Immich sucht die Gesichter in einem Foto erst kurz nach dessen Ankunft. Eine kürzere Wartezeit zeigt neue Fotos früher, aber eine Person, die erst spät gefunden wird, fehlt vielleicht, wenn das Foto angeboten wird. Eine Regel, die von selbst sendet, wartet sechsmal so lange.",
+ "Waits {n} min before offering a photo.": "Wartet {n} Min., bevor ein Foto angeboten wird.",
+ "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there {n} min, within this service's limits and quiet hours. You can still take a hand-over back.": "Diese Regel sendet die Fotos, die nach dem Einschalten bei Immich ankommen, von selbst, sobald sie {n} Min. dort sind, im Rahmen der Limits und Ruhezeiten dieses Dienstes. Eine Übergabe kannst du weiterhin zurücknehmen.",
+ "the wait before a photo is offered can be from 1 to 60 minutes": "die Wartezeit, bevor ein Foto angeboten wird, kann 1 bis 60 Minuten betragen"
 }

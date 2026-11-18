@@ -738,6 +738,8 @@ var migrations = []string{
 	 );
 	 ALTER TABLE rules ADD COLUMN pairing TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE services ADD COLUMN pairing TEXT NOT NULL DEFAULT '';`,
+	// how long a rule waits before it offers a photo, so that its faces have been looked for (0: the app's usual wait)
+	`ALTER TABLE rules ADD COLUMN settle_minutes INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

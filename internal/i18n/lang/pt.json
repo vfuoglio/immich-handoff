@@ -1465,5 +1465,12 @@
  "The invitation lapsed before {name} said yes": "O convite caducou antes de {name} dizer que sim",
  "{name} declined the invitation": "{name} recusou o convite",
  "{name} stopped sharing photos with you": "{name} deixou de partilhar fotos consigo",
- "An administrator removed someone from this sharing": "Um administrador removeu alguém desta partilha"
+ "An administrator removed someone from this sharing": "Um administrador removeu alguém desta partilha",
+ "Wait before offering a photo": "Espera antes de oferecer uma foto",
+ "The usual wait ({n} min)": "A espera habitual ({n} min)",
+ "{n} min": "{n} min",
+ "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.": "O Immich procura os rostos numa foto um pouco depois de ela chegar. Uma espera mais curta mostra as fotos novas mais cedo, mas uma pessoa encontrada tarde pode faltar quando a foto é oferecida. Uma regra que envia sozinha espera seis vezes mais.",
+ "Waits {n} min before offering a photo.": "Espera {n} min antes de oferecer uma foto.",
+ "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there {n} min, within this service's limits and quiet hours. You can still take a hand-over back.": "Esta regra envia sozinha as fotos que chegam ao Immich depois de a ativar, quando já lá estão há {n} min, dentro dos limites e das horas de silêncio deste serviço. Continua a poder retirar uma entrega.",
+ "the wait before a photo is offered can be from 1 to 60 minutes": "a espera antes de oferecer uma foto pode ir de 1 a 60 minutos"
 }

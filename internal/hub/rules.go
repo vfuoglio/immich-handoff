@@ -22,6 +22,7 @@ var (
 	ErrRuleEmpty     = errors.New("choose at least one thing for the rule to look for: a person, dates, a place, an album or a phrase")
 	ErrBadRuleDate   = errors.New("the dates must be real dates, and the first must not be after the last")
 	ErrBadRulePhrase = errors.New("the phrase can be up to 100 characters")
+	ErrBadSettle     = errors.New("the wait before a photo is offered can be from 1 to 60 minutes")
 	ErrTooManyRules  = errors.New("you already have 20 rules; end one first")
 	ErrNoRule        = errors.New("that is not one of your rules")
 	ErrRulePerson    = errors.New("that person is not among the people Immich has named in your library")
@@ -44,7 +45,13 @@ type RuleParams struct {
 	NotAlbums []uuid.UUID
 	Phrase    string
 	Also      []string // other services of the person's to make the same rule for
+	// SettleMinutes is how long a photo waits in Immich before the rule offers it (and a sixth of how long before it sends one by itself),
+	// so that its faces have been looked for: 0 is the app's usual wait, otherwise 1 to 60.
+	SettleMinutes int
 }
+
+// maxSettleMinutes is the longest wait a rule can be given before it offers a photo.
+const maxSettleMinutes = 60
 
 // RuleChoices are what a person can choose from, read from their own Immich with their own session.
 type RuleChoices struct {
@@ -119,6 +126,9 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 	phrase := strings.TrimSpace(p.Phrase)
 	if utf8.RuneCountInString(phrase) > 100 || strings.ContainsAny(phrase, "\r\n\x00") {
 		return store.Rule{}, ErrBadRulePhrase
+	}
+	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes {
+		return store.Rule{}, ErrBadSettle
 	}
 	cond.Phrase = phrase
 	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
@@ -213,7 +223,7 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			return store.Rule{}, fmt.Errorf("could not allow the app to read your albums: %w", err)
 		}
 	}
-	r, err := h.Store.AddRule(ctx, store.Rule{OwnerID: user.ID, Service: p.Service, Cond: cond})
+	r, err := h.Store.AddRule(ctx, store.Rule{OwnerID: user.ID, Service: p.Service, Cond: cond, SettleMinutes: p.SettleMinutes})
 	if err != nil {
 		return store.Rule{}, err
 	}

@@ -29,6 +29,17 @@ const (
 	defaultSettle = 5 * time.Minute
 )
 
+// ruleWait is how long a photo must have been in Immich before this rule offers it: the rule's own choice, or the app's usual wait.
+func (h *Hub) ruleWait(r store.Rule) time.Duration {
+	if r.SettleMinutes > 0 {
+		return time.Duration(r.SettleMinutes) * time.Minute
+	}
+	return h.ruleSettle()
+}
+
+// RuleWait is the app's usual wait before a rule offers a photo (RULES_SETTLE_MINUTES, five minutes unless set), for a form to say.
+func (h *Hub) RuleWait() time.Duration { return h.ruleSettle() }
+
 func (h *Hub) ruleSettle() time.Duration {
 	if h.RulesSettle > 0 {
 		return h.RulesSettle
@@ -111,7 +122,7 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		if a.OwnerId != me || a.IsArchived || a.IsTrashed || out[a.Id] || known[a.Id.String()] != "" || sentByAny[a.Id.String()] {
 			continue
 		}
-		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < h.ruleSettle() {
+		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < h.ruleWait(r) {
 			continue
 		}
 		people := a.People
@@ -205,7 +216,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	for _, m := range matches {
 		id := m.Asset.Id.String()
 		if r.Mode == store.RuleAuto && r.Cond.Phrase == "" && !m.Asset.CreatedAt.Before(r.AutoSince) {
-			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleSettle() {
+			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleWait(r) {
 				continue // not settled enough to send without asking; it is looked at again next time
 			}
 			auto = append(auto, id)

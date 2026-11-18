@@ -188,6 +188,7 @@ func fakeImmich() http.Handler {
 		j(w, out)
 	})
 	mux.HandleFunc("GET /api/workflows", func(w http.ResponseWriter, r *http.Request) { j(w, []any{}) })
+	mux.HandleFunc("GET /api/search/suggestions", func(w http.ResponseWriter, r *http.Request) { j(w, []string{"Portugal"}) })
 	// Add to my library: every original is the same small picture (above), and an upload is stored under an id that is "other"'s
 	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
