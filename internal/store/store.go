@@ -749,6 +749,38 @@ var migrations = []string{
 	// the fingerprint of the animal in each example photo of a pet rule, when the optional pet sidecar is on
 	// a service whose photos go only to destinations (a folder, a server): its owner has no receiver key and no Immich receiver
 	`ALTER TABLE services ADD COLUMN dest_only INTEGER NOT NULL DEFAULT 0;`,
+	// destinations: places a service hands photos to that are not an Immich account. A person's own network destination (credentials sealed),
+	// the binding of a destination (the administrator's by name, or a person's own) to a service with its template, limit, pause and state,
+	// and a log of what each binding delivered, for its daily limit.
+	`CREATE TABLE destinations (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   kind       TEXT NOT NULL,
+	   settings   TEXT NOT NULL DEFAULT '{}',
+	   secret_enc BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE service_destinations (
+	   id         TEXT PRIMARY KEY,
+	   service    TEXT NOT NULL,
+	   ref        TEXT NOT NULL,
+	   template   TEXT NOT NULL DEFAULT '',
+	   cap_photos INTEGER NOT NULL DEFAULT 0,
+	   cap_mb     INTEGER NOT NULL DEFAULT 0,
+	   paused     INTEGER NOT NULL DEFAULT 0,
+	   state      TEXT NOT NULL DEFAULT 'ok',
+	   note       TEXT NOT NULL DEFAULT '',
+	   since      TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL,
+	   UNIQUE (service, ref)
+	 );
+	 CREATE TABLE destination_log (
+	   binding TEXT NOT NULL,
+	   at      TEXT NOT NULL,
+	   bytes   INTEGER NOT NULL
+	 );
+	 CREATE INDEX destination_log_binding ON destination_log (binding, at);`,
 	`CREATE TABLE pet_prints (
 	   rule_id  TEXT NOT NULL,
 	   asset_id TEXT NOT NULL,
@@ -1171,6 +1203,8 @@ func (s *Store) RemoveService(ctx context.Context, name string) error {
 		`DELETE FROM requests WHERE service = ?`,
 		`DELETE FROM bridges WHERE service = ?`,
 		`DELETE FROM bridge_invites WHERE service = ?`,
+		`DELETE FROM destination_log WHERE binding IN (SELECT id FROM service_destinations WHERE service = ?)`,
+		`DELETE FROM service_destinations WHERE service = ?`,
 		`DELETE FROM services WHERE name = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, name); err != nil {

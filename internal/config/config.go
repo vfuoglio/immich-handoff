@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -174,8 +175,14 @@ type routesFile struct {
 		Mode       string   `yaml:"mode"`
 		SentTag    string   `yaml:"sent_tag"`
 		Album      string   `yaml:"album"`
-		QuietHours string   `yaml:"quiet_hours"`
-		QuietLarge int      `yaml:"quiet_large_mb"`
+		// Destinations are places that are not an Immich account that this service also hands photos to: the names of destinations in the
+		// destinations file (DESTINATIONS_FILE), and where each puts files.
+		Destinations []struct {
+			Name     string `yaml:"name"`
+			Template string `yaml:"template"`
+		} `yaml:"destinations"`
+		QuietHours string `yaml:"quiet_hours"`
+		QuietLarge int    `yaml:"quiet_large_mb"`
 		Accept     struct {
 			MinRating   int    `yaml:"min_rating"`
 			PhotosOnly  bool   `yaml:"photos_only"`
@@ -273,8 +280,23 @@ func parseRoutes(raw []byte, env Env, d Defaults, connect Connect, selfService b
 		default:
 			problems = append(problems, where+": mode must be move or copy")
 		}
-		if len(s.Receivers) == 0 || (len(s.Senders) == 0 && !s.AllowJoin) {
-			problems = append(problems, where+": needs at least one receiver, and at least one sender unless allow_join is true")
+		seenDest := map[string]bool{}
+		for _, d := range s.Destinations {
+			switch {
+			case d.Name == "":
+				problems = append(problems, where+": a destination needs a name")
+			case seenDest[d.Name]:
+				problems = append(problems, where+": destination "+d.Name+" is named twice")
+			default:
+				if err := dest.ValidTemplate(d.Template); err != nil {
+					problems = append(problems, where+": destination "+d.Name+": template: "+err.Error())
+				}
+				svc.DestRefs = append(svc.DestRefs, syncer.DestRef{Name: d.Name, Template: strings.TrimSpace(d.Template)})
+			}
+			seenDest[d.Name] = true
+		}
+		if (len(s.Receivers) == 0 && len(s.Destinations) == 0) || (len(s.Senders) == 0 && !s.AllowJoin) {
+			problems = append(problems, where+": needs at least one receiver or destination, and at least one sender unless allow_join is true")
 		}
 		isSender := map[string]bool{}
 		for _, n := range s.Senders {

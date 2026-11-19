@@ -2,8 +2,13 @@ package doctor
 
 import (
 	"bytes"
+	"errors"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -117,5 +122,42 @@ func TestThePetSidecarAddressIsCheckedOnlyWhenSetAndAnUnreachableOneIsAWarning(t
 	down.Close()
 	if r := run(url, nil); r.Fails != 0 || r.Warns != 1 {
 		t.Errorf("it does not answer: the app still works, so a warning: %d fails %d warnings", r.Fails, r.Warns)
+	}
+}
+
+func TestTheDestinationsFileIsCheckedAndEachDestinationIsAskedWhetherItWorks(t *testing.T) {
+	dest.Register("folder", func(s dest.Spec, n dest.Net) (dest.Destination, error) {
+		if s.Settings["root"] == "/broken" {
+			return &dest.Memory{Fail: errors.New("the share is not mounted")}, nil
+		}
+		return &dest.Memory{}, nil
+	})
+	run := func(file string, svcs ...*syncer.Service) (string, *Report) {
+		var buf bytes.Buffer
+		r := &Report{W: &buf}
+		env := map[string]string{}
+		if file != "" {
+			p := filepath.Join(t.TempDir(), "d.yaml")
+			os.WriteFile(p, []byte(file), 0o600)
+			env["DESTINATIONS_FILE"] = p
+		}
+		destinations(r, Input{Env: func(k string) string { return env[k] }, Services: svcs})
+		return buf.String(), r
+	}
+	if out, r := run(""); out != "" || r.Fails != 0 {
+		t.Errorf("unset is fine: %q", out)
+	}
+	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n  cloud:\n    kind: s3\n    bucket: b\n    access_key: a\n    secret_key: s\n",
+		&syncer.Service{Name: "family", DestRefs: []syncer.DestRef{{Name: "nas"}, {Name: "nope"}}})
+	if r.Fails != 2 || r.Warns != 1 {
+		t.Errorf("%d fails %d warnings\n%s", r.Fails, r.Warns, out)
+	}
+	for _, want := range []string{"destination nas: the memory destination answers", "destination broken: the share is not mounted", "destination cloud: this version of the app cannot hand over", `names the destination nope`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if _, r := run("destinations:\n  a:\n    kind: folder\n"); r.Fails != 1 {
+		t.Error("a file with a problem is a failure")
 	}
 }

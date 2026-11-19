@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
@@ -53,6 +54,13 @@ type Hub struct {
 	People  *People     // writes to the people who asked for email (optional)
 	// Destinations gives the receivers outside Immich (folders, servers) a service sends to, besides its Immich receivers (nil: none).
 	Destinations func(service string) []syncer.Remote
+	// AdminDests are the destinations the administrator named (DESTINATIONS_FILE), by name. UserDests lets people add network ones of their own
+	// (DESTINATIONS_USER_ADD) and DestNet says whether addresses on a private network are allowed (DESTINATIONS_ALLOW_PRIVATE).
+	AdminDests   map[string]dest.Spec
+	UserDests    bool
+	DestNet      dest.Net
+	destMu       sync.Mutex
+	destRemotes  map[string]*boundRemote
 	Pets         *pets.Client     // the optional pet sidecar (PET_SIDECAR_URL); nil: pet rules use Immich's own search
 	petNotes     sync.Map         // rule id -> what to tell the person about its last look (the pet helper was down)
 	Push         *Push            // sends notifications to the devices people allowed (optional)
@@ -197,6 +205,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 	for _, svc := range h.Static {
 		cp := *svc
 		cp.Senders = append(append([]*syncer.Account(nil), svc.Senders...), extra[svc.Label()]...)
+		cp.Remotes = append([]syncer.Remote(nil), h.destinationsFor(ctx, svc.Label(), svc.DestRefs)...)
 		merged = append(merged, &cp)
 	}
 	for _, v := range owned {
@@ -225,6 +234,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 		if rcv != nil {
 			svc.Receivers = []*syncer.Account{rcv}
 		}
+		svc.Remotes = append(svc.Remotes, h.destinationsFor(ctx, v.Name, nil)...)
 		if h.Destinations != nil {
 			svc.Remotes = append(svc.Remotes, h.Destinations(v.Name)...)
 		}

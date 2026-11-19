@@ -886,6 +886,12 @@ func roomChips(ctx context.Context, r RoomView) []Chip {
 }
 
 // pausedValue is what the pause button sends: the state the room should be in after the press.
+// destVals are the values a button on a destination sends: the service, the destination and, to pause or resume it, which.
+func destVals(service, id, paused string) string {
+	b, _ := json.Marshal(map[string]string{"service": service, "id": id, "paused": paused})
+	return string(b)
+}
+
 func pausedValue(nowPaused bool) string {
 	if nowPaused {
 		return "0"

@@ -45,6 +45,7 @@ type Service struct {
 	ExpiryDays int    // unfiled copies lose InboxTag after this many days
 	Senders    []*Account
 	Receivers  []*Account
+	DestRefs   []DestRef // destinations the routes file names for this service (the hub makes the receivers)
 	Remotes    []Remote  // receivers that are not an Immich account of this server (another Immich server, a folder, ...), in addition to Receivers (none: nil)
 	AllowJoin  bool      // people may add themselves as senders from the web page
 	Pool       bool      // an event pool: every member is a sender and a receiver, and a photo goes to everyone but its sender
@@ -192,4 +193,10 @@ func ResolveUsers(ctx context.Context, services []*Service) (failed []*Account) 
 // Ended reports whether a pool has reached its end: nothing is handed over any more, and what was handed over stays.
 func (s *Service) Ended(now time.Time) bool {
 	return s.Pool && !s.EndsAt.IsZero() && !s.EndsAt.After(now)
+}
+
+// DestRef is a destination a service from the routes file names: the administrator's destination by name, and where it puts files.
+type DestRef struct {
+	Name     string
+	Template string
 }

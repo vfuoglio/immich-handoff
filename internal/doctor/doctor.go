@@ -11,11 +11,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
@@ -83,6 +85,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	sharedAlbums(r, in)
 	rulesSettings(r, in)
 	petSidecar(r, in)
+	destinations(r, in)
 	memoriesSettings(r, in)
 	buttonSettings(r, in)
 	mailIn(ctx, r, in)
@@ -756,4 +759,55 @@ func petSidecar(r *Report, in Input) {
 		return
 	}
 	r.add(OK, "the pet helper at "+c.URL+" answers", "")
+}
+
+// destinations checks the administrator's destinations (DESTINATIONS_FILE): the file reads, each destination can be reached and written to
+// (the kind says how it knows), and every destination a service of the routes file names is defined.
+func destinations(r *Report, in Input) {
+	if firstOf(in.Env, "DESTINATIONS_FILE") == "" && firstOf(in.Env, "DESTINATIONS_USER_ADD") == "" && firstOf(in.Env, "DESTINATIONS_ALLOW_PRIVATE") == "" {
+		return
+	}
+	r.section("Destinations")
+	ds, err := dest.SettingsFrom(in.Env)
+	if err != nil {
+		r.add(Fail, err.Error()+", and the app will not start with it", "Fix the file or remove DESTINATIONS_FILE.")
+		return
+	}
+	if ds.UserAdd {
+		r.add(OK, "people may add network destinations of their own (DESTINATIONS_USER_ADD)", "")
+	}
+	if ds.AllowPrivate {
+		r.add(OK, "addresses on a private network are allowed for destinations (DESTINATIONS_ALLOW_PRIVATE)", "")
+	}
+	names := make([]string, 0, len(ds.Specs))
+	for n := range ds.Specs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		d, err := dest.Build(ds.Specs[n], dest.Net{AllowPrivate: ds.AllowPrivate})
+		if errors.Is(err, dest.ErrKindUnavailable) {
+			r.add(Warn, "destination "+n+": "+err.Error(), "Update the app, or use another kind.")
+			continue
+		}
+		if err != nil {
+			r.add(Fail, "destination "+n+": "+err.Error(), "Check its settings in the destinations file.")
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ok, err := d.Check(ctx)
+		cancel()
+		if err != nil {
+			r.add(Fail, "destination "+n+": "+err.Error(), "Photos for it wait, still tagged, until it works.")
+			continue
+		}
+		r.add(OK, "destination "+n+": "+ok, "")
+	}
+	for _, svc := range in.Services {
+		for _, d := range svc.DestRefs {
+			if _, ok := ds.Specs[d.Name]; !ok {
+				r.add(Fail, "service "+svc.Label()+" names the destination "+d.Name+", which the destinations file does not define", "Add it to the file, or take it out of the routes file; the app will not start with it.")
+			}
+		}
+	}
 }

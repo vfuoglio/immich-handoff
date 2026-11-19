@@ -129,6 +129,12 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /qr", w.qrCode)
 	mux.HandleFunc("POST /services/bridge-invite", w.newBridgeInvite)
 	mux.HandleFunc("POST /services/bridge/remove", w.removeBridge)
+	mux.HandleFunc("POST /services/destinations", w.attachDestination)
+	mux.HandleFunc("POST /services/destinations/edit", w.editDestination)
+	mux.HandleFunc("POST /services/destinations/pause", w.pauseDestination)
+	mux.HandleFunc("POST /services/destinations/remove", w.removeDestination)
+	mux.HandleFunc("POST /destinations", w.addOwnDestination)
+	mux.HandleFunc("POST /destinations/forget", w.forgetOwnDestination)
 	mux.HandleFunc("GET /bridge/{token}", w.bridgePage)
 	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)
@@ -572,6 +578,7 @@ func (w *Server) ownedViews(ctx context.Context, me *member) []OwnedView {
 				ov.BridgeRetry = st.RetryAt.Local().Format("15:04")
 			}
 		}
+		w.destinationViews(ctx, &ov, o.Service)
 		ov.Digest = w.digestView(ctx, o.Service.Label())
 		if o.Service.Pool {
 			ov.Pool, ov.PoolEnded = true, o.Service.Ended(time.Now())
@@ -616,6 +623,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	}
 	d.CanOffer = true
 	d.DeleteOK = w.Hub != nil && w.Hub.ReceiverDelete
+	d.DestsOn = len(w.Hub.AdminDests) > 0 || w.Hub.UserDests
 	if offers, err := w.Hub.Offers(ctx, me.user.ID); err == nil {
 		for _, o := range offers {
 			owner := ""
@@ -1317,7 +1325,7 @@ func (w *Server) createService(rw http.ResponseWriter, r *http.Request) {
 		return w.Hub.CreateService(ctx, me.sess, me.user, hub.CreateParams{
 			Name: r.PostFormValue("name"), Tag: r.PostFormValue("tag"), Policy: r.PostFormValue("policy"),
 			Visibility: r.PostFormValue("visibility"), InboxTag: r.PostFormValue("inbox"), ExpiryDays: days, Album: r.PostFormValue("album"),
-			LimitPhotos: photos, LimitMB: mb, Pool: r.PostFormValue("pool") == "1", EndsInDays: poolDays,
+			LimitPhotos: photos, LimitMB: mb, Pool: r.PostFormValue("pool") == "1", EndsInDays: poolDays, DestinationOnly: r.PostFormValue("destonly") == "1",
 		})
 	})
 }

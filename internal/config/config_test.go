@@ -232,3 +232,35 @@ func TestTheAppWideQuietHoursAndThePlainInstallsRulesComeFromTheEnvironment(t *t
 		t.Error("a rating of 8 must be refused")
 	}
 }
+
+func TestAServiceMayHaveOnlyDestinationsAndNamesThemWithATemplate(t *testing.T) {
+	y := `
+accounts:
+  alice: { key: a }
+services:
+  - name: backup
+    tag: to-nas
+    senders: [alice]
+    destinations:
+      - name: nas
+        template: "{yyyy}/{mm}/{name}"
+      - name: attic
+`
+	svcs, err := parseRoutes([]byte(y), env(nil), DefaultsFrom(env(nil)), connect, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || len(svcs[0].Receivers) != 0 || len(svcs[0].DestRefs) != 2 || svcs[0].DestRefs[0].Name != "nas" || svcs[0].DestRefs[0].Template != "{yyyy}/{mm}/{name}" || svcs[0].DestRefs[1].Template != "" {
+		t.Fatalf("%+v", svcs[0])
+	}
+	for name, bad := range map[string]string{
+		"neither":        strings.Replace(y, "    destinations:\n      - name: nas\n        template: \"{yyyy}/{mm}/{name}\"\n      - name: attic\n", "", 1),
+		"twice":          strings.Replace(y, "- name: attic", "- name: nas", 1),
+		"a bad template": strings.Replace(y, "{yyyy}/{mm}/{name}", "../{name}", 1),
+		"no name":        strings.Replace(y, "- name: attic", "- template: x", 1),
+	} {
+		if _, err := parseRoutes([]byte(bad), env(nil), DefaultsFrom(env(nil)), connect, false); err == nil {
+			t.Errorf("%s should be refused", name)
+		}
+	}
+}

@@ -1,8 +1,10 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -143,6 +145,11 @@ type OwnedView struct {
 	AcceptMaxMB       int
 	LifetimeDays      int  // copies that arrive are moved to the owner's trash after this many days, 0: they stay
 	DeleteOK          bool // the administrator allows it (RECEIVER_DELETE)
+	DestOnly          bool   // its photos go only to destinations: the owner receives nothing
+	Dests             []DestView
+	DestChoices       []DestChoiceView // the destinations that can be added to it
+	OwnDests          []DestChoiceView // the network destinations the person entered (to forget when unused)
+	UserDests         bool             // the administrator lets people add network destinations of their own
 	BridgeOn          bool   // the administrator allows receivers on other servers (BRIDGE_ENABLE)
 	BridgeInvite      string // the open link for someone on another server, if there is one
 	HasBridge         bool   // the service has a receiver on another server
@@ -312,6 +319,7 @@ type DashboardData struct {
 	Activity []ActivityView
 	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
+	DestsOn  bool // there are destinations (the administrator named some, or people may add their own)
 	DeleteOK bool // new receiver keys may move copies to their owner's trash (RECEIVER_DELETE), which the dialog that makes a key says
 	Last     *syncer.RunInfo
 
@@ -730,7 +738,7 @@ templ Dashboard(d DashboardData) {
 			if d.CanOffer {
 				<details class="offer">
 					<summary>{ t(ctx, "Offer a service of your own") }</summary>
-					@OfferForm(d.DeleteOK)
+					@OfferForm(d.DeleteOK, d.DestsOn)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
 				@RoomSection(d.Rooms)
@@ -1722,6 +1730,7 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					</div>
 				</div>
 			}
+			@DestinationsBox(o)
 			if o.BridgeOn {
 				<div class="field">
 					<label>{ t(ctx, "A receiver on another Immich server") }</label>
@@ -1761,7 +1770,7 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 	</details>
 }
 
-templ OfferForm(deleteOK bool) {
+templ OfferForm(deleteOK, destsOn bool) {
 	<form class="card offer-form" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ createConfirm(ctx, deleteOK) } data-confirm-title={ t(ctx, "Create this service?") } data-confirm-label={ t(ctx, "Create service") }>
 		<p class="meta">{ t(ctx, "Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.") }</p>
 		<div class="form-grid">
@@ -1793,6 +1802,12 @@ templ OfferForm(deleteOK bool) {
 			<small class="meta">{ t(ctx, "For a trip or a party. A photo anyone tags goes to everyone else in the pool, tagged with who took it, and everyone's originals stay where they are. People who join are told so before they do.") }</small>
 			<label for="svc-poolends">{ t(ctx, "The pool ends after (days, empty: when I end it)") } <input id="svc-poolends" name="poolends" type="number" min="1" max="366" class="narrow"/></label>
 		</div>
+		if destsOn {
+			<div class="field">
+				<label><input name="destonly" type="checkbox" value="1"/> { t(ctx, "Only to destinations: no copy goes to my own library") }</label>
+				<small class="meta">{ t(ctx, "For a service whose photos go only to a folder or a server you add after you make it. Nothing is received in your library, and it cannot be an event pool or use an album.") }</small>
+			</div>
+		}
 		<details class="more">
 			<summary>{ t(ctx, "More options") }</summary>
 			<div class="form-grid">
@@ -4813,4 +4828,139 @@ templ PetForm(service string, photos []PetPhoto, helper bool) {
 			<p class="row"><button class="primary" type="submit">{ t(ctx, "Make the pet rule") }</button></p>
 		}
 	</form>
+}
+
+// DestView is one destination of a service, for its owner's card.
+type DestView struct {
+	ID, Name, Kind, Template, Example string
+	CapPhotos, CapMB                  int
+	Used                              string
+	Paused, Failing, Own              bool
+	Note, Since                       string
+}
+
+// DestChoiceView is a destination that can be added to a service.
+type DestChoiceView struct {
+	Ref, Name, Kind string
+}
+
+func destKindLabel(ctx context.Context, kind string) string {
+	switch kind {
+	case "folder":
+		return t(ctx, "folder")
+	case "webdav":
+		return "WebDAV"
+	case "s3":
+		return "S3"
+	case "sftp":
+		return "SFTP"
+	}
+	return kind
+}
+
+// DestinationsBox is the owner's part of a service for the places it hands photos to that are not an Immich account.
+templ DestinationsBox(o OwnedView) {
+	if len(o.Dests) > 0 || len(o.DestChoices) > 0 || o.UserDests || o.DestOnly {
+		<div class="field dests">
+			<label>{ t(ctx, "Destinations") }</label>
+			if o.DestOnly {
+				<small class="meta">{ t(ctx, "This service has only destinations: nothing it handles is copied into your library. An original is moved or marked only when every destination holds the photo.") }</small>
+			} else {
+				<small class="meta">{ t(ctx, "A photo that is handed over to you also goes to each destination. An original is moved or marked only when you and every destination hold it.") }</small>
+			}
+			for _, d := range o.Dests {
+				<div class="card dest">
+					<p><b>{ d.Name }</b> <span class="meta">{ destKindLabel(ctx, d.Kind) }</span>
+						if d.Paused {
+							<span class="chip warn">{ t(ctx, "Paused") }</span>
+						} else if d.Failing {
+							<span class="chip bad">{ t(ctx, "Not answering") }</span>
+						} else {
+							<span class="chip ok">{ t(ctx, "Working") }</span>
+						}
+					</p>
+					if d.Failing {
+						<p class="meta bad-note">{ d.Note } { t(ctx, "Photos for it wait, still tagged, until it works.") }</p>
+					}
+					if d.Used != "" {
+						<p class="meta">{ d.Used }</p>
+					}
+					<form class="row" hx-post="services/destinations/edit" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="service" value={ o.Name }/>
+						<input type="hidden" name="id" value={ d.ID }/>
+						<label>{ t(ctx, "Where files go") } <input name="template" value={ d.Template } placeholder="{service}/{sender}/{yyyy}/{mm}" maxlength="200" aria-describedby={ "ex-" + d.ID }/></label>
+						<small class="meta" id={ "ex-" + d.ID }>{ t(ctx, "For example: {path}", "path", d.Example) }</small>
+						<label>{ t(ctx, "Photos a day") } <input name="cap_photos" type="number" min="0" class="narrow" value={ capText(d.CapPhotos) }/></label>
+						<label>{ t(ctx, "MB a day") } <input name="cap_mb" type="number" min="0" class="narrow" value={ capText(d.CapMB) }/></label>
+						<button type="submit">{ t(ctx, "Save") }</button>
+					</form>
+					<p class="row">
+						<button hx-post="services/destinations/pause" hx-vals={ destVals(o.Name, d.ID, pausedValue(d.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+							if d.Paused {
+								{ t(ctx, "Resume this destination") }
+							} else {
+								{ t(ctx, "Pause this destination") }
+							}
+						</button>
+						<button class="danger" hx-post="services/destinations/remove" hx-vals={ vals2("service", o.Name, "id", d.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sending {name} to {destination}? What it already received stays there, and photos waiting for it are no longer waited for.", "name", o.Name, "destination", d.Name) } data-confirm-title={ t(ctx, "Remove the destination?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+					</p>
+				</div>
+			}
+			if len(o.DestChoices) > 0 {
+				<form class="card offer-form" hx-post="services/destinations" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<input type="hidden" name="service" value={ o.Name }/>
+					<div class="field">
+						<label for={ "dest-ref-" + o.Name }>{ t(ctx, "Add a destination") }</label>
+						<select id={ "dest-ref-" + o.Name } name="ref">
+							for _, c := range o.DestChoices {
+								<option value={ c.Ref }>{ c.Name } ({ destKindLabel(ctx, c.Kind) })</option>
+							}
+						</select>
+					</div>
+					<div class="field">
+						<label for={ "dest-tpl-" + o.Name }>{ t(ctx, "Where files go (empty: by sender and date)") }</label>
+						<input id={ "dest-tpl-" + o.Name } name="template" placeholder="{service}/{sender}/{yyyy}/{mm}" maxlength="200"/>
+						<small class="meta">{ t(ctx, "You can use {service}, {sender}, {yyyy}, {mm}, {dd} and {name}. The file's own name is added unless the template has {name}.") }</small>
+					</div>
+					<div class="row">
+						<label>{ t(ctx, "Photos a day") } <input name="cap_photos" type="number" min="0" class="narrow"/></label>
+						<label>{ t(ctx, "MB a day") } <input name="cap_mb" type="number" min="0" class="narrow"/></label>
+						<button class="primary" type="submit">{ t(ctx, "Add") }</button>
+					</div>
+				</form>
+			}
+			if o.UserDests {
+				<details class="offer">
+					<summary>{ t(ctx, "Enter a network destination of my own") }</summary>
+					<form class="card offer-form" hx-post="destinations" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" autocomplete="off">
+						<p class="meta">{ t(ctx, "WebDAV (Nextcloud, ownCloud), S3-compatible storage or SFTP. The password or key is kept encrypted and is never shown again.") }</p>
+						<div class="field"><label>{ t(ctx, "Name") } <input name="name" maxlength="40" required/></label></div>
+						<div class="field"><label>{ t(ctx, "Kind") }
+							<select name="kind"><option value="webdav">WebDAV</option><option value="s3">S3</option><option value="sftp">SFTP</option></select></label></div>
+						<div class="field"><label>{ t(ctx, "WebDAV address") } <input name="url" placeholder="https://cloud.example.org/remote.php/dav/files/me"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 endpoint (empty for Amazon)") } <input name="endpoint" placeholder="https://s3.example.org"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 bucket") } <input name="bucket"/></label></div>
+						<div class="field"><label>{ t(ctx, "SFTP host") } <input name="host"/></label> <label>{ t(ctx, "Port") } <input name="port" class="narrow" placeholder="22"/></label></div>
+						<div class="field"><label>{ t(ctx, "User name") } <input name="user" autocomplete="off"/></label></div>
+						<div class="field"><label>{ t(ctx, "Password") } <input name="password" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 access key") } <input name="access_key" autocomplete="off"/></label> <label>{ t(ctx, "S3 secret key") } <input name="secret_key" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "SFTP private key (instead of a password)") } <textarea name="private_key" rows="3" autocomplete="off"></textarea></label></div>
+						<button class="primary" type="submit">{ t(ctx, "Save the destination") }</button>
+					</form>
+				</details>
+			}
+			for _, c := range o.OwnDests {
+				<p class="meta">{ c.Name } ({ destKindLabel(ctx, c.Kind) })
+					<button hx-post="destinations/forget" hx-vals={ vals("ref", c.Ref) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Forget {destination}? Its address and password are deleted. It cannot be forgotten while a service uses it.", "destination", c.Name) } data-confirm-title={ t(ctx, "Forget the destination?") } data-confirm-label={ t(ctx, "Forget") } data-danger="true">{ t(ctx, "Forget") }</button>
+				</p>
+			}
+		</div>
+	}
+}
+
+func capText(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
 }
