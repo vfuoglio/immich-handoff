@@ -298,6 +298,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/delete", w.deleteRule)
 	mux.HandleFunc("GET /fragments/follow-albums", w.followAlbums)
 	mux.HandleFunc("POST /rules/follow", w.followAlbum)
+	mux.HandleFunc("GET /fragments/import-sources", w.importSources)
+	mux.HandleFunc("POST /rules/import", w.followDestination)
+	mux.HandleFunc("GET /rules/import-photo/{rule}/{asset}", w.importPhoto)
 	mux.HandleFunc("GET /fragments/folder-check", w.folderCheck)
 	mux.HandleFunc("POST /rules/folder", w.followFolder)
 	mux.HandleFunc("GET /fragments/stack-check", w.stackCheck)
@@ -670,7 +673,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
-		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me)}
+		d.Library = LibraryView{Available: true, Dest: def.Kind, Album: def.Album, Followed: w.followedViews(ctx, me), Imports: w.importViews(ctx, me), ImportOn: len(w.Hub.ImportSources(ctx, me.user.ID)) > 0}
 	}
 	w.overview(ctx, me, &d)
 	return d
@@ -748,6 +751,15 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 	}
 	for _, sg := range d.Suggestions {
 		more := sg.Count - len(sg.Thumbs)
+		if sg.Import { // a destination the person follows: the files are added to their own library
+			acts := []NeedAction{
+				{Label: t(ctx, "Add to my library"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new file in {destination}", "{n} new files in {destination}", sg.Count, "destination", sg.Owner),
+				Text: t(ctx, "Add them to your library? Nothing in the destination is changed."), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
+			continue
+		}
 		if sg.Library { // an album shared with the person, followed: the photos are copied into their own library
 			acts := []NeedAction{
 				{Label: t(ctx, "Add to my library"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},

@@ -403,6 +403,11 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 	if err := h.Store.DeleteRule(ctx, r.ID); err != nil {
 		return err
 	}
+	if r.Kind == store.RuleKindImport {
+		h.dropLibraryKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped following the destination {destination}", "name", user.Name, "destination", r.Cond.SourceName))
+		return nil
+	}
 	if r.Kind == store.RuleKindLibrary {
 		h.dropLibraryKeyIfUnused(ctx, sess, user.ID)
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped following the album {album}", "name", user.Name, "album", r.Cond.Album.Name))

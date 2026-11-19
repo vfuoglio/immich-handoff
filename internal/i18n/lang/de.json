@@ -1630,5 +1630,55 @@
  "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Nur SFTP: Die App vertraut einem Server anhand seines Schlüssels. Sieh ihn dir an, vergleiche ihn mit dem deines Servers und speichere dann.",
  "The server's key is": "Der Schlüssel des Servers ist",
  "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Prüfe, dass dies der Schlüssel deines Servers ist (zum Beispiel mit ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub auf ihm), bevor du speicherst: Ab jetzt vertraut die App nur diesem Schlüssel und hält an, wenn er sich ändert.",
- "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "sieh dir zuerst den Schlüssel des SFTP-Servers an, vergleiche ihn mit dem deines Servers und speichere mit ihm: Die App vertraut nur diesem Schlüssel"
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "sieh dir zuerst den Schlüssel des SFTP-Servers an, vergleiche ihn mit dem deines Servers und speichere mit ihm: Die App vertraut nur diesem Schlüssel",
+ "New in {destination}": "Neu in {destination}",
+ "In my library, tagged with where they came from": "In meiner Bibliothek, mit der Herkunft als Tag",
+ "Destinations you follow": "Ziele, denen du folgst",
+ "{destination}, the folder {folder}": "{destination}, der Ordner {folder}",
+ "You have answered Always {n} times. You can let it add files by itself from now on.": "Du hast {n}-mal mit „Immer“ geantwortet. Du kannst ab jetzt Dateien von selbst hinzufügen lassen.",
+ "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.": "Ab jetzt werden Dateien, die in diesem Ziel erscheinen, ohne Nachfrage zu deiner Bibliothek hinzugefügt. Nur Dateien, die ab jetzt erscheinen, werden so hinzugefügt. Im Ziel wird nichts verändert.",
+ "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.": "Diesem Ziel nicht mehr folgen? Die schon hinzugefügten Dateien bleiben in deiner Bibliothek, und im Ziel wird nichts angefasst.",
+ "Follow a destination": "Einem Ziel folgen",
+ "Loading the destinations...": "Die Ziele werden geladen …",
+ "There is no destination you can follow.": "Es gibt kein Ziel, dem du folgen kannst.",
+ "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.": "Die Fotos und Videos, die im Ziel erscheinen, werden dir mit Bildern angeboten, um sie zu deiner Bibliothek hinzuzufügen, und nach dreimal „Immer“ kannst du sie von selbst hinzufügen lassen. Die App liest das Ziel nur: Nichts darin wird verändert oder gelöscht. Dateien, die die App selbst dorthin übergeben hat, werden nicht zurückangeboten.",
+ "Which destination": "Welches Ziel",
+ "The folder in it (empty: all of it)": "Der Ordner darin (leer: alles)",
+ "Only what appears from now on": "Nur was ab jetzt erscheint",
+ "What is there now, and what appears": "Was jetzt da ist und was erscheint",
+ "Where the files go": "Wohin die Dateien kommen",
+ "the name of the album, when the files go to one": "der Name des Albums, wenn die Dateien in eines kommen",
+ "Follow this destination": "Diesem Ziel folgen",
+ "Files that appeared in the destination {destination}. Nothing in it is changed.": "Dateien, die im Ziel {destination} erschienen sind. Darin wird nichts verändert.",
+ "Add the ticked files to my library": "Die markierten Dateien zu meiner Bibliothek hinzufügen",
+ "Add the ticked files, and always": "Die markierten Dateien hinzufügen und immer",
+ "Add them to your library? Nothing in the destination is changed.": "Zu deiner Bibliothek hinzufügen? Im Ziel wird nichts verändert.",
+ "that is not a destination you can import from": "das ist kein Ziel, aus dem du importieren kannst",
+ "the administrator has not allowed importing from that destination": "der Administrator hat das Importieren aus diesem Ziel nicht erlaubt",
+ "you already follow that destination": "du folgst diesem Ziel schon",
+ "no picture for that file": "kein Bild für diese Datei",
+ "{name} follows the destination {destination}": "{name} folgt dem Ziel {destination}",
+ "{name} stopped following the destination {destination}": "{name} folgt dem Ziel {destination} nicht mehr",
+ "{name} made the destination {destination} ask first again": "{name} lässt bei dem Ziel {destination} wieder zuerst fragen",
+ "{name} let the destination {destination} add files to the library by itself": "{name} lässt das Ziel {destination} Dateien von selbst zur Bibliothek hinzufügen",
+ "{n} new file in {destination}": {
+  "one": "{n} neue Datei in {destination}",
+  "other": "{n} neue Dateien in {destination}"
+ },
+ "{n} file added to your library from {destination} on its own": {
+  "one": "{n} Datei aus {destination} selbst zu deiner Bibliothek hinzugefügt",
+  "other": "{n} Dateien aus {destination} selbst zu deiner Bibliothek hinzugefügt"
+ },
+ "{n} new file in the destination {destination} you follow. Look at it on the Overview.": {
+  "one": "{n} neue Datei im Ziel {destination}, dem du folgst. Sieh sie dir in der Übersicht an.",
+  "other": "{n} neue Dateien im Ziel {destination}, dem du folgst. Sieh sie dir in der Übersicht an."
+ },
+ "{n} file added to your library from {destination}": {
+  "one": "{n} Datei aus {destination} zu deiner Bibliothek hinzugefügt",
+  "other": "{n} Dateien aus {destination} zu deiner Bibliothek hinzugefügt"
+ },
+ "{n} file of the destination {destination} left out of your library": {
+  "one": "{n} Datei des Ziels {destination} nicht zu deiner Bibliothek hinzugefügt",
+  "other": "{n} Dateien des Ziels {destination} nicht zu deiner Bibliothek hinzugefügt"
+ }
 }

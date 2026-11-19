@@ -74,10 +74,22 @@ A destination that does not answer, is paused or has reached its own daily limit
 
 A sender can take back their last hand-over within 24 hours, as before. For a destination that means the files (photo, sidecar, record, clip) are **deleted**: there is no trash on a folder, a bucket or a server. The confirmation says so. If a destination cannot be reached, nothing is changed and the sender is told.
 
+## Importing: following a destination
+
+A destination can also be **followed**, the way an album shared with you is: on your page, under *Add to my library*, **Follow a destination**. The photos and videos that **appear** in it (a folder your phone syncs to, a bucket someone fills) are offered to you with pictures, **Add to my library** / **Not these** / **Always**, and after three *Always* the rule can add them by itself. Adding streams the file into **your own Immich with your own key** (the same key as for following albums, which also needs the permission to upload; you can delete it in Immich), with its XMP sidecar when there is one beside it, and Immich refuses a duplicate by checksum, so a file is never added twice.
+
+- **Only reads.** Nothing in the destination is changed, renamed or deleted, ever.
+- **From now on, or everything:** *Only what appears from now on* remembers what is there now and never offers it; *What is there now, and what appears* offers it all (up to 200 files a look).
+- **A folder in it:** give a sub-folder to follow only that (a rule never reads outside it).
+- **What is offered:** photos and videos (JPEG, PNG, HEIC, RAW, MP4, MOV and so on). Sidecars, the records this app writes and files still being written are not. **A file with a record beside it is a hand-over of this app, and is not offered back.**
+- **Pictures:** JPEG, PNG, GIF and WebP files are shown scaled; a video, a HEIC or a RAW shows its name and size instead.
+- **Where the files go:** in your library tagged with where they came from (`from/<destination>`), plain, or in an album.
+- **What you may follow:** the destinations you entered yourself (your own storage), and the administrator's only if the administrator opened them for it with `import: true` in `destinations.yaml`. Open one only if it holds nobody else's files: anyone who may use it can then read all of it (or the folder they choose) into their own library. WebDAV, S3 and SFTP are followed the same way as a folder.
+
 ## Worth knowing
 
 - **A destination is outside Immich.** Who can read the files, and what happens to them, is up to the folder, the cloud or the server, not this app. Give a destination only to people you trust with the photos.
 - **Each place holds a copy**, so the photos take room in every place (and the quota of a cloud applies to it).
 - **Speed:** a photo is handed over when the app next looks (the tag's workflow wakes it at once; otherwise within the sweep).
-- **Several destinations** per service are allowed (up to 8). **Importing** from a destination into Immich is a separate part and is not here yet.
+- **Several destinations** per service are allowed (up to 8).
 - The details of the choices are in the [design note](../design/destinations-design.md) and the security side in [Security](../security.md#destinations).

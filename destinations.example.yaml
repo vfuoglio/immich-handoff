@@ -6,6 +6,7 @@ destinations:
   nas:
     kind: folder
     root: /destinations/nas
+    # import: true     # let people who may use it also follow it and add its files to their own library; only for a place that holds nobody else's files
 
   # A WebDAV folder (Nextcloud, ownCloud and others). Use https; an address on your own network needs DESTINATIONS_ALLOW_PRIVATE=true.
   # For Nextcloud and ownCloud make an app password (Settings, Security) instead of using the account's password.

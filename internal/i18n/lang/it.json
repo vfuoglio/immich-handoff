@@ -1630,5 +1630,55 @@
  "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Solo SFTP: l'app si fida di un server in base alla sua chiave. Guardala, confrontala con quella del tuo server, poi salva.",
  "The server's key is": "La chiave del server è",
  "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Controlla che sia la chiave del tuo server (per esempio con ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub su di esso) prima di salvare: da ora l'app si fida solo di questa chiave e si ferma se cambia.",
- "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "guarda prima la chiave del server SFTP, confrontala con quella del tuo server e salva con essa: l'app si fida solo di quella chiave"
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "guarda prima la chiave del server SFTP, confrontala con quella del tuo server e salva con essa: l'app si fida solo di quella chiave",
+ "New in {destination}": "Novità in {destination}",
+ "In my library, tagged with where they came from": "Nella mia libreria, con l'origine come tag",
+ "Destinations you follow": "Destinazioni che segui",
+ "{destination}, the folder {folder}": "{destination}, la cartella {folder}",
+ "You have answered Always {n} times. You can let it add files by itself from now on.": "Hai risposto «Sempre» {n} volte. Ora puoi lasciare che aggiunga i file da sola.",
+ "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.": "D'ora in poi i file che compaiono in questa destinazione vengono aggiunti alla tua libreria senza chiedertelo. Vengono aggiunti così solo i file che compaiono da ora. Nella destinazione non viene cambiato nulla.",
+ "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.": "Smettere di seguire questa destinazione? I file già aggiunti restano nella tua libreria e nella destinazione non viene toccato nulla.",
+ "Follow a destination": "Segui una destinazione",
+ "Loading the destinations...": "Caricamento delle destinazioni…",
+ "There is no destination you can follow.": "Non c'è nessuna destinazione che puoi seguire.",
+ "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.": "Le foto e i video che compaiono nella destinazione ti vengono proposti con le immagini, da aggiungere alla tua libreria, e dopo aver detto «Sempre» tre volte puoi lasciare che li aggiunga da sola. L'app legge soltanto la destinazione: nulla viene cambiato o eliminato. I file che l'app stessa vi ha consegnato non ti vengono riproposti.",
+ "Which destination": "Quale destinazione",
+ "The folder in it (empty: all of it)": "La cartella al suo interno (vuoto: tutto)",
+ "Only what appears from now on": "Solo ciò che compare da ora",
+ "What is there now, and what appears": "Ciò che c'è ora e ciò che compare",
+ "Where the files go": "Dove vanno i file",
+ "the name of the album, when the files go to one": "il nome dell'album, quando i file vanno in uno",
+ "Follow this destination": "Segui questa destinazione",
+ "Files that appeared in the destination {destination}. Nothing in it is changed.": "File comparsi nella destinazione {destination}. Non viene cambiato nulla.",
+ "Add the ticked files to my library": "Aggiungi i file selezionati alla mia libreria",
+ "Add the ticked files, and always": "Aggiungi i file selezionati e sempre",
+ "Add them to your library? Nothing in the destination is changed.": "Aggiungerli alla tua libreria? Nella destinazione non viene cambiato nulla.",
+ "that is not a destination you can import from": "quella non è una destinazione da cui puoi importare",
+ "the administrator has not allowed importing from that destination": "l'amministratore non ha consentito l'importazione da quella destinazione",
+ "you already follow that destination": "segui già quella destinazione",
+ "no picture for that file": "nessuna immagine per quel file",
+ "{name} follows the destination {destination}": "{name} segue la destinazione {destination}",
+ "{name} stopped following the destination {destination}": "{name} ha smesso di seguire la destinazione {destination}",
+ "{name} made the destination {destination} ask first again": "{name} ha rimesso la destinazione {destination} su «chiedi prima»",
+ "{name} let the destination {destination} add files to the library by itself": "{name} ha lasciato che la destinazione {destination} aggiunga i file alla libreria da sola",
+ "{n} new file in {destination}": {
+  "one": "{n} nuovo file in {destination}",
+  "other": "{n} nuovi file in {destination}"
+ },
+ "{n} file added to your library from {destination} on its own": {
+  "one": "{n} file di {destination} aggiunto alla tua libreria da solo",
+  "other": "{n} file di {destination} aggiunti alla tua libreria da soli"
+ },
+ "{n} new file in the destination {destination} you follow. Look at it on the Overview.": {
+  "one": "{n} nuovo file nella destinazione {destination} che segui. Guardalo nella Panoramica.",
+  "other": "{n} nuovi file nella destinazione {destination} che segui. Guardali nella Panoramica."
+ },
+ "{n} file added to your library from {destination}": {
+  "one": "{n} file di {destination} aggiunto alla tua libreria",
+  "other": "{n} file di {destination} aggiunti alla tua libreria"
+ },
+ "{n} file of the destination {destination} left out of your library": {
+  "one": "{n} file della destinazione {destination} lasciato fuori dalla tua libreria",
+  "other": "{n} file della destinazione {destination} lasciati fuori dalla tua libreria"
+ }
 }

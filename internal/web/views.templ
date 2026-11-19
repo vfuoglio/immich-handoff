@@ -277,7 +277,20 @@ type LibraryView struct {
 	Available   bool
 	Dest, Album string
 	Followed    []FollowedView // the albums shared with the person that a rule follows
+	Imports     []ImportFollowView // the destinations that a rule follows
+	ImportOn    bool               // there is a destination the person may follow
 }
+
+// ImportFollowView is a destination that a rule follows, for the person's page.
+type ImportFollowView struct {
+	ID, Source, Prefix, Dest, Mode string
+	Always                         int
+	Paused, CanAuto                bool
+	Last, Problem                  string
+}
+
+// ImportOption is a destination the person may follow, in the form.
+type ImportOption struct{ Ref, Label string }
 
 // FolderRuleView is a rule that makes albums from the folders of an external library, for the person's page.
 type FolderRuleView struct {
@@ -1130,6 +1143,98 @@ templ LibraryCard(l LibraryView) {
 			<p class="meta">{ t(ctx, "Loading the albums shared with you...") }</p>
 		</div>
 	</details>
+	if l.ImportOn || len(l.Imports) > 0 {
+		<h3>{ t(ctx, "Destinations you follow") }</h3>
+		for _, f := range l.Imports {
+			<div class="card rule">
+				<p><b>
+					if f.Prefix != "" {
+						{ t(ctx, "{destination}, the folder {folder}", "destination", f.Source, "folder", f.Prefix) }
+					} else {
+						{ f.Source }
+					}
+				</b>
+					if f.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if f.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Adds by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				<p class="meta">{ f.Dest }</p>
+				if f.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", f.Last) }</p>
+				}
+				if f.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", f.Problem) }</p>
+				}
+				if f.Mode != "auto" && f.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it add files by itself from now on.", "n", f.Always) }</p>
+				}
+				<p class="row">
+					if f.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if f.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.") }>{ t(ctx, "Let it add by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", f.ID, "paused", pausedValue(f.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if f.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.") } data-confirm-title={ t(ctx, "Stop following?") } data-confirm-label={ t(ctx, "Stop following") } data-danger="true">{ t(ctx, "Stop following") }</button>
+				</p>
+			</div>
+		}
+		if l.ImportOn {
+			<details class="offer">
+				<summary>{ t(ctx, "Follow a destination") }</summary>
+				<div hx-get="fragments/import-sources" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+					<p class="meta">{ t(ctx, "Loading the destinations...") }</p>
+				</div>
+			</details>
+		}
+	}
+}
+
+// ImportForm is the form that follows a destination: which one, the folder in it, what to start with, where the files go.
+templ ImportForm(sources []ImportOption) {
+	if len(sources) == 0 {
+		<p class="meta">{ t(ctx, "There is no destination you can follow.") }</p>
+	} else {
+		<form class="card offer-form" hx-post="rules/import" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<p class="meta">{ t(ctx, "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.") }</p>
+			<div class="field">
+				<label for="import-source">{ t(ctx, "Which destination") }</label>
+				<select id="import-source" name="source">
+					for _, s := range sources {
+						<option value={ s.Ref }>{ s.Label }</option>
+					}
+				</select>
+			</div>
+			<div class="field">
+				<label for="import-prefix">{ t(ctx, "The folder in it (empty: all of it)") }</label>
+				<input id="import-prefix" name="prefix" maxlength="200" autocomplete="off" placeholder="phone/camera"/>
+			</div>
+			<div class="field">
+				<label><input type="radio" name="history" value="new" checked/> { t(ctx, "Only what appears from now on") }</label>
+				<label><input type="radio" name="history" value="all"/> { t(ctx, "What is there now, and what appears") }</label>
+			</div>
+			<div class="field">
+				<label for="import-dest">{ t(ctx, "Where the files go") }</label>
+				<select id="import-dest" name="dest">
+					<option value="tag">{ t(ctx, "In my library, tagged with where they came from") }</option>
+					<option value="plain">{ t(ctx, "In my library") }</option>
+					<option value="album">{ t(ctx, "In an album") }</option>
+				</select>
+				<input name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "the name of the album, when the files go to one") } aria-label={ t(ctx, "The name of a new album") }/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Follow this destination") }</button></p>
+		</form>
+	}
 }
 
 // FollowForm is the form that follows an album shared with the person: which one, what to start with, where the copies go.
@@ -4577,6 +4682,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		} else if d.Folder {
 			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Import {
+			<h1>{ t(ctx, "New in {destination}", "destination", d.Owner) }</h1>
+			<p class="lead">{ t(ctx, "Files that appeared in the destination {destination}. Nothing in it is changed.", "destination", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Library {
 			<h1>{ t(ctx, "New in {album}", "album", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Photos added to the album {album}, shared by {owner}.", "album", d.Album, "owner", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
@@ -4616,6 +4724,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				} else if d.Folder {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
+				} else if d.Import {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked files to my library") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked files, and always") }</button>
 				} else if d.Library {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked photos to my library") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked photos, and always") }</button>

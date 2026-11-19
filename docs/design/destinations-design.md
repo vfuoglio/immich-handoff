@@ -115,6 +115,13 @@ The same places, read: **a destination can be followed** the way an album shared
 - **Written whole, read back.** A file is written under a temporary name beside its place, **read back and compared by size and SHA-1**, and renamed into place; a taken name is the same file when its content has the same SHA-1 (it is read), otherwise the new file is suffixed. Take-back removes the files and the folders it leaves empty (SFTP removes only an empty folder, so nothing else can be lost). A dropped session is made again on the next use; a cancelled transfer closes the connection.
 - The folder files go under (`root`) must exist: a wrong one is said, never created.
 
+## Built so far (#243)
+
+- **`import` rules** (`store.RuleKindImport`, `Cond.Source`/`SourceName`/`Prefix`, `hub/import.go`): `FollowDestination` lists the destination (so a bad address or login shows at once), asks the person's key for `asset.upload`, and with *only from now on* remembers what is there. `lookImport` lists, offers photos and videos that are not sidecars, not records, not files with a record beside them (this app's own deliveries) and not files modified within the settle wait; at most 200 a look. A yes streams each file (`Open`, never kept) into the person's Immich with `UploadFileWith` (modified time, sidecar), then files it as the rule says. It is the library-follow code with another source: suggestion cards, *Always* after three, auto, pause, delete, and the shared key.
+- **Who may follow what:** a person's own network destinations, and an administrator's only with `import: true`. The listing's prefix is fixed in the rule and checked again before every read.
+- **Pictures** of a file are made on request from files the rule has offered (`/rules/import-photo/{rule}/{encoded file}`): JPEG, PNG, GIF and WebP scaled to 480 px; anything else shows its name.
+- The same code serves all four kinds (it needs only `List`, `Stat` and `Open`), so #244 is a check of the network kinds on it.
+
 ## The test
 - **Unit tests** for the interface against an in-memory store, the template cleaning (traversal, long and odd names), the suffix and idempotence rules, the checksum comparison, the per-destination state, and the cap and pause.
 - **End to end** (a throwaway Immich with two people): a folder destination for a service (extra receiver and destination-only), a photo handed over arrives with sidecar and record, a repeat is skipped, a different photo with the same name is suffixed, a live photo, a move after a verified copy, a move held by a destination that is down, take-back deleting the files. WebDAV against a small in-test server (`golang.org/x/net/webdav`), S3 against an in-test S3 stub or MinIO in the stack, SFTP against an in-test server on the new dependency.

@@ -154,6 +154,7 @@ type SuggestionView struct {
 	Folder                    bool     // the rule makes albums from folders: Service is empty
 	Albums                    []string // the albums the waiting photos would go in, for such a rule
 	Library                   bool     // the rule follows an album shared with the person: Service is empty
+	Import                    bool     // the rule follows a destination: Owner is its name, Album the folder
 	Album, Owner              string   // for such a rule
 	Count                     int
 	Thumbs                    []NeedThumb
@@ -177,6 +178,17 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 		}
 		if s.Rule.Kind == "library" && s.Rule.Cond.Album != nil {
 			v.Library, v.Album, v.Owner = true, s.Rule.Cond.Album.Name, s.Rule.Cond.AlbumOwner
+		}
+		if s.Rule.Kind == store.RuleKindImport {
+			v.Import, v.Owner, v.Album = true, s.Rule.Cond.SourceName, s.Rule.Cond.Prefix
+			for i, p := range s.Photos {
+				if i == 8 {
+					break
+				}
+				v.Thumbs = append(v.Thumbs, NeedThumb{URL: "rules/import-photo/" + s.Rule.ID + "/" + hub.EncodeImportRef(p.AssetID), Why: p.Why})
+			}
+			out = append(out, v)
+			continue
 		}
 		if s.Rule.Kind == "folder" {
 			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
@@ -374,6 +386,7 @@ type SuggestionReview struct {
 	Photos                          []RuleReviewPhoto
 	Phrase                          bool
 	Library                         bool   // the rule follows an album shared with the person
+	Import                          bool   // the rule follows a destination (Owner is its name)
 	Album, Owner                    string // for such a rule
 	Folder                          bool   // the rule makes albums from folders (Album is the folder)
 	Stack                           bool   // the rule stacks photos: the page shows Groups
@@ -407,6 +420,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	if sg.Rule.Kind == "library" && sg.Rule.Cond.Album != nil {
 		d.Library, d.Album, d.Owner = true, sg.Rule.Cond.Album.Name, sg.Rule.Cond.AlbumOwner
 	}
+	if sg.Rule.Kind == store.RuleKindImport {
+		d.Import, d.Owner = true, sg.Rule.Cond.SourceName
+	}
 	if sg.Rule.Kind == "folder" {
 		d.Folder, d.Album = true, sg.Rule.Cond.Folder
 	}
@@ -424,7 +440,11 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		if sg.Rule.Kind == store.RuleKindStack { // shown by group, below
 			break
 		}
-		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
+		url := "rules/photo/" + sg.Rule.ID + "/" + p.AssetID
+		if sg.Rule.Kind == store.RuleKindImport {
+			url = "rules/import-photo/" + sg.Rule.ID + "/" + hub.EncodeImportRef(p.AssetID)
+		}
+		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: url, Why: p.Why})
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	SuggestionReviewPage(d).Render(r.Context(), rw)
@@ -644,4 +664,84 @@ func (w *Server) addPet(rw http.ResponseWriter, r *http.Request) {
 		_, err := w.Hub.AddRule(ctx, me.sess, me.user, hub.RuleParams{Service: service, Examples: ids(r, "photo")})
 		return err
 	})
+}
+
+// ImportFollowViews are the destinations the person's rules follow.
+func (w *Server) importViews(ctx context.Context, me *member) []ImportFollowView {
+	if w.Hub == nil {
+		return nil
+	}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return nil
+	}
+	l := loc(ctx)
+	var out []ImportFollowView
+	for _, r := range rules {
+		if r.Kind != store.RuleKindImport {
+			continue
+		}
+		v := ImportFollowView{ID: r.ID, Source: r.Cond.SourceName, Prefix: r.Cond.Prefix, Dest: importDestWords(ctx, r.Dest, r.DestAlbum), Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			v.Last = l.Stamp(r.LastLook.Local())
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func importDestWords(ctx context.Context, dest, album string) string {
+	if dest == "tag" || dest == "" {
+		return t(ctx, "In my library, tagged with where they came from")
+	}
+	return destWords(ctx, dest, album)
+}
+
+// importSources lists the destinations the person may follow, for the form; it is asked for when the form is opened.
+func (w *Server) importSources(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	var opts []ImportOption
+	for _, c := range w.Hub.ImportSources(r.Context(), me.user.ID) {
+		opts = append(opts, ImportOption{Ref: c.Ref, Label: c.Name + " (" + destKindLabel(r.Context(), c.Kind) + ")"})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	ImportForm(opts).Render(r.Context(), rw)
+}
+
+func (w *Server) followDestination(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "destination followed", func(ctx context.Context, me *member, _ string) error {
+		album := strings.TrimSpace(r.PostFormValue("album"))
+		_, err := w.Hub.FollowDestination(ctx, me.sess, me.user, hub.ImportParams{Source: r.PostFormValue("source"), Prefix: r.PostFormValue("prefix"), History: r.PostFormValue("history"), Dest: hub.LibraryDest{Kind: r.PostFormValue("dest"), Album: album}})
+		return err
+	})
+}
+
+// importPhoto shows a small picture of a file a followed destination offers; only files the rule offered are ever read.
+func (w *Server) importPhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	b, err := w.Hub.ImportThumbnail(r.Context(), me.user.ID, r.PathValue("rule"), r.PathValue("asset"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", "image/jpeg")
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Write(b)
 }

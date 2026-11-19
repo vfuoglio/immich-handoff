@@ -189,6 +189,16 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 	if answer == AnswerAlways && len(yes) > 0 {
 		h.Store.AddRuleAlways(ctx, r.ID)
 	}
+	if r.Kind == store.RuleKindImport {
+		src := r.Cond.SourceName
+		switch {
+		case len(yes) > 0:
+			h.event(ctx, "", user.ID, "import", i18n.PackN("{n} file added to your library from {destination}", "{n} files added to your library from {destination}", len(yes), "destination", src))
+		case len(no) > 0:
+			h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} file of the destination {destination} left out of your library", "{n} files of the destination {destination} left out of your library", len(no), "destination", src))
+		}
+		return nil
+	}
 	if r.Kind == store.RuleKindLibrary {
 		album := r.Cond.Album.Name
 		switch {
@@ -228,6 +238,9 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 
 // sendForRule tags photos with the service's tag, in the sender's own account, so that the normal hand-over takes them.
 func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) error {
+	if r.Kind == store.RuleKindImport { // a followed destination: the files are added to the person's own library
+		return h.importForRule(ctx, r, assets)
+	}
 	if r.Kind == store.RuleKindLibrary { // a followed album: the photos are copied into the person's own library
 		return h.copyForRule(ctx, r, assets)
 	}
@@ -315,6 +328,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 		if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleSuggest, h.now()); err != nil {
 			return err
 		}
+		if r.Kind == store.RuleKindImport {
+			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the destination {destination} ask first again", "name", user.Name, "destination", r.Cond.SourceName))
+			return nil
+		}
 		if r.Kind == store.RuleKindLibrary {
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the album {album} ask first again", "name", user.Name, "album", r.Cond.Album.Name))
 			return nil
@@ -344,6 +361,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	}
 	if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleAuto, h.now()); err != nil {
 		return err
+	}
+	if r.Kind == store.RuleKindImport {
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the destination {destination} add files to the library by itself", "name", user.Name, "destination", r.Cond.SourceName))
+		return nil
 	}
 	if r.Kind == store.RuleKindLibrary {
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the album {album} add photos to the library by itself", "name", user.Name, "album", r.Cond.Album.Name))

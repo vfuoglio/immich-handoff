@@ -61,6 +61,7 @@ type Hub struct {
 	DestNet      dest.Net
 	destMu       sync.Mutex
 	destRemotes  map[string]*boundRemote
+	importDests  map[string]dest.Destination
 	Pets         *pets.Client     // the optional pet sidecar (PET_SIDECAR_URL); nil: pet rules use Immich's own search
 	petNotes     sync.Map         // rule id -> what to tell the person about its last look (the pet helper was down)
 	Push         *Push            // sends notifications to the devices people allowed (optional)

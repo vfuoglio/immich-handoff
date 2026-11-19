@@ -1786,5 +1786,65 @@
  "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Только SFTP: приложение доверяет серверу по его ключу. Посмотрите его, сравните с ключом вашего сервера и затем сохраните.",
  "The server's key is": "Ключ сервера:",
  "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Убедитесь, что это ключ вашего сервера (например, командой ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub на нём), прежде чем сохранять: с этого момента приложение доверяет только этому ключу и остановится, если он изменится.",
- "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "сначала посмотрите ключ SFTP-сервера, сравните его с ключом вашего сервера и сохраните с ним: приложение доверяет только этому ключу"
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "сначала посмотрите ключ SFTP-сервера, сравните его с ключом вашего сервера и сохраните с ним: приложение доверяет только этому ключу",
+ "New in {destination}": "Новое в {destination}",
+ "In my library, tagged with where they came from": "В моей библиотеке, с меткой источника",
+ "Destinations you follow": "Места назначения, за которыми вы следите",
+ "{destination}, the folder {folder}": "{destination}, папка {folder}",
+ "You have answered Always {n} times. You can let it add files by itself from now on.": "Вы ответили «Всегда» {n} раз. Теперь можно разрешить добавлять файлы самому.",
+ "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.": "С этого момента файлы, появляющиеся в этом месте назначения, добавляются в вашу библиотеку без вашего вопроса. Так добавляются только файлы, появившиеся с этого момента. В месте назначения ничего не меняется.",
+ "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.": "Перестать следить за этим местом назначения? Уже добавленные файлы останутся в вашей библиотеке, а в месте назначения ничего не будет затронуто.",
+ "Follow a destination": "Следить за местом назначения",
+ "Loading the destinations...": "Загрузка мест назначения…",
+ "There is no destination you can follow.": "Нет мест назначения, за которыми можно следить.",
+ "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.": "Фото и видео, появляющиеся в месте назначения, предлагаются вам с картинками, чтобы добавить в библиотеку, а после трёх ответов «Всегда» можно разрешить добавлять их самому. Приложение только читает место назначения: в нём ничего не меняется и не удаляется. Файлы, которые приложение само туда передало, вам не предлагаются.",
+ "Which destination": "Какое место назначения",
+ "The folder in it (empty: all of it)": "Папка в нём (пусто: всё)",
+ "Only what appears from now on": "Только то, что появится с этого момента",
+ "What is there now, and what appears": "Что там есть сейчас и что появится",
+ "Where the files go": "Куда попадают файлы",
+ "the name of the album, when the files go to one": "название альбома, если файлы идут в альбом",
+ "Follow this destination": "Следить за этим местом назначения",
+ "Files that appeared in the destination {destination}. Nothing in it is changed.": "Файлы, появившиеся в месте назначения {destination}. В нём ничего не меняется.",
+ "Add the ticked files to my library": "Добавить отмеченные файлы в мою библиотеку",
+ "Add the ticked files, and always": "Добавить отмеченные файлы и всегда",
+ "Add them to your library? Nothing in the destination is changed.": "Добавить их в вашу библиотеку? В месте назначения ничего не меняется.",
+ "that is not a destination you can import from": "из этого места назначения импортировать нельзя",
+ "the administrator has not allowed importing from that destination": "администратор не разрешил импорт из этого места назначения",
+ "you already follow that destination": "вы уже следите за этим местом назначения",
+ "no picture for that file": "для этого файла нет картинки",
+ "{name} follows the destination {destination}": "{name} следит за местом назначения {destination}",
+ "{name} stopped following the destination {destination}": "{name} перестал(а) следить за местом назначения {destination}",
+ "{name} made the destination {destination} ask first again": "{name} снова включил(а) вопрос сначала для места назначения {destination}",
+ "{name} let the destination {destination} add files to the library by itself": "{name} разрешил(а) месту назначения {destination} добавлять файлы в библиотеку самому",
+ "{n} new file in {destination}": {
+  "one": "{n} новый файл в {destination}",
+  "few": "{n} новых файла в {destination}",
+  "many": "{n} новых файлов в {destination}",
+  "other": "{n} новых файлов в {destination}"
+ },
+ "{n} file added to your library from {destination} on its own": {
+  "one": "{n} файл из {destination} добавлен в вашу библиотеку сам",
+  "few": "{n} файла из {destination} добавлены в вашу библиотеку сами",
+  "many": "{n} файлов из {destination} добавлены в вашу библиотеку сами",
+  "other": "{n} файлов из {destination} добавлены в вашу библиотеку сами"
+ },
+ "{n} new file in the destination {destination} you follow. Look at it on the Overview.": {
+  "one": "{n} новый файл в месте назначения {destination}, за которым вы следите. Посмотрите его в обзоре.",
+  "few": "{n} новых файла в месте назначения {destination}, за которым вы следите. Посмотрите их в обзоре.",
+  "many": "{n} новых файлов в месте назначения {destination}, за которым вы следите. Посмотрите их в обзоре.",
+  "other": "{n} новых файлов в месте назначения {destination}, за которым вы следите. Посмотрите их в обзоре."
+ },
+ "{n} file added to your library from {destination}": {
+  "one": "{n} файл из {destination} добавлен в вашу библиотеку",
+  "few": "{n} файла из {destination} добавлены в вашу библиотеку",
+  "many": "{n} файлов из {destination} добавлены в вашу библиотеку",
+  "other": "{n} файлов из {destination} добавлены в вашу библиотеку"
+ },
+ "{n} file of the destination {destination} left out of your library": {
+  "one": "{n} файл места назначения {destination} оставлен вне вашей библиотеки",
+  "few": "{n} файла места назначения {destination} оставлены вне вашей библиотеки",
+  "many": "{n} файлов места назначения {destination} оставлены вне вашей библиотеки",
+  "other": "{n} файлов места назначения {destination} оставлены вне вашей библиотеки"
+ }
 }

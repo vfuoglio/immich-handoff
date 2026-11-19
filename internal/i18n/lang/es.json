@@ -1630,5 +1630,55 @@
  "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Solo SFTP: la app confía en un servidor por su clave. Mírala, compárala con la de tu servidor y luego guarda.",
  "The server's key is": "La clave del servidor es",
  "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Comprueba que es la clave de tu servidor (por ejemplo con ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub en él) antes de guardar: desde ahora la app solo confía en esta clave y se detiene si cambia.",
- "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "mira primero la clave del servidor SFTP, compárala con la de tu servidor y guarda con ella: la app solo confía en esa clave"
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "mira primero la clave del servidor SFTP, compárala con la de tu servidor y guarda con ella: la app solo confía en esa clave",
+ "New in {destination}": "Novedades en {destination}",
+ "In my library, tagged with where they came from": "En mi biblioteca, con una etiqueta de su origen",
+ "Destinations you follow": "Destinos que sigues",
+ "{destination}, the folder {folder}": "{destination}, la carpeta {folder}",
+ "You have answered Always {n} times. You can let it add files by itself from now on.": "Has respondido «Siempre» {n} veces. Ya puedes dejar que añada archivos sola.",
+ "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.": "A partir de ahora los archivos que aparezcan en este destino se añaden a tu biblioteca sin preguntarte. Solo se añaden así los archivos que aparezcan desde ahora. No se cambia nada en el destino.",
+ "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.": "¿Dejar de seguir este destino? Los archivos ya añadidos se quedan en tu biblioteca y no se toca nada en el destino.",
+ "Follow a destination": "Seguir un destino",
+ "Loading the destinations...": "Cargando los destinos…",
+ "There is no destination you can follow.": "No hay ningún destino que puedas seguir.",
+ "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.": "Las fotos y los vídeos que aparecen en el destino se te ofrecen con imágenes para añadirlos a tu biblioteca, y cuando hayas dicho «Siempre» tres veces puedes dejar que los añada sola. La app solo lee el destino: no se cambia ni se borra nada en él. Los archivos que la propia app entregó allí no se te vuelven a ofrecer.",
+ "Which destination": "Qué destino",
+ "The folder in it (empty: all of it)": "La carpeta dentro (vacío: todo)",
+ "Only what appears from now on": "Solo lo que aparezca desde ahora",
+ "What is there now, and what appears": "Lo que hay ahora y lo que aparezca",
+ "Where the files go": "Dónde van los archivos",
+ "the name of the album, when the files go to one": "el nombre del álbum, cuando los archivos van a uno",
+ "Follow this destination": "Seguir este destino",
+ "Files that appeared in the destination {destination}. Nothing in it is changed.": "Archivos que aparecieron en el destino {destination}. No se cambia nada en él.",
+ "Add the ticked files to my library": "Añadir los archivos marcados a mi biblioteca",
+ "Add the ticked files, and always": "Añadir los archivos marcados y siempre",
+ "Add them to your library? Nothing in the destination is changed.": "¿Añadirlos a tu biblioteca? No se cambia nada en el destino.",
+ "that is not a destination you can import from": "ese no es un destino desde el que puedas importar",
+ "the administrator has not allowed importing from that destination": "el administrador no ha permitido importar desde ese destino",
+ "you already follow that destination": "ya sigues ese destino",
+ "no picture for that file": "no hay imagen para ese archivo",
+ "{name} follows the destination {destination}": "{name} sigue el destino {destination}",
+ "{name} stopped following the destination {destination}": "{name} dejó de seguir el destino {destination}",
+ "{name} made the destination {destination} ask first again": "{name} hizo que el destino {destination} vuelva a preguntar primero",
+ "{name} let the destination {destination} add files to the library by itself": "{name} dejó que el destino {destination} añada archivos a la biblioteca sola",
+ "{n} new file in {destination}": {
+  "one": "{n} archivo nuevo en {destination}",
+  "other": "{n} archivos nuevos en {destination}"
+ },
+ "{n} file added to your library from {destination} on its own": {
+  "one": "{n} archivo de {destination} añadido a tu biblioteca solo",
+  "other": "{n} archivos de {destination} añadidos a tu biblioteca solos"
+ },
+ "{n} new file in the destination {destination} you follow. Look at it on the Overview.": {
+  "one": "{n} archivo nuevo en el destino {destination} que sigues. Míralo en el Resumen.",
+  "other": "{n} archivos nuevos en el destino {destination} que sigues. Míralos en el Resumen."
+ },
+ "{n} file added to your library from {destination}": {
+  "one": "{n} archivo de {destination} añadido a tu biblioteca",
+  "other": "{n} archivos de {destination} añadidos a tu biblioteca"
+ },
+ "{n} file of the destination {destination} left out of your library": {
+  "one": "{n} archivo del destino {destination} se dejó fuera de tu biblioteca",
+  "other": "{n} archivos del destino {destination} se dejaron fuera de tu biblioteca"
+ }
 }

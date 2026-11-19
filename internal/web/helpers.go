@@ -646,7 +646,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library", "pairing":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library", "import", "pairing":
 		return "ok"
 	}
 	return ""
@@ -976,6 +976,9 @@ func libraryTrigger(l LibraryView) string {
 func reviewTitle(ctx context.Context, d SuggestionReview) string {
 	if d.Folder {
 		return t(ctx, "Albums from {folder}", "folder", d.Album)
+	}
+	if d.Import {
+		return t(ctx, "New in {destination}", "destination", d.Owner)
 	}
 	if d.Library {
 		return t(ctx, "New in {album}", "album", d.Album)

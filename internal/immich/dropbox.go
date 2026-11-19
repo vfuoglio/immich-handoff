@@ -21,6 +21,22 @@ var DropBoxPermissions = perms("user.read", "tag.read", "tag.create", "tag.asset
 // account. When Immich already has the same file it answers with that one, and duplicate is true. A reader that
 // fails (a file that turns out too large, a guest who went away) fails the upload and nothing is stored.
 func (a *API) UploadFile(ctx context.Context, name string, r io.Reader, at time.Time) (id openapi_types.UUID, duplicate bool, err error) {
+	return a.UploadFileWith(ctx, name, r, at, UploadFileOptions{})
+}
+
+// UploadFileOptions is what a file that comes from outside Immich can carry besides its bytes: the time it was last changed (otherwise
+// the same as the time it was taken) and an XMP sidecar, which Immich reads for the rating, the location and the description.
+type UploadFileOptions struct {
+	Modified time.Time
+	Sidecar  []byte
+}
+
+// UploadFileWith is UploadFile with those options.
+func (a *API) UploadFileWith(ctx context.Context, name string, r io.Reader, at time.Time, opts UploadFileOptions) (id openapi_types.UUID, duplicate bool, err error) {
+	modified := opts.Modified
+	if modified.IsZero() {
+		modified = at
+	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	watch := time.AfterFunc(StallTimeout, func() { cancel(ErrStalled) })
@@ -33,9 +49,21 @@ func (a *API) UploadFile(ctx context.Context, name string, r io.Reader, at time.
 		pw.CloseWithError(func() error {
 			for k, v := range map[string]string{
 				"fileCreatedAt":  at.UTC().Format(time.RFC3339Nano),
-				"fileModifiedAt": at.UTC().Format(time.RFC3339Nano),
+				"fileModifiedAt": modified.UTC().Format(time.RFC3339Nano),
 			} {
 				if err := mw.WriteField(k, v); err != nil {
+					return err
+				}
+			}
+			if len(opts.Sidecar) > 0 {
+				sh := make(textproto.MIMEHeader)
+				sh.Set("Content-Disposition", fmt.Sprintf(`form-data; name="sidecarData"; filename=%q`, name+".xmp"))
+				sh.Set("Content-Type", "application/xml")
+				sp, err := mw.CreatePart(sh)
+				if err != nil {
+					return err
+				}
+				if _, err := sp.Write(opts.Sidecar); err != nil {
 					return err
 				}
 			}

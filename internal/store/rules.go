@@ -30,6 +30,9 @@ const (
 	RuleKindFolder = "folder"
 	// RuleKindStack stacks the person's photos that belong together: a RAW and its JPEG, an edit and its original, a burst.
 	RuleKindStack = "stack"
+	// RuleKindImport follows a destination (a folder, a bucket, a server): the files that appear in it are offered, and added to the
+	// person's library, with the sender's own key. Cond.Source names the destination, Cond.Prefix the folder under it.
+	RuleKindImport = "import"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -56,6 +59,11 @@ type RuleCond struct {
 	// Cutoff is how like an example's animal a crop must be (cosine of the sidecar's fingerprints) for a photo to be offered, when the
 	// optional pet sidecar is on; the person's answers move it. Zero: the default.
 	Cutoff float64 `json:"cutoff,omitempty"`
+	// Source, SourceName and Prefix are what an import rule follows: the destination ("admin:<name>" or "own:<id>"), the name it had, and the
+	// folder under its root.
+	Source     string `json:"source,omitempty"`
+	SourceName string `json:"sourceName,omitempty"`
+	Prefix     string `json:"prefix,omitempty"`
 	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
 	AlbumOwner string `json:"albumOwner,omitempty"`
 	// Folder, Level and Naming say which folders of an external library become albums, for a rule of kind folder.

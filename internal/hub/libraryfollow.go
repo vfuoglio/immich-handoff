@@ -93,7 +93,7 @@ func (h *Hub) dropLibraryKeyIfUnused(ctx context.Context, sess *immich.API, user
 		return
 	}
 	for _, r := range rules {
-		if r.Kind == "library" {
+		if r.Kind == "library" || r.Kind == store.RuleKindImport {
 			return
 		}
 	}

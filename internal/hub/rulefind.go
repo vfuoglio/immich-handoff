@@ -190,6 +190,9 @@ func whyMatched(c store.RuleCond, a immich.AssetResponseDto) string {
 
 // LookRule looks at one rule and adds what it finds to its batch of suggestions. It returns how many photos are new.
 func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
+	if r.Kind == store.RuleKindImport {
+		return h.lookImport(ctx, r)
+	}
 	if r.Kind == store.RuleKindLibrary {
 		return h.lookLibrary(ctx, r)
 	}
@@ -317,7 +320,7 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 	if err != nil {
 		return 0, err
 	}
-	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder || r.Kind == store.RuleKindStack { // these look at everything there is: there is nothing older to look back at
+	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder || r.Kind == store.RuleKindStack || r.Kind == store.RuleKindImport { // these look at everything there is: there is nothing older to look back at
 		return 0, ErrNothingOlder
 	}
 	if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {

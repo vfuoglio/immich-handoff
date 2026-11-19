@@ -1630,5 +1630,55 @@
  "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "SFTP seulement : l'application fait confiance à un serveur d'après sa clé. Regardez-la, comparez-la à celle de votre serveur, puis enregistrez.",
  "The server's key is": "La clé du serveur est",
  "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Vérifiez que c'est bien la clé de votre serveur (par exemple avec ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub sur celui-ci) avant d'enregistrer : désormais l'application ne fait confiance qu'à cette clé et s'arrête si elle change.",
- "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "regardez d'abord la clé du serveur SFTP, comparez-la à celle de votre serveur et enregistrez avec elle : l'application ne fait confiance qu'à cette clé"
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "regardez d'abord la clé du serveur SFTP, comparez-la à celle de votre serveur et enregistrez avec elle : l'application ne fait confiance qu'à cette clé",
+ "New in {destination}": "Nouveau dans {destination}",
+ "In my library, tagged with where they came from": "Dans ma bibliothèque, avec leur origine en étiquette",
+ "Destinations you follow": "Destinations que vous suivez",
+ "{destination}, the folder {folder}": "{destination}, le dossier {folder}",
+ "You have answered Always {n} times. You can let it add files by itself from now on.": "Vous avez répondu « Toujours » {n} fois. Vous pouvez maintenant la laisser ajouter les fichiers seule.",
+ "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.": "À partir de maintenant, les fichiers qui apparaissent dans cette destination sont ajoutés à votre bibliothèque sans vous demander. Seuls les fichiers qui apparaissent à partir de maintenant le sont ainsi. Rien n'est modifié dans la destination.",
+ "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.": "Ne plus suivre cette destination ? Les fichiers déjà ajoutés restent dans votre bibliothèque, et rien n'est touché dans la destination.",
+ "Follow a destination": "Suivre une destination",
+ "Loading the destinations...": "Chargement des destinations…",
+ "There is no destination you can follow.": "Il n'y a aucune destination que vous puissiez suivre.",
+ "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.": "Les photos et vidéos qui apparaissent dans la destination vous sont proposées avec des images, pour les ajouter à votre bibliothèque, et après avoir dit « Toujours » trois fois vous pouvez la laisser les ajouter seule. L'application ne fait que lire la destination : rien n'y est modifié ni supprimé. Les fichiers qu'elle y a elle-même remis ne vous sont pas reproposés.",
+ "Which destination": "Quelle destination",
+ "The folder in it (empty: all of it)": "Le dossier dedans (vide : tout)",
+ "Only what appears from now on": "Seulement ce qui apparaît à partir de maintenant",
+ "What is there now, and what appears": "Ce qui s'y trouve maintenant et ce qui apparaît",
+ "Where the files go": "Où vont les fichiers",
+ "the name of the album, when the files go to one": "le nom de l'album, quand les fichiers vont dans un album",
+ "Follow this destination": "Suivre cette destination",
+ "Files that appeared in the destination {destination}. Nothing in it is changed.": "Fichiers apparus dans la destination {destination}. Rien n'y est modifié.",
+ "Add the ticked files to my library": "Ajouter les fichiers cochés à ma bibliothèque",
+ "Add the ticked files, and always": "Ajouter les fichiers cochés, et toujours",
+ "Add them to your library? Nothing in the destination is changed.": "Les ajouter à votre bibliothèque ? Rien n'est modifié dans la destination.",
+ "that is not a destination you can import from": "ce n'est pas une destination depuis laquelle vous pouvez importer",
+ "the administrator has not allowed importing from that destination": "l'administrateur n'a pas autorisé l'import depuis cette destination",
+ "you already follow that destination": "vous suivez déjà cette destination",
+ "no picture for that file": "pas d'image pour ce fichier",
+ "{name} follows the destination {destination}": "{name} suit la destination {destination}",
+ "{name} stopped following the destination {destination}": "{name} ne suit plus la destination {destination}",
+ "{name} made the destination {destination} ask first again": "{name} a remis la destination {destination} en « demander d'abord »",
+ "{name} let the destination {destination} add files to the library by itself": "{name} a laissé la destination {destination} ajouter seule des fichiers à la bibliothèque",
+ "{n} new file in {destination}": {
+  "one": "{n} nouveau fichier dans {destination}",
+  "other": "{n} nouveaux fichiers dans {destination}"
+ },
+ "{n} file added to your library from {destination} on its own": {
+  "one": "{n} fichier de {destination} ajouté seul à votre bibliothèque",
+  "other": "{n} fichiers de {destination} ajoutés seuls à votre bibliothèque"
+ },
+ "{n} new file in the destination {destination} you follow. Look at it on the Overview.": {
+  "one": "{n} nouveau fichier dans la destination {destination} que vous suivez. Regardez-le dans la Vue d'ensemble.",
+  "other": "{n} nouveaux fichiers dans la destination {destination} que vous suivez. Regardez-les dans la Vue d'ensemble."
+ },
+ "{n} file added to your library from {destination}": {
+  "one": "{n} fichier de {destination} ajouté à votre bibliothèque",
+  "other": "{n} fichiers de {destination} ajoutés à votre bibliothèque"
+ },
+ "{n} file of the destination {destination} left out of your library": {
+  "one": "{n} fichier de la destination {destination} laissé hors de votre bibliothèque",
+  "other": "{n} fichiers de la destination {destination} laissés hors de votre bibliothèque"
+ }
 }

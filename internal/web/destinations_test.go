@@ -3,6 +3,7 @@ package web_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/vfuoglio/immich-handoff/internal/dest"
@@ -10,8 +11,22 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
+var (
+	webFoldersMu sync.Mutex
+	webFolders   = map[string]*dest.Memory{} // the root of a "folder" destination -> what it holds, for these tests
+)
+
+func folderAt(root string) *dest.Memory {
+	webFoldersMu.Lock()
+	defer webFoldersMu.Unlock()
+	if webFolders[root] == nil {
+		webFolders[root] = &dest.Memory{}
+	}
+	return webFolders[root]
+}
+
 func init() {
-	dest.Register("folder", func(s dest.Spec, n dest.Net) (dest.Destination, error) { return &dest.Memory{}, nil })
+	dest.Register("folder", func(s dest.Spec, n dest.Net) (dest.Destination, error) { return folderAt(s.Settings["root"]), nil })
 }
 
 func withDestinations(t *testing.T, st **store.Store, userAdd bool) func(*web.Server) {
