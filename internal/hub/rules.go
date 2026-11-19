@@ -45,7 +45,7 @@ type RuleParams struct {
 	NotAlbums []uuid.UUID
 	Phrase    string
 	Examples  []uuid.UUID // a pet rule: photos of the person's own library that it looks for look-alikes of
-	Also      []string // other services of the person's to make the same rule for
+	Also      []string    // other services of the person's to make the same rule for
 	// SettleMinutes is how long a photo waits in Immich before the rule offers it (and a sixth of how long before it sends one by itself),
 	// so that its faces have been looked for: 0 is the app's usual wait, otherwise 1 to 60.
 	SettleMinutes int
