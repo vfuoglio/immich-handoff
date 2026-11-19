@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
 // other is the receiver's server: what a check of the key asks.
@@ -37,7 +38,7 @@ func withRemote(t *testing.T, s *scenario, address, key string, p bridge.Policy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		in.Services[0].Remote = r
+		in.Services[0].Remotes = []syncer.Remote{r}
 	}
 }
 
@@ -79,8 +80,8 @@ func TestADoctorChangesNothingAboutTheBridge(t *testing.T) {
 	reported := false
 	out, fails, _ := s.run(t, true, func(in *Input) {
 		withRemote(t, s, srv.URL, "FAR", bridge.Policy{AllowPrivate: true})(in)
-		in.Services[0].Remote.(*bridge.Remote).Report = func(error, string) { reported = true }
-		in.Services[0].Remote.(*bridge.Remote).Gate = func() error { reported = true; return nil }
+		in.Services[0].Remotes[0].(*bridge.Remote).Report = func(error, string) { reported = true }
+		in.Services[0].Remotes[0].(*bridge.Remote).Gate = func() error { reported = true; return nil }
 	})
 	want(t, out, fails, 0)
 	if reported {

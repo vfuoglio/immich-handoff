@@ -3,6 +3,7 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -341,8 +342,9 @@ type receiver struct {
 
 func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
 	log := s.Log.With("service", svc.Label())
-	// Never run without a healthy receiver: with none, an original would be deleted with no copy anywhere.
-	if svc.Broken != "" || len(svc.Receivers) == 0 {
+	// Never run without a healthy receiver: with none, an original would be deleted with no copy anywhere. A destination is a
+	// receiver too: a service may have no Immich receiver at all.
+	if svc.Broken != "" || len(svc.Receivers) == 0 && len(svc.Remotes) == 0 {
 		return
 	}
 	// A pool that has ended hands nothing over: what was handed over stays, and tagged photos stay tagged.
@@ -355,12 +357,20 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 		log.Debug("service is paused; leaving tagged photos alone")
 		return
 	}
-	if svc.Remote != nil {
-		// photos wait, still tagged, until the other server can be used; nothing is sent and nothing deleted
-		if err := svc.Remote.Ready(ctx); err != nil {
-			log.Warn("the receiver on another server is not ready; tagged photos wait", "receiver", svc.Remote.Label(), "err", err)
-			return
+	// A receiver that is not ready is left out of this pass and says why; the others go on. A photo is only finished (its original
+	// kept as handed over, or moved) when every receiver holds it, so what a down one lacks waits, still tagged, until it is back.
+	down := map[Remote]error{}
+	for _, rm := range svc.Remotes {
+		if err := rm.Ready(ctx); err != nil {
+			log.Warn("a receiver outside this Immich is not ready; photos for it wait, still tagged", "receiver", rm.Label(), "err", err)
+			down[rm] = err
+			if h, ok := rm.(Holder); ok && h.HoldsAll() {
+				return // nothing is sent and nothing is deleted, not even for the service's own receivers
+			}
 		}
+	}
+	if len(svc.Receivers) == 0 && len(down) == len(svc.Remotes) {
+		return // nothing can be delivered anywhere this pass
 	}
 	var rs []receiver
 	for _, r := range svc.Receivers {
@@ -389,12 +399,12 @@ func (s *Syncer) runService(ctx context.Context, svc *Service, hints map[uuid.UU
 		rs = append(rs, rc)
 	}
 	for _, snd := range svc.Senders {
-		c.add(s.ingest(ctx, log, svc, snd, rs, hints, resolved))
+		c.add(s.ingest(ctx, log, svc, snd, rs, down, hints, resolved))
 	}
 	return
 }
 
-func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
+func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, down map[Remote]error, hints map[uuid.UUID]time.Time, resolved map[uuid.UUID]bool) (c Counts) {
 	log = log.With("sender", snd.Name)
 	if snd.Paused {
 		log.Debug("sender is paused; leaving their tagged photos alone")
@@ -546,7 +556,10 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 		if !s.Cfg.DryRun {
 			s.emit(live.Started, svc, snd, "", 0, nil)
 		}
-		switch out, handed, err := s.process(ctx, log, procSvc, snd, rs, a, tagID, batch); {
+		switch out, handed, err := s.process(ctx, log, procSvc, snd, rs, down, a, tagID, batch); {
+		case errors.As(err, new(*Waiting)):
+			// a receiver outside this Immich was not ready: the photo stays tagged and is delivered to it when it is back
+			log.Info("photo waits for a receiver that is not ready", "file", a.OriginalFileName, "err", err)
 		case err != nil:
 			c.Errors++
 			s.emit(live.Failed, svc, snd, "", 0, nil)
@@ -619,7 +632,7 @@ func (s *Syncer) ingest(ctx context.Context, log *slog.Logger, svc *Service, snd
 // last, and only after every receiver holds a verified copy of every photo. Any failure keeps the originals; because
 // Immich recognises duplicates by checksum, a later retry is safe for receivers that already have their copies. It
 // returns what it handed over (the tagged photo, and the rest of its stack).
-func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, a immich.AssetResponseDto, shareTag uuid.UUID, batch string) (string, []immich.AssetResponseDto, error) {
+func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, rs []receiver, down map[Remote]error, a immich.AssetResponseDto, shareTag uuid.UUID, batch string) (string, []immich.AssetResponseDto, error) {
 	if s.Cfg.DryRun {
 		log.Info("[dry-run] would hand over and remove original", "asset", a.Id, "file", a.OriginalFileName)
 		return "dryrun", nil, nil
@@ -661,19 +674,41 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 		}
 		s.restack(ctx, log, svc, r, copies)
 	}
-	if svc.Remote != nil {
+	// Every receiver outside this Immich gets what it lacks. One that is down or fails does not hold up the others, which take the
+	// photo now and have it recorded; but the original is touched only when none lacks it.
+	var lacking []string
+	var failed error
+	for _, rm := range svc.Remotes {
+		if down[rm] != nil {
+			lacking = append(lacking, rm.Label())
+			continue
+		}
 		for _, m := range members {
-			cp, err := s.deliverRemote(ctx, log, svc, snd, m, clips[m.Id])
-			if err != nil {
-				return "", nil, err
+			if s.delivered(ctx, m.Id, rm.ID()) {
+				continue // it already holds this photo (a retry for the receivers that lack it)
 			}
-			if cp.Created { // what the other server holds is recorded as well, so a take-back can reach it
-				s.remember(ctx, snd, batch, m.Id, cp.ID, false, true)
+			cp, err := s.deliverRemote(ctx, log, rm, snd, m, clips[m.Id])
+			if err != nil {
+				lacking = append(lacking, rm.Label())
+				if failed == nil {
+					failed = err
+				}
+				break
+			}
+			if cp.Created { // what the other side holds is recorded as well, so a take-back can reach it
+				outcome = "imported"
+				s.rememberRemote(ctx, snd, batch, m.Id, rm.ID(), cp.Ref, false)
 			}
 			if cp.ClipCreated && clips[m.Id] != nil {
-				s.remember(ctx, snd, batch, clips[m.Id].Id, cp.Clip, true, true)
+				s.rememberRemote(ctx, snd, batch, clips[m.Id].Id, rm.ID(), cp.Clip, true)
 			}
 		}
+	}
+	if len(lacking) > 0 {
+		if failed != nil {
+			return "", nil, failed
+		}
+		return "", nil, &Waiting{For: lacking}
 	}
 	if svc.CopiesFor(snd) {
 		if err := s.markSent(ctx, svc, snd.API, a.Id, shareTag); err != nil {
@@ -700,17 +735,17 @@ func (s *Syncer) process(ctx context.Context, log *slog.Logger, svc *Service, sn
 
 // deliverRemote hands one photo to the receiver on another server. Like handOne it touches nothing of the original;
 // any error keeps it, and because the other server recognises a duplicate, a retry is safe.
-func (s *Syncer) deliverRemote(ctx context.Context, log *slog.Logger, svc *Service, snd *Account, a immich.AssetResponseDto, clip *immich.AssetResponseDto) (RemoteCopy, error) {
+func (s *Syncer) deliverRemote(ctx context.Context, log *slog.Logger, rm Remote, snd *Account, a immich.AssetResponseDto, clip *immich.AssetResponseDto) (RemoteCopy, error) {
 	if e := a.ExifInfo; !s.Cfg.NoDetails && (e == nil || (e.Description == nil && e.Rating == nil && e.Latitude == nil)) {
 		if full, err := snd.API.Asset(ctx, a.Id); err == nil && full != nil {
 			a = *full
 		}
 	}
-	cp, err := svc.Remote.Deliver(ctx, snd.API, a, clip, RemoteJob{Sender: snd.Name, Details: !s.Cfg.NoDetails})
+	cp, err := rm.Deliver(ctx, snd.API, a, clip, RemoteJob{Sender: snd.Name, Details: !s.Cfg.NoDetails})
 	if err != nil {
-		return cp, fmt.Errorf("to %s: %w", svc.Remote.Label(), err)
+		return cp, fmt.Errorf("to %s: %w", rm.Label(), err)
 	}
-	log.Debug("handed over to another server", "file", a.OriginalFileName, "receiver", svc.Remote.Label())
+	log.Debug("handed over outside this Immich", "file", a.OriginalFileName, "receiver", rm.Label())
 	return cp, nil
 }
 

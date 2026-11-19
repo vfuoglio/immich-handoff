@@ -327,7 +327,7 @@ func TestDeliverTellsWhichCopyItMadeOverThere(t *testing.T) {
 	r := remote(t, d, "good-key")
 	clip := asset("IMG_1.mov")
 	cp, err := r.Deliver(context.Background(), source(t), asset("IMG_1.jpg"), &clip, syncer.RemoteJob{Sender: "Bob"})
-	if err != nil || cp.ID == uuid.Nil || !cp.Created || cp.Clip == uuid.Nil || !cp.ClipCreated {
+	if err != nil || cp.Ref == "" || !cp.Created || cp.Clip == "" || !cp.ClipCreated {
 		t.Fatalf("%+v %v", cp, err)
 	}
 	d.status = "duplicate"

@@ -349,8 +349,10 @@ func (h *Hub) BridgeStatus(ctx context.Context, service string) (BridgeStatus, b
 	}
 	st := BridgeStatus{Name: b.DisplayName, State: b.State, Note: b.Note, Version: b.Version, Checked: b.CheckedAt, RetryAt: b.RetryAt}
 	if svc := h.service(service); svc != nil {
-		if rm, ok := svc.Remote.(*bridge.Remote); ok {
-			st.TakeBack = rm.CanTakeBack() && b.State == store.BridgeOK
+		for _, r := range svc.Remotes {
+			if rm, ok := r.(*bridge.Remote); ok {
+				st.TakeBack = rm.CanTakeBack() && b.State == store.BridgeOK
+			}
 		}
 	}
 	return st, true

@@ -42,15 +42,17 @@ type Options struct {
 }
 
 type Hub struct {
-	Static       []*syncer.Service // from the environment or the routes file
-	Store        *store.Store      // nil: self-service is switched off
-	Connect      func(key string) (*immich.API, error)
-	Hook         syncer.Webhook // used to create the sender's workflow when someone joins
-	Wake         func(reason string)
-	Retry        func()           // sets up missing workflows in the background (Immich may still be loading its plugins)
-	Notify       notify.Func      // tells an admin something needs attention (optional)
-	Bus          *live.Bus        // tells the open pages what changed, as it happens (optional)
-	People       *People          // writes to the people who asked for email (optional)
+	Static  []*syncer.Service // from the environment or the routes file
+	Store   *store.Store      // nil: self-service is switched off
+	Connect func(key string) (*immich.API, error)
+	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
+	Wake    func(reason string)
+	Retry   func()      // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Notify  notify.Func // tells an admin something needs attention (optional)
+	Bus     *live.Bus   // tells the open pages what changed, as it happens (optional)
+	People  *People     // writes to the people who asked for email (optional)
+	// Destinations gives the receivers outside Immich (folders, servers) a service sends to, besides its Immich receivers (nil: none).
+	Destinations func(service string) []syncer.Remote
 	Pets         *pets.Client     // the optional pet sidecar (PET_SIDECAR_URL); nil: pet rules use Immich's own search
 	petNotes     sync.Map         // rule id -> what to tell the person about its last look (the pet helper was down)
 	Push         *Push            // sends notifications to the devices people allowed (optional)
@@ -203,9 +205,12 @@ func (h *Hub) Reload(ctx context.Context) error {
 		if v.Pool {
 			rcvMode = syncer.ModeCopy // the owner's own photos stay with them too
 		}
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, rcvMode, uuid.Nil, "", false)
-		if rcv == nil {
-			continue
+		var rcv *syncer.Account
+		if !v.DestOnly { // a service with only destinations has no Immich receiver: its owner makes no key
+			rcv = account(v.ID, v.OwnerName, v.OwnerID, v.Key, rcvMode, uuid.Nil, "", false)
+			if rcv == nil {
+				continue
+			}
 		}
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
@@ -214,8 +219,14 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB, LifetimeDays: v.LifetimeDays,
 			Quiet:   syncer.Quiet{From: v.QuietFrom, To: v.QuietTo, LargeMB: v.QuietLargeMB},
 			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
-			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
-			Pool: v.Pool, EndsAt: v.EndsAt,
+			Senders: extra[v.Name],
+			Pool:    v.Pool, EndsAt: v.EndsAt,
+		}
+		if rcv != nil {
+			svc.Receivers = []*syncer.Account{rcv}
+		}
+		if h.Destinations != nil {
+			svc.Remotes = append(svc.Remotes, h.Destinations(v.Name)...)
 		}
 		if v.Pool {
 			// everybody sends and everybody receives: the owner's account and each member's are in both lists
@@ -227,7 +238,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			// a service with a receiver on another server never runs without it: the original would be removed
 			// with a copy in only some of the places it was promised
 			if r, why := h.remoteFor(b); r != nil {
-				svc.Remote = r
+				svc.Remotes = append(svc.Remotes, r)
 			} else {
 				svc.Broken, svc.BrokenFix, svc.Receivers = why, "Set BRIDGE_ENABLE=true again, or remove the receiver on another server on the service's card.", nil
 			}

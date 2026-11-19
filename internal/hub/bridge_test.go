@@ -30,7 +30,7 @@ func TestAServiceWithABridgeGetsItsRemoteReceiver(t *testing.T) {
 	if err := e.h.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if svc := service(e, "holiday"); svc.Remote != nil || svc.Broken == "" || len(svc.Receivers) != 0 {
+	if svc := service(e, "holiday"); len(svc.Remotes) != 0 || svc.Broken == "" || len(svc.Receivers) != 0 {
 		t.Fatalf("bridges off: %+v", svc)
 	}
 
@@ -39,25 +39,25 @@ func TestAServiceWithABridgeGetsItsRemoteReceiver(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := service(e, "holiday")
-	if svc.Remote == nil || svc.Remote.Label() != "Aunt Lia" || svc.Broken != "" || len(svc.Receivers) != 1 {
+	if len(svc.Remotes) != 1 || svc.Remotes[0].Label() != "Aunt Lia" || svc.Broken != "" || len(svc.Receivers) != 1 {
 		t.Fatalf("bridges on: %+v", svc)
 	}
 	// the same receiver is kept across reloads (its connections are reused), and replaced with a new key
-	first := svc.Remote
+	first := svc.Remotes[0]
 	e.h.Reload(ctx)
-	if service(e, "holiday").Remote != first {
+	if service(e, "holiday").Remotes[0] != first {
 		t.Error("a reload made a new receiver")
 	}
 	e.st.SetBridge(ctx, store.Bridge{Service: "holiday", Address: "https://photos.example.org", Key: "NEW", DisplayName: "Aunt Lia"})
 	e.h.Reload(ctx)
-	if service(e, "holiday").Remote == first {
+	if service(e, "holiday").Remotes[0] == first {
 		t.Error("a new key must make a new receiver")
 	}
 
 	// a service without a bridge is untouched, and removing the bridge removes the receiver
 	e.st.RemoveBridge(ctx, "holiday")
 	e.h.Reload(ctx)
-	if service(e, "holiday").Remote != nil || service(e, "family").Remote != nil {
+	if len(service(e, "holiday").Remotes) != 0 || len(service(e, "family").Remotes) != 0 {
 		t.Error("no bridge, no remote")
 	}
 }
@@ -114,7 +114,7 @@ func withBridge(t *testing.T, o *otherServer) (*env, *bridge.Remote) {
 	if err := e.h.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
-	return e, service(e, "holiday").Remote.(*bridge.Remote)
+	return e, service(e, "holiday").Remotes[0].(*bridge.Remote)
 }
 
 func state(t *testing.T, e *env) store.Bridge {
@@ -167,7 +167,7 @@ func TestARevokedKeyIsRecordedOnceAndNotTriedAgain(t *testing.T) {
 	// a new key ends it
 	e.st.SetBridge(ctx, store.Bridge{Service: "holiday", Address: o.URL, Key: "SOMETHING ELSE", DisplayName: "Aunt Lia"})
 	e.h.Reload(ctx)
-	r = service(e, "holiday").Remote.(*bridge.Remote)
+	r = service(e, "holiday").Remotes[0].(*bridge.Remote)
 	if err := r.Ready(ctx); err != nil {
 		t.Fatalf("after a new key: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestAcceptingAnInvitationConnectsTheServiceAndUsesTheLinkUp(t *testing.T) {
 	if err != nil || b.Key != "REMOTE" || b.DisplayName != "Aunt Lia" || b.Version != "v3.2.0" || b.State != store.BridgeOK || b.Address != o.URL {
 		t.Fatalf("%+v %v", b, err)
 	}
-	if svc := service(e, "holiday"); svc.Remote == nil || svc.Remote.Label() != "Aunt Lia" {
+	if svc := service(e, "holiday"); len(svc.Remotes) != 1 || svc.Remotes[0].Label() != "Aunt Lia" {
 		t.Fatal("the running service does not have its receiver")
 	}
 	if err := e.h.AcceptBridge(ctx, token, o.URL, "REMOTE", "Again"); !errors.Is(err, hub.ErrBridgeInvite) {
@@ -397,7 +397,7 @@ func TestTheOwnerCanRemoveTheBridgeAndWaitingPhotosThenGoToTheOwnerAlone(t *test
 	if err := e.h.RemoveBridge(ctx, ann, "holiday"); err != nil {
 		t.Fatal(err)
 	}
-	if svc := service(e, "holiday"); svc.Remote != nil || svc.Broken != "" || len(svc.Receivers) != 1 {
+	if svc := service(e, "holiday"); len(svc.Remotes) != 0 || svc.Broken != "" || len(svc.Receivers) != 1 {
 		t.Fatalf("%+v", svc)
 	}
 	if _, ok := e.h.BridgeStatus(ctx, "holiday"); ok {

@@ -2,11 +2,45 @@ package syncer
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 )
+
+// Waiting is why a photo was not finished: receivers outside this Immich that were not ready, so it stays tagged and the original is
+// not touched.
+type Waiting struct{ For []string }
+
+func (w *Waiting) Error() string { return "waiting for " + strings.Join(w.For, ", ") }
+
+// RemoteLedger is implemented by a Provider that remembers what each receiver outside this Immich holds, by the reference it gave
+// (a path, a key or an id there), so a hand-over can be taken back and a retry delivers only to the receivers that lack the photo.
+type RemoteLedger interface {
+	RememberRemote(ctx context.Context, snd *Account, batch string, senderAsset uuid.UUID, dest, ref string, clip bool)
+	// Delivered says whether dest holds the photo (not taken back since).
+	Delivered(ctx context.Context, senderAsset uuid.UUID, dest string) bool
+}
+
+func (s *Syncer) rememberRemote(ctx context.Context, snd *Account, batch string, senderAsset uuid.UUID, dest, ref string, clip bool) {
+	if l, ok := s.Provider.(RemoteLedger); ok {
+		l.RememberRemote(ctx, snd, batch, senderAsset, dest, ref, clip)
+		return
+	}
+	if l, ok := s.Provider.(Ledger); ok { // an older provider remembers only ids that are Immich's
+		if id, err := uuid.Parse(ref); err == nil {
+			l.Remember(ctx, snd, batch, senderAsset, id, clip, true)
+		}
+	}
+}
+
+func (s *Syncer) delivered(ctx context.Context, senderAsset uuid.UUID, dest string) bool {
+	if l, ok := s.Provider.(RemoteLedger); ok {
+		return l.Delivered(ctx, senderAsset, dest)
+	}
+	return false
+}
 
 // remember tells a Provider that keeps a ledger which copy came from which photo.
 func (s *Syncer) remember(ctx context.Context, snd *Account, batch string, senderAsset, receiverAsset uuid.UUID, clip, remote bool) {

@@ -44,6 +44,7 @@ type Remote struct {
 }
 
 var _ syncer.Remote = (*Remote)(nil)
+var _ syncer.TakeBacker = (*Remote)(nil)
 
 // NewRemote makes the receiver. The address must have been accepted by Policy.Address.
 func NewRemote(name, address, key string, p Policy) (*Remote, error) {
@@ -53,6 +54,23 @@ func NewRemote(name, address, key string, p Policy) (*Remote, error) {
 		return nil, err
 	}
 	return &Remote{Name: name, Address: address, Policy: p, api: api, key: key, hc: hc}, nil
+}
+
+// HoldsAll implements syncer.Holder: while the other server cannot be used the whole service waits, as it always has.
+func (r *Remote) HoldsAll() bool { return true }
+
+// ID implements syncer.Remote: a service has one bridge, recorded under this name.
+func (r *Remote) ID() string { return "bridge" }
+
+// TakeBackRefs implements syncer.TakeBacker: the references are ids on the other server.
+func (r *Remote) TakeBackRefs(ctx context.Context, refs []string) error {
+	var ids []uuid.UUID
+	for _, ref := range refs {
+		if id, err := uuid.Parse(ref); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return r.TakeBack(ctx, ids)
 }
 
 // Label implements syncer.Remote.
@@ -80,7 +98,7 @@ func (r *Remote) Ready(ctx context.Context) error {
 func (r *Remote) CanTakeBack() bool { return r.takeBack.Load() }
 
 // ErrCannotTakeBack: the receiver's key has not got (or no longer has) the optional asset.delete permission.
-var ErrCannotTakeBack = errors.New("the receiver's key on the other server cannot move photos to the trash (it has no asset.delete)")
+var ErrCannotTakeBack = fmt.Errorf("%w: the receiver's key on the other server cannot move photos to the trash (it has no asset.delete)", syncer.ErrCannotTakeBack)
 
 // TakeBack moves copies the app handed over to the receiver's trash, and nothing else: it knows the ids it was given
 // and reads nothing from the other server. Immich keeps the trash for as long as its own settings say, so nothing is
@@ -132,13 +150,13 @@ func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetRes
 		}
 		id := up.Id
 		motion = &id
-		cp.Clip, cp.ClipCreated = id, up.Status == immich.AssetMediaStatusCreated
+		cp.Clip, cp.ClipCreated = id.String(), up.Status == immich.AssetMediaStatusCreated
 	}
 	up, _, err := immich.TransferWith(ctx, src, r.api, a, immich.UploadOptions{MotionClip: motion, Details: job.Details})
 	if err != nil {
 		return cp, r.classify(err)
 	}
-	cp.ID, cp.Created = up.Id, up.Status == immich.AssetMediaStatusCreated
+	cp.Ref, cp.Created = up.Id.String(), up.Status == immich.AssetMediaStatusCreated
 	tag, err := r.api.UpsertTag(ctx, TagFor(job.Sender))
 	if err != nil {
 		return cp, r.classify(fmt.Errorf("make the tag: %w", err))

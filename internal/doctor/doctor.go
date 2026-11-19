@@ -377,8 +377,18 @@ func services(ctx context.Context, r *Report, in Input) {
 			}
 			tags(ctx, r, rc, "receiver")
 		}
-		if rm, ok := svc.Remote.(*bridge.Remote); ok {
-			remote(ctx, r, rm)
+		for _, rm := range svc.Remotes {
+			switch x := rm.(type) {
+			case *bridge.Remote:
+				remote(ctx, r, x)
+			case syncer.Diagnoser:
+				who := "receiver outside this Immich (" + rm.Label() + ")"
+				if ok, err := x.Diagnose(ctx); err != nil {
+					r.add(Fail, who+": "+err.Error(), "Photos for it wait, still tagged, and the app tries again.")
+				} else {
+					r.add(OK, who+": "+ok, "")
+				}
+			}
 		}
 		if len(svc.Senders) == 0 {
 			r.add(OK, "no senders have joined yet", "")
