@@ -44,6 +44,7 @@ type RuleParams struct {
 	Album     uuid.UUID
 	NotAlbums []uuid.UUID
 	Phrase    string
+	Examples  []uuid.UUID // a pet rule: photos of the person's own library that it looks for look-alikes of
 	Also      []string // other services of the person's to make the same rule for
 	// SettleMinutes is how long a photo waits in Immich before the rule offers it (and a sixth of how long before it sends one by itself),
 	// so that its faces have been looked for: 0 is the app's usual wait, otherwise 1 to 60.
@@ -131,6 +132,24 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 		return store.Rule{}, ErrBadSettle
 	}
 	cond.Phrase = phrase
+	if len(p.Examples) > 0 {
+		if len(p.Examples) < petMinExamples || len(p.Examples) > petMaxExamples {
+			return store.Rule{}, ErrBadExamples
+		}
+		seen := map[uuid.UUID]bool{}
+		for _, id := range p.Examples {
+			if seen[id] {
+				return store.Rule{}, ErrBadExamples
+			}
+			seen[id] = true
+			a, err := sess.Asset(ctx, id)
+			if err != nil || a.OwnerId != user.ID || a.IsTrashed {
+				return store.Rule{}, ErrBadExamples // only the person's own photos
+			}
+			cond.Examples = append(cond.Examples, id.String())
+		}
+		cond.Rank = petStartRank
+	}
 	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
 		return store.Rule{}, ErrBadRuleDate
 	}
@@ -215,7 +234,10 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			cond.NotAlbums = append(cond.NotAlbums, ref)
 		}
 	}
-	if len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" {
+	if cond.Pet() && (len(p.People)+len(p.NotPeople) > 0 || cond.After != "" || cond.Before != "" || cond.Country != "" || cond.Album != nil || len(cond.NotAlbums) > 0 || cond.Phrase != "") {
+		return store.Rule{}, ErrPetAlone
+	}
+	if !cond.Pet() && len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" {
 		return store.Rule{}, ErrRuleEmpty
 	}
 	if needAlbums { // reading albums for the timer: the key gets album.read through the person's own session, as for a linked album
@@ -285,6 +307,9 @@ func RuleSentence(c store.RuleCond) string {
 	}
 	if c.Phrase != "" {
 		parts = append(parts, "that look like \""+c.Phrase+"\"")
+	}
+	if c.Pet() {
+		parts = append(parts, fmt.Sprintf("that look like your %d example photos", len(c.Examples)))
 	}
 	return strings.Join(parts, " ")
 }

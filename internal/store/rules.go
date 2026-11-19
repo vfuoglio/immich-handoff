@@ -47,6 +47,10 @@ type RuleCond struct {
 	Album     *RuleRef  `json:"album,omitempty"`
 	NotAlbums []RuleRef `json:"notAlbums,omitempty"`
 	Phrase    string    `json:"phrase,omitempty"`
+	// Examples are the photos of the person's own library that a pet rule looks for look-alikes of ("photos like these"), and Rank is how
+	// far down Immich's list of look-alikes of an example a photo may be and still be offered, learned from the answers.
+	Examples []string `json:"examples,omitempty"`
+	Rank     int      `json:"rank,omitempty"`
 	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
 	AlbumOwner string `json:"albumOwner,omitempty"`
 	// Folder, Level and Naming say which folders of an external library become albums, for a rule of kind folder.
@@ -302,5 +306,21 @@ func (s *Store) RuleSentAssets(ctx context.Context, owner uuid.UUID, service str
 // MarkRuleCaughtUp records that a rule of kind folder has looked at everything in its folder up to that moment.
 func (s *Store) MarkRuleCaughtUp(ctx context.Context, id string, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE rules SET caught_up = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), id)
+	return err
+}
+
+// Pet says whether the rule looks for look-alikes of example photos (a pet), which can only ever suggest.
+func (c RuleCond) Pet() bool { return len(c.Examples) > 0 }
+
+// NeverAuto says whether a rule with this condition always asks first: a phrase and a pet are never certain.
+func (c RuleCond) NeverAuto() bool { return c.Phrase != "" || c.Pet() }
+
+// SetRuleCond replaces what a rule looks for (a pet rule changes its examples and its rank as it learns).
+func (s *Store) SetRuleCond(ctx context.Context, id string, c RuleCond) error {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE rules SET cond = ? WHERE id = ?`, string(b), id)
 	return err
 }

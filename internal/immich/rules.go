@@ -160,3 +160,35 @@ func (a *API) RuleSearch(ctx context.Context, f RuleFilter) ([]AssetResponseDto,
 	}
 	return r.JSON200.Assets.Items, nil
 }
+
+// SimilarTo asks Immich for the photos that look like one of the person's own, nearest first: Immich's smart search with
+// queryAssetId ranks the whole library and gives no score, so the position is all there is. A server without machine learning answers
+// ErrNoSmartSearch.
+func (a *API) SimilarTo(ctx context.Context, asset openapi_types.UUID, size int) ([]AssetResponseDto, error) {
+	dto := SmartSearchDto{QueryAssetId: &asset, Size: &size}
+	r, err := a.c.SearchSmartWithResponse(ctx, dto)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		if r.StatusCode() == http.StatusBadRequest && strings.Contains(string(r.Body), "not enabled") {
+			return nil, ErrNoSmartSearch
+		}
+		return nil, statusErr("searchSmart", r.StatusCode(), r.Body)
+	}
+	return r.JSON200.Assets.Items, nil
+}
+
+// Recent lists the newest photos (not videos) of the person's own library, one page, for them to pick examples from.
+func (a *API) Recent(ctx context.Context, n int) ([]AssetResponseDto, error) {
+	order, typ, page := AssetOrderDesc, IMAGE, 1
+	dto := MetadataSearchDto{Size: &n, Page: &page, Order: &order, Type: &typ}
+	r, err := a.c.SearchAssetsWithResponse(ctx, nil, dto)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("searchAssets", r.StatusCode(), r.Body)
+	}
+	return r.JSON200.Assets.Items, nil
+}

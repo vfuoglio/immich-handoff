@@ -1559,5 +1559,14 @@
  "Send by themselves": "Envoyer toutes seules",
  "Send by themselves from now on": "Envoyer toutes seules dès maintenant",
  "{name} let the sharing of photos with {other} send by itself": "{name} a laissé le partage de photos avec {other} envoyer tout seul",
- "{name} made the sharing of photos with {other} ask first again": "{name} a remis le partage de photos avec {other} en « demander d'abord »"
+ "{name} made the sharing of photos with {other} ask first again": "{name} a remis le partage de photos avec {other} en « demander d'abord »",
+ "Make a rule for a pet": "Créer une règle pour un animal",
+ "Loading your photos...": "Chargement de vos photos…",
+ "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.": "Choisissez 3 à 8 photos de votre animal. La règle propose les photos qu'Immich trouve les plus ressemblantes, et chaque photo que vous envoyez lui apprend davantage.",
+ "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.": "Attendez-vous à un début bruité : Immich ne sait pas distinguer les animaux, les premiers lots peuvent donc contenir de mauvaises photos, le temps que vos réponses apprennent quelque chose à la règle. Un animal qui en ressemble à un autre, ou un petit à côté de personnes, est mal trouvé. Une règle d'animal demande toujours d'abord et n'envoie jamais seule.",
+ "There are no recent photos of yours to pick from.": "Vous n'avez aucune photo récente à choisir.",
+ "a pet rule needs 3 to 8 photos of your own as examples": "une règle d'animal demande 3 à 8 photos à vous comme exemples",
+ "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "une règle pour un animal ne regarde que ses photos d'exemple : faites une autre règle pour des personnes, des lieux ou des dates",
+ "a rule for a pet always asks first, because a look-alike is never certain": "une règle pour un animal demande toujours d'abord, parce qu'une ressemblance n'est jamais certaine",
+ "Make the pet rule": "Créer la règle"
 }

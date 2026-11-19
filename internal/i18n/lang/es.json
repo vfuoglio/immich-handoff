@@ -1559,5 +1559,14 @@
  "Send by themselves": "Enviar solas",
  "Send by themselves from now on": "Enviar solas a partir de ahora",
  "{name} let the sharing of photos with {other} send by itself": "{name} dejó que el uso compartido de fotos con {other} envíe por sí solo",
- "{name} made the sharing of photos with {other} ask first again": "{name} volvió a preguntar primero en el uso compartido de fotos con {other}"
+ "{name} made the sharing of photos with {other} ask first again": "{name} volvió a preguntar primero en el uso compartido de fotos con {other}",
+ "Make a rule for a pet": "Crear una regla para una mascota",
+ "Loading your photos...": "Cargando tus fotos…",
+ "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.": "Elige de 3 a 8 fotos de tu mascota. La regla ofrece las fotos que Immich encuentra más parecidas, y cada foto que envías le enseña más.",
+ "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.": "Prepárate para un comienzo con ruido: Immich no distingue unos animales de otros, así que los primeros lotes pueden traer fotos equivocadas hasta que tus respuestas hayan enseñado a la regla. Una mascota parecida a otra, o una pequeña junto a personas, se encuentra mal. Una regla de mascota siempre pregunta primero y nunca envía sola.",
+ "There are no recent photos of yours to pick from.": "No hay fotos recientes tuyas para elegir.",
+ "a pet rule needs 3 to 8 photos of your own as examples": "una regla de mascota necesita de 3 a 8 fotos tuyas como ejemplos",
+ "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "una regla para una mascota solo mira sus fotos de ejemplo: crea otra regla para personas, lugares o fechas",
+ "a rule for a pet always asks first, because a look-alike is never certain": "una regla para una mascota siempre pregunta primero, porque un parecido nunca es seguro",
+ "Make the pet rule": "Crear la regla"
 }

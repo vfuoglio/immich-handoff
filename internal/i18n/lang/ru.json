@@ -1715,5 +1715,14 @@
  "Send by themselves": "Отправлять самим",
  "Send by themselves from now on": "Отправлять самим с этого момента",
  "{name} let the sharing of photos with {other} send by itself": "{name} разрешил(а) обмену фотографиями с {other} отправлять самому",
- "{name} made the sharing of photos with {other} ask first again": "{name} снова включил(а) вопрос сначала в обмене фотографиями с {other}"
+ "{name} made the sharing of photos with {other} ask first again": "{name} снова включил(а) вопрос сначала в обмене фотографиями с {other}",
+ "Make a rule for a pet": "Создать правило для питомца",
+ "Loading your photos...": "Загрузка ваших фотографий…",
+ "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.": "Выберите от 3 до 8 фотографий вашего питомца. Правило предлагает фотографии, которые Immich считает самыми похожими, и каждая отправленная вами фотография учит его лучше.",
+ "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.": "Приготовьтесь к шумному началу: Immich не различает животных, поэтому первые подборки могут содержать неверные фотографии, пока ваши ответы не научат правило. Питомец, похожий на другого, или маленький рядом с людьми находится плохо. Правило для питомца всегда спрашивает сначала и никогда не отправляет само.",
+ "There are no recent photos of yours to pick from.": "Нет недавних ваших фотографий для выбора.",
+ "a pet rule needs 3 to 8 photos of your own as examples": "правилу для питомца нужны от 3 до 8 ваших фотографий в качестве примеров",
+ "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "правило для питомца смотрит только на свои фотографии-примеры: создайте отдельное правило для людей, мест или дат",
+ "a rule for a pet always asks first, because a look-alike is never certain": "правило для питомца всегда спрашивает сначала, потому что сходство никогда не бывает надёжным",
+ "Make the pet rule": "Создать правило"
 }

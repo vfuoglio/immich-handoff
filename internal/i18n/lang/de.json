@@ -1559,5 +1559,14 @@
  "Send by themselves": "Von selbst senden",
  "Send by themselves from now on": "Ab jetzt von selbst senden",
  "{name} let the sharing of photos with {other} send by itself": "{name} lässt das Teilen von Fotos mit {other} von selbst senden",
- "{name} made the sharing of photos with {other} ask first again": "{name} hat das Teilen von Fotos mit {other} wieder auf „zuerst fragen“ gestellt"
+ "{name} made the sharing of photos with {other} ask first again": "{name} hat das Teilen von Fotos mit {other} wieder auf „zuerst fragen“ gestellt",
+ "Make a rule for a pet": "Eine Regel für ein Haustier erstellen",
+ "Loading your photos...": "Deine Fotos werden geladen …",
+ "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.": "Wähle 3 bis 8 Fotos deines Haustiers. Die Regel bietet die Fotos an, die Immich am ähnlichsten findet, und jedes Foto, das du sendest, bringt ihr mehr bei.",
+ "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.": "Rechne mit einem holprigen Start: Immich kann Tiere nicht unterscheiden, deshalb enthalten die ersten Stapel womöglich falsche Fotos, bis deine Antworten der Regel etwas beigebracht haben. Ein Tier, das einem anderen ähnlich sieht, oder ein kleines neben Menschen wird schlecht gefunden. Eine Haustier-Regel fragt immer zuerst und sendet nie von selbst.",
+ "There are no recent photos of yours to pick from.": "Es gibt keine neuen Fotos von dir zur Auswahl.",
+ "a pet rule needs 3 to 8 photos of your own as examples": "eine Haustier-Regel braucht 3 bis 8 eigene Fotos als Beispiele",
+ "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "eine Regel für ein Haustier sieht nur auf ihre Beispielfotos: Erstelle eine eigene Regel für Personen, Orte oder Daten",
+ "a rule for a pet always asks first, because a look-alike is never certain": "eine Regel für ein Haustier fragt immer zuerst, weil ein ähnliches Foto nie sicher ist",
+ "Make the pet rule": "Regel erstellen"
 }

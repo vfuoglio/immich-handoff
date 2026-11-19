@@ -36,7 +36,7 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	l := loc(ctx)
 	out := make([]RuleView, 0, len(rules))
 	for _, r := range rules {
-		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != "", CanAuto: hub.CanAuto(r), WaitMin: r.SettleMinutes}
+		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.NeverAuto(), CanAuto: hub.CanAuto(r), WaitMin: r.SettleMinutes}
 		if !r.LastLook.IsZero() {
 			v.Last = l.Stamp(r.LastLook.Local())
 		}
@@ -156,7 +156,7 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 	}
 	var out []SuggestionView
 	for _, s := range list {
-		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
+		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.NeverAuto()}
 		if s.Rule.Pairing != "" { // the pool has a generated name: the card says who the photos are for
 			v.Service = w.pairingOther(ctx, me.user.ID, s.Rule.Pairing, v.Service)
 		}
@@ -385,7 +385,7 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
+	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.NeverAuto()}
 	if sg.Rule.Pairing != "" {
 		d.Service = w.pairingOther(r.Context(), me.user.ID, sg.Rule.Pairing, d.Service)
 	}
@@ -563,3 +563,70 @@ func settleOf(r *http.Request) (int, error) {
 
 // waitMinutes is the app's usual wait before a rule offers a photo, in whole minutes, for a form to say.
 func (w *Server) waitMinutes() int { return max(1, int((w.Hub.RuleWait()+30*time.Second)/time.Minute)) }
+
+// PetPhoto is one of the person's recent photos, to pick as an example of a pet.
+type PetPhoto struct{ ID string }
+
+// petForm is the form that makes a rule for a pet: the person's newest photos, to pick three to eight of the animal from.
+func (w *Server) petForm(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	items, err := me.sess.Recent(r.Context(), 60)
+	if err != nil {
+		http.Error(rw, "could not list your photos", http.StatusBadGateway)
+		return
+	}
+	var photos []PetPhoto
+	for _, a := range items {
+		if a.OwnerId == me.user.ID && !a.IsTrashed && !a.IsArchived {
+			photos = append(photos, PetPhoto{ID: a.Id.String()})
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	PetForm(r.URL.Query().Get("service"), photos).Render(r.Context(), rw)
+}
+
+// petPhoto shows one of the person's own photos while they pick the examples of a pet. Only their own are shown.
+func (w *Server) petPhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("asset"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if a, err := me.sess.Asset(r.Context(), id); err != nil || a.OwnerId != me.user.ID || a.IsTrashed {
+		http.NotFound(rw, r)
+		return
+	}
+	data, ct, err := me.sess.Thumbnail(r.Context(), id, false)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if !strings.HasPrefix(ct, "image/") {
+		ct = "image/jpeg"
+	}
+	rw.Header().Set("Content-Type", ct)
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Write(data)
+}
+
+func (w *Server) addPet(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "pet rule made", func(ctx context.Context, me *member, service string) error {
+		r.ParseForm()
+		_, err := w.Hub.AddRule(ctx, me.sess, me.user, hub.RuleParams{Service: service, Examples: ids(r, "photo")})
+		return err
+	})
+}

@@ -37,6 +37,9 @@ Candidates join the rule's **open batch** (one per rule; it grows until answered
 ### Auto
 Sends without asking, only photos that arrive **after the switch**, once they have settled for 30 minutes, within the service's limits and quiet hours, and can be taken back like any hand-over. A rule with a phrase never becomes automatic (nor will a pet rule). A rule that sends can be switched on at once, from the rule's row or from a sharing's card, after a confirmation that names the photos and where they go and says that a wrong photo can reach the service; the album, library and stack rules still wait for three *Always*. The person can switch back to suggest at any time.
 
+### Pets
+A rule with **examples** (3 to 8 of the person's own photos, up to 12 as it learns) instead of people, places or a phrase. It is a condition of an ordinary send rule, not a kind of its own, so Send, Not these, the pass, the wait and look-back are the same. The pass asks `POST /search/smart` with `queryAssetId` for each example (the whole library is ranked, no score), takes the first *m* of each (skipping the examples) and then keeps what arrived after the rule, so the rank is the one that was measured in #227. *m* starts at 10 and, after each Send, becomes 1.5 times the worst rank of an accepted photo plus one, never smaller than it was (at most 300); each accepted photo becomes an example. The rank is kept in the photo's reason (`(rank N)`). It is **suggestion-only** like a phrase (`RuleCond.NeverAuto`), and says plainly when smart search is off. The optional sidecar of #235 replaces the ranking with a cosine against fingerprints.
+
 ### Look back
 A button on a rule suggests the older photos that match (up to 200, newest first) as a batch of suggestions; nothing old is ever sent without a yes.
 

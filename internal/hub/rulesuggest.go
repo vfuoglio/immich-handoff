@@ -155,6 +155,15 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 			}
 		}
 		h.Store.SetRulePhotos(ctx, r.ID, yes, store.RuleSuggested, store.RuleSent)
+		var accepted []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range yes {
+				if p.AssetID == id {
+					accepted = append(accepted, p)
+				}
+			}
+		}
+		h.learnPet(ctx, r, accepted) // a pet rule widens its reach and takes the accepted photos as examples
 	}
 	if len(no) > 0 {
 		h.Store.SetRulePhotos(ctx, r.ID, no, store.RuleSuggested, store.RuleDeclined)
@@ -306,6 +315,9 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	if r.Cond.Phrase != "" {
 		return ErrAutoPhrase
 	}
+	if r.Cond.Pet() {
+		return ErrAutoPet
+	}
 	if r.Kind == store.RuleKindStack && onlyBursts(r.Cond) {
 		return ErrBurstOnly
 	}
@@ -334,5 +346,5 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 // CanAuto says whether a rule may be let go on by itself: it is not automatic yet, it has no phrase, and either it sends photos
 // (the person may switch it on at once, naming who they go to) or it has been answered Always often enough.
 func CanAuto(r store.Rule) bool {
-	return r.Mode != store.RuleAuto && (r.Kind == store.RuleKindSend || r.Always >= alwaysToAuto) && r.Cond.Phrase == "" && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
+	return r.Mode != store.RuleAuto && (r.Kind == store.RuleKindSend || r.Always >= alwaysToAuto) && !r.Cond.NeverAuto() && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
 }

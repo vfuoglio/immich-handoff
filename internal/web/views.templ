@@ -4445,6 +4445,12 @@ templ RulesBox(s ServiceView) {
 			</div>
 		}
 		<details class="offer">
+			<summary>{ t(ctx, "Make a rule for a pet") }</summary>
+			<div hx-get={ "fragments/pet-form?service=" + url.QueryEscape(s.Name) } hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your photos...") }</p>
+			</div>
+		</details>
+		<details class="offer">
 			<summary>{ t(ctx, "Make a rule") }</summary>
 			<div hx-get={ "fragments/rule-form?service=" + url.QueryEscape(s.Name) } hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
 				<p class="meta">{ t(ctx, "Loading your people, places and albums...") }</p>
@@ -4777,4 +4783,23 @@ templ WaitField(usual int) {
 		</select>
 		<small class="meta">{ t(ctx, "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.") }</small>
 	</div>
+}
+
+// PetForm is the form that makes a rule for a pet: the person picks three to eight photos of the animal from their newest ones.
+templ PetForm(service string, photos []PetPhoto) {
+	<form class="card offer-form" hx-post="rules/pet" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="service" value={ service }/>
+		<p class="meta">{ t(ctx, "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.") }</p>
+		<p class="meta">{ t(ctx, "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.") }</p>
+		if len(photos) == 0 {
+			<p class="meta">{ t(ctx, "There are no recent photos of yours to pick from.") }</p>
+		} else {
+			<div class="petgrid">
+				for _, p := range photos {
+					<label class="petpick"><input type="checkbox" name="photo" value={ p.ID }/><img src={ "rules/pet-photo/" + p.ID } alt="" width="96" height="96" loading="lazy"/></label>
+				}
+			</div>
+			<p class="row"><button class="primary" type="submit">{ t(ctx, "Make the pet rule") }</button></p>
+		}
+	</form>
 }

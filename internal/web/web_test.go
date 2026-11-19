@@ -233,8 +233,21 @@ func fakeImmich() http.Handler {
 			OriginalPath string `json:"originalPath"`
 			WithExif     bool   `json:"withExif"`
 			WithStacked  *bool  `json:"withStacked"`
+			Type         string `json:"type"`
+			Order        string `json:"order"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
+		if body.Type == "IMAGE" && body.Order == "desc" && !body.WithExif { // the newest photos, to pick the examples of a pet from: three of "other"'s own and one that is not
+			pic := func(id, owner string) map[string]any {
+				m := a(id)
+				m["ownerId"], m["createdAt"], m["type"] = owner, ts, "IMAGE"
+				return m
+			}
+			j(w, map[string]any{"assets": map[string]any{"items": []any{
+				pic("55555555-0000-4000-8000-0000000000c1", otherID), pic("55555555-0000-4000-8000-0000000000c2", otherID), pic("55555555-0000-4000-8000-0000000000c3", otherID), pic("55555555-0000-4000-8000-0000000000c4", otherID),
+				pic("11111111-1111-1111-1111-111111111111", aliceID)}, "count": 5, "total": 5, "facets": []any{}}})
+			return
+		}
 		if body.WithExif && body.WithStacked != nil { // stacking: the person's photos with their EXIF: a RAW and its JPEG, and a photo alone
 			shot := func(id, name string) map[string]any {
 				m := a(id)

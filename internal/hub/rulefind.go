@@ -89,7 +89,14 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 			f.CreatedAfter = week
 		}
 	}
-	found, err := api.RuleSearch(ctx, f)
+	var found []immich.AssetResponseDto
+	var ranks map[uuid.UUID]int
+	var err error
+	if c.Pet() { // the look-alikes of the examples; the week's window is applied after the ranking, which is over the whole library
+		found, ranks, err = h.petSearch(ctx, api, c, f.CreatedAfter)
+	} else {
+		found, err = api.RuleSearch(ctx, f)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +151,11 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		if skip {
 			continue
 		}
-		matches = append(matches, match{Asset: a, Why: whyMatched(c, a)})
+		why := whyMatched(c, a)
+		if c.Pet() {
+			why = petWhy(ranks[a.Id])
+		}
+		matches = append(matches, match{Asset: a, Why: why})
 	}
 	return matches, nil
 }
@@ -206,6 +217,9 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		problem := trimNet(err)
 		if errors.Is(err, immich.ErrNoSmartSearch) {
 			problem = "your Immich server cannot do a smart search (it runs without machine learning), so the phrase finds nothing"
+			if r.Cond.Pet() {
+				problem = "your Immich server cannot do a smart search (it runs without machine learning), so photos like your examples cannot be found"
+			}
 		}
 		h.Store.MarkRuleLook(ctx, r.ID, h.now(), problem)
 		return 0, err
@@ -215,7 +229,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	var suggested int
 	for _, m := range matches {
 		id := m.Asset.Id.String()
-		if r.Mode == store.RuleAuto && r.Cond.Phrase == "" && !m.Asset.CreatedAt.Before(r.AutoSince) {
+		if r.Mode == store.RuleAuto && !r.Cond.NeverAuto() && !m.Asset.CreatedAt.Before(r.AutoSince) {
 			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleWait(r) {
 				continue // not settled enough to send without asking; it is looked at again next time
 			}
