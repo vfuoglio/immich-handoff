@@ -371,7 +371,7 @@ func TestAPhotoDeliveredToABoundDestinationLandsWhereTheTemplateSaysAndCountsFor
 
 func TestADestinationOfAKindThisVersionCannotWriteToSaysSoInsteadOfBreakingTheService(t *testing.T) {
 	e, ctx := destEnv(t)
-	e.h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "sftp", Settings: map[string]string{"host": "h", "user": "u", "password": "p"}}
+	e.h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "tape", Settings: map[string]string{"drive": "0"}}
 	if err := e.h.AttachDestination(ctx, ann, "nas", "admin:cloud", "", 0, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -381,5 +381,37 @@ func TestADestinationOfAKindThisVersionCannotWriteToSaysSoInsteadOfBreakingTheSe
 	}
 	if st := e.h.DestinationsOf(ctx, "nas")[0]; st.State != store.DestFailing || !strings.Contains(st.Note, "cannot hand over") {
 		t.Errorf("the owner's card says why: %+v", st)
+	}
+}
+
+func TestAnSFTPDestinationOfAPersonNeedsAKeyTheyHaveLookedAtAndTheLookingIsGated(t *testing.T) {
+	e, ctx := destEnv(t)
+	sftp := hub.OwnDestParams{Name: "Server", Kind: "sftp", Settings: map[string]string{"host": "nas.example.org", "user": "ann"}, Secrets: map[string]string{"password": "pw"}}
+	if _, err := e.h.ProbeHostKey(ctx, "nas.example.org", ""); !errors.Is(err, hub.ErrUserDestsOff) {
+		t.Errorf("off by default: %v", err)
+	}
+	e.h.UserDests = true
+	if _, err := e.h.AddOwnDestination(ctx, ann, sftp); !errors.Is(err, hub.ErrNeedHostKey) || !hub.IsUserError(err) {
+		t.Fatalf("no key looked at: %v", err)
+	}
+	bad := sftp
+	bad.Settings = map[string]string{"host": "nas.example.org", "user": "ann", "host_key": "SHA256:short"}
+	if _, err := e.h.AddOwnDestination(ctx, ann, bad); !errors.Is(err, hub.ErrNeedHostKey) {
+		t.Errorf("a key that is not a fingerprint: %v", err)
+	}
+	good := sftp
+	good.Settings = map[string]string{"host": "nas.example.org", "user": "ann", "host_key": "SHA256:" + strings.Repeat("A", 43)}
+	c, err := e.h.AddOwnDestination(ctx, ann, good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := e.st.OwnDestinationsOf(ctx, annID)
+	if len(stored) != 1 || stored[0].Settings["host_key"] == "" || stored[0].Secrets["password"] != "pw" || stored[0].Settings["password"] != "" {
+		t.Errorf("the pinned key is kept with the settings, the password sealed: %+v", stored)
+	}
+	_ = c
+	// looking at a key of a server on a private network needs the administrator's switch
+	if _, err := e.h.ProbeHostKey(ctx, "192.168.1.9", ""); !errors.Is(err, hub.ErrBadDestination) {
+		t.Errorf("%v", err)
 	}
 }

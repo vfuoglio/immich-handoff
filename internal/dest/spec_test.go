@@ -74,7 +74,7 @@ func TestTheDestinationsFileIsParsedWithVariablesAndSecretFilesAndEveryProblemIs
 }
 
 func TestAKindWithNoBuilderSaysSoAndARegisteredOneIsBuilt(t *testing.T) {
-	if _, err := dest.Build(dest.Spec{Name: "x", Kind: "sftp"}, dest.Net{}); !errors.Is(err, dest.ErrKindUnavailable) {
+	if _, err := dest.Build(dest.Spec{Name: "x", Kind: "tape"}, dest.Net{}); !errors.Is(err, dest.ErrKindUnavailable) {
 		t.Errorf("%v", err)
 	}
 	dest.Register("memory-test", func(s dest.Spec, n dest.Net) (dest.Destination, error) { return &dest.Memory{}, nil })

@@ -102,7 +102,7 @@ func (w *Server) removeDestination(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) addOwnDestination(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "own destination added", func(ctx context.Context, me *member, _ string) error {
 		p := hub.OwnDestParams{Name: r.PostFormValue("name"), Kind: r.PostFormValue("kind"), Settings: map[string]string{}}
-		for _, k := range []string{"url", "endpoint", "bucket", "region", "host", "port", "user", "password", "access_key", "secret_key", "private_key"} {
+		for _, k := range []string{"url", "endpoint", "bucket", "region", "host", "port", "user", "password", "access_key", "secret_key", "private_key", "passphrase", "host_key", "root"} {
 			if v := strings.TrimSpace(r.PostFormValue(k)); v != "" {
 				p.Settings[k] = v
 			}
@@ -116,4 +116,25 @@ func (w *Server) forgetOwnDestination(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "own destination forgotten", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.ForgetOwnDestination(ctx, me.user, r.PostFormValue("ref"))
 	})
+}
+
+// hostKey shows the key of an SFTP server (the person compares it with their server's, and the form is saved with it).
+func (w *Server) hostKey(rw http.ResponseWriter, r *http.Request) {
+	me := w.guarded(rw, r)
+	if me == nil {
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	fp, err := w.Hub.ProbeHostKey(r.Context(), r.PostFormValue("host"), r.PostFormValue("port"))
+	if err != nil {
+		w.Log.Warn("host key not read", "user", me.user.Email, "err", err)
+		rw.WriteHeader(http.StatusOK)
+		HostKeyBox("", t(r.Context(), err.Error())).Render(r.Context(), rw)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	HostKeyBox(fp, "").Render(r.Context(), rw)
 }

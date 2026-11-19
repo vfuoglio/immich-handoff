@@ -1779,5 +1779,12 @@
  "{name} removed a destination of {service}": "{name} удалил(а) место назначения для {service}",
  "{destination} of {service} is not answering: {reason}": "{destination} для {service} не отвечает: {reason}",
  "{destination} of {service} answers again": "{destination} для {service} снова отвечает",
- "S3 region (empty: us-east-1)": "Регион S3 (пусто: us-east-1)"
+ "S3 region (empty: us-east-1)": "Регион S3 (пусто: us-east-1)",
+ "Passphrase of the key": "Парольная фраза ключа",
+ "Folder on the SFTP server (empty: the home folder)": "Папка на SFTP-сервере (пусто: домашняя папка)",
+ "Look at the SFTP server's key": "Посмотреть ключ SFTP-сервера",
+ "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Только SFTP: приложение доверяет серверу по его ключу. Посмотрите его, сравните с ключом вашего сервера и затем сохраните.",
+ "The server's key is": "Ключ сервера:",
+ "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Убедитесь, что это ключ вашего сервера (например, командой ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub на нём), прежде чем сохранять: с этого момента приложение доверяет только этому ключу и остановится, если он изменится.",
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "сначала посмотрите ключ SFTP-сервера, сравните его с ключом вашего сервера и сохраните с ним: приложение доверяет только этому ключу"
 }

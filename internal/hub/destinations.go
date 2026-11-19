@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ var (
 	ErrBadDestination   = errors.New("that destination is not valid")
 	ErrBadDestLimit     = errors.New("a daily limit is a whole number of photos and megabytes, 0 for none")
 	ErrTooManyDests     = errors.New("a service can use at most 8 destinations")
+	ErrNeedHostKey      = errors.New("look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key")
 )
 
 const maxServiceDestinations = 8
@@ -124,6 +126,11 @@ func (h *Hub) AddOwnDestination(ctx context.Context, owner immich.User, p OwnDes
 	}
 	if err := dest.CheckAddress(spec, h.DestNet); err != nil {
 		return DestChoice{}, fmt.Errorf("%w: %v", ErrBadDestination, err)
+	}
+	if kind == "sftp" { // an SFTP server is only ever trusted by the key a person has looked at
+		if !hostKeyRe.MatchString(spec.Settings["host_key"]) {
+			return DestChoice{}, ErrNeedHostKey
+		}
 	}
 	for _, c := range h.DestinationChoices(ctx, owner.ID) {
 		if strings.EqualFold(c.Name, spec.Name) {
@@ -579,4 +586,22 @@ func (h *Hub) ownerOf(ctx context.Context, service string) uuid.UUID {
 		return svc.OwnerID
 	}
 	return uuid.Nil
+}
+
+var hostKeyRe = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{43}$`)
+
+// ProbeHostKey connects to an SFTP server only to learn its key, which the person is shown to compare with their server's before they save
+// the destination with it (nothing is trusted that they have not seen). It needs the same permission as adding a destination.
+func (h *Hub) ProbeHostKey(ctx context.Context, host, port string) (string, error) {
+	if !h.SelfService() {
+		return "", ErrNotJoinable
+	}
+	if !h.UserDests {
+		return "", ErrUserDestsOff
+	}
+	fp, err := dest.ProbeHostKey(ctx, strings.TrimSpace(host), strings.TrimSpace(port), h.DestNet)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrBadDestination, err)
+	}
+	return fp, nil
 }

@@ -24,7 +24,7 @@ var required = map[string][]string{
 }
 
 // SecretKeys are the settings that are secrets: they are sealed when a person enters them and never shown again.
-var SecretKeys = map[string]bool{"password": true, "secret_key": true, "private_key": true, "access_key": true}
+var SecretKeys = map[string]bool{"password": true, "secret_key": true, "private_key": true, "access_key": true, "passphrase": true}
 
 // Spec is a destination as the administrator names it or a person enters it: a name, a kind and the kind's settings.
 type Spec struct {

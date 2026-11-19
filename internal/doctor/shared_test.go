@@ -147,12 +147,12 @@ func TestTheDestinationsFileIsCheckedAndEachDestinationIsAskedWhetherItWorks(t *
 	if out, r := run(""); out != "" || r.Fails != 0 {
 		t.Errorf("unset is fine: %q", out)
 	}
-	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n  cloud:\n    kind: sftp\n    host: h\n    user: u\n    password: p\n",
+	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n",
 		&syncer.Service{Name: "family", DestRefs: []syncer.DestRef{{Name: "nas"}, {Name: "nope"}}})
-	if r.Fails != 2 || r.Warns != 1 {
+	if r.Fails != 2 || r.Warns != 0 {
 		t.Errorf("%d fails %d warnings\n%s", r.Fails, r.Warns, out)
 	}
-	for _, want := range []string{"destination nas: the memory destination answers", "destination broken: the share is not mounted", "destination cloud: this version of the app cannot hand over", `names the destination nope`} {
+	for _, want := range []string{"destination nas: the memory destination answers", "destination broken: the share is not mounted", `names the destination nope`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}

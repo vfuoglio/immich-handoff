@@ -135,6 +135,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /services/destinations/remove", w.removeDestination)
 	mux.HandleFunc("POST /destinations", w.addOwnDestination)
 	mux.HandleFunc("POST /destinations/forget", w.forgetOwnDestination)
+	mux.HandleFunc("POST /destinations/hostkey", w.hostKey)
 	mux.HandleFunc("GET /bridge/{token}", w.bridgePage)
 	mux.HandleFunc("POST /bridge/{token}", w.bridgeConnect)
 	mux.HandleFunc("GET /drop/{token}", w.dropPage)

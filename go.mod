@@ -14,6 +14,8 @@ require (
 	github.com/chromedp/chromedp v0.14.2
 	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/runtime v1.9.0
+	github.com/pkg/sftp v1.13.12
+	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.48.0
 	golang.org/x/net v0.62.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -40,6 +42,7 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect

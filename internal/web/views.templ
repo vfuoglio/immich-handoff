@@ -4944,7 +4944,13 @@ templ DestinationsBox(o OwnedView) {
 						<div class="field"><label>{ t(ctx, "User name") } <input name="user" autocomplete="off"/></label></div>
 						<div class="field"><label>{ t(ctx, "Password") } <input name="password" type="password" autocomplete="new-password"/></label></div>
 						<div class="field"><label>{ t(ctx, "S3 access key") } <input name="access_key" autocomplete="off"/></label> <label>{ t(ctx, "S3 secret key") } <input name="secret_key" type="password" autocomplete="new-password"/></label></div>
-						<div class="field"><label>{ t(ctx, "SFTP private key (instead of a password)") } <textarea name="private_key" rows="3" autocomplete="off"></textarea></label></div>
+						<div class="field"><label>{ t(ctx, "SFTP private key (instead of a password)") } <textarea name="private_key" rows="3" autocomplete="off"></textarea></label> <label>{ t(ctx, "Passphrase of the key") } <input name="passphrase" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "Folder on the SFTP server (empty: the home folder)") } <input name="root" placeholder="/photos"/></label></div>
+						<div class="field" id="hostkey-box">
+							<button type="button" hx-post="destinations/hostkey" hx-include="closest form" hx-target="next .hostkey-result" hx-swap="innerHTML">{ t(ctx, "Look at the SFTP server's key") }</button>
+							<small class="meta">{ t(ctx, "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.") }</small>
+							<div class="hostkey-result"></div>
+						</div>
 						<button class="primary" type="submit">{ t(ctx, "Save the destination") }</button>
 					</form>
 				</details>
@@ -4963,4 +4969,15 @@ func capText(n int) string {
 		return ""
 	}
 	return strconv.Itoa(n)
+}
+
+// HostKeyBox is what looking at an SFTP server's key shows: the key to compare, kept in the form so that saving trusts exactly it.
+templ HostKeyBox(fingerprint, problem string) {
+	if problem != "" {
+		<p class="meta bad-note">{ problem }</p>
+	} else {
+		<p>{ t(ctx, "The server's key is") } <code>{ fingerprint }</code></p>
+		<input type="hidden" name="host_key" value={ fingerprint }/>
+		<small class="meta">{ t(ctx, "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.") }</small>
+	}
 }

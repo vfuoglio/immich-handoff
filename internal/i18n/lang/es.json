@@ -1623,5 +1623,12 @@
  "{name} removed a destination of {service}": "{name} quitó un destino de {service}",
  "{destination} of {service} is not answering: {reason}": "{destination} de {service} no responde: {reason}",
  "{destination} of {service} answers again": "{destination} de {service} vuelve a responder",
- "S3 region (empty: us-east-1)": "Región de S3 (vacío: us-east-1)"
+ "S3 region (empty: us-east-1)": "Región de S3 (vacío: us-east-1)",
+ "Passphrase of the key": "Frase de contraseña de la clave",
+ "Folder on the SFTP server (empty: the home folder)": "Carpeta en el servidor SFTP (vacío: la carpeta personal)",
+ "Look at the SFTP server's key": "Ver la clave del servidor SFTP",
+ "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.": "Solo SFTP: la app confía en un servidor por su clave. Mírala, compárala con la de tu servidor y luego guarda.",
+ "The server's key is": "La clave del servidor es",
+ "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.": "Comprueba que es la clave de tu servidor (por ejemplo con ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub en él) antes de guardar: desde ahora la app solo confía en esta clave y se detiene si cambia.",
+ "look at the SFTP server's key first, compare it with your server's, and save with it: the app trusts only that key": "mira primero la clave del servidor SFTP, compárala con la de tu servidor y guarda con ella: la app solo confía en esa clave"
 }
