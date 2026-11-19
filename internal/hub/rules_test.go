@@ -278,12 +278,14 @@ func TestAMessageLinkSendsOrLeavesOutWhatARuleFoundAndWorksOnce(t *testing.T) {
 	}
 }
 
-func TestARuleSendsByItselfOnlyAfterThreeAlwaysOnlyNewSettledPhotosAndNeverForAPhrase(t *testing.T) {
+func TestARuleSendsByItselfWhenSwitchedOnOnlyNewSettledPhotosAndNeverForAPhrase(t *testing.T) {
 	e, ctx := ruleEnv(t)
 	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
 	ph, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Phrase: "a beach"})
-	if err := e.h.SetRuleAuto(ctx, bob, r.ID, true); !errors.Is(err, hub.ErrAutoTooSoon) || !hub.IsUserError(err) {
-		t.Errorf("not before three Always: %v", err)
+	rr, _ := e.st.RuleByID(ctx, r.ID)
+	pp, _ := e.st.RuleByID(ctx, ph.ID)
+	if !hub.CanAuto(rr) || hub.CanAuto(pp) {
+		t.Error("a rule that sends can be switched on at once, a phrase never")
 	}
 	stored := func() store.Rule { x, _ := e.st.RuleByID(ctx, r.ID); return x }
 	old := hit(bobID, 600, nil, noraID) // reached Immich before the switch: stays a suggestion
@@ -392,5 +394,48 @@ func TestTwoRulesThatFindTheSamePhotoHandItOverOnce(t *testing.T) {
 	// the same rule for a service the person has not joined is refused, and says which
 	if _, err := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", Phrase: "x", Also: []string{"nowhere"}}); err == nil || !strings.Contains(err.Error(), "nowhere") {
 		t.Errorf("a service they did not join: %v", err)
+	}
+}
+
+func TestASendRuleSwitchedOnAtOnceSendsNothingThatWasThereBeforeAndOffAsksAgain(t *testing.T) {
+	e, ctx := ruleEnv(t)
+	r, _ := e.h.AddRule(ctx, e.sess, bob, hub.RuleParams{Service: "family", People: []uuid.UUID{uuid.MustParse(noraID)}})
+	stored := func() store.Rule { x, _ := e.st.RuleByID(ctx, r.ID); return x }
+	if stored().Always != 0 {
+		t.Fatal("no Always answered yet")
+	}
+	before := hit(bobID, 600, nil, noraID) // there before the switch
+	e.f.ruleHits = []map[string]any{before}
+	e.h.LookRule(ctx, stored())
+	if err := e.h.SetRuleAuto(ctx, bob, r.ID, true); err != nil {
+		t.Fatalf("on at once, with no Always: %v", err)
+	}
+	if got := stored(); got.Mode != "auto" || got.AutoSince.IsZero() {
+		t.Fatalf("on since now: %+v", got)
+	}
+	sent := len(e.f.tagged)
+	e.st.SetRuleMode(ctx, r.ID, "auto", time.Now().Add(-2*time.Hour))
+	e.h.LookRule(ctx, stored())
+	if len(e.f.tagged) != sent {
+		t.Errorf("a photo that was there before the switch is not sent: %v", e.f.tagged[sent:])
+	}
+	after := hit(bobID, 40, func(m map[string]any) {
+		m["createdAt"] = time.Now().Add(-40 * time.Minute).UTC().Format(time.RFC3339Nano)
+	}, noraID)
+	e.f.ruleHits = []map[string]any{after}
+	e.h.LookRule(ctx, stored())
+	if len(e.f.tagged) != sent+1 || e.f.tagged[sent] != after["id"] {
+		t.Errorf("a settled photo that arrived after it is sent: %v", e.f.tagged)
+	}
+	if err := e.h.SetRuleAuto(ctx, bob, r.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	e.f.ruleHits = []map[string]any{hit(bobID, 45, func(m map[string]any) {
+		m["createdAt"] = time.Now().Add(-45 * time.Minute).UTC().Format(time.RFC3339Nano)
+	}, noraID)}
+	n := len(e.f.tagged)
+	e.h.LookRule(ctx, stored())
+	if len(e.f.tagged) != n {
+		t.Error("switched off, it only suggests")
 	}
 }

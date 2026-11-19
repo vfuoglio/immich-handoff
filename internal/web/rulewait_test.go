@@ -43,6 +43,12 @@ func TestARuleFormOffersTheWaitBeforeAPhotoIsOfferedAndTheChoiceIsKeptAndShown(t
 	if strings.Contains(page, "Waits 0 min") {
 		t.Error("the usual wait is not announced")
 	}
+	// no Always has been answered, yet the switch is there, and its confirmation says what goes where and what can go wrong
+	for _, want := range []string{">Send by itself<", "without asking you, so a wrong photo can reach club", "switch this off at any time", "You can let it send by itself from now on, without answering Always"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("a rule that sends offers the switch from the start: lacks %q", want)
+		}
+	}
 	// a rule that sends by itself says the right time, not half an hour
 	if err := st.SetRuleMode(ctx, rules[0].ID, store.RuleAuto, rules[0].CreatedAt); err != nil {
 		t.Fatal(err)

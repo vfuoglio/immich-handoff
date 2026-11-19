@@ -4424,13 +4424,13 @@ templ RulesBox(s ServiceView) {
 				} else if r.Mode == "auto" {
 					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there half an hour, within this service's limits and quiet hours. You can still take a hand-over back.") }</p>
 				} else if r.CanAuto {
-					<p class="meta">{ t(ctx, "You have answered Always to this rule {n} times. You can let it send by itself from now on.", "n", r.Always) }</p>
+					<p class="meta">{ t(ctx, "This rule asks you first. You can let it send by itself from now on, without answering Always, and switch it back at any time.") }</p>
 				}
 				<p class="row">
 					if r.Mode == "auto" {
 						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
 					} else if r.CanAuto {
-						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on this rule sends the photos it finds without asking you, so a wrong photo can reach the service. Only photos that reach Immich from now on are sent, and you can switch it back at any time. Continue?") } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?", "rule", r.Sentence, "service", s.Name) } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
 					}
 					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" title={ t(ctx, "Suggest the older photos that match this rule too") }>{ t(ctx, "Also look back") }</button>
 					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
@@ -4680,6 +4680,16 @@ templ PairingItem(it PairingView) {
 						}
 					</button>
 					<button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sharing photos with {other}? The photos already copied stay where they are, and nothing is deleted.", "other", it.Other) } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop sharing") }</button>
+				</p>
+				if it.Auto {
+					<p class="meta">{ t(ctx, "Your photos of {people} go to {other} by themselves, once they have settled. You can still take a hand-over back.", "people", it.Mine, "other", it.Other) }</p>
+				}
+				<p class="row">
+					if it.Auto {
+						<button hx-post="pairings/auto" hx-vals={ vals2("pairing", it.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else {
+						<button hx-post="pairings/auto" hx-vals={ vals2("pairing", it.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on, photos of {people} go to {other} without asking you, so a wrong photo can reach {other}. Only photos that reach Immich from now on are sent, once they have settled, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?", "people", it.Mine, "other", it.Other) } data-confirm-title={ t(ctx, "Send by themselves?") } data-confirm-label={ t(ctx, "Send by themselves") }>{ t(ctx, "Send by themselves from now on") }</button>
+					}
 				</p>
 				for _, r := range it.Rules {
 					<p class="row"><button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Suggest older photos of {people}", "people", r.Name) }</button></p>

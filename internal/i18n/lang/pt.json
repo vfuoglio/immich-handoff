@@ -1550,5 +1550,14 @@
  "that rule is not sending by itself": "essa regra não envia sozinha",
  "answer the photos that are waiting for this rule first, then look back": "responda primeiro às fotos que esperam por esta regra e depois olhe para trás",
  "no older photo matches this rule": "nenhuma foto mais antiga corresponde a esta regra",
- "the app could not read your photos with its key": "a aplicação não conseguiu ler as suas fotos com a sua chave"
+ "the app could not read your photos with its key": "a aplicação não conseguiu ler as suas fotos com a sua chave",
+ "This rule asks you first. You can let it send by itself from now on, without answering Always, and switch it back at any time.": "Esta regra pergunta primeiro. Pode deixá-la enviar sozinha a partir de agora, sem responder «Sempre», e voltar atrás a qualquer momento.",
+ "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "A partir de agora, as fotos que correspondem a {rule} vão para {service} sem lhe perguntar, por isso uma foto errada pode chegar a {service}. Só são enviadas as fotos que chegam ao Immich a partir de agora, depois de assentarem, dentro dos limites e das horas de silêncio do serviço, e pode desfazer uma entrega durante 24 horas. Pode desativar isto a qualquer momento. Continuar?",
+ "Your photos of {people} go to {other} by themselves, once they have settled. You can still take a hand-over back.": "As suas fotos de {people} vão para {other} sozinhas, depois de assentarem. Ainda pode desfazer uma entrega.",
+ "From now on, photos of {people} go to {other} without asking you, so a wrong photo can reach {other}. Only photos that reach Immich from now on are sent, once they have settled, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "A partir de agora, as fotos de {people} vão para {other} sem lhe perguntar, por isso uma foto errada pode chegar a {other}. Só são enviadas as fotos que chegam ao Immich a partir de agora, depois de assentarem, e pode desfazer uma entrega durante 24 horas. Pode desativar isto a qualquer momento. Continuar?",
+ "Send by themselves?": "Enviar sozinhas?",
+ "Send by themselves": "Enviar sozinhas",
+ "Send by themselves from now on": "Enviar sozinhas a partir de agora",
+ "{name} let the sharing of photos with {other} send by itself": "{name} deixou a partilha de fotos com {other} enviar sozinha",
+ "{name} made the sharing of photos with {other} ask first again": "{name} voltou a pôr a partilha de fotos com {other} em «perguntar primeiro»"
 }

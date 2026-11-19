@@ -1550,5 +1550,14 @@
  "that rule is not sending by itself": "diese Regel sendet nicht von selbst",
  "answer the photos that are waiting for this rule first, then look back": "beantworte zuerst die Fotos, die für diese Regel warten, und schau dann zurück",
  "no older photo matches this rule": "kein älteres Foto passt zu dieser Regel",
- "the app could not read your photos with its key": "die App konnte deine Fotos mit ihrem Schlüssel nicht lesen"
+ "the app could not read your photos with its key": "die App konnte deine Fotos mit ihrem Schlüssel nicht lesen",
+ "This rule asks you first. You can let it send by itself from now on, without answering Always, and switch it back at any time.": "Diese Regel fragt dich zuerst. Du kannst sie ab jetzt von selbst senden lassen, ohne „Immer“ zu antworten, und jederzeit wieder zurückschalten.",
+ "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "Ab jetzt gehen Fotos, die zu {rule} passen, an {service}, ohne dich zu fragen, sodass auch ein falsches Foto bei {service} landen kann. Gesendet werden nur Fotos, die ab jetzt in Immich ankommen, sobald sie sich gesetzt haben, innerhalb der Limits und Ruhezeiten des Dienstes; eine Übergabe kannst du 24 Stunden lang zurückholen. Du kannst das jederzeit ausschalten. Fortfahren?",
+ "Your photos of {people} go to {other} by themselves, once they have settled. You can still take a hand-over back.": "Deine Fotos von {people} gehen von selbst an {other}, sobald sie sich gesetzt haben. Eine Übergabe kannst du weiterhin zurückholen.",
+ "From now on, photos of {people} go to {other} without asking you, so a wrong photo can reach {other}. Only photos that reach Immich from now on are sent, once they have settled, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "Ab jetzt gehen Fotos von {people} an {other}, ohne dich zu fragen, sodass auch ein falsches Foto bei {other} landen kann. Gesendet werden nur Fotos, die ab jetzt in Immich ankommen, sobald sie sich gesetzt haben; eine Übergabe kannst du 24 Stunden lang zurückholen. Du kannst das jederzeit ausschalten. Fortfahren?",
+ "Send by themselves?": "Von selbst senden?",
+ "Send by themselves": "Von selbst senden",
+ "Send by themselves from now on": "Ab jetzt von selbst senden",
+ "{name} let the sharing of photos with {other} send by itself": "{name} lässt das Teilen von Fotos mit {other} von selbst senden",
+ "{name} made the sharing of photos with {other} ask first again": "{name} hat das Teilen von Fotos mit {other} wieder auf „zuerst fragen“ gestellt"
 }

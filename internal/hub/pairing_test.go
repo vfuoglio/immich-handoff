@@ -494,3 +494,30 @@ func TestEachPersonOfAPairingChoosesTheirOwnWaitAndABadWaitMakesNothing(t *testi
 		t.Errorf("and the starter's stays: %d", got)
 	}
 }
+
+func TestEachPersonSwitchesTheirOwnSideOfASharingToSendByItselfAndBackAndOnlyOnceItIsOn(t *testing.T) {
+	e, ctx := pairingEnv(t)
+	p, _ := offered(t, e, ctx)
+	if err := e.h.SetPairingAuto(ctx, bob, p.ID, true); !errors.Is(err, hub.ErrPairingState) {
+		t.Errorf("nothing to switch before the yes: %v", err)
+	}
+	accepted(t, e, ctx, p)
+	if err := e.h.SetPairingAuto(ctx, immich.User{ID: uuid.New()}, p.ID, true); !errors.Is(err, hub.ErrNoPairing) {
+		t.Errorf("a stranger: %v", err)
+	}
+	if err := e.h.SetPairingAuto(ctx, bob, p.ID, true); err != nil {
+		t.Fatalf("on at once, with no Always: %v", err)
+	}
+	if r := ruleOfUser(t, e, ctx, bobID); r.Mode != store.RuleAuto || r.AutoSince.IsZero() {
+		t.Errorf("bob's rule sends by itself from now on: %+v", r)
+	}
+	if r := ruleOfUser(t, e, ctx, annID); r.Mode == store.RuleAuto {
+		t.Errorf("ann's side is her own choice: %+v", r)
+	}
+	if err := e.h.SetPairingAuto(ctx, bob, p.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if r := ruleOfUser(t, e, ctx, bobID); r.Mode != store.RuleSuggest {
+		t.Errorf("and off again: %+v", r)
+	}
+}

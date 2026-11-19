@@ -309,8 +309,8 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	if r.Kind == store.RuleKindStack && onlyBursts(r.Cond) {
 		return ErrBurstOnly
 	}
-	if r.Always < alwaysToAuto {
-		return ErrAutoTooSoon
+	if r.Kind != store.RuleKindSend && r.Always < alwaysToAuto {
+		return ErrAutoTooSoon // a rule that sends may be switched on at once; the others wait for three Always
 	}
 	if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleAuto, h.now()); err != nil {
 		return err
@@ -331,8 +331,8 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	return nil
 }
 
-// CanAuto says whether a rule may be let go on by itself: it has been answered Always often enough, it is not automatic yet and
-// has no phrase.
+// CanAuto says whether a rule may be let go on by itself: it is not automatic yet, it has no phrase, and either it sends photos
+// (the person may switch it on at once, naming who they go to) or it has been answered Always often enough.
 func CanAuto(r store.Rule) bool {
-	return r.Mode != store.RuleAuto && r.Always >= alwaysToAuto && r.Cond.Phrase == "" && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
+	return r.Mode != store.RuleAuto && (r.Kind == store.RuleKindSend || r.Always >= alwaysToAuto) && r.Cond.Phrase == "" && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
 }

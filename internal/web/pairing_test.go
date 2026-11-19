@@ -178,6 +178,31 @@ func TestSharingPhotosWithSomeoneIsOfferedFromTheOverviewAndSaidYesToOnItsOwnPag
 		}
 	}
 
+	// the switch to send by themselves: its confirmation names the photos and who they go to, it is each person's own, and it can be undone
+	_, pg0 := do(t, "GET", app.URL+"/", "sess=family", nil)
+	for _, w := range []string{"Send by themselves from now on", "photos of Nora go to Alice without asking you", "a wrong photo can reach Alice", "switch this off at any time"} {
+		if !strings.Contains(pg0, w) {
+			t.Errorf("the card's switch lacks %q", w)
+		}
+	}
+	if code, _ := postForm(t, app.URL+"/pairings/auto", "sess=other", "pairing="+p.ID+"&on=1"); code != 409 {
+		t.Errorf("a stranger cannot switch it: %d", code)
+	}
+	if code, b := postForm(t, app.URL+"/pairings/auto", "sess=family", "pairing="+p.ID+"&on=1"); code != 204 {
+		t.Fatalf("switching on: %d %s", code, b)
+	}
+	_, pg1 := do(t, "GET", app.URL+"/", "sess=family", nil)
+	_, pg2 := do(t, "GET", app.URL+"/", "sess=alice", nil)
+	if !strings.Contains(pg1, "Your photos of Nora go to Alice by themselves") || !strings.Contains(pg1, "Ask me first again") {
+		t.Errorf("the starter's card says it sends by itself and offers the way back: %s", pg1)
+	}
+	if strings.Contains(pg2, "go to Family by themselves") || !strings.Contains(pg2, "Send by themselves from now on") {
+		t.Errorf("the other person's side is still their own choice")
+	}
+	if code, _ := postForm(t, app.URL+"/pairings/auto", "sess=family", "pairing="+p.ID+"&on=0"); code != 204 {
+		t.Errorf("switching off: %d", code)
+	}
+
 	// a suggestion says who it is for, not the pool
 	rules, _ := st.RulesOfPairing(ctx, p.ID)
 	var famRule store.Rule

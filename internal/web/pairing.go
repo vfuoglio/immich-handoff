@@ -31,6 +31,7 @@ type PairingView struct {
 	Expires          string // while it waits for a yes: when the offer lapses
 	Link             string // for the starter, while it waits: the page the other person opens
 	WaitMin          int    // the person's own wait before their rules offer a photo, when they chose one (0: the usual)
+	Auto             bool   // the person's own rules here send by themselves
 	Rules            []PairRuleView
 }
 
@@ -101,6 +102,7 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 			if rules, err := w.Hub.PairingRules(ctx, me.user.ID, p.ID); err == nil {
 				for _, r := range rules {
 					it.WaitMin = r.SettleMinutes // each person makes their rules with one wait
+					it.Auto = r.Mode == store.RuleAuto
 					if p.State == store.PairingInvited {
 						continue // nothing to look back at before the yes
 					}
@@ -178,6 +180,12 @@ func (w *Server) acceptPairing(rw http.ResponseWriter, r *http.Request) {
 func (w *Server) pausePairing(rw http.ResponseWriter, r *http.Request) {
 	w.membership(rw, r, "sharing paused", func(ctx context.Context, me *member, _ string) error {
 		return w.Hub.PausePairing(ctx, me.user, r.PostFormValue("pairing"), r.PostFormValue("paused") == "1")
+	})
+}
+
+func (w *Server) autoPairing(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "sharing automatic", func(ctx context.Context, me *member, _ string) error {
+		return w.Hub.SetPairingAuto(ctx, me.user, r.PostFormValue("pairing"), r.PostFormValue("on") == "1")
 	})
 }
 

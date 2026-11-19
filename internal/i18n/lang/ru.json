@@ -1706,5 +1706,14 @@
  "that rule is not sending by itself": "это правило не отправляет само",
  "answer the photos that are waiting for this rule first, then look back": "сначала ответьте на фото, ожидающие это правило, потом посмотрите старые",
  "no older photo matches this rule": "ни одно более старое фото не подходит под это правило",
- "the app could not read your photos with its key": "приложение не смогло прочитать ваши фото своим ключом"
+ "the app could not read your photos with its key": "приложение не смогло прочитать ваши фото своим ключом",
+ "This rule asks you first. You can let it send by itself from now on, without answering Always, and switch it back at any time.": "Это правило сначала спрашивает вас. Вы можете разрешить ему отправлять самому с этого момента, не отвечая «Всегда», и в любой момент вернуть как было.",
+ "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "С этого момента фотографии, подходящие под {rule}, уходят в {service} без вашего вопроса, поэтому ошибочное фото может попасть в {service}. Отправляются только фотографии, которые попадут в Immich с этого момента, после того как устоятся, в рамках лимитов и тихих часов сервиса; передачу можно вернуть в течение 24 часов. Это можно выключить в любой момент. Продолжить?",
+ "Your photos of {people} go to {other} by themselves, once they have settled. You can still take a hand-over back.": "Ваши фотографии {people} уходят к {other} сами, после того как устоятся. Передачу по-прежнему можно вернуть.",
+ "From now on, photos of {people} go to {other} without asking you, so a wrong photo can reach {other}. Only photos that reach Immich from now on are sent, once they have settled, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?": "С этого момента фотографии {people} уходят к {other} без вашего вопроса, поэтому ошибочное фото может попасть к {other}. Отправляются только фотографии, которые попадут в Immich с этого момента, после того как устоятся; передачу можно вернуть в течение 24 часов. Это можно выключить в любой момент. Продолжить?",
+ "Send by themselves?": "Отправлять самим?",
+ "Send by themselves": "Отправлять самим",
+ "Send by themselves from now on": "Отправлять самим с этого момента",
+ "{name} let the sharing of photos with {other} send by itself": "{name} разрешил(а) обмену фотографиями с {other} отправлять самому",
+ "{name} made the sharing of photos with {other} ask first again": "{name} снова включил(а) вопрос сначала в обмене фотографиями с {other}"
 }

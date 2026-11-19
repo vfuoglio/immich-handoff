@@ -211,6 +211,40 @@ func (h *Hub) PausePairing(ctx context.Context, user immich.User, id string, pau
 	return h.Reload(ctx)
 }
 
+// SetPairingAuto switches the person's own rules of a sharing between sending by themselves and asking first. The switch is the
+// person's own: each side chooses for their own rules, and it covers only photos that reach Immich after it is switched on.
+func (h *Hub) SetPairingAuto(ctx context.Context, user immich.User, id string, on bool) error {
+	p, err := h.pairingOf(ctx, user.ID, id)
+	if err != nil {
+		return err
+	}
+	if p.State != store.PairingActive && p.State != store.PairingPaused {
+		return ErrPairingState
+	}
+	rules, err := h.PairingRules(ctx, user.ID, p.ID)
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, r := range rules {
+		if (r.Mode == store.RuleAuto) == on {
+			continue
+		}
+		if err := h.SetRuleAuto(asPairing(ctx), user, r.ID, on); err != nil {
+			return err
+		}
+		changed = true
+	}
+	if changed {
+		word := "made the sharing of photos with {other} ask first again"
+		if on {
+			word = "let the sharing of photos with {other} send by itself"
+		}
+		h.event(ctx, p.Service, user.ID, "pairing", i18n.Pack("{name} "+word, "name", user.Name, "other", pairingOther(p, user.ID)))
+	}
+	return nil
+}
+
 // StopPairing ends the sharing. Every copy stays where it is and nothing is deleted from anyone's library.
 //   - The starter's own side is taken apart at once: the pool, its key and workflow in their Immich, every rule on both sides and
 //     the record. The other person's key in their own Immich can only be deleted by them: it shows in their list of services

@@ -95,6 +95,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /pairings", w.startPairing)
 	mux.HandleFunc("POST /pairings/accept", w.acceptPairing)
 	mux.HandleFunc("POST /pairings/pause", w.pausePairing)
+	mux.HandleFunc("POST /pairings/auto", w.autoPairing)
 	mux.HandleFunc("POST /pairings/stop", w.stopPairing)
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
