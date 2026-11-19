@@ -7,8 +7,13 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"golang.org/x/net/webdav"
 
 	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
@@ -258,4 +263,124 @@ func mustSess(t *testing.T, h *hub.Hub) *immich.API {
 		t.Fatal(err)
 	}
 	return api
+}
+
+// ---- a real network kind: WebDAV against a server in the test ----
+
+type davRig struct {
+	srv  *httptest.Server
+	down atomic.Bool
+	url  string
+}
+
+func newDavRig(t *testing.T) *davRig {
+	t.Helper()
+	h := &webdav.Handler{Prefix: "/dav", FileSystem: webdav.Dir(t.TempDir()), LockSystem: webdav.NewMemLS()}
+	rig := &davRig{}
+	rig.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rig.down.Load() {
+			http.Error(w, "down", 503)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(rig.srv.Close)
+	rig.url = rig.srv.URL + "/dav"
+	return rig
+}
+
+func (r *davRig) put(t *testing.T, name, body string) {
+	t.Helper()
+	d, err := dest.NewWebDAV(r.url, "", "", dest.Net{AllowPrivate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Put(context.Background(), name, strings.NewReader(body), int64(len(body))); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAWebDAVDestinationIsFollowedOfferedAddedAndAFailingServerLosesNothing(t *testing.T) {
+	h, f, st, _, _ := importSetup(t)
+	ctx := context.Background()
+	rig := newDavRig(t)
+	h.DestNet.AllowPrivate = true // the test server is on 127.0.0.1
+	h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "webdav", Settings: map[string]string{"url": rig.url, "import": "true"}}
+	rig.put(t, "old/before.jpg", "was there")
+	r, err := h.FollowDestination(ctx, mustSess(t, h), bob, hub.ImportParams{Source: "admin:cloud", Dest: hub.LibraryDest{Kind: hub.LibraryPlain}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := h.LookRule(ctx, r); err != nil || n != 0 {
+		t.Fatalf("what was there is not offered: %d %v", n, err)
+	}
+	rig.put(t, "phone/new.jpg", "a new photo")
+	rig.put(t, "phone/new.jpg.xmp", "<x/>")
+	rig.put(t, "phone/also.jpg", "another one")
+	got, _ := st.RuleByID(ctx, r.ID)
+	if n, err := h.LookRule(ctx, got); err != nil || n != 2 {
+		t.Fatalf("two new photos, not the sidecar: %d %v", n, err)
+	}
+	if n, _ := h.LookRule(ctx, got); n != 0 {
+		t.Errorf("a seen one is not offered again: %d", n)
+	}
+	// the server stops answering: the look fails in words, and nothing that was offered is lost or marked
+	rig.down.Store(true)
+	before, _ := st.RulePhotoStates(ctx, r.ID)
+	if _, err := h.LookRule(ctx, got); err == nil {
+		t.Fatal("it cannot be listed")
+	}
+	if again, _ := st.RuleByID(ctx, r.ID); !strings.Contains(again.Problem, "could not be listed") || strings.Contains(again.Problem, rig.srv.Listener.Addr().String()) {
+		t.Errorf("the rule says so, without the address: %q", again.Problem)
+	}
+	if after, _ := st.RulePhotoStates(ctx, r.ID); len(after) != len(before) {
+		t.Errorf("nothing is marked on a failure: %v %v", before, after)
+	}
+	if err := h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerSend, nil); err == nil {
+		t.Error("a yes while the server is down fails, and keeps what is offered")
+	}
+	if w, _ := st.RulePhotos(ctx, r.ID, store.RuleSuggested); len(w) != 2 {
+		t.Errorf("both are still waiting: %+v", w)
+	}
+	// it is back: the yes adds both, the first with its sidecar, and the destination is as it was
+	rig.down.Store(false)
+	if err := h.AnswerSuggestion(ctx, bob, r.ID, hub.AnswerSend, nil); err != nil {
+		t.Fatal(err)
+	}
+	var withSidecar, without int
+	for _, u := range f.uploads {
+		if u.name == "new.jpg" && u.sidecar {
+			withSidecar++
+		}
+		if u.name == "also.jpg" && !u.sidecar {
+			without++
+		}
+	}
+	if withSidecar != 1 || without != 1 || len(f.bobCopies()) != 2 {
+		t.Errorf("added, the first with its sidecar: %+v", f.uploads)
+	}
+	d, _ := dest.NewWebDAV(rig.url, "", "", dest.Net{AllowPrivate: true})
+	if all, _ := d.List(ctx, ""); len(all) != 4 {
+		t.Errorf("nothing at the destination changed: %+v", all)
+	}
+}
+
+func TestADestinationWithTooManyFilesIsFollowedByAFolderInsideIt(t *testing.T) {
+	h, _, _, _, _ := importSetup(t)
+	ctx := context.Background()
+	rig := newDavRig(t)
+	h.DestNet.AllowPrivate = true
+	h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "webdav", Settings: map[string]string{"url": rig.url, "import": "true"}}
+	for i := 0; i < 4; i++ {
+		rig.put(t, "big/f"+string(rune('a'+i))+".jpg", "x")
+	}
+	rig.put(t, "small/only.jpg", "y")
+	dest.ListLimit = 3
+	defer func() { dest.ListLimit = 200000 }()
+	if _, err := h.FollowDestination(ctx, mustSess(t, h), bob, hub.ImportParams{Source: "admin:cloud", Dest: hub.LibraryDest{Kind: hub.LibraryPlain}}); !errors.Is(err, hub.ErrImportTooBig) || !hub.IsUserError(err) {
+		t.Fatalf("all of it is too much: %v", err)
+	}
+	if _, err := h.FollowDestination(ctx, mustSess(t, h), bob, hub.ImportParams{Source: "admin:cloud", Prefix: "small", Dest: hub.LibraryDest{Kind: hub.LibraryPlain}}); err != nil {
+		t.Errorf("a folder inside it is fine: %v", err)
+	}
 }

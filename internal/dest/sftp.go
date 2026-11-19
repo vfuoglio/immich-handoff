@@ -458,8 +458,8 @@ func (s *SFTP) List(ctx context.Context, prefix string) ([]Entry, error) {
 				continue
 			}
 			out = append(out, Entry{Ref: s.ref(w.Path()), Size: fi.Size(), Modified: fi.ModTime()})
-			if len(out) > listMaxEntries {
-				return errors.New("the destination holds too many files to list")
+			if len(out) > ListLimit {
+				return ErrTooManyFiles
 			}
 		}
 		return nil

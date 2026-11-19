@@ -1680,5 +1680,6 @@
  "{n} file of the destination {destination} left out of your library": {
   "one": "{n} archivo del destino {destination} se dejó fuera de tu biblioteca",
   "other": "{n} archivos del destino {destination} se dejaron fuera de tu biblioteca"
- }
+ },
+ "that destination holds too many files to follow as a whole: follow a folder inside it": "ese destino tiene demasiados archivos para seguirlo entero: sigue una carpeta dentro de él"
 }

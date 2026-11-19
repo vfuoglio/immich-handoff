@@ -226,6 +226,9 @@ func (f *Folder) List(ctx context.Context, prefix string) ([]Entry, error) {
 			return nil
 		}
 		out = append(out, Entry{Ref: f.ref(p), Size: info.Size(), Modified: info.ModTime()})
+		if len(out) > ListLimit {
+			return ErrTooManyFiles
+		}
 		return nil
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Ref < out[j].Ref })

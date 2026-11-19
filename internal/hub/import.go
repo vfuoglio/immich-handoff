@@ -34,6 +34,7 @@ var (
 	ErrImportNotAllowed = errors.New("the administrator has not allowed importing from that destination")
 	ErrAlreadyImporting = errors.New("you already follow that destination")
 	ErrNoThumbnail      = errors.New("no picture for that file")
+	ErrImportTooBig     = errors.New("that destination holds too many files to follow as a whole: follow a folder inside it")
 )
 
 // mediaExt are the files an import offers: the photos and videos Immich takes. Everything else in a folder (documents, sidecars, the
@@ -190,6 +191,9 @@ func (h *Hub) FollowDestination(ctx context.Context, sess *immich.API, user immi
 		return store.Rule{}, err
 	}
 	entries, err := src.List(ctx, prefix) // read now: this also shows that it can be reached and listed
+	if errors.Is(err, dest.ErrTooManyFiles) {
+		return store.Rule{}, ErrImportTooBig
+	}
 	if err != nil {
 		return store.Rule{}, fmt.Errorf("the destination could not be listed: %w", err)
 	}
@@ -238,6 +242,9 @@ func (h *Hub) lookImport(ctx context.Context, r store.Rule) (int, error) {
 		return fail("the destination is not available: "+trimNet(err), err)
 	}
 	entries, err := src.List(ctx, r.Cond.Prefix)
+	if errors.Is(err, dest.ErrTooManyFiles) {
+		return fail("the destination holds too many files to look at in one go: follow a folder inside it instead", ErrImportTooBig)
+	}
 	if err != nil {
 		return fail("the destination could not be listed: "+trimNet(err), err)
 	}

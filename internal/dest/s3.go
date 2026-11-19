@@ -613,8 +613,8 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 			}
 			t, _ := time.Parse(time.RFC3339, c.Modified)
 			out = append(out, Entry{Ref: s.ref(c.Key), Size: c.Size, Modified: t})
-			if len(out) > listMaxEntries {
-				return nil, errors.New("the destination holds too many files to list")
+			if len(out) > ListLimit {
+				return nil, ErrTooManyFiles
 			}
 		}
 		if !page.Truncated || page.Next == "" {

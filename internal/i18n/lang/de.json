@@ -1680,5 +1680,6 @@
  "{n} file of the destination {destination} left out of your library": {
   "one": "{n} Datei des Ziels {destination} nicht zu deiner Bibliothek hinzugefügt",
   "other": "{n} Dateien des Ziels {destination} nicht zu deiner Bibliothek hinzugefügt"
- }
+ },
+ "that destination holds too many files to follow as a whole: follow a folder inside it": "dieses Ziel enthält zu viele Dateien, um es als Ganzes zu verfolgen: Folge einem Ordner darin"
 }

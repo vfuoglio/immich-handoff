@@ -80,7 +80,8 @@ A destination can also be **followed**, the way an album shared with you is: on 
 
 - **Only reads.** Nothing in the destination is changed, renamed or deleted, ever.
 - **From now on, or everything:** *Only what appears from now on* remembers what is there now and never offers it; *What is there now, and what appears* offers it all (up to 200 files a look).
-- **A folder in it:** give a sub-folder to follow only that (a rule never reads outside it).
+- **A folder in it:** give a sub-folder to follow only that (a rule never reads outside it). A place with more than 200,000 files is too much to list every time it is looked at: the app says so, and you follow a folder inside it instead.
+- **How it looks:** the app lists the destination every few minutes (a folder at a time on WebDAV, a page of a thousand at a time on S3, a walk of the folders on SFTP), tells new files by their name, and uses the time a file was last changed to leave out one that is still being written. A download that moves no data for three minutes is given up and tried again at the next look; nothing is lost.
 - **What is offered:** photos and videos (JPEG, PNG, HEIC, RAW, MP4, MOV and so on). Sidecars, the records this app writes and files still being written are not. **A file with a record beside it is a hand-over of this app, and is not offered back.**
 - **Pictures:** JPEG, PNG, GIF and WebP files are shown scaled; a video, a HEIC or a RAW shows its name and size instead.
 - **Where the files go:** in your library tagged with where they came from (`from/<destination>`), plain, or in an album.

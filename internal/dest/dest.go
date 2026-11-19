@@ -13,6 +13,13 @@ import (
 // ErrNotFound: nothing is stored under that reference.
 var ErrNotFound = errors.New("not found")
 
+// ErrTooManyFiles: a listing would be longer than ListLimit. Listing a place with that many files every time it is looked at is not cheap,
+// so the place is followed (imported from) by a folder inside it instead.
+var ErrTooManyFiles = errors.New("the destination holds too many files to list")
+
+// ListLimit is the most files one listing returns before it gives up with ErrTooManyFiles (a variable so that tests need not make 200,000).
+var ListLimit = 200000
+
 // Stored is what a destination holds after Put.
 type Stored struct {
 	Ref     string // names the file there (a path, a key); what Stat, Open and Delete take

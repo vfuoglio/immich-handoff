@@ -440,8 +440,7 @@ func (w *WebDAV) Delete(ctx context.Context, ref string) error {
 }
 
 const (
-	listMaxDepth   = 16
-	listMaxEntries = 200000
+	listMaxDepth = 16
 )
 
 // List implements Destination: the files under a prefix, found folder by folder (a server may refuse a listing of everything at once).
@@ -470,8 +469,8 @@ func (w *WebDAV) List(ctx context.Context, prefix string) ([]Entry, error) {
 				continue
 			}
 			out = append(out, Entry{Ref: e.Ref, Size: e.Size, Modified: e.Modified})
-			if len(out) > listMaxEntries {
-				return errors.New("the destination holds too many files to list")
+			if len(out) > ListLimit {
+				return ErrTooManyFiles
 			}
 		}
 		return ctx.Err()

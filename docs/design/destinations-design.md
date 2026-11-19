@@ -122,6 +122,11 @@ The same places, read: **a destination can be followed** the way an album shared
 - **Pictures** of a file are made on request from files the rule has offered (`/rules/import-photo/{rule}/{encoded file}`): JPEG, PNG, GIF and WebP scaled to 480 px; anything else shows its name.
 - The same code serves all four kinds (it needs only `List`, `Stat` and `Open`), so #244 is a check of the network kinds on it.
 
+## Built so far (#244)
+
+- Nothing new was needed in the import itself: it needs only `List`, `Stat` and `Open`, which the four kinds have. What #244 added is the proof and the limit: a contract test that runs the same steps (list everything and under a folder, with sizes and times; a folder that is not there; a file and its missing sidecar read as *not found*; a listing over the limit) against a folder, WebDAV, S3 and SFTP, an import of a WebDAV destination end to end (offered, seen not offered again, a failing server says so in words without its address and loses nothing, the yes adds the files with their sidecars and the destination is as it was), and `dest.ListLimit` (200,000) with `ErrTooManyFiles`, which the person is told in words: follow a folder inside it.
+- The download is read by `UploadFileWith`, whose stall watchdog gives up a stream that moves no data for three minutes.
+
 ## The test
 - **Unit tests** for the interface against an in-memory store, the template cleaning (traversal, long and odd names), the suffix and idempotence rules, the checksum comparison, the per-destination state, and the cap and pause.
 - **End to end** (a throwaway Immich with two people): a folder destination for a service (extra receiver and destination-only), a photo handed over arrives with sidecar and record, a repeat is skipped, a different photo with the same name is suffixed, a live photo, a move after a verified copy, a move held by a destination that is down, take-back deleting the files. WebDAV against a small in-test server (`golang.org/x/net/webdav`), S3 against an in-test S3 stub or MinIO in the stack, SFTP against an in-test server on the new dependency.
