@@ -219,7 +219,7 @@ func TestAPhotoIsWrittenWithItsSidecarAndRecordAndALivePhotoWithItsClipUnderOneB
 		}
 	}
 	rec, _ := os.ReadFile(filepath.Join(root, "IMG_1234 (2).HEIC.handoff.json"))
-	for _, want := range []string{`"sender": "Bob"`, `"service": "family"`, `"original_name": "IMG_1234.HEIC"`, id, `"source_checksum": "c2hhMQ=="`, `"sha1"`} {
+	for _, want := range []string{`"sender": "Bob"`, `"service": "family"`, `"original_name": "IMG_1234.HEIC"`, id, `"source_checksum": "c2hhMQ=="`, `"sha1"`, `"verified": "size and checksum"`} {
 		if !strings.Contains(string(rec), want) {
 			t.Errorf("the record lacks %q:\n%s", want, rec)
 		}

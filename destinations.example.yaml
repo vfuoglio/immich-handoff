@@ -7,12 +7,15 @@ destinations:
     kind: folder
     root: /destinations/nas
 
+  # A WebDAV folder (Nextcloud, ownCloud and others). Use https; an address on your own network needs DESTINATIONS_ALLOW_PRIVATE=true.
+  # For Nextcloud and ownCloud make an app password (Settings, Security) instead of using the account's password.
+  cloud:
+    kind: webdav
+    url: https://cloud.example.org/remote.php/dav/files/me/Photos
+    user: me
+    password_file: /run/secrets/webdav_password
+
   # The kinds below are described in docs/design/destinations-design.md and arrive one by one.
-  # cloud:
-  #   kind: webdav
-  #   url: https://cloud.example.org/remote.php/dav/files/me
-  #   user: me
-  #   password_file: /run/secrets/webdav_password
   # bucket:
   #   kind: s3
   #   endpoint: https://s3.example.org     # empty for Amazon

@@ -111,6 +111,7 @@ type record struct {
 	SourceAsset    string    `json:"source_asset"`
 	SourceChecksum string    `json:"source_checksum,omitempty"`
 	SHA1           string    `json:"sha1"`
+	Verified       string    `json:"verified"` // how the copy was checked: "size and checksum" or "size only"
 	Size           int64     `json:"size"`
 }
 
@@ -134,7 +135,7 @@ func (r *Remote) aux(ctx context.Context, st Stored, a immich.AssetResponseDto, 
 			}
 		}
 	}
-	b, _ := json.MarshalIndent(record{File: st.Ref, Original: a.OriginalFileName, Sender: job.Sender, Service: r.Service, At: time.Now().UTC(), SourceAsset: a.Id.String(), SourceChecksum: a.Checksum, SHA1: st.Sum, Size: st.Size}, "", " ")
+	b, _ := json.MarshalIndent(record{File: st.Ref, Original: a.OriginalFileName, Sender: job.Sender, Service: r.Service, At: time.Now().UTC(), SourceAsset: a.Id.String(), SourceChecksum: a.Checksum, SHA1: st.Sum, Verified: st.Verified, Size: st.Size}, "", " ")
 	return r.replace(ctx, st.Ref+recordExt, append(b, '\n'))
 }
 
@@ -212,6 +213,11 @@ func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetRespons
 	case info.Sum != "" && info.Sum != sum:
 		return Stored{}, fmt.Errorf("%w: its checksum differs", ErrNotHeld)
 	}
+	st.Verified = "size only" // a destination that cannot say what it holds is trusted for the size
+	if st.Sum != "" || info.Sum != "" {
+		st.Verified = "size and checksum"
+	}
+	st.Sum = sum // what was sent, which the record keeps
 	return st, nil
 }
 
