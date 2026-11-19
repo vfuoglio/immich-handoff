@@ -1778,5 +1778,6 @@
  "{name} resumed a destination of {service}": "{name} возобновил(а) место назначения для {service}",
  "{name} removed a destination of {service}": "{name} удалил(а) место назначения для {service}",
  "{destination} of {service} is not answering: {reason}": "{destination} для {service} не отвечает: {reason}",
- "{destination} of {service} answers again": "{destination} для {service} снова отвечает"
+ "{destination} of {service} answers again": "{destination} для {service} снова отвечает",
+ "S3 region (empty: us-east-1)": "Регион S3 (пусто: us-east-1)"
 }

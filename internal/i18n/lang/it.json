@@ -1622,5 +1622,6 @@
  "{name} resumed a destination of {service}": "{name} ha ripreso una destinazione di {service}",
  "{name} removed a destination of {service}": "{name} ha rimosso una destinazione di {service}",
  "{destination} of {service} is not answering: {reason}": "{destination} di {service} non risponde: {reason}",
- "{destination} of {service} answers again": "{destination} di {service} risponde di nuovo"
+ "{destination} of {service} answers again": "{destination} di {service} risponde di nuovo",
+ "S3 region (empty: us-east-1)": "Regione S3 (vuoto: us-east-1)"
 }

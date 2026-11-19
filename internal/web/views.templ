@@ -4939,7 +4939,7 @@ templ DestinationsBox(o OwnedView) {
 							<select name="kind"><option value="webdav">WebDAV</option><option value="s3">S3</option><option value="sftp">SFTP</option></select></label></div>
 						<div class="field"><label>{ t(ctx, "WebDAV address") } <input name="url" placeholder="https://cloud.example.org/remote.php/dav/files/me"/></label></div>
 						<div class="field"><label>{ t(ctx, "S3 endpoint (empty for Amazon)") } <input name="endpoint" placeholder="https://s3.example.org"/></label></div>
-						<div class="field"><label>{ t(ctx, "S3 bucket") } <input name="bucket"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 bucket") } <input name="bucket"/></label> <label>{ t(ctx, "S3 region (empty: us-east-1)") } <input name="region" class="narrow" placeholder="us-east-1"/></label></div>
 						<div class="field"><label>{ t(ctx, "SFTP host") } <input name="host"/></label> <label>{ t(ctx, "Port") } <input name="port" class="narrow" placeholder="22"/></label></div>
 						<div class="field"><label>{ t(ctx, "User name") } <input name="user" autocomplete="off"/></label></div>
 						<div class="field"><label>{ t(ctx, "Password") } <input name="password" type="password" autocomplete="new-password"/></label></div>

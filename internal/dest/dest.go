@@ -19,8 +19,8 @@ type Stored struct {
 	Size    int64  // the size the destination holds
 	Sum     string // the SHA-1 (hex) of what it holds when it knows it (computed while writing, or the server's checksum); empty when it cannot say
 	Existed bool   // a file with that name and checksum was already there, so nothing new was written
-	// Verified is set by Remote, not by a destination: how the copy was checked, "size and checksum" or "size only" (a server that gives no
-	// checksum), for the record written beside the file.
+	// Verified is how the copy was checked, "size and checksum" or "size only" (a server that gives no checksum), for the record written
+	// beside the file. Remote fills it in unless the destination already did (S3 checks the MD5 the store returns for each upload).
 	Verified string
 }
 

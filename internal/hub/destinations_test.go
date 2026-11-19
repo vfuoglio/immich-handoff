@@ -371,7 +371,7 @@ func TestAPhotoDeliveredToABoundDestinationLandsWhereTheTemplateSaysAndCountsFor
 
 func TestADestinationOfAKindThisVersionCannotWriteToSaysSoInsteadOfBreakingTheService(t *testing.T) {
 	e, ctx := destEnv(t)
-	e.h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "s3", Settings: map[string]string{"bucket": "b", "access_key": "a", "secret_key": "s"}}
+	e.h.AdminDests["cloud"] = dest.Spec{Name: "cloud", Kind: "sftp", Settings: map[string]string{"host": "h", "user": "u", "password": "p"}}
 	if err := e.h.AttachDestination(ctx, ann, "nas", "admin:cloud", "", 0, 0); err != nil {
 		t.Fatal(err)
 	}

@@ -147,7 +147,7 @@ func TestTheDestinationsFileIsCheckedAndEachDestinationIsAskedWhetherItWorks(t *
 	if out, r := run(""); out != "" || r.Fails != 0 {
 		t.Errorf("unset is fine: %q", out)
 	}
-	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n  cloud:\n    kind: s3\n    bucket: b\n    access_key: a\n    secret_key: s\n",
+	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n  cloud:\n    kind: sftp\n    host: h\n    user: u\n    password: p\n",
 		&syncer.Service{Name: "family", DestRefs: []syncer.DestRef{{Name: "nas"}, {Name: "nope"}}})
 	if r.Fails != 2 || r.Warns != 1 {
 		t.Errorf("%d fails %d warnings\n%s", r.Fails, r.Warns, out)

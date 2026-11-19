@@ -213,9 +213,11 @@ func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetRespons
 	case info.Sum != "" && info.Sum != sum:
 		return Stored{}, fmt.Errorf("%w: its checksum differs", ErrNotHeld)
 	}
-	st.Verified = "size only" // a destination that cannot say what it holds is trusted for the size
-	if st.Sum != "" || info.Sum != "" {
-		st.Verified = "size and checksum"
+	if st.Verified == "" { // a destination may have checked the copy itself (S3 does, by the MD5 the store returns)
+		st.Verified = "size only" // one that cannot say what it holds is trusted for the size
+		if st.Sum != "" || info.Sum != "" {
+			st.Verified = "size and checksum"
+		}
 	}
 	st.Sum = sum // what was sent, which the record keeps
 	return st, nil
