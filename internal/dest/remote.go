@@ -1,9 +1,11 @@
 package dest
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,9 +22,10 @@ import (
 // the destination, checks what the destination holds, and says so only when it holds the photo. It takes no part in what is written
 // besides the bytes: the name comes from Path (the template, the sidecar and the record are the folder's, WebDAV's, ... own work).
 type Remote struct {
-	Ident string      // the receiver's name within its service
-	Name  string      // what logs and pages call it
-	D     Destination // where the files go
+	Ident   string      // the receiver's name within its service
+	Name    string      // what logs and pages call it
+	Service string      // the service it belongs to, for the record written beside each file
+	D       Destination // where the files go
 	// Path names the file for a photo, relative to the destination's root; nil: the original's file name. It must not leave the root: the
 	// destination cleans it again.
 	Path func(job syncer.RemoteJob, a immich.AssetResponseDto) string
@@ -58,26 +61,111 @@ func (r *Remote) name(job syncer.RemoteJob, a immich.AssetResponseDto) string {
 	return path.Base(strings.ReplaceAll(a.OriginalFileName, "\\", "/"))
 }
 
-// Deliver implements syncer.Remote. A live photo's clip goes first. The photo is held when the destination's own look at it (its size
-// and, when it can say, its checksum) agrees with the bytes that were sent.
+// Deliver implements syncer.Remote. The photo is written first, then the XMP sidecar (the rating, location and description a bridge also
+// carries, when details are carried) and a record of where it came from, both named after the photo; a live photo's clip follows with the
+// photo's base name. The photo is held when the destination's own look at it (its size and, when it can say, its checksum) agrees with
+// the bytes that were sent. When anything after the photo fails, what this delivery created is removed again, so that a retry starts clean.
 func (r *Remote) Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job syncer.RemoteJob) (syncer.RemoteCopy, error) {
 	var cp syncer.RemoteCopy
-	if clip != nil {
-		st, err := r.put(ctx, src, *clip, job)
-		if err != nil {
-			return cp, fmt.Errorf("motion clip: %w", err)
-		}
-		cp.Clip, cp.ClipCreated = st.Ref, !st.Existed
-	}
-	st, err := r.put(ctx, src, a, job)
+	st, err := r.put(ctx, src, a, r.name(job, a))
 	if err != nil {
 		return cp, err
 	}
+	undo := func() {
+		if !st.Existed {
+			r.removeAll(context.WithoutCancel(ctx), st.Ref)
+		}
+	}
+	if err := r.aux(ctx, st, a, job); err != nil {
+		undo()
+		return cp, fmt.Errorf("the photo arrived but its sidecar or record could not be written: %w", err)
+	}
 	cp.Ref, cp.Created = st.Ref, !st.Existed
+	if clip != nil {
+		cst, err := r.put(ctx, src, *clip, clipName(st.Ref, *clip))
+		if err != nil {
+			undo()
+			return syncer.RemoteCopy{}, fmt.Errorf("motion clip: %w", err)
+		}
+		cp.Clip, cp.ClipCreated = cst.Ref, !cst.Existed
+	}
 	return cp, nil
 }
 
-func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetResponseDto, job syncer.RemoteJob) (Stored, error) {
+// clipName is the name of a live photo's clip: the photo's base name (as it was finally stored) and the clip's own extension.
+func clipName(stillRef string, clip immich.AssetResponseDto) string {
+	ext := path.Ext(strings.ReplaceAll(clip.OriginalFileName, "\\", "/"))
+	if ext == "" {
+		ext = ".mov"
+	}
+	return strings.TrimSuffix(stillRef, path.Ext(stillRef)) + ext
+}
+
+// record is what is written beside each file: where it came from, and what was written.
+type record struct {
+	File           string    `json:"file"`
+	Original       string    `json:"original_name"`
+	Sender         string    `json:"sender"`
+	Service        string    `json:"service"`
+	At             time.Time `json:"delivered_at"`
+	SourceAsset    string    `json:"source_asset"`
+	SourceChecksum string    `json:"source_checksum,omitempty"`
+	SHA1           string    `json:"sha1"`
+	Size           int64     `json:"size"`
+}
+
+const (
+	sidecarExt = ".xmp"
+	recordExt  = ".handoff.json"
+)
+
+// aux writes the sidecar and the record beside a stored photo. For a photo that was already there (a repeat) the record of the first
+// delivery is kept, and the pieces are written only if they are missing.
+func (r *Remote) aux(ctx context.Context, st Stored, a immich.AssetResponseDto, job syncer.RemoteJob) error {
+	if st.Existed {
+		if _, err := r.D.Stat(ctx, st.Ref+recordExt); err == nil {
+			return nil
+		}
+	}
+	if job.Details {
+		if x := immich.Sidecar(a); x != nil {
+			if err := r.replace(ctx, st.Ref+sidecarExt, x); err != nil {
+				return err
+			}
+		}
+	}
+	b, _ := json.MarshalIndent(record{File: st.Ref, Original: a.OriginalFileName, Sender: job.Sender, Service: r.Service, At: time.Now().UTC(), SourceAsset: a.Id.String(), SourceChecksum: a.Checksum, SHA1: st.Sum, Size: st.Size}, "", " ")
+	return r.replace(ctx, st.Ref+recordExt, append(b, '\n'))
+}
+
+// replace writes a small file under exactly this name, replacing one that is there.
+func (r *Remote) replace(ctx context.Context, ref string, b []byte) error {
+	if err := r.D.Delete(ctx, ref); err != nil {
+		return err
+	}
+	st, err := r.D.Put(ctx, ref, bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		return err
+	}
+	if st.Ref != ref {
+		r.D.Delete(ctx, st.Ref)
+		return fmt.Errorf("%s was taken", ref)
+	}
+	return nil
+}
+
+// removeAll deletes a photo and what was written beside it.
+func (r *Remote) removeAll(ctx context.Context, ref string) error {
+	var first error
+	for _, x := range []string{ref, ref + sidecarExt, ref + recordExt} {
+		if err := r.D.Delete(ctx, x); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetResponseDto, name string) (Stored, error) {
 	stall := r.Stall
 	if stall <= 0 {
 		stall = immich.StallTimeout
@@ -96,7 +184,7 @@ func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetRespons
 	var n atomic.Int64
 	size := resp.ContentLength // -1 when the server did not say
 	tee := io.TeeReader(body, io.MultiWriter(h, countWriter{&n}))
-	st, err := r.D.Put(ctx, r.name(job, a), tee, size)
+	st, err := r.D.Put(ctx, name, tee, size)
 	if err != nil {
 		if body.stalled() {
 			return Stored{}, fmt.Errorf("the transfer stalled: no data for %s", stall)
@@ -130,7 +218,7 @@ func (r *Remote) put(ctx context.Context, src *immich.API, a immich.AssetRespons
 // TakeBackRefs implements syncer.TakeBacker: the files are deleted (a destination has no trash).
 func (r *Remote) TakeBackRefs(ctx context.Context, refs []string) error {
 	for _, ref := range refs {
-		if err := r.D.Delete(ctx, ref); err != nil {
+		if err := r.removeAll(ctx, ref); err != nil {
 			return err
 		}
 	}

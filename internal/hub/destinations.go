@@ -410,7 +410,7 @@ func (h *Hub) boundRemote(ctx context.Context, service string, b store.ServiceDe
 	} else if d, err := dest.Build(spec, h.DestNet); err != nil {
 		r.buildErr = err
 	} else {
-		r.inner = &dest.Remote{Ident: b.ID, Name: name, D: d, Path: r.path}
+		r.inner = &dest.Remote{Ident: b.ID, Name: name, Service: service, D: d, Path: r.path}
 	}
 	h.destRemotes[b.ID] = r
 	return r

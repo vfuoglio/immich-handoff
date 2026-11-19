@@ -3,12 +3,16 @@ package syncer_test
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -152,5 +156,30 @@ func TestInCopyModeTheTagStaysUntilEveryDestinationHoldsThePhoto(t *testing.T) {
 	s.Run(context.Background(), "test", false)
 	if len(down.got) != 1 || len(f.refusedTagged) != 1 {
 		t.Fatalf("then it is delivered and marked: got=%v sent=%v", down.got, f.refusedTagged)
+	}
+}
+
+func TestAFolderDestinationGetsTheOriginalWithItsRecordAndTheOriginalMoves(t *testing.T) {
+	root := t.TempDir()
+	d, err := dest.NewFolder(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &dest.Remote{Ident: "nas", Name: "the NAS", Service: "backup", D: d}
+	f, _, s := destEnv(t, false, r)
+	s.Run(context.Background(), "test", false)
+	var files []string
+	filepath.WalkDir(root, func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			rel, _ := filepath.Rel(root, p)
+			files = append(files, rel)
+		}
+		return nil
+	})
+	if len(files) != 2 || len(f.deleted) != 1 || s.Last().Counts.Imported != 1 {
+		t.Fatalf("the photo and its record are in the folder and the original moved: %v deleted=%v counts=%+v", files, f.deleted, s.Last().Counts)
+	}
+	if !strings.HasSuffix(files[0]+files[1], ".handoff.json") && !strings.HasSuffix(files[1], ".handoff.json") {
+		t.Errorf("%v", files)
 	}
 }

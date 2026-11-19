@@ -67,10 +67,13 @@ func TestAPhotoIsStreamedIntoTheDestinationAndHeldOnlyWhenItsOwnLookAgrees(t *te
 	}
 	// the same photo again is already there: held, nothing new, nothing to take back
 	cp, err = r.Deliver(context.Background(), api, a, nil, syncer.RemoteJob{Sender: "alice"})
-	if err != nil || cp.Created || cp.Ref != "IMG_1.jpg" || m.Puts != 2 {
+	if err != nil || cp.Created || cp.Ref != "IMG_1.jpg" || m.Puts != 3 { // the photo, its record and the clip: a repeat writes nothing more
 		t.Fatalf("a repeat: %+v %v puts=%d", cp, err, m.Puts)
 	}
 	// take-back deletes the files
+	if len(m.Refs()) != 3 {
+		t.Errorf("the photo, its record and its clip: %v", m.Refs())
+	}
 	if err := r.TakeBackRefs(context.Background(), []string{"IMG_1.jpg", "IMG_1.mov"}); err != nil || len(m.Refs()) != 0 {
 		t.Errorf("take-back: %v %v", err, m.Refs())
 	}
