@@ -11,6 +11,7 @@ Start with what you want to do.
 | **Deliver a shoot to a client** | [Client rooms](guides/client-rooms.md) |
 | **Share an album with a friend on another server** | [Share albums across servers](guides/shared-albums.md), [receive on another server](guides/other-server.md) |
 | **Share a person's photos with my partner, both ways** | [Share a person's photos](guides/share-people.md) |
+| **Also hand photos over to a folder, a Nextcloud, an S3 bucket or a server** | [Destinations](guides/destinations.md) |
 | **Stop tagging by hand** | [Rules and the button inside Immich](guides/automate.md), [setting up the button](find-handoff.md#hand-over-from-inside-immich) |
 | **Send from my phone** | [Send photos from a phone](guides/phone.md) |
 | Limit, pause or take back hand-overs | [Control what is handed over](guides/controls.md) |
