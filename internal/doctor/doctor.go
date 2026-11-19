@@ -19,6 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -81,6 +82,7 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	notifications(r, in)
 	sharedAlbums(r, in)
 	rulesSettings(r, in)
+	petSidecar(r, in)
 	memoriesSettings(r, in)
 	buttonSettings(r, in)
 	mailIn(ctx, r, in)
@@ -717,4 +719,31 @@ func onSwitch(v string) bool {
 		return true
 	}
 	return false
+}
+
+// petSidecar checks PET_SIDECAR_URL, which the app refuses to start with when it is not an address, and that the sidecar answers (the
+// app works without it: a pet rule then uses Immich's own search and says so).
+func petSidecar(r *Report, in Input) {
+	v := firstOf(in.Env, "PET_SIDECAR_URL")
+	if v == "" {
+		return
+	}
+	r.section("Pet helper")
+	c, err := pets.New(v)
+	if err != nil {
+		r.add(Fail, err.Error()+", and the app will not start with it", "Fix it or remove it (without it pet rules use Immich's own search).")
+		return
+	}
+	if in.Client != nil {
+		c.HTTP = in.Client
+	} else {
+		c.HTTP = &http.Client{Timeout: 10 * time.Second}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	if err := c.Ping(ctx); err != nil {
+		r.add(Warn, "the pet helper at "+c.URL+" does not answer ("+err.Error()+"): pet rules use Immich's own search until it does", "Start the pet container, or check the address and that this app can reach it.")
+		return
+	}
+	r.add(OK, "the pet helper at "+c.URL+" answers", "")
 }

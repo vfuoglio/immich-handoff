@@ -12,6 +12,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -124,6 +125,7 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 		return store.Rule{}, ErrTooManyRules
 	}
 	var cond store.RuleCond
+	var prints []store.PetPrint
 	phrase := strings.TrimSpace(p.Phrase)
 	if utf8.RuneCountInString(phrase) > 100 || strings.ContainsAny(phrase, "\r\n\x00") {
 		return store.Rule{}, ErrBadRulePhrase
@@ -149,6 +151,16 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			cond.Examples = append(cond.Examples, id.String())
 		}
 		cond.Rank = petStartRank
+		if h.Pets != nil { // with the pet sidecar on: the animal in each example, so that rules compare crops instead of whole photos
+			var err error
+			prints, err = h.examplePrints(ctx, sess, p.Examples)
+			if errors.Is(err, pets.ErrDown) {
+				prints, err = nil, nil // it is down now: the rule works with Immich's search, and says so when it looks
+			}
+			if err != nil {
+				return store.Rule{}, err
+			}
+		}
 	}
 	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
 		return store.Rule{}, ErrBadRuleDate
@@ -245,9 +257,20 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			return store.Rule{}, fmt.Errorf("could not allow the app to read your albums: %w", err)
 		}
 	}
+	if len(prints) > 0 { // the sidecar is sent a preview, so the rule's key may look at previews: given through the person's own session
+		if err := sess.AddKeyPermission(ctx, link.KeyID, "asset.view"); err != nil {
+			return store.Rule{}, fmt.Errorf("could not allow the app to look at previews of your photos: %w", err)
+		}
+	}
 	r, err := h.Store.AddRule(ctx, store.Rule{OwnerID: user.ID, Service: p.Service, Cond: cond, SettleMinutes: p.SettleMinutes})
 	if err != nil {
 		return store.Rule{}, err
+	}
+	for _, pr := range prints {
+		if err := h.Store.PutPetPrint(ctx, r.ID, pr); err != nil {
+			h.Store.DeleteRule(ctx, r.ID)
+			return store.Rule{}, err
+		}
 	}
 	h.event(ctx, p.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service}: {rule}", "name", user.Name, "service", p.Service, "rule", RuleSentence(r.Cond)))
 	return r, nil

@@ -90,10 +90,10 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		}
 	}
 	var found []immich.AssetResponseDto
-	var ranks map[uuid.UUID]int
+	var whys map[uuid.UUID]string
 	var err error
-	if c.Pet() { // the look-alikes of the examples; the week's window is applied after the ranking, which is over the whole library
-		found, ranks, err = h.petSearch(ctx, api, c, f.CreatedAfter)
+	if c.Pet() {
+		found, whys, err = h.findPet(ctx, api, me, r, f.CreatedAfter, back)
 	} else {
 		found, err = api.RuleSearch(ctx, f)
 	}
@@ -153,7 +153,7 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		}
 		why := whyMatched(c, a)
 		if c.Pet() {
-			why = petWhy(ranks[a.Id])
+			why = whys[a.Id]
 		}
 		matches = append(matches, match{Asset: a, Why: why})
 	}
@@ -253,7 +253,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		h.Store.SetRulePhotos(ctx, r.ID, auto, store.RuleSuggested, store.RuleSent)
 		h.event(ctx, r.Service, r.OwnerID, "rule", i18n.PackN("{n} photo sent to {service} by a rule on its own: {rule}", "{n} photos sent to {service} by a rule on its own: {rule}", len(auto), "service", r.Service, "rule", RuleSentence(r.Cond)))
 	}
-	h.Store.MarkRuleLook(ctx, r.ID, h.now(), "")
+	h.Store.MarkRuleLook(ctx, r.ID, h.now(), h.takePetNote(r.ID)) // empty, or that the pet helper is down and Immich's own search was used
 	if suggested > 0 {
 		h.Log.Debug("a rule found photos", "rule", r.ID, "count", suggested)
 		if len(waiting) == 0 && !r.Paused { // told once for a batch, when it begins, not for each photo that joins it

@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/store"
+	"github.com/vfuoglio/immich-handoff/internal/web"
 )
 
 func TestAPetRuleIsMadeFromPhotosThePersonPicksOfTheirOwn(t *testing.T) {
@@ -60,5 +62,35 @@ func TestAPetRuleIsMadeFromPhotosThePersonPicksOfTheirOwn(t *testing.T) {
 	}
 	if strings.Contains(page, "Send by itself</button>") || strings.Contains(page, "rules/auto") && strings.Contains(page, `"on":"1"`) {
 		t.Error("a pet rule has no switch to send by itself")
+	}
+}
+
+func TestAPetRuleThatUsesThePetHelperShowsTheAnimalFoundInEachExampleAndTheFormSaysTheHelperIsOn(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPairings(t, &st))
+	ctx := context.Background()
+	_, form := do(t, "GET", app.URL+"/fragments/pet-form?service=club", "sess=other", nil)
+	if strings.Contains(form, "pet helper on") {
+		t.Error("the form does not mention a helper that is not there")
+	}
+	r, err := st.AddRule(ctx, store.Rule{OwnerID: mustUUID(otherID), Service: "club", Cond: store.RuleCond{Examples: []string{"55555555-0000-4000-8000-0000000000c1", "55555555-0000-4000-8000-0000000000c2", "55555555-0000-4000-8000-0000000000c3"}, Rank: 10}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.PutPetPrint(ctx, r.ID, store.PetPrint{Asset: "55555555-0000-4000-8000-0000000000c1", Kind: "dog", Box: [4]float64{0.1, 0.2, 0.5, 0.4}, Vec: []float32{1, 0}})
+	_, page := do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"The animal the pet helper found in each of your examples", "rules/pet-photo/55555555-0000-4000-8000-0000000000c1", "left:10%;top:20%;width:50%;height:40%"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the card lacks %q", want)
+		}
+	}
+}
+
+func TestThePetFormSaysTheHelperIsOnWhenItIs(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPairings(t, &st), func(s *web.Server) { s.Hub.Pets, _ = pets.New("http://pets.invalid:8090") })
+	_, form := do(t, "GET", app.URL+"/fragments/pet-form?service=club", "sess=other", nil)
+	if !strings.Contains(form, "This server has the pet helper on") || !strings.Contains(form, "keeps nothing") {
+		t.Error("the form says what the helper is and does")
 	}
 }

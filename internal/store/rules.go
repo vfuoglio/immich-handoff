@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,6 +53,9 @@ type RuleCond struct {
 	// far down Immich's list of look-alikes of an example a photo may be and still be offered, learned from the answers.
 	Examples []string `json:"examples,omitempty"`
 	Rank     int      `json:"rank,omitempty"`
+	// Cutoff is how like an example's animal a crop must be (cosine of the sidecar's fingerprints) for a photo to be offered, when the
+	// optional pet sidecar is on; the person's answers move it. Zero: the default.
+	Cutoff float64 `json:"cutoff,omitempty"`
 	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
 	AlbumOwner string `json:"albumOwner,omitempty"`
 	// Folder, Level and Naming say which folders of an external library become albums, for a rule of kind folder.
@@ -177,6 +182,9 @@ func (s *Store) SetRulePaused(ctx context.Context, id string, paused bool) error
 
 // DeleteRule forgets a rule and what it did with each photo.
 func (s *Store) DeleteRule(ctx context.Context, id string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pet_prints WHERE rule_id = ?`, id); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM rule_photos WHERE rule_id = ?`, id); err != nil {
 		return err
 	}
@@ -323,4 +331,49 @@ func (s *Store) SetRuleCond(ctx context.Context, id string, c RuleCond) error {
 	}
 	_, err = s.db.ExecContext(ctx, `UPDATE rules SET cond = ? WHERE id = ?`, string(b), id)
 	return err
+}
+
+// PetPrint is the fingerprint of the animal in an example photo of a pet rule, and where it is in the photo (x, y, width, height as
+// fractions of the photo, for the card to draw it).
+type PetPrint struct {
+	Asset string
+	Kind  string
+	Box   [4]float64
+	Vec   []float32
+}
+
+// PutPetPrint keeps (or replaces) the fingerprint of the animal in an example photo.
+func (s *Store) PutPetPrint(ctx context.Context, rule string, p PetPrint) error {
+	box, _ := json.Marshal(p.Box)
+	b := make([]byte, 4*len(p.Vec))
+	for i, v := range p.Vec {
+		binary.LittleEndian.PutUint32(b[4*i:], math.Float32bits(v))
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO pet_prints (rule_id, asset_id, kind, box, vec) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(rule_id, asset_id) DO UPDATE SET kind = excluded.kind, box = excluded.box, vec = excluded.vec`, rule, p.Asset, p.Kind, string(box), b)
+	return err
+}
+
+// PetPrints are the fingerprints a pet rule has, in the order they were made.
+func (s *Store) PetPrints(ctx context.Context, rule string) ([]PetPrint, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, kind, box, vec FROM pet_prints WHERE rule_id = ? ORDER BY rowid`, rule)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PetPrint
+	for rows.Next() {
+		var p PetPrint
+		var box string
+		var b []byte
+		if err := rows.Scan(&p.Asset, &p.Kind, &box, &b); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(box), &p.Box)
+		for i := 0; i+4 <= len(b); i += 4 {
+			p.Vec = append(p.Vec, math.Float32frombits(binary.LittleEndian.Uint32(b[i:])))
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }

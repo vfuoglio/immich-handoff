@@ -18,6 +18,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/peer"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -50,6 +51,8 @@ type Hub struct {
 	Notify       notify.Func      // tells an admin something needs attention (optional)
 	Bus          *live.Bus        // tells the open pages what changed, as it happens (optional)
 	People       *People          // writes to the people who asked for email (optional)
+	Pets         *pets.Client     // the optional pet sidecar (PET_SIDECAR_URL); nil: pet rules use Immich's own search
+	petNotes     sync.Map         // rule id -> what to tell the person about its last look (the pet helper was down)
 	Push         *Push            // sends notifications to the devices people allowed (optional)
 	MailIn       *MailIn          // reads the mailbox that photos are mailed to (optional)
 	AppURL       string           // how people reach the page; the links in messages are built from it (optional: without it a message carries no action links)

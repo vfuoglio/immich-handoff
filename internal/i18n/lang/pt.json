@@ -1568,5 +1568,8 @@
  "a pet rule needs 3 to 8 photos of your own as examples": "uma regra de animal precisa de 3 a 8 fotos suas como exemplos",
  "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "uma regra para um animal só olha para as suas fotos de exemplo: crie outra regra para pessoas, locais ou datas",
  "a rule for a pet always asks first, because a look-alike is never certain": "uma regra para um animal pergunta sempre primeiro, porque uma semelhança nunca é certa",
- "Make the pet rule": "Criar a regra"
+ "Make the pet rule": "Criar a regra",
+ "The animal the pet helper found in each of your examples:": "O animal que o assistente de animais encontrou em cada um dos seus exemplos:",
+ "This server has the pet helper on: the rule compares the animal in each photo with the animal in your examples, so every example must show the animal clearly. Photos are sent to the helper as previews and it keeps nothing.": "Este servidor tem o assistente de animais ativado: a regra compara o animal de cada foto com o animal dos seus exemplos, por isso cada exemplo tem de mostrar claramente o animal. As fotos são enviadas ao assistente como pré-visualizações e ele não guarda nada.",
+ "no cat or dog was found in one of the photos: pick photos where the pet is clearly in view": "não foi encontrado nenhum gato nem cão numa das fotos: escolha fotos em que o animal se veja bem"
 }

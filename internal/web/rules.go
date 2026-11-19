@@ -21,8 +21,15 @@ type RuleView struct {
 	Paused             bool
 	Last, Problem      string
 	Phrase             bool
-	CanAuto            bool // answered Always often enough, and may be let go on by itself
-	WaitMin            int  // the rule's own wait before it offers a photo, in minutes (0: the app's usual wait)
+	CanAuto            bool             // answered Always often enough, and may be let go on by itself
+	WaitMin            int              // the rule's own wait before it offers a photo, in minutes (0: the app's usual wait)
+	PetExamples        []PetExampleView // a pet rule that uses the pet helper: the animal found in each example
+}
+
+// PetExampleView is an example photo of a pet rule with the box round the animal the pet helper found in it, as percentages.
+type PetExampleView struct {
+	Asset      string
+	X, Y, W, H int
 }
 
 func (w *Server) ruleViews(ctx context.Context, me *member, service string) []RuleView {
@@ -39,6 +46,14 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.NeverAuto(), CanAuto: hub.CanAuto(r), WaitMin: r.SettleMinutes}
 		if !r.LastLook.IsZero() {
 			v.Last = l.Stamp(r.LastLook.Local())
+		}
+		if r.Cond.Pet() && w.Hub.Store != nil {
+			if prints, err := w.Hub.Store.PetPrints(ctx, r.ID); err == nil {
+				pct := func(f float64) int { return int(f*100 + 0.5) }
+				for _, p := range prints {
+					v.PetExamples = append(v.PetExamples, PetExampleView{Asset: p.Asset, X: pct(p.Box[0]), Y: pct(p.Box[1]), W: pct(p.Box[2]), H: pct(p.Box[3])})
+				}
+			}
 		}
 		out = append(out, v)
 	}
@@ -590,7 +605,7 @@ func (w *Server) petForm(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	PetForm(r.URL.Query().Get("service"), photos).Render(r.Context(), rw)
+	PetForm(r.URL.Query().Get("service"), photos, w.Hub.Pets != nil).Render(r.Context(), rw)
 }
 
 // petPhoto shows one of the person's own photos while they pick the examples of a pet. Only their own are shown.

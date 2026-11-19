@@ -1724,5 +1724,8 @@
  "a pet rule needs 3 to 8 photos of your own as examples": "правилу для питомца нужны от 3 до 8 ваших фотографий в качестве примеров",
  "a rule for a pet looks only at its example photos: make a separate rule for people, places or dates": "правило для питомца смотрит только на свои фотографии-примеры: создайте отдельное правило для людей, мест или дат",
  "a rule for a pet always asks first, because a look-alike is never certain": "правило для питомца всегда спрашивает сначала, потому что сходство никогда не бывает надёжным",
- "Make the pet rule": "Создать правило"
+ "Make the pet rule": "Создать правило",
+ "The animal the pet helper found in each of your examples:": "Животное, которое помощник по питомцам нашёл в каждом из ваших примеров:",
+ "This server has the pet helper on: the rule compares the animal in each photo with the animal in your examples, so every example must show the animal clearly. Photos are sent to the helper as previews and it keeps nothing.": "На этом сервере включён помощник по питомцам: правило сравнивает животное на каждой фотографии с животным на ваших примерах, поэтому на каждом примере животное должно быть хорошо видно. Фотографии отправляются помощнику как превью, и он ничего не хранит.",
+ "no cat or dog was found in one of the photos: pick photos where the pet is clearly in view": "ни кошка, ни собака не найдены на одной из фотографий: выберите фотографии, где питомец хорошо виден"
 }

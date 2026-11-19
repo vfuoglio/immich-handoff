@@ -2,6 +2,8 @@ package doctor
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -89,5 +91,31 @@ func TestTheOnThisDayIntervalIsCheckedOnlyWhenSet(t *testing.T) {
 	}
 	if _, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "5", "PUBLIC_IMMICH_URL": "https://photos.example"}); r.Fails != 0 || r.Warns != 0 {
 		t.Error("all set")
+	}
+}
+
+func TestThePetSidecarAddressIsCheckedOnlyWhenSetAndAnUnreachableOneIsAWarning(t *testing.T) {
+	run := func(url string, client *http.Client) *Report {
+		var buf bytes.Buffer
+		r := &Report{W: &buf}
+		petSidecar(r, Input{Env: func(k string) string { return map[string]string{"PET_SIDECAR_URL": url}[k] }, Client: client})
+		return r
+	}
+	if r := run("", nil); r.Fails+r.Warns != 0 {
+		t.Error("unset is fine")
+	}
+	if r := run("pets:8090", nil); r.Fails != 1 {
+		t.Error("an address without http:// is refused, as the app would")
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
+	defer up.Close()
+	if r := run(up.URL, up.Client()); r.Fails+r.Warns != 0 {
+		t.Errorf("it answers: %d fails %d warnings", r.Fails, r.Warns)
+	}
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := down.URL
+	down.Close()
+	if r := run(url, nil); r.Fails != 0 || r.Warns != 1 {
+		t.Errorf("it does not answer: the app still works, so a warning: %d fails %d warnings", r.Fails, r.Warns)
 	}
 }

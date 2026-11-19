@@ -163,7 +163,25 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 				}
 			}
 		}
-		h.learnPet(ctx, r, accepted) // a pet rule widens its reach and takes the accepted photos as examples
+		var rejected []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range no {
+				if p.AssetID == id {
+					rejected = append(rejected, p)
+				}
+			}
+		}
+		h.learnPet(ctx, r, accepted, rejected) // a pet rule widens its reach and takes the accepted photos as examples
+	} else if len(no) > 0 && r.Cond.Pet() {
+		var rejected []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range no {
+				if p.AssetID == id {
+					rejected = append(rejected, p)
+				}
+			}
+		}
+		h.learnPet(ctx, r, nil, rejected)
 	}
 	if len(no) > 0 {
 		h.Store.SetRulePhotos(ctx, r.ID, no, store.RuleSuggested, store.RuleDeclined)

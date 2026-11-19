@@ -21,6 +21,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -228,6 +229,14 @@ func run(log *slog.Logger) error {
 				return errors.New("RULES_SETTLE_MINUTES must be a number of minutes, from 0.01 to 1440")
 			}
 			h.RulesSettle = time.Duration(m * float64(time.Minute))
+		}
+		if v := env("PET_SIDECAR_URL", ""); v != "" {
+			c, err := pets.New(v)
+			if err != nil {
+				return err
+			}
+			h.Pets = c
+			log.Info("the pet helper is on: pet rules compare the animals in photos", "url", c.URL)
 		}
 		go h.RulesLoop(ctx)
 		if v := env("MEMORIES_CHECK_MINUTES", ""); v != "" {

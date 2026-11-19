@@ -34,6 +34,26 @@ jobs:
         run: .github/scripts/doc_links_test.sh
       - run: go vet ./... && go vet -tags e2e ./...
       - run: go test -race ./...
+  pets:
+    # The optional pet sidecar (pet-sidecar/) is a second image: it is built here and the sample photos are posted to it, so a change to it
+    # (or to a model it downloads) that stops it finding the animals is seen before a release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
+      - name: Build the image (the models are checked against their checksums)
+        run: docker build -t pet-sidecar pet-sidecar
+      - name: The image runs as a user with no privileges and says it is healthy
+        run: |
+          [ "$(docker run --rm --entrypoint id pet-sidecar -u)" != 0 ] || { echo "::error::the pet sidecar runs as root"; exit 1; }
+          [ "$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' pet-sidecar)" = yes ] || { echo "::error::the pet sidecar has no HEALTHCHECK"; exit 1; }
+      - name: The sample photos find the sample animals
+        working-directory: pet-sidecar
+        run: |
+          docker run -d --name pets -p 8090:8090 pet-sidecar
+          for i in $(seq 1 30); do curl -fs http://localhost:8090/ping >/dev/null && break; sleep 2; done
+          python3 -m pip install --quiet pillow
+          python3 check.py http://localhost:8090 || { docker logs pets; exit 1; }
   types:
     # The page's scripts are TypeScript (internal/web/ts). Building and running the program needs no Node: esbuild
     # is a Go tool and the bundle is committed. Node is used here only, to check the types and run the page's few script tests.

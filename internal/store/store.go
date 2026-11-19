@@ -740,6 +740,15 @@ var migrations = []string{
 	 ALTER TABLE services ADD COLUMN pairing TEXT NOT NULL DEFAULT '';`,
 	// how long a rule waits before it offers a photo, so that its faces have been looked for (0: the app's usual wait)
 	`ALTER TABLE rules ADD COLUMN settle_minutes INTEGER NOT NULL DEFAULT 0;`,
+	// the fingerprint of the animal in each example photo of a pet rule, when the optional pet sidecar is on
+	`CREATE TABLE pet_prints (
+	   rule_id  TEXT NOT NULL,
+	   asset_id TEXT NOT NULL,
+	   kind     TEXT NOT NULL DEFAULT '',
+	   box      TEXT NOT NULL DEFAULT '',
+	   vec      BLOB NOT NULL,
+	   PRIMARY KEY (rule_id, asset_id)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

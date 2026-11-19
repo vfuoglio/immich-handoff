@@ -169,6 +169,7 @@ func (s *Store) RemovePairing(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 	for _, q := range []string{
+		`DELETE FROM pet_prints WHERE rule_id IN (SELECT id FROM rules WHERE pairing = ?)`,
 		`DELETE FROM rule_photos WHERE rule_id IN (SELECT id FROM rules WHERE pairing = ?)`,
 		`DELETE FROM rules WHERE pairing = ?`,
 		`DELETE FROM pairings WHERE id = ?`,
