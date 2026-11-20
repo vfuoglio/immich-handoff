@@ -111,7 +111,7 @@ jobs:
         working-directory: tools/typecheck
         run: npm ci --ignore-scripts && npm run check && npm test
   e2e-groups:
-    # The end-to-end tests take about five minutes one after another, so they run as four groups at the same time
+    # The end-to-end tests take about five minutes one after another, so they run as six groups at the same time
     # (test/groups.sh), each against its own throwaway Immich. They do not wait for the unit tests: a failure there
     # shows up on its own, and the wall time is the longest group, not the sum.
     name: e2e (${{ matrix.group }})
@@ -119,7 +119,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [browser, core, hub, bridge]
+        group: [browser, core, hub, hub2, hub3, bridge]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { ref: "${{ inputs.ref }}" }
