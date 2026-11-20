@@ -30,13 +30,39 @@ The rule is shown as a sentence ("photos of Nora without Leo taken from 2026-05-
 
 **One rule for several services.** In the form, **Make the same rule for these services too** makes a copy of the rule for each other service you sent to, so "photos of Nora" can go to one service and to another. Each copy is a rule of its own, answered on its own (and can be paused, made automatic or ended on its own). **A photo goes to a service once**, however many of your rules for that service find it: when one has sent it, the others no longer offer it and a second yes does not hand it over again.
 
+**How long a rule waits.** Immich finds the faces in a photo a little after it arrives and never says when it has finished, so a rule waits before it offers a photo: five minutes by default (`RULES_SETTLE_MINUTES`). When you make a rule you can choose a shorter or longer wait, from 1 to 60 minutes. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered, or a person you left out may not have shown yet; a rule that sends by itself waits six times as long, so with two minutes it sends after twelve. The rule's row says when it has its own wait.
+
 **Also look back.** A new rule only looks at photos that reach Immich from now on. **Also look back** on a rule's row suggests the **older** photos that match too, up to 200, newest first, as one batch of suggestions like any other: nothing old is sent without your yes, and the button waits until you have answered what is already waiting.
 
-**Letting a rule send by itself.** After you have answered **Always** to a rule three times, its row offers **Send by itself**. From then on it sends, without asking, the photos that reach Immich **after you switched it on**, once they have been there half an hour (so every face has been found and a person you left out has shown), within the service's daily limit and quiet hours; you can still take a hand-over back. What was already waiting stays a suggestion, a line in your Activity says what was sent, and **Ask me first again** turns it back at any time. A rule with a phrase never sends by itself.
+**Letting a rule send by itself.** A rule that sends photos of people to a service offers **Send by itself** from the start, and you do not have to answer **Always** first; the rules that make albums, add photos to your library or stack photos still offer it after three **Always**. Before it turns on, the app says which photos go where and that a wrong photo can reach the service. From then on it sends, without asking, the photos that reach Immich **after you switched it on**, once they have been there half an hour (six times the rule's wait, so every face has been found and a person you left out has shown), within the service's daily limit and quiet hours; you can still take a hand-over back. What was already waiting stays a suggestion, a line in your Activity says what was sent, and **Ask me first again** turns it back at any time. A rule with a phrase never sends by itself.
 
 A card also has **Look at them one by one**: a page with every photo large, the reason under each and a tick on each. **Send the ticked photos** sends those and leaves the unticked out for good (this rule will not offer them again); there is **Not these** for the whole batch too. When a batch begins, you are told once (in your Activity, and on your devices or by email if you asked for those), with **Send** and **Not these** as one-tap buttons in the message: the link asks first and works once, as the other one-tap links do. A photo that joins a batch later does not tell you again.
 
 Ending a rule never touches photos already handed over, and leaving the service ends its rules. The permissions the rule needs are the ones your key for the service has; for the albums it asks you to give the key **read albums**, through your own sign-in, as when you link an album.
+
+**A rule for a pet.** Immich cannot tell animals apart, so a pet has no name to give a rule. Under **Make a rule for a pet**, pick **3 to 8 photos of your own** of the animal from your newest ones. The rule then asks Immich for the photos it finds most like each of them and offers those that arrived after the rule was made, with pictures, as suggestions: **Send** or **Not these**. It starts with the ten nearest to each example and learns from you: every photo you send becomes one more example (up to twelve) and widens how far down Immich's list the rule looks. Be ready for a **noisy start**: Immich gives no score, only an order, so the first batches may hold wrong photos; a pet that looks like another, or a small one beside people, is found badly (a dog that fills the frame is found best). A pet rule **always asks first**, has no *Always* and never sends by itself. It needs Immich's smart search (machine learning) to be on, and says so when it is not. **Also look back** suggests older photos in the same way.
+
+### The optional pet helper
+
+The pet rule is much more accurate with a small second container, the **pet helper**. It finds the cat or dog in each photo and compares **that animal** with the animal in your examples, so a pet that is small beside people is not lost among them, and about six times fewer wrong photos are offered at the same recall (measured in [#228](../design/pairing-design.md)). It is optional and the person who runs the app switches it on once for everybody:
+
+```yaml
+services:
+  immich-handoff:
+    environment:
+      PET_SIDECAR_URL: http://pets:8090
+  pets:
+    image: vfuoglio/immich-handoff-pets:1
+    restart: unless-stopped
+    mem_limit: 512m
+    # nothing outside the app needs to reach it, and it needs no network of its own beyond the app
+```
+
+- **What it costs:** an image of about 400 MB, about 110 MB of memory when idle and 200 to 300 MB at work, and about 0.4 seconds a photo on two processors; the pass looks at up to 30 new photos at a time, and a look back at up to 150.
+- **What it does with photos:** the app sends it a **preview** of each photo of a person who has a pet rule, never the original; it keeps nothing, writes nothing to disk and calls nobody. Give it no other network access. The pet rule's key gets the permission to look at previews (`asset.view`) through your own sign-in when you make the rule, and loses it again when the helper is switched off and you next open the page.
+- **What changes in the rule:** each example must show the animal (the app says which photo shows none) and the rule's card shows a box round the animal it found in each one, so that a photo with two animals is not ambiguous. A photo is offered when the animal in it is alike enough (a cutoff near 0.45 that your answers move: it goes down to what you accepted, and up when you turn a whole batch down). Each photo you send becomes one more example.
+- **When it is down:** the rule says "the pet helper is not answering" and looks with Immich's own search until it is back. `doctor` checks the address and that it answers.
+- **What it does not do:** it cannot tell two look-alike pets apart, a cat is found less well than a dog, and a pet rule still only suggests.
 
 ## Following an album shared with you
 

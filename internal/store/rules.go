@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +30,9 @@ const (
 	RuleKindFolder = "folder"
 	// RuleKindStack stacks the person's photos that belong together: a RAW and its JPEG, an edit and its original, a burst.
 	RuleKindStack = "stack"
+	// RuleKindImport follows a destination (a folder, a bucket, a server): the files that appear in it are offered, and added to the
+	// person's library, with the sender's own key. Cond.Source names the destination, Cond.Prefix the folder under it.
+	RuleKindImport = "import"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -47,6 +52,18 @@ type RuleCond struct {
 	Album     *RuleRef  `json:"album,omitempty"`
 	NotAlbums []RuleRef `json:"notAlbums,omitempty"`
 	Phrase    string    `json:"phrase,omitempty"`
+	// Examples are the photos of the person's own library that a pet rule looks for look-alikes of ("photos like these"), and Rank is how
+	// far down Immich's list of look-alikes of an example a photo may be and still be offered, learned from the answers.
+	Examples []string `json:"examples,omitempty"`
+	Rank     int      `json:"rank,omitempty"`
+	// Cutoff is how like an example's animal a crop must be (cosine of the sidecar's fingerprints) for a photo to be offered, when the
+	// optional pet sidecar is on; the person's answers move it. Zero: the default.
+	Cutoff float64 `json:"cutoff,omitempty"`
+	// Source, SourceName and Prefix are what an import rule follows: the destination ("admin:<name>" or "own:<id>"), the name it had, and the
+	// folder under its root.
+	Source     string `json:"source,omitempty"`
+	SourceName string `json:"sourceName,omitempty"`
+	Prefix     string `json:"prefix,omitempty"`
 	// AlbumOwner is who shared the album, for a rule that follows an album shared with the person.
 	AlbumOwner string `json:"albumOwner,omitempty"`
 	// Folder, Level and Naming say which folders of an external library become albums, for a rule of kind folder.
@@ -81,14 +98,21 @@ type Rule struct {
 	// CaughtUp is when a rule of kind folder finished its first full look at the folder (zero: not yet). From then on it only
 	// lists the photos that came to Immich after it, which is what keeps a pass cheap in a very large library.
 	CaughtUp time.Time
+	// Pairing is the id of the pairing this rule belongs to (empty: an ordinary rule). A rule of a pairing cannot be changed or
+	// deleted by hand: the pairing's card is the only place.
+	Pairing string
+	// SettleMinutes is how long a photo must have been in Immich before this rule offers it, and a sixth of how long before it sends
+	// one by itself (zero: the app's usual wait, RULES_SETTLE_MINUTES). Immich never says that it has finished looking for faces, so
+	// this is the person's choice between seeing new photos sooner and being sure a second person in them has been found.
+	SettleMinutes int
 }
 
-const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album, caught_up`
+const ruleCols = `id, owner_id, service, cond, mode, always, paused, since, auto_since, last_look, problem, created_at, kind, dest, dest_album, caught_up, pairing, settle_minutes`
 
 func scanRule(sc interface{ Scan(...any) error }) (Rule, error) {
 	var r Rule
 	var owner, cond, since, auto, last, created, caught string
-	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum, &caught); err != nil {
+	if err := sc.Scan(&r.ID, &owner, &r.Service, &cond, &r.Mode, &r.Always, &r.Paused, &since, &auto, &last, &r.Problem, &created, &r.Kind, &r.Dest, &r.DestAlbum, &caught, &r.Pairing, &r.SettleMinutes); err != nil {
 		return r, err
 	}
 	r.OwnerID, _ = uuid.Parse(owner)
@@ -117,8 +141,8 @@ func (s *Store) AddRule(ctx context.Context, r Rule) (Rule, error) {
 		r.Since = r.CreatedAt
 	}
 	cond, _ := json.Marshal(r.Cond)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum, tstr(r.CaughtUp))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO rules (`+ruleCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.OwnerID.String(), r.Service, string(cond), r.Mode, r.Always, b2i(r.Paused), r.Since.Format(time.RFC3339Nano), tstr(r.AutoSince), tstr(r.LastLook), r.Problem, r.CreatedAt.Format(time.RFC3339Nano), r.Kind, r.Dest, r.DestAlbum, tstr(r.CaughtUp), r.Pairing, r.SettleMinutes)
 	return r, err
 }
 
@@ -166,6 +190,9 @@ func (s *Store) SetRulePaused(ctx context.Context, id string, paused bool) error
 
 // DeleteRule forgets a rule and what it did with each photo.
 func (s *Store) DeleteRule(ctx context.Context, id string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pet_prints WHERE rule_id = ?`, id); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM rule_photos WHERE rule_id = ?`, id); err != nil {
 		return err
 	}
@@ -296,4 +323,65 @@ func (s *Store) RuleSentAssets(ctx context.Context, owner uuid.UUID, service str
 func (s *Store) MarkRuleCaughtUp(ctx context.Context, id string, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE rules SET caught_up = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), id)
 	return err
+}
+
+// Pet says whether the rule looks for look-alikes of example photos (a pet), which can only ever suggest.
+func (c RuleCond) Pet() bool { return len(c.Examples) > 0 }
+
+// NeverAuto says whether a rule with this condition always asks first: a phrase and a pet are never certain.
+func (c RuleCond) NeverAuto() bool { return c.Phrase != "" || c.Pet() }
+
+// SetRuleCond replaces what a rule looks for (a pet rule changes its examples and its rank as it learns).
+func (s *Store) SetRuleCond(ctx context.Context, id string, c RuleCond) error {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE rules SET cond = ? WHERE id = ?`, string(b), id)
+	return err
+}
+
+// PetPrint is the fingerprint of the animal in an example photo of a pet rule, and where it is in the photo (x, y, width, height as
+// fractions of the photo, for the card to draw it).
+type PetPrint struct {
+	Asset string
+	Kind  string
+	Box   [4]float64
+	Vec   []float32
+}
+
+// PutPetPrint keeps (or replaces) the fingerprint of the animal in an example photo.
+func (s *Store) PutPetPrint(ctx context.Context, rule string, p PetPrint) error {
+	box, _ := json.Marshal(p.Box)
+	b := make([]byte, 4*len(p.Vec))
+	for i, v := range p.Vec {
+		binary.LittleEndian.PutUint32(b[4*i:], math.Float32bits(v))
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO pet_prints (rule_id, asset_id, kind, box, vec) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(rule_id, asset_id) DO UPDATE SET kind = excluded.kind, box = excluded.box, vec = excluded.vec`, rule, p.Asset, p.Kind, string(box), b)
+	return err
+}
+
+// PetPrints are the fingerprints a pet rule has, in the order they were made.
+func (s *Store) PetPrints(ctx context.Context, rule string) ([]PetPrint, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT asset_id, kind, box, vec FROM pet_prints WHERE rule_id = ? ORDER BY rowid`, rule)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PetPrint
+	for rows.Next() {
+		var p PetPrint
+		var box string
+		var b []byte
+		if err := rows.Scan(&p.Asset, &p.Kind, &box, &b); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(box), &p.Box)
+		for i := 0; i+4 <= len(b); i += 4 {
+			p.Vec = append(p.Vec, math.Float32frombits(binary.LittleEndian.Uint32(b[i:])))
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }

@@ -234,7 +234,7 @@ func (w *Server) sendPage(rw http.ResponseWriter, r *http.Request) {
 		d.FileMB, d.WaitMB, d.KeepHours = int(file>>20), int(waiting>>20), int(keep/time.Hour)
 	}
 	for _, s := range w.servicesFor(r.Context(), me) {
-		if s.Role == "sender" {
+		if s.Role == "sender" && !s.Pairing {
 			d.Targets = append(d.Targets, SendTarget{Name: s.Name, Hold: s.Hold})
 		}
 	}

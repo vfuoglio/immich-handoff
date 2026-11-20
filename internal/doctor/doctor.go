@@ -11,14 +11,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -81,6 +84,8 @@ func Run(ctx context.Context, in Input, w io.Writer) (fails, warns int) {
 	notifications(r, in)
 	sharedAlbums(r, in)
 	rulesSettings(r, in)
+	petSidecar(r, in)
+	destinations(r, in)
 	memoriesSettings(r, in)
 	buttonSettings(r, in)
 	mailIn(ctx, r, in)
@@ -375,8 +380,18 @@ func services(ctx context.Context, r *Report, in Input) {
 			}
 			tags(ctx, r, rc, "receiver")
 		}
-		if rm, ok := svc.Remote.(*bridge.Remote); ok {
-			remote(ctx, r, rm)
+		for _, rm := range svc.Remotes {
+			switch x := rm.(type) {
+			case *bridge.Remote:
+				remote(ctx, r, x)
+			case syncer.Diagnoser:
+				who := "receiver outside this Immich (" + rm.Label() + ")"
+				if ok, err := x.Diagnose(ctx); err != nil {
+					r.add(Fail, who+": "+err.Error(), "Photos for it wait, still tagged, and the app tries again.")
+				} else {
+					r.add(OK, who+": "+ok, "")
+				}
+			}
 		}
 		if len(svc.Senders) == 0 {
 			r.add(OK, "no senders have joined yet", "")
@@ -717,4 +732,82 @@ func onSwitch(v string) bool {
 		return true
 	}
 	return false
+}
+
+// petSidecar checks PET_SIDECAR_URL, which the app refuses to start with when it is not an address, and that the sidecar answers (the
+// app works without it: a pet rule then uses Immich's own search and says so).
+func petSidecar(r *Report, in Input) {
+	v := firstOf(in.Env, "PET_SIDECAR_URL")
+	if v == "" {
+		return
+	}
+	r.section("Pet helper")
+	c, err := pets.New(v)
+	if err != nil {
+		r.add(Fail, err.Error()+", and the app will not start with it", "Fix it or remove it (without it pet rules use Immich's own search).")
+		return
+	}
+	if in.Client != nil {
+		c.HTTP = in.Client
+	} else {
+		c.HTTP = &http.Client{Timeout: 10 * time.Second}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	if err := c.Ping(ctx); err != nil {
+		r.add(Warn, "the pet helper at "+c.URL+" does not answer ("+err.Error()+"): pet rules use Immich's own search until it does", "Start the pet container, or check the address and that this app can reach it.")
+		return
+	}
+	r.add(OK, "the pet helper at "+c.URL+" answers", "")
+}
+
+// destinations checks the administrator's destinations (DESTINATIONS_FILE): the file reads, each destination can be reached and written to
+// (the kind says how it knows), and every destination a service of the routes file names is defined.
+func destinations(r *Report, in Input) {
+	if firstOf(in.Env, "DESTINATIONS_FILE") == "" && firstOf(in.Env, "DESTINATIONS_USER_ADD") == "" && firstOf(in.Env, "DESTINATIONS_ALLOW_PRIVATE") == "" {
+		return
+	}
+	r.section("Destinations")
+	ds, err := dest.SettingsFrom(in.Env)
+	if err != nil {
+		r.add(Fail, err.Error()+", and the app will not start with it", "Fix the file or remove DESTINATIONS_FILE.")
+		return
+	}
+	if ds.UserAdd {
+		r.add(OK, "people may add network destinations of their own (DESTINATIONS_USER_ADD)", "")
+	}
+	if ds.AllowPrivate {
+		r.add(OK, "addresses on a private network are allowed for destinations (DESTINATIONS_ALLOW_PRIVATE)", "")
+	}
+	names := make([]string, 0, len(ds.Specs))
+	for n := range ds.Specs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		d, err := dest.Build(ds.Specs[n], dest.Net{AllowPrivate: ds.AllowPrivate})
+		if errors.Is(err, dest.ErrKindUnavailable) {
+			r.add(Warn, "destination "+n+": "+err.Error(), "Update the app, or use another kind.")
+			continue
+		}
+		if err != nil {
+			r.add(Fail, "destination "+n+": "+err.Error(), "Check its settings in the destinations file.")
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ok, err := d.Check(ctx)
+		cancel()
+		if err != nil {
+			r.add(Fail, "destination "+n+": "+err.Error(), "Photos for it wait, still tagged, until it works.")
+			continue
+		}
+		r.add(OK, "destination "+n+": "+ok, "")
+	}
+	for _, svc := range in.Services {
+		for _, d := range svc.DestRefs {
+			if _, ok := ds.Specs[d.Name]; !ok {
+				r.add(Fail, "service "+svc.Label()+" names the destination "+d.Name+", which the destinations file does not define", "Add it to the file, or take it out of the routes file; the app will not start with it.")
+			}
+		}
+	}
 }

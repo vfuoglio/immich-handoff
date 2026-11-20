@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -20,7 +21,15 @@ type RuleView struct {
 	Paused             bool
 	Last, Problem      string
 	Phrase             bool
-	CanAuto            bool // answered Always often enough, and may be let go on by itself
+	CanAuto            bool             // answered Always often enough, and may be let go on by itself
+	WaitMin            int              // the rule's own wait before it offers a photo, in minutes (0: the app's usual wait)
+	PetExamples        []PetExampleView // a pet rule that uses the pet helper: the animal found in each example
+}
+
+// PetExampleView is an example photo of a pet rule with the box round the animal the pet helper found in it, as percentages.
+type PetExampleView struct {
+	Asset      string
+	X, Y, W, H int
 }
 
 func (w *Server) ruleViews(ctx context.Context, me *member, service string) []RuleView {
@@ -34,9 +43,17 @@ func (w *Server) ruleViews(ctx context.Context, me *member, service string) []Ru
 	l := loc(ctx)
 	out := make([]RuleView, 0, len(rules))
 	for _, r := range rules {
-		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.Phrase != "", CanAuto: hub.CanAuto(r)}
+		v := RuleView{ID: r.ID, Sentence: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, Problem: r.Problem, Phrase: r.Cond.NeverAuto(), CanAuto: hub.CanAuto(r), WaitMin: r.SettleMinutes}
 		if !r.LastLook.IsZero() {
 			v.Last = l.Stamp(r.LastLook.Local())
+		}
+		if r.Cond.Pet() && w.Hub.Store != nil {
+			if prints, err := w.Hub.Store.PetPrints(ctx, r.ID); err == nil {
+				pct := func(f float64) int { return int(f*100 + 0.5) }
+				for _, p := range prints {
+					v.PetExamples = append(v.PetExamples, PetExampleView{Asset: p.Asset, X: pct(p.Box[0]), Y: pct(p.Box[1]), W: pct(p.Box[2]), H: pct(p.Box[3])})
+				}
+			}
 		}
 		out = append(out, v)
 	}
@@ -137,6 +154,7 @@ type SuggestionView struct {
 	Folder                    bool     // the rule makes albums from folders: Service is empty
 	Albums                    []string // the albums the waiting photos would go in, for such a rule
 	Library                   bool     // the rule follows an album shared with the person: Service is empty
+	Import                    bool     // the rule follows a destination: Owner is its name, Album the folder
 	Album, Owner              string   // for such a rule
 	Count                     int
 	Thumbs                    []NeedThumb
@@ -154,9 +172,23 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 	}
 	var out []SuggestionView
 	for _, s := range list {
-		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.Phrase != ""}
+		v := SuggestionView{RuleID: s.Rule.ID, Service: s.Rule.Service, Sentence: hub.RuleSentence(s.Rule.Cond), Count: len(s.Photos), Always: s.Rule.Always, Phrase: s.Rule.Cond.NeverAuto()}
+		if s.Rule.Pairing != "" { // the pool has a generated name: the card says who the photos are for
+			v.Service = w.pairingOther(ctx, me.user.ID, s.Rule.Pairing, v.Service)
+		}
 		if s.Rule.Kind == "library" && s.Rule.Cond.Album != nil {
 			v.Library, v.Album, v.Owner = true, s.Rule.Cond.Album.Name, s.Rule.Cond.AlbumOwner
+		}
+		if s.Rule.Kind == store.RuleKindImport {
+			v.Import, v.Owner, v.Album = true, s.Rule.Cond.SourceName, s.Rule.Cond.Prefix
+			for i, p := range s.Photos {
+				if i == 8 {
+					break
+				}
+				v.Thumbs = append(v.Thumbs, NeedThumb{URL: "rules/import-photo/" + s.Rule.ID + "/" + hub.EncodeImportRef(p.AssetID), Why: p.Why})
+			}
+			out = append(out, v)
+			continue
 		}
 		if s.Rule.Kind == "folder" {
 			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
@@ -226,6 +258,7 @@ type RuleChoicesView struct {
 	City    []string
 	Picked  string   // the chosen country, when the cities are listed
 	Others  []string // the person's other services, to make the same rule for
+	WaitMin int      // the app's usual wait before a rule offers a photo, in minutes, for the form to say
 }
 
 // PersonOption is a named person in the form.
@@ -246,7 +279,7 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
-	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries}
+	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries, WaitMin: w.waitMinutes()}
 	for _, p := range c.People {
 		v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
 	}
@@ -322,10 +355,15 @@ func (w *Server) addRule(rw http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		p := hub.RuleParams{Service: service, People: ids(r, "person"), NotPeople: ids(r, "notperson"), After: r.PostFormValue("after"), Before: r.PostFormValue("before"),
 			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase"), Also: r.PostForm["also"]}
+		n, err := settleOf(r)
+		if err != nil {
+			return err
+		}
+		p.SettleMinutes = n
 		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
 			p.Album = id
 		}
-		_, err := w.Hub.AddRule(ctx, me.sess, me.user, p)
+		_, err = w.Hub.AddRule(ctx, me.sess, me.user, p)
 		return err
 	})
 }
@@ -348,6 +386,7 @@ type SuggestionReview struct {
 	Photos                          []RuleReviewPhoto
 	Phrase                          bool
 	Library                         bool   // the rule follows an album shared with the person
+	Import                          bool   // the rule follows a destination (Owner is its name)
 	Album, Owner                    string // for such a rule
 	Folder                          bool   // the rule makes albums from folders (Album is the folder)
 	Stack                           bool   // the rule stacks photos: the page shows Groups
@@ -374,9 +413,15 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.Phrase != ""}
+	d := SuggestionReview{User: me.user.Name, RuleID: sg.Rule.ID, Service: sg.Rule.Service, Sentence: hub.RuleSentence(sg.Rule.Cond), Phrase: sg.Rule.Cond.NeverAuto()}
+	if sg.Rule.Pairing != "" {
+		d.Service = w.pairingOther(r.Context(), me.user.ID, sg.Rule.Pairing, d.Service)
+	}
 	if sg.Rule.Kind == "library" && sg.Rule.Cond.Album != nil {
 		d.Library, d.Album, d.Owner = true, sg.Rule.Cond.Album.Name, sg.Rule.Cond.AlbumOwner
+	}
+	if sg.Rule.Kind == store.RuleKindImport {
+		d.Import, d.Owner = true, sg.Rule.Cond.SourceName
 	}
 	if sg.Rule.Kind == "folder" {
 		d.Folder, d.Album = true, sg.Rule.Cond.Folder
@@ -395,7 +440,11 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		if sg.Rule.Kind == store.RuleKindStack { // shown by group, below
 			break
 		}
-		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: "rules/photo/" + sg.Rule.ID + "/" + p.AssetID, Why: p.Why})
+		url := "rules/photo/" + sg.Rule.ID + "/" + p.AssetID
+		if sg.Rule.Kind == store.RuleKindImport {
+			url = "rules/import-photo/" + sg.Rule.ID + "/" + hub.EncodeImportRef(p.AssetID)
+		}
+		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: url, Why: p.Why})
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	SuggestionReviewPage(d).Render(r.Context(), rw)
@@ -531,4 +580,168 @@ func (w *Server) followFolder(rw http.ResponseWriter, r *http.Request) {
 		_, err := w.Hub.FollowFolder(ctx, me.sess, me.user, hub.FolderSpec{Prefix: r.PostFormValue("folder"), Depth: level, Naming: r.PostFormValue("naming")})
 		return err
 	})
+}
+
+// settleOf reads the wait a person chose for the rules they are making: empty is the usual wait (0), anything else must be a whole
+// number of minutes (the hub says whether it is in range).
+func settleOf(r *http.Request) (int, error) {
+	v := strings.TrimSpace(r.PostFormValue("settle"))
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, hub.ErrBadSettle
+	}
+	return n, nil
+}
+
+// waitMinutes is the app's usual wait before a rule offers a photo, in whole minutes, for a form to say.
+func (w *Server) waitMinutes() int { return max(1, int((w.Hub.RuleWait()+30*time.Second)/time.Minute)) }
+
+// PetPhoto is one of the person's recent photos, to pick as an example of a pet.
+type PetPhoto struct{ ID string }
+
+// petForm is the form that makes a rule for a pet: the person's newest photos, to pick three to eight of the animal from.
+func (w *Server) petForm(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	items, err := me.sess.Recent(r.Context(), 60)
+	if err != nil {
+		http.Error(rw, "could not list your photos", http.StatusBadGateway)
+		return
+	}
+	var photos []PetPhoto
+	for _, a := range items {
+		if a.OwnerId == me.user.ID && !a.IsTrashed && !a.IsArchived {
+			photos = append(photos, PetPhoto{ID: a.Id.String()})
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	PetForm(r.URL.Query().Get("service"), photos, w.Hub.Pets != nil).Render(r.Context(), rw)
+}
+
+// petPhoto shows one of the person's own photos while they pick the examples of a pet. Only their own are shown.
+func (w *Server) petPhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("asset"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if a, err := me.sess.Asset(r.Context(), id); err != nil || a.OwnerId != me.user.ID || a.IsTrashed {
+		http.NotFound(rw, r)
+		return
+	}
+	data, ct, err := me.sess.Thumbnail(r.Context(), id, false)
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	if !strings.HasPrefix(ct, "image/") {
+		ct = "image/jpeg"
+	}
+	rw.Header().Set("Content-Type", ct)
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Write(data)
+}
+
+func (w *Server) addPet(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "pet rule made", func(ctx context.Context, me *member, service string) error {
+		r.ParseForm()
+		_, err := w.Hub.AddRule(ctx, me.sess, me.user, hub.RuleParams{Service: service, Examples: ids(r, "photo")})
+		return err
+	})
+}
+
+// ImportFollowViews are the destinations the person's rules follow.
+func (w *Server) importViews(ctx context.Context, me *member) []ImportFollowView {
+	if w.Hub == nil {
+		return nil
+	}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return nil
+	}
+	l := loc(ctx)
+	var out []ImportFollowView
+	for _, r := range rules {
+		if r.Kind != store.RuleKindImport {
+			continue
+		}
+		v := ImportFollowView{ID: r.ID, Source: r.Cond.SourceName, Prefix: r.Cond.Prefix, Dest: importDestWords(ctx, r.Dest, r.DestAlbum), Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			v.Last = l.Stamp(r.LastLook.Local())
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+func importDestWords(ctx context.Context, dest, album string) string {
+	if dest == "tag" || dest == "" {
+		return t(ctx, "In my library, tagged with where they came from")
+	}
+	return destWords(ctx, dest, album)
+}
+
+// importSources lists the destinations the person may follow, for the form; it is asked for when the form is opened.
+func (w *Server) importSources(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	var opts []ImportOption
+	for _, c := range w.Hub.ImportSources(r.Context(), me.user.ID) {
+		opts = append(opts, ImportOption{Ref: c.Ref, Label: c.Name + " (" + destKindLabel(r.Context(), c.Kind) + ")"})
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	ImportForm(opts).Render(r.Context(), rw)
+}
+
+func (w *Server) followDestination(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "destination followed", func(ctx context.Context, me *member, _ string) error {
+		album := strings.TrimSpace(r.PostFormValue("album"))
+		_, err := w.Hub.FollowDestination(ctx, me.sess, me.user, hub.ImportParams{Source: r.PostFormValue("source"), Prefix: r.PostFormValue("prefix"), History: r.PostFormValue("history"), Dest: hub.LibraryDest{Kind: r.PostFormValue("dest"), Album: album}})
+		return err
+	})
+}
+
+// importPhoto shows a small picture of a file a followed destination offers; only files the rule offered are ever read.
+func (w *Server) importPhoto(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil {
+		http.NotFound(rw, r)
+		return
+	}
+	b, err := w.Hub.ImportThumbnail(r.Context(), me.user.ID, r.PathValue("rule"), r.PathValue("asset"))
+	if err != nil {
+		http.NotFound(rw, r)
+		return
+	}
+	rw.Header().Set("Content-Type", "image/jpeg")
+	rw.Header().Set("Cache-Control", "private, max-age=3600")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Write(b)
 }

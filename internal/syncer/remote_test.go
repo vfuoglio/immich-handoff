@@ -9,8 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -25,9 +23,12 @@ type fakeRemote struct {
 	sawClip   bool
 	dup       bool // answer as a server that already had the photo
 	n         int
+	hold      bool // while not ready, hold up the whole service (as a bridge does)
 }
 
-func (r *fakeRemote) Label() string { return "aunt lia" }
+func (r *fakeRemote) ID() string     { return "aunt" }
+func (r *fakeRemote) HoldsAll() bool { return r.hold }
+func (r *fakeRemote) Label() string  { return "aunt lia" }
 func (r *fakeRemote) Ready(context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,9 +44,9 @@ func (r *fakeRemote) Deliver(_ context.Context, _ *immich.API, a immich.AssetRes
 	r.sawClip = r.sawClip || clip != nil
 	r.delivered = append(r.delivered, job.Sender+":"+a.OriginalFileName)
 	r.n++
-	cp := syncer.RemoteCopy{ID: uuid.MustParse(fmt.Sprintf("f0000000-0000-4000-8000-%012d", r.n)), Created: !r.dup}
+	cp := syncer.RemoteCopy{Ref: fmt.Sprintf("f0000000-0000-4000-8000-%012d", r.n), Created: !r.dup}
 	if clip != nil {
-		cp.Clip, cp.ClipCreated = uuid.MustParse(fmt.Sprintf("f1000000-0000-4000-8000-%012d", r.n)), !r.dup
+		cp.Clip, cp.ClipCreated = fmt.Sprintf("f1000000-0000-4000-8000-%012d", r.n), !r.dup
 	}
 	return cp, nil
 }
@@ -57,7 +58,7 @@ func withRemote(t *testing.T, f *fakeImmich, r *fakeRemote, tune func(*syncer.Se
 	svc := service(
 		[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
 		[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
-	svc.Remote = r
+	svc.Remotes = []syncer.Remote{r}
 	if tune != nil {
 		tune(svc)
 	}
@@ -111,7 +112,7 @@ func TestInCopyModeTheOriginalIsNotMarkedUntilTheRemoteHasIt(t *testing.T) {
 }
 
 func TestAPhotoWaitsWhenTheRemoteIsNotReady(t *testing.T) {
-	f, r := &fakeImmich{uploadStatus: "created"}, &fakeRemote{notReady: errors.New("revoked")}
+	f, r := &fakeImmich{uploadStatus: "created"}, &fakeRemote{notReady: errors.New("revoked"), hold: true}
 	c := withRemote(t, f, r, nil)
 	if c != (syncer.Counts{}) {
 		t.Errorf("counts = %+v", c)
@@ -142,7 +143,7 @@ func TestADryRunDeliversNothingToTheRemote(t *testing.T) {
 	srv := httptest.NewServer(f.handler())
 	defer srv.Close()
 	svc := service([]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}}, []*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})
-	svc.Remote = r
+	svc.Remotes = []syncer.Remote{r}
 	s := &syncer.Syncer{Services: []*syncer.Service{svc}, Log: quiet(), Cfg: syncer.Config{DryRun: true}}
 	s.Run(context.Background(), "test", false)
 	if len(r.delivered) != 0 || len(f.deleted) != 0 {
@@ -157,7 +158,7 @@ func TestWhatTheOtherServerHoldsIsRememberedForTakingBack(t *testing.T) {
 		p := &ledgerProvider{svcs: []*syncer.Service{service(
 			[]*syncer.Account{{Name: "alice", API: newAPI(t, srv.URL, "src")}},
 			[]*syncer.Account{{Name: "family", API: newAPI(t, srv.URL, "dest")}})}}
-		p.svcs[0].Remote = r
+		p.svcs[0].Remotes = []syncer.Remote{r}
 		s := &syncer.Syncer{Provider: p, Log: quiet()}
 		s.Run(context.Background(), "test", false)
 		srv.Close()

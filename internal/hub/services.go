@@ -71,7 +71,13 @@ type CreateParams struct {
 	// its sender. EndsInDays (1 to 366; 0: until the owner ends it) is when it stops.
 	Pool       bool
 	EndsInDays int
+	// DestinationOnly makes a service whose photos go only to destinations (a folder, a server): the owner is not a receiver, so no
+	// key is made in their Immich. It cannot be a pool or file photos in an album.
+	DestinationOnly bool
 }
+
+// ErrDestOnly: a service whose photos go only to destinations cannot be a pool or use an album.
+var ErrDestOnly = errors.New("a service whose photos go only to destinations cannot be an event pool or put photos in an album")
 
 // CreateService makes the signed-in person the owner (receiver) of a new service. A receiver key is
 // created in their account through their own session and kept encrypted; nobody ever sees it.
@@ -129,27 +135,37 @@ func (h *Hub) CreateService(ctx context.Context, sess *immich.API, owner immich.
 	if p.Pool {
 		keyPerms = immich.PoolPermissionsFor(album != "", h.ReceiverDelete)
 	}
-	keyID, secret, err := sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", keyPerms)
-	if err != nil {
-		return fmt.Errorf("could not create an API key in your Immich account: %w", err)
-	}
-	undo := func() {
-		if err := sess.DeleteAPIKey(context.WithoutCancel(ctx), keyID); err != nil {
-			h.Log.Error("could not remove the key created for a failed service", "err", err)
+	var keyID uuid.UUID
+	var secret string
+	undo := func() {}
+	if p.DestinationOnly {
+		if p.Pool || album != "" {
+			return ErrDestOnly
 		}
-	}
-	if api, err := h.Connect(secret); err != nil {
-		undo()
-		return err
-	} else if me, err := api.Me(ctx); err != nil || me.ID != owner.ID {
-		undo()
-		return fmt.Errorf("the new key does not work for your account: %v", err)
+	} else {
+		var err error
+		keyID, secret, err = sess.CreateAPIKey(ctx, keyName(name)+" (receiving)", keyPerms)
+		if err != nil {
+			return fmt.Errorf("could not create an API key in your Immich account: %w", err)
+		}
+		undo = func() {
+			if err := sess.DeleteAPIKey(context.WithoutCancel(ctx), keyID); err != nil {
+				h.Log.Error("could not remove the key created for a failed service", "err", err)
+			}
+		}
+		if api, err := h.Connect(secret); err != nil {
+			undo()
+			return err
+		} else if me, err := api.Me(ctx); err != nil || me.ID != owner.ID {
+			undo()
+			return fmt.Errorf("the new key does not work for your account: %v", err)
+		}
 	}
 	if _, err := h.Store.AddService(ctx, store.Service{
 		Name: name, Tag: tag, InboxTag: inboxTag, Refused: h.Options.RefusedTag, ExpiryDays: expiry, SentTag: h.Options.SentTag,
 		OwnerID: owner.ID, OwnerName: owner.Name, OwnerEmail: owner.Email, KeyID: keyID, Key: secret, Policy: policy,
 		Visibility: visibility, Invite: invite, Album: album, LimitPhotos: p.LimitPhotos, LimitMB: p.LimitMB,
-		Pool: p.Pool, EndsAt: poolEnd(h.now(), p.EndsInDays), Mode: poolMode(p.Pool),
+		Pool: p.Pool, EndsAt: poolEnd(h.now(), p.EndsInDays), Mode: poolMode(p.Pool), DestOnly: p.DestinationOnly,
 	}); err != nil {
 		undo()
 		if errors.Is(err, store.ErrExists) {
@@ -198,6 +214,9 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 	if svc == nil || svc.OwnerID != owner.ID {
 		return ErrNotOwner
 	}
+	if err := h.lockedService(ctx, name); err != nil {
+		return err
+	}
 	stored, err := h.Store.Services(ctx)
 	if err != nil {
 		return err
@@ -208,8 +227,10 @@ func (h *Hub) DeleteService(ctx context.Context, sess *immich.API, owner immich.
 				h.endDigestLink(ctx, &v, d)
 				_ = h.Store.DeleteDigest(ctx, name)
 			}
-			if err := sess.DeleteAPIKey(ctx, v.KeyID); err != nil {
-				h.Log.Warn("delete service: could not delete the receiver key (it may already be gone)", "err", err)
+			if !v.DestOnly { // a service with only destinations has no receiver key
+				if err := sess.DeleteAPIKey(ctx, v.KeyID); err != nil {
+					h.Log.Warn("delete service: could not delete the receiver key (it may already be gone)", "err", err)
+				}
 			}
 		}
 	}
@@ -380,7 +401,7 @@ func (h *Hub) Orphaned(ctx context.Context, user uuid.UUID) ([]string, error) {
 
 // IsUserError reports whether err is something to tell the person as it is (a refusal), not a fault.
 func IsUserError(err error) bool {
-	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrDropNeedsPassword, ErrMessageNeedsName, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided, ErrDigestOff, ErrDigestRunning, ErrBadFrameName, ErrBadFrameEnd, ErrTooManyFrames, ErrNoFrame, ErrMailInOff, ErrDropMailLocked, ErrPoolConfirm, ErrPoolEnded, ErrBadPoolEnd, ErrNotPool, ErrNoLoved, ErrBadLogo, ErrBadMark, ErrPhoneOff, ErrPhoneTooBig, ErrPhoneFull, ErrPhoneNoUpload, ErrPhoneOffset, ErrPhoneChunk, ErrPhoneIncomplete, ErrPhoneKind, ErrPhoneChecksum, ErrPhoneEmpty, ErrNoPhotosChosen, ErrTooManyChosen, ErrNotYourPhotos, ErrNotVisible, ErrBadLibrary, ErrNoLibAlbum, ErrBadLibAlbum, ErrUndoLate, ErrNoCopyKept, ErrNoLibraryKey, ErrAlbumNotShared, ErrAlreadyFollowed, ErrBadFollowHistory, ErrBadRoomName, ErrBadRoomTitle, ErrBadRoomEnd, ErrTooManyRooms, ErrNoRoom, ErrBadRoomPIN, ErrRoomTooBig, ErrRoomNotActive, ErrBadRoomMark, ErrRoomMarkText, ErrRoomLogo, ErrRoomLimit, ErrRoomLocked, ErrRoomNoPicks, ErrRoomClaimed, ErrRoomName, ErrBadPickMode, ErrBadPickLim, ErrNothingToRelease, ErrNotReleased, ErrBadReleaseDays, ErrRoomNotesOff, ErrBadNotesMode, ErrRoomNoteLong, ErrRoomNotesMax, ErrBadReply, ErrNoNote, ErrSharingOff, ErrLookBackBusy, ErrNothingOlder, ErrNoSuggestion, ErrAutoTooSoon, ErrAutoPhrase, ErrRuleNotAuto, ErrRuleEmpty, ErrBadRuleDate, ErrBadRulePhrase, ErrTooManyRules, ErrNoRule, ErrRulePerson, ErrRulePlace, ErrRuleSame, ErrBadImmichKey, ErrBadPersonName, ErrGroupFull, ErrBadPeerLink, ErrPeerInviteGone, ErrNoPeer, ErrPeerUnreachable, ErrPeerSelf, ErrTooManyPeers, ErrBadPeerName, ErrPeerVersionTaken, ErrPeerRefused, ErrBadShareName, ErrBadHistory, ErrBadDeletion, ErrPeerNotActive, ErrNoSharedAlbum, ErrNotYetAnswered, ErrTooManyShared, ErrBadSharedPhoto, ErrSharedTooBig, ErrSharedBusy, ErrNoRemoval, ErrSingleRound, ErrRoundNotReady, ErrRoundReleased, ErrTooManyRounds, ErrBadMemoryTime, ErrBadMemoryZone, ErrMemoryNoChannel, ErrMemoriesNotOn, ErrMemoriesNoSender, ErrBadMemoryDay, ErrBadFolder, ErrBadDepth, ErrBadNaming, ErrNoFolderPh, ErrNoFolderKey, ErrFolderTwice, ErrFolderKeyMiss, ErrNoStackKey, ErrStackTwice, ErrBadSignals, ErrBadStackCover, ErrStackNothing, ErrBurstOnly} {
+	for _, e := range []error{ErrNotJoinable, ErrAlready, ErrNotJoined, ErrNeedsApproval, ErrBadName, ErrBadTag, ErrNameTaken, ErrTagInUse, ErrNotOwner, ErrNoRequest, ErrNoInvite, ErrBadExpiry, ErrBadAlbum, ErrNoAlbum, ErrBadLimit, ErrBadRules, ErrDeleteOff, ErrNothingToTakeBack, ErrReceiverCannotDelete, ErrBadLifetime, ErrBadDropName, ErrBadDropLimit, ErrBadDropText, ErrBadDropSecret, ErrDropNeedsPassword, ErrMessageNeedsName, ErrNoDropBox, ErrDropFinished, ErrDropRole, ErrBadDropAlbum, ErrBadDropWhen, ErrNoStaging, ErrNoSuchPerson, ErrHostSelf, ErrBadHostRole, ErrTooManyHosts, ErrNoEnd, ErrNothingChosen, ErrSomeNotStored, ErrBadDropLook, ErrBadCover, ErrBadTemplate, ErrNoTemplate, ErrDropDeleteOff, ErrDropKept, ErrBadPrompts, ErrDropPrompt, ErrBadMessage, ErrBadVoice, ErrGuestBookOff, ErrGuestBookFull, ErrNoShare, ErrBadShare, ErrNothingToShare, ErrNoPhotosYet, ErrHighlightsRunning, ErrNoHighlights, ErrOnwardService, ErrNoOnward, ErrBadScope, ErrBridgesOff, ErrBridgeInvite, ErrBadBridgeName, ErrBridgeAttempts, ErrNoBridge, bridge.ErrBadAddress, bridge.ErrRedirect, bridge.ErrNotImmich, bridge.ErrVersion, bridge.ErrKeyTooBroad, bridge.ErrKeyTooSmall, bridge.ErrRevoked, bridge.ErrUnreachable, ErrMailOff, ErrBadMailMode, ErrNoMailAddress, ErrMailNotOn, ErrMailTestSoon, ErrMailSend, ErrPushOff, ErrBadPushDevice, ErrBadPushHost, ErrTooManyDevices, ErrNoDevice, ErrPushTestSoon, ErrPushSend, ErrActionInvalid, ErrAlreadyDecided, ErrDigestOff, ErrDigestRunning, ErrBadFrameName, ErrBadFrameEnd, ErrTooManyFrames, ErrNoFrame, ErrMailInOff, ErrDropMailLocked, ErrPoolConfirm, ErrPoolEnded, ErrBadPoolEnd, ErrNotPool, ErrNoLoved, ErrBadLogo, ErrBadMark, ErrPhoneOff, ErrPhoneTooBig, ErrPhoneFull, ErrPhoneNoUpload, ErrPhoneOffset, ErrPhoneChunk, ErrPhoneIncomplete, ErrPhoneKind, ErrPhoneChecksum, ErrPhoneEmpty, ErrNoPhotosChosen, ErrTooManyChosen, ErrNotYourPhotos, ErrNotVisible, ErrBadLibrary, ErrNoLibAlbum, ErrBadLibAlbum, ErrUndoLate, ErrNoCopyKept, ErrNoLibraryKey, ErrAlbumNotShared, ErrAlreadyFollowed, ErrBadFollowHistory, ErrBadRoomName, ErrBadRoomTitle, ErrBadRoomEnd, ErrTooManyRooms, ErrNoRoom, ErrBadRoomPIN, ErrRoomTooBig, ErrRoomNotActive, ErrBadRoomMark, ErrRoomMarkText, ErrRoomLogo, ErrRoomLimit, ErrRoomLocked, ErrRoomNoPicks, ErrRoomClaimed, ErrRoomName, ErrBadPickMode, ErrBadPickLim, ErrNothingToRelease, ErrNotReleased, ErrBadReleaseDays, ErrRoomNotesOff, ErrBadNotesMode, ErrRoomNoteLong, ErrRoomNotesMax, ErrBadReply, ErrNoNote, ErrSharingOff, ErrLookBackBusy, ErrNothingOlder, ErrNoSuggestion, ErrAutoTooSoon, ErrAutoPhrase, ErrAutoPet, ErrDestOnly, ErrNoDestination, ErrDestinationTaken, ErrUserDestsOff, ErrNoFolderByUser, ErrBadDestination, ErrBadDestLimit, ErrTooManyDests, ErrNeedHostKey, ErrNoImportSource, ErrImportNotAllowed, ErrAlreadyImporting, ErrNoThumbnail, ErrImportTooBig, ErrNoAnimal, ErrBadExamples, ErrPetAlone, immich.ErrNoSmartSearch, ErrRuleNotAuto, ErrRuleEmpty, ErrBadRuleDate, ErrBadRulePhrase, ErrTooManyRules, ErrNoRule, ErrRulePerson, ErrRulePlace, ErrRuleSame, ErrBadImmichKey, ErrBadPersonName, ErrGroupFull, ErrBadPeerLink, ErrPeerInviteGone, ErrNoPeer, ErrPeerUnreachable, ErrPeerSelf, ErrTooManyPeers, ErrBadPeerName, ErrPeerVersionTaken, ErrPeerRefused, ErrBadShareName, ErrBadHistory, ErrBadDeletion, ErrPeerNotActive, ErrNoSharedAlbum, ErrNotYetAnswered, ErrTooManyShared, ErrBadSharedPhoto, ErrSharedTooBig, ErrSharedBusy, ErrNoRemoval, ErrSingleRound, ErrRoundNotReady, ErrRoundReleased, ErrTooManyRounds, ErrBadMemoryTime, ErrBadMemoryZone, ErrMemoryNoChannel, ErrMemoriesNotOn, ErrMemoriesNoSender, ErrBadMemoryDay, ErrBadFolder, ErrBadDepth, ErrBadNaming, ErrNoFolderPh, ErrNoFolderKey, ErrFolderTwice, ErrFolderKeyMiss, ErrNoStackKey, ErrStackTwice, ErrBadSignals, ErrBadStackCover, ErrStackNothing, ErrBurstOnly, ErrLockedByPairing, ErrNoPairing, ErrPairingSelf, ErrPairingPeople, ErrTooManyPairings, ErrPairingState, ErrPairingLapsed, ErrBadSettle} {
 		if errors.Is(err, e) {
 			return true
 		}
@@ -444,6 +465,9 @@ func (h *Hub) ownedService(ctx context.Context, owner immich.User, name string) 
 	}
 	for i := range stored {
 		if stored[i].Name == name && stored[i].OwnerID == owner.ID {
+			if stored[i].Pairing != "" && !isPairingOp(ctx) {
+				return nil, ErrLockedByPairing // the sharing's own card is the only place
+			}
 			return &stored[i], nil
 		}
 	}

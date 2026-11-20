@@ -155,12 +155,49 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 			}
 		}
 		h.Store.SetRulePhotos(ctx, r.ID, yes, store.RuleSuggested, store.RuleSent)
+		var accepted []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range yes {
+				if p.AssetID == id {
+					accepted = append(accepted, p)
+				}
+			}
+		}
+		var rejected []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range no {
+				if p.AssetID == id {
+					rejected = append(rejected, p)
+				}
+			}
+		}
+		h.learnPet(ctx, r, accepted, rejected) // a pet rule widens its reach and takes the accepted photos as examples
+	} else if len(no) > 0 && r.Cond.Pet() {
+		var rejected []store.RulePhoto
+		for _, p := range photos {
+			for _, id := range no {
+				if p.AssetID == id {
+					rejected = append(rejected, p)
+				}
+			}
+		}
+		h.learnPet(ctx, r, nil, rejected)
 	}
 	if len(no) > 0 {
 		h.Store.SetRulePhotos(ctx, r.ID, no, store.RuleSuggested, store.RuleDeclined)
 	}
 	if answer == AnswerAlways && len(yes) > 0 {
 		h.Store.AddRuleAlways(ctx, r.ID)
+	}
+	if r.Kind == store.RuleKindImport {
+		src := r.Cond.SourceName
+		switch {
+		case len(yes) > 0:
+			h.event(ctx, "", user.ID, "import", i18n.PackN("{n} file added to your library from {destination}", "{n} files added to your library from {destination}", len(yes), "destination", src))
+		case len(no) > 0:
+			h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} file of the destination {destination} left out of your library", "{n} files of the destination {destination} left out of your library", len(no), "destination", src))
+		}
+		return nil
 	}
 	if r.Kind == store.RuleKindLibrary {
 		album := r.Cond.Album.Name
@@ -201,6 +238,9 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 
 // sendForRule tags photos with the service's tag, in the sender's own account, so that the normal hand-over takes them.
 func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) error {
+	if r.Kind == store.RuleKindImport { // a followed destination: the files are added to the person's own library
+		return h.importForRule(ctx, r, assets)
+	}
 	if r.Kind == store.RuleKindLibrary { // a followed album: the photos are copied into the person's own library
 		return h.copyForRule(ctx, r, assets)
 	}
@@ -288,6 +328,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 		if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleSuggest, h.now()); err != nil {
 			return err
 		}
+		if r.Kind == store.RuleKindImport {
+			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the destination {destination} ask first again", "name", user.Name, "destination", r.Cond.SourceName))
+			return nil
+		}
 		if r.Kind == store.RuleKindLibrary {
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the album {album} ask first again", "name", user.Name, "album", r.Cond.Album.Name))
 			return nil
@@ -306,14 +350,21 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	if r.Cond.Phrase != "" {
 		return ErrAutoPhrase
 	}
+	if r.Cond.Pet() {
+		return ErrAutoPet
+	}
 	if r.Kind == store.RuleKindStack && onlyBursts(r.Cond) {
 		return ErrBurstOnly
 	}
-	if r.Always < alwaysToAuto {
-		return ErrAutoTooSoon
+	if r.Kind != store.RuleKindSend && r.Always < alwaysToAuto {
+		return ErrAutoTooSoon // a rule that sends may be switched on at once; the others wait for three Always
 	}
 	if err := h.Store.SetRuleMode(ctx, r.ID, store.RuleAuto, h.now()); err != nil {
 		return err
+	}
+	if r.Kind == store.RuleKindImport {
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the destination {destination} add files to the library by itself", "name", user.Name, "destination", r.Cond.SourceName))
+		return nil
 	}
 	if r.Kind == store.RuleKindLibrary {
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the album {album} add photos to the library by itself", "name", user.Name, "album", r.Cond.Album.Name))
@@ -331,8 +382,8 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	return nil
 }
 
-// CanAuto says whether a rule may be let go on by itself: it has been answered Always often enough, it is not automatic yet and
-// has no phrase.
+// CanAuto says whether a rule may be let go on by itself: it is not automatic yet, it has no phrase, and either it sends photos
+// (the person may switch it on at once, naming who they go to) or it has been answered Always often enough.
 func CanAuto(r store.Rule) bool {
-	return r.Mode != store.RuleAuto && r.Always >= alwaysToAuto && r.Cond.Phrase == "" && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
+	return r.Mode != store.RuleAuto && (r.Kind == store.RuleKindSend || r.Always >= alwaysToAuto) && !r.Cond.NeverAuto() && !(r.Kind == store.RuleKindStack && onlyBursts(r.Cond))
 }

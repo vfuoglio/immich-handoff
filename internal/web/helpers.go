@@ -503,7 +503,7 @@ func (d DashboardData) Receiving() []ServiceView { return d.byRole("receiver", t
 func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 	var out []ServiceView
 	for _, s := range d.Services {
-		if s.Role == role && !(notOwned && s.Owned) {
+		if s.Role == role && !(notOwned && s.Owned) && !s.Pairing {
 			out = append(out, s)
 		}
 	}
@@ -646,7 +646,7 @@ func activityTone(kind string) string {
 		return "bad"
 	case "limit", "paused", "album", "sharing_problem":
 		return "warn"
-	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library":
+	case "joined", "approved", "reconnected", "resumed", "created", "backup", "choice", "arrival", "library", "import", "pairing":
 		return "ok"
 	}
 	return ""
@@ -886,6 +886,12 @@ func roomChips(ctx context.Context, r RoomView) []Chip {
 }
 
 // pausedValue is what the pause button sends: the state the room should be in after the press.
+// destVals are the values a button on a destination sends: the service, the destination and, to pause or resume it, which.
+func destVals(service, id, paused string) string {
+	b, _ := json.Marshal(map[string]string{"service": service, "id": id, "paused": paused})
+	return string(b)
+}
+
 func pausedValue(nowPaused bool) string {
 	if nowPaused {
 		return "0"
@@ -970,6 +976,9 @@ func libraryTrigger(l LibraryView) string {
 func reviewTitle(ctx context.Context, d SuggestionReview) string {
 	if d.Folder {
 		return t(ctx, "Albums from {folder}", "folder", d.Album)
+	}
+	if d.Import {
+		return t(ctx, "New in {destination}", "destination", d.Owner)
 	}
 	if d.Library {
 		return t(ctx, "New in {album}", "album", d.Album)

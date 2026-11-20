@@ -10,6 +10,7 @@ For the maintainer. A release is a git tag; everything else is done by the relea
 
 ## What a release produces
 
+- the optional pet helper's image `vfuoglio/immich-handoff-pets` on Docker Hub and `ghcr.io/vfuoglio/immich-handoff-pets` (built from `pet-sidecar/`, with the same version tags, signed and with an SBOM in the same way; its own CI job builds it and posts sample photos first)
 - the container image `vfuoglio/immich-handoff` on Docker Hub, and the identical `ghcr.io/vfuoglio/immich-handoff` on GitHub's registry, for amd64 and arm64, tagged `1.2.3`, `1.2` and, if it is the highest version released so far, `latest` (a version with a suffix such as `1.2.3-rc1` gets only its own tag, and not `X.Y` or `latest`)
 - a signature for each image, a software bill of materials and build provenance (see [Verifying an image](#verifying-an-image))
 - a GitHub Release named after the tag, whose text is that version's section of `CHANGELOG.md`

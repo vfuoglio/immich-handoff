@@ -304,9 +304,9 @@ func TestBrowser(t *testing.T) {
 		if !strings.Contains(card["blur"], "blur") || card["radius"] == "0px" {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
-		// the order down the page: live (the stream is the first thing under the headline), needs you, this week, get started, then the person's own settings cards (where Add to my library puts copies, and the folders that make albums)
+		// the order down the page: live (the stream is the first thing under the headline), needs you, this week, get started, then the person's own settings cards (the pairing card, where Add to my library puts copies, and the folders that make albums)
 		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(order, "|") != "Live as it happens|Needs you|This week|Get started|Add to my library|Albums from my folders|Stack photos that belong together" {
+		if strings.Join(order, "|") != "Live as it happens|Needs you|This week|Get started|Share photos with someone|Add to my library|Albums from my folders|Stack photos that belong together" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)

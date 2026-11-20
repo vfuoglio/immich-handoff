@@ -29,6 +29,17 @@ const (
 	defaultSettle = 5 * time.Minute
 )
 
+// ruleWait is how long a photo must have been in Immich before this rule offers it: the rule's own choice, or the app's usual wait.
+func (h *Hub) ruleWait(r store.Rule) time.Duration {
+	if r.SettleMinutes > 0 {
+		return time.Duration(r.SettleMinutes) * time.Minute
+	}
+	return h.ruleSettle()
+}
+
+// RuleWait is the app's usual wait before a rule offers a photo (RULES_SETTLE_MINUTES, five minutes unless set), for a form to say.
+func (h *Hub) RuleWait() time.Duration { return h.ruleSettle() }
+
 func (h *Hub) ruleSettle() time.Duration {
 	if h.RulesSettle > 0 {
 		return h.RulesSettle
@@ -78,7 +89,14 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 			f.CreatedAfter = week
 		}
 	}
-	found, err := api.RuleSearch(ctx, f)
+	var found []immich.AssetResponseDto
+	var whys map[uuid.UUID]string
+	var err error
+	if c.Pet() {
+		found, whys, err = h.findPet(ctx, api, me, r, f.CreatedAfter, back)
+	} else {
+		found, err = api.RuleSearch(ctx, f)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +129,7 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		if a.OwnerId != me || a.IsArchived || a.IsTrashed || out[a.Id] || known[a.Id.String()] != "" || sentByAny[a.Id.String()] {
 			continue
 		}
-		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < h.ruleSettle() {
+		if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" || h.now().Sub(a.CreatedAt) < h.ruleWait(r) {
 			continue
 		}
 		people := a.People
@@ -133,7 +151,11 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		if skip {
 			continue
 		}
-		matches = append(matches, match{Asset: a, Why: whyMatched(c, a)})
+		why := whyMatched(c, a)
+		if c.Pet() {
+			why = whys[a.Id]
+		}
+		matches = append(matches, match{Asset: a, Why: why})
 	}
 	return matches, nil
 }
@@ -168,6 +190,9 @@ func whyMatched(c store.RuleCond, a immich.AssetResponseDto) string {
 
 // LookRule looks at one rule and adds what it finds to its batch of suggestions. It returns how many photos are new.
 func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
+	if r.Kind == store.RuleKindImport {
+		return h.lookImport(ctx, r)
+	}
 	if r.Kind == store.RuleKindLibrary {
 		return h.lookLibrary(ctx, r)
 	}
@@ -195,6 +220,9 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		problem := trimNet(err)
 		if errors.Is(err, immich.ErrNoSmartSearch) {
 			problem = "your Immich server cannot do a smart search (it runs without machine learning), so the phrase finds nothing"
+			if r.Cond.Pet() {
+				problem = "your Immich server cannot do a smart search (it runs without machine learning), so photos like your examples cannot be found"
+			}
 		}
 		h.Store.MarkRuleLook(ctx, r.ID, h.now(), problem)
 		return 0, err
@@ -204,8 +232,8 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	var suggested int
 	for _, m := range matches {
 		id := m.Asset.Id.String()
-		if r.Mode == store.RuleAuto && r.Cond.Phrase == "" && !m.Asset.CreatedAt.Before(r.AutoSince) {
-			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleSettle() {
+		if r.Mode == store.RuleAuto && !r.Cond.NeverAuto() && !m.Asset.CreatedAt.Before(r.AutoSince) {
+			if h.now().Sub(m.Asset.CreatedAt) < 6*h.ruleWait(r) {
 				continue // not settled enough to send without asking; it is looked at again next time
 			}
 			auto = append(auto, id)
@@ -228,7 +256,7 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 		h.Store.SetRulePhotos(ctx, r.ID, auto, store.RuleSuggested, store.RuleSent)
 		h.event(ctx, r.Service, r.OwnerID, "rule", i18n.PackN("{n} photo sent to {service} by a rule on its own: {rule}", "{n} photos sent to {service} by a rule on its own: {rule}", len(auto), "service", r.Service, "rule", RuleSentence(r.Cond)))
 	}
-	h.Store.MarkRuleLook(ctx, r.ID, h.now(), "")
+	h.Store.MarkRuleLook(ctx, r.ID, h.now(), h.takePetNote(r.ID)) // empty, or that the pet helper is down and Immich's own search was used
 	if suggested > 0 {
 		h.Log.Debug("a rule found photos", "rule", r.ID, "count", suggested)
 		if len(waiting) == 0 && !r.Paused { // told once for a batch, when it begins, not for each photo that joins it
@@ -248,6 +276,7 @@ func (h *Hub) RulesMaintenance(ctx context.Context) {
 	if h.Store == nil || !h.SelfService() {
 		return
 	}
+	h.ExpirePairings(ctx)
 	list, err := h.Store.AllRules(ctx)
 	if err != nil {
 		return
@@ -291,7 +320,7 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 	if err != nil {
 		return 0, err
 	}
-	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder || r.Kind == store.RuleKindStack { // these look at everything there is: there is nothing older to look back at
+	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder || r.Kind == store.RuleKindStack || r.Kind == store.RuleKindImport { // these look at everything there is: there is nothing older to look back at
 		return 0, ErrNothingOlder
 	}
 	if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {

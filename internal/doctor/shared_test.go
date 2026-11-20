@@ -2,6 +2,13 @@ package doctor
 
 import (
 	"bytes"
+	"errors"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
+	"github.com/vfuoglio/immich-handoff/internal/syncer"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -89,5 +96,68 @@ func TestTheOnThisDayIntervalIsCheckedOnlyWhenSet(t *testing.T) {
 	}
 	if _, r := check(map[string]string{"MEMORIES_CHECK_MINUTES": "5", "PUBLIC_IMMICH_URL": "https://photos.example"}); r.Fails != 0 || r.Warns != 0 {
 		t.Error("all set")
+	}
+}
+
+func TestThePetSidecarAddressIsCheckedOnlyWhenSetAndAnUnreachableOneIsAWarning(t *testing.T) {
+	run := func(url string, client *http.Client) *Report {
+		var buf bytes.Buffer
+		r := &Report{W: &buf}
+		petSidecar(r, Input{Env: func(k string) string { return map[string]string{"PET_SIDECAR_URL": url}[k] }, Client: client})
+		return r
+	}
+	if r := run("", nil); r.Fails+r.Warns != 0 {
+		t.Error("unset is fine")
+	}
+	if r := run("pets:8090", nil); r.Fails != 1 {
+		t.Error("an address without http:// is refused, as the app would")
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
+	defer up.Close()
+	if r := run(up.URL, up.Client()); r.Fails+r.Warns != 0 {
+		t.Errorf("it answers: %d fails %d warnings", r.Fails, r.Warns)
+	}
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := down.URL
+	down.Close()
+	if r := run(url, nil); r.Fails != 0 || r.Warns != 1 {
+		t.Errorf("it does not answer: the app still works, so a warning: %d fails %d warnings", r.Fails, r.Warns)
+	}
+}
+
+func TestTheDestinationsFileIsCheckedAndEachDestinationIsAskedWhetherItWorks(t *testing.T) {
+	dest.Register("folder", func(s dest.Spec, n dest.Net) (dest.Destination, error) {
+		if s.Settings["root"] == "/broken" {
+			return &dest.Memory{Fail: errors.New("the share is not mounted")}, nil
+		}
+		return &dest.Memory{}, nil
+	})
+	run := func(file string, svcs ...*syncer.Service) (string, *Report) {
+		var buf bytes.Buffer
+		r := &Report{W: &buf}
+		env := map[string]string{}
+		if file != "" {
+			p := filepath.Join(t.TempDir(), "d.yaml")
+			os.WriteFile(p, []byte(file), 0o600)
+			env["DESTINATIONS_FILE"] = p
+		}
+		destinations(r, Input{Env: func(k string) string { return env[k] }, Services: svcs})
+		return buf.String(), r
+	}
+	if out, r := run(""); out != "" || r.Fails != 0 {
+		t.Errorf("unset is fine: %q", out)
+	}
+	out, r := run("destinations:\n  nas:\n    kind: folder\n    root: /ok\n  broken:\n    kind: folder\n    root: /broken\n",
+		&syncer.Service{Name: "family", DestRefs: []syncer.DestRef{{Name: "nas"}, {Name: "nope"}}})
+	if r.Fails != 2 || r.Warns != 0 {
+		t.Errorf("%d fails %d warnings\n%s", r.Fails, r.Warns, out)
+	}
+	for _, want := range []string{"destination nas: the memory destination answers", "destination broken: the share is not mounted", `names the destination nope`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if _, r := run("destinations:\n  a:\n    kind: folder\n"); r.Fails != 1 {
+		t.Error("a file with a problem is a failure")
 	}
 }

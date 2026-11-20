@@ -161,12 +161,34 @@ func fakeImmich() http.Handler {
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 		id := "bbbbbbbb-0000-4000-8000-000000000001"
+		secret := "lib-secret"
+		switch strings.TrimSpace(r.Header.Get("Cookie")) { // a key made with a person's own session is theirs
+		case "sess=alice":
+			secret = "k-alice"
+		case "sess=family":
+			secret = "k-family"
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
-		json.NewEncoder(w).Encode(map[string]any{"id": id, "name": body.Name, "secret": "lib-secret", "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
+		json.NewEncoder(w).Encode(map[string]any{"id": id, "name": body.Name, "secret": secret, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts,
 			"apiKey": map[string]any{"id": id, "name": body.Name, "permissions": body.Permissions, "createdAt": ts, "updatedAt": ts}})
 	})
 	mux.HandleFunc("DELETE /api/api-keys/{id}", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	// the named people of a library (the same two for everyone), the users of the server, and the workflows a hub looks for
+	mux.HandleFunc("GET /api/people", func(w http.ResponseWriter, r *http.Request) {
+		j(w, map[string]any{"hasNextPage": false, "total": 2, "hidden": 0, "people": []any{
+			map[string]any{"id": "eeeeeeee-0000-4000-8000-000000000001", "name": "Nora", "isHidden": false, "thumbnailPath": "x"},
+			map[string]any{"id": "eeeeeeee-0000-4000-8000-000000000002", "name": "Leo", "isHidden": false, "thumbnailPath": "x"}}})
+	})
+	mux.HandleFunc("GET /api/users", func(w http.ResponseWriter, r *http.Request) {
+		out := []any{}
+		for _, u := range [][3]string{{aliceID, "Alice", "alice@x.test"}, {familyID, "Family", "family@x.test"}, {otherID, "Other", "other@x.test"}} {
+			out = append(out, map[string]any{"id": u[0], "name": u[1], "email": u[2], "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""})
+		}
+		j(w, out)
+	})
+	mux.HandleFunc("GET /api/workflows", func(w http.ResponseWriter, r *http.Request) { j(w, []any{}) })
+	mux.HandleFunc("GET /api/search/suggestions", func(w http.ResponseWriter, r *http.Request) { j(w, []string{"Portugal"}) })
 	// Add to my library: every original is the same small picture (above), and an upload is stored under an id that is "other"'s
 	mux.HandleFunc("POST /api/assets", func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
@@ -211,8 +233,21 @@ func fakeImmich() http.Handler {
 			OriginalPath string `json:"originalPath"`
 			WithExif     bool   `json:"withExif"`
 			WithStacked  *bool  `json:"withStacked"`
+			Type         string `json:"type"`
+			Order        string `json:"order"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
+		if body.Type == "IMAGE" && body.Order == "desc" && !body.WithExif { // the newest photos, to pick the examples of a pet from: three of "other"'s own and one that is not
+			pic := func(id, owner string) map[string]any {
+				m := a(id)
+				m["ownerId"], m["createdAt"], m["type"] = owner, ts, "IMAGE"
+				return m
+			}
+			j(w, map[string]any{"assets": map[string]any{"items": []any{
+				pic("55555555-0000-4000-8000-0000000000c1", otherID), pic("55555555-0000-4000-8000-0000000000c2", otherID), pic("55555555-0000-4000-8000-0000000000c3", otherID), pic("55555555-0000-4000-8000-0000000000c4", otherID),
+				pic("11111111-1111-1111-1111-111111111111", aliceID)}, "count": 5, "total": 5, "facets": []any{}}})
+			return
+		}
 		if body.WithExif && body.WithStacked != nil { // stacking: the person's photos with their EXIF: a RAW and its JPEG, and a photo alone
 			shot := func(id, name string) map[string]any {
 				m := a(id)

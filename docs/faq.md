@@ -15,6 +15,12 @@ No. The app makes a named, restricted key in *your* account with your own sign-i
 **Do the people who send need to install anything?**
 No. Senders use Immich as they do now: add a tag, or press the **Hand over...** button if your administrator [added it](find-handoff.md#hand-over-from-inside-immich). Guests without an account use a link or QR code in their browser.
 
+**Can I share the photos of a person with my partner, both ways, without doing anything each time?**
+Yes: on the Overview, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
+
+**Can photos go to a NAS, a Nextcloud, an S3 bucket or an SFTP server instead of, or as well as, another Immich account?**
+Yes: the administrator names the places (a folder, WebDAV, S3, SFTP) in a file, and the owner of a service adds one to it. The photo is written as a file with a sidecar and a record, checked, and only then is the original moved or marked; if a place is down, the original stays tagged until it holds the photo. Clouds without their own kind (Google Drive, OneDrive, Dropbox) are reached through a folder mounted with rclone. Taking a hand-over back deletes the files there. See [Destinations](guides/destinations.md).
+
 **Can I keep a photo someone shared with me?**
 Yes: the button inside Immich shows **Add to my library** on photos from albums shared with you and from a partner, and copies them into your own library with their description, rating and location (the person who shared them is not told, and a copy takes as much room as the photo). See [Add to my library](find-handoff.md#add-to-my-library-from-inside-immich). To have the new photos of an album shared with you offered to you as they are added, [follow the album](guides/automate.md#following-an-album-shared-with-you).
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -22,6 +23,7 @@ var (
 	ErrRuleEmpty     = errors.New("choose at least one thing for the rule to look for: a person, dates, a place, an album or a phrase")
 	ErrBadRuleDate   = errors.New("the dates must be real dates, and the first must not be after the last")
 	ErrBadRulePhrase = errors.New("the phrase can be up to 100 characters")
+	ErrBadSettle     = errors.New("the wait before a photo is offered can be from 1 to 60 minutes")
 	ErrTooManyRules  = errors.New("you already have 20 rules; end one first")
 	ErrNoRule        = errors.New("that is not one of your rules")
 	ErrRulePerson    = errors.New("that person is not among the people Immich has named in your library")
@@ -43,8 +45,15 @@ type RuleParams struct {
 	Album     uuid.UUID
 	NotAlbums []uuid.UUID
 	Phrase    string
-	Also      []string // other services of the person's to make the same rule for
+	Examples  []uuid.UUID // a pet rule: photos of the person's own library that it looks for look-alikes of
+	Also      []string    // other services of the person's to make the same rule for
+	// SettleMinutes is how long a photo waits in Immich before the rule offers it (and a sixth of how long before it sends one by itself),
+	// so that its faces have been looked for: 0 is the app's usual wait, otherwise 1 to 60.
+	SettleMinutes int
 }
+
+// maxSettleMinutes is the longest wait a rule can be given before it offers a photo.
+const maxSettleMinutes = 60
 
 // RuleChoices are what a person can choose from, read from their own Immich with their own session.
 type RuleChoices struct {
@@ -103,6 +112,9 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 	if !h.SelfService() {
 		return store.Rule{}, ErrNotJoined
 	}
+	if err := h.lockedService(ctx, p.Service); err != nil { // a pairing's pool takes only the pairing's own rules
+		return store.Rule{}, err
+	}
 	link, err := h.senderLink(ctx, user.ID, p.Service)
 	if err != nil {
 		return store.Rule{}, err
@@ -113,11 +125,43 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 		return store.Rule{}, ErrTooManyRules
 	}
 	var cond store.RuleCond
+	var prints []store.PetPrint
 	phrase := strings.TrimSpace(p.Phrase)
 	if utf8.RuneCountInString(phrase) > 100 || strings.ContainsAny(phrase, "\r\n\x00") {
 		return store.Rule{}, ErrBadRulePhrase
 	}
+	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes {
+		return store.Rule{}, ErrBadSettle
+	}
 	cond.Phrase = phrase
+	if len(p.Examples) > 0 {
+		if len(p.Examples) < petMinExamples || len(p.Examples) > petMaxExamples {
+			return store.Rule{}, ErrBadExamples
+		}
+		seen := map[uuid.UUID]bool{}
+		for _, id := range p.Examples {
+			if seen[id] {
+				return store.Rule{}, ErrBadExamples
+			}
+			seen[id] = true
+			a, err := sess.Asset(ctx, id)
+			if err != nil || a.OwnerId != user.ID || a.IsTrashed {
+				return store.Rule{}, ErrBadExamples // only the person's own photos
+			}
+			cond.Examples = append(cond.Examples, id.String())
+		}
+		cond.Rank = petStartRank
+		if h.Pets != nil { // with the pet sidecar on: the animal in each example, so that rules compare crops instead of whole photos
+			var err error
+			prints, err = h.examplePrints(ctx, sess, p.Examples)
+			if errors.Is(err, pets.ErrDown) {
+				prints, err = nil, nil // it is down now: the rule works with Immich's search, and says so when it looks
+			}
+			if err != nil {
+				return store.Rule{}, err
+			}
+		}
+	}
 	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
 		return store.Rule{}, ErrBadRuleDate
 	}
@@ -202,7 +246,10 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			cond.NotAlbums = append(cond.NotAlbums, ref)
 		}
 	}
-	if len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" {
+	if cond.Pet() && (len(p.People)+len(p.NotPeople) > 0 || cond.After != "" || cond.Before != "" || cond.Country != "" || cond.Album != nil || len(cond.NotAlbums) > 0 || cond.Phrase != "") {
+		return store.Rule{}, ErrPetAlone
+	}
+	if !cond.Pet() && len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" {
 		return store.Rule{}, ErrRuleEmpty
 	}
 	if needAlbums { // reading albums for the timer: the key gets album.read through the person's own session, as for a linked album
@@ -210,9 +257,20 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 			return store.Rule{}, fmt.Errorf("could not allow the app to read your albums: %w", err)
 		}
 	}
-	r, err := h.Store.AddRule(ctx, store.Rule{OwnerID: user.ID, Service: p.Service, Cond: cond})
+	if len(prints) > 0 { // the sidecar is sent a preview, so the rule's key may look at previews: given through the person's own session
+		if err := sess.AddKeyPermission(ctx, link.KeyID, "asset.view"); err != nil {
+			return store.Rule{}, fmt.Errorf("could not allow the app to look at previews of your photos: %w", err)
+		}
+	}
+	r, err := h.Store.AddRule(ctx, store.Rule{OwnerID: user.ID, Service: p.Service, Cond: cond, SettleMinutes: p.SettleMinutes})
 	if err != nil {
 		return store.Rule{}, err
+	}
+	for _, pr := range prints {
+		if err := h.Store.PutPetPrint(ctx, r.ID, pr); err != nil {
+			h.Store.DeleteRule(ctx, r.ID)
+			return store.Rule{}, err
+		}
 	}
 	h.event(ctx, p.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service}: {rule}", "name", user.Name, "service", p.Service, "rule", RuleSentence(r.Cond)))
 	return r, nil
@@ -273,6 +331,9 @@ func RuleSentence(c store.RuleCond) string {
 	if c.Phrase != "" {
 		parts = append(parts, "that look like \""+c.Phrase+"\"")
 	}
+	if c.Pet() {
+		parts = append(parts, fmt.Sprintf("that look like your %d example photos", len(c.Examples)))
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -318,6 +379,9 @@ func (h *Hub) PauseRule(ctx context.Context, user uuid.UUID, id string, paused b
 	if err != nil {
 		return err
 	}
+	if r.Pairing != "" && !isPairingOp(ctx) {
+		return ErrLockedByPairing
+	}
 	return h.Store.SetRulePaused(ctx, r.ID, paused)
 }
 
@@ -333,8 +397,16 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 	if err != nil {
 		return err
 	}
+	if r.Pairing != "" && !isPairingOp(ctx) {
+		return ErrLockedByPairing
+	}
 	if err := h.Store.DeleteRule(ctx, r.ID); err != nil {
 		return err
+	}
+	if r.Kind == store.RuleKindImport {
+		h.dropLibraryKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped following the destination {destination}", "name", user.Name, "destination", r.Cond.SourceName))
+		return nil
 	}
 	if r.Kind == store.RuleKindLibrary {
 		h.dropLibraryKeyIfUnused(ctx, sess, user.ID)

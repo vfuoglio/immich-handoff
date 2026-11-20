@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,7 +45,8 @@ type Service struct {
 	ExpiryDays int    // unfiled copies lose InboxTag after this many days
 	Senders    []*Account
 	Receivers  []*Account
-	Remote     Remote    // a receiver on another Immich server, in addition to Receivers (nil: none)
+	DestRefs   []DestRef // destinations the routes file names for this service (the hub makes the receivers)
+	Remotes    []Remote  // receivers that are not an Immich account of this server (another Immich server, a folder, ...), in addition to Receivers (none: nil)
 	AllowJoin  bool      // people may add themselves as senders from the web page
 	Pool       bool      // an event pool: every member is a sender and a receiver, and a photo goes to everyone but its sender
 	EndsAt     time.Time // a pool stops handing over at this time (zero: until the owner ends it)
@@ -63,29 +65,53 @@ type Service struct {
 	BrokenFix     string    // when set, what to do about Broken instead of reconnecting the receiver key (which would not help)
 }
 
-// Remote is a receiver that lives on another Immich server (a bridge). The app holds a key there that can only upload
-// and tag, so none of what a same-server receiver supports (stacks, albums, expiry, taking back, checking the copy by
-// reading it) applies. It is in addition to the service's own receivers: a photo goes to all of them, and the original
-// is touched only after every one holds it.
+// Remote is a receiver that is not an account of this Immich: a bridge to another Immich server, or a destination such as a
+// folder. The app holds a key or a credential there that can only add, so none of what a same-server receiver supports (stacks,
+// albums, expiry, checking the copy by reading it through Immich) applies. It is in addition to the service's own receivers, and a
+// service may have several: a photo goes to all that are ready, and the original is touched only after every one of them holds
+// it (a failing one holds the original, still tagged, and the next pass delivers only to what lacks the photo).
 type Remote interface {
+	// ID names the receiver within its service ("bridge", or a destination's name); a hand-over is recorded under it.
+	ID() string
 	// Label names the receiver in logs.
 	Label() string
 	// Ready says whether photos may be handed to it now; a non-nil error is why not, and the photos wait, still
-	// tagged, as for a paused service. It is called once at the start of every pass.
+	// tagged, as for a paused service. It is called once at the start of every pass, for each receiver.
 	Ready(ctx context.Context) error
 	// Deliver hands over one photo (and its motion clip, for a live photo) streamed from src. It returns nil only when
-	// the other server has the photo and its tag. The copy says which photo it is over there, so a hand-over can be
+	// the other side has the photo (and its tag). The copy says which photo it is over there, so a hand-over can be
 	// taken back later.
 	Deliver(ctx context.Context, src *immich.API, a immich.AssetResponseDto, clip *immich.AssetResponseDto, job RemoteJob) (RemoteCopy, error)
 }
 
-// RemoteCopy is what the other server holds after a hand-over: the photo's id there, and a live photo's motion clip.
-// Created is false when the server already had the photo (a duplicate): nothing new arrived, so nothing is recorded to
-// take back.
+// Holder is a Remote that, while it is not ready, holds up the whole service: not even the service's own receivers get the photos (a
+// bridge: the other server is a promised place for every photo). Without it a receiver that is not ready is left out of the pass and
+// the others go on, and only the original waits.
+type Holder interface {
+	HoldsAll() bool
+}
+
+// TakeBacker is a Remote that can undo what it delivered: refs are the references Deliver returned. It returns
+// ErrCannotTakeBack when the other side does not allow it (the copies stay).
+type TakeBacker interface {
+	TakeBackRefs(ctx context.Context, refs []string) error
+}
+
+// ErrCannotTakeBack: the receiver does not allow what was handed over to be taken back (the copies stay where they are).
+var ErrCannotTakeBack = errors.New("the receiver does not allow a hand-over to be taken back")
+
+// Diagnoser is a Remote that can say, for `doctor`, whether it works and how: what it checked, or why not.
+type Diagnoser interface {
+	Diagnose(ctx context.Context) (ok string, err error)
+}
+
+// RemoteCopy is what the other side holds after a hand-over: a reference to the photo there (an id on another Immich, a path or a
+// key in a destination), and a live photo's motion clip. Created is false when it already had the photo (a duplicate): nothing
+// new arrived, so nothing is recorded to take back.
 type RemoteCopy struct {
-	ID          uuid.UUID
+	Ref         string
 	Created     bool
-	Clip        uuid.UUID // zero: no motion clip
+	Clip        string // empty: no motion clip
 	ClipCreated bool
 }
 
@@ -167,4 +193,10 @@ func ResolveUsers(ctx context.Context, services []*Service) (failed []*Account) 
 // Ended reports whether a pool has reached its end: nothing is handed over any more, and what was handed over stays.
 func (s *Service) Ended(now time.Time) bool {
 	return s.Pool && !s.EndsAt.IsZero() && !s.EndsAt.After(now)
+}
+
+// DestRef is a destination a service from the routes file names: the administrator's destination by name, and where it puts files.
+type DestRef struct {
+	Name     string
+	Template string
 }

@@ -1,8 +1,10 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -104,6 +106,7 @@ type ServiceView struct {
 	Stopped    bool   // receiver: the owner paused this service
 	Owned      bool   // receiver: the person offers this service themselves (it is shown with the services they offer)
 	Account    string // sender: the name this person's account goes by in the service (what live events call them)
+	Pairing    bool   // the service is the private pool of a photo sharing between two people: it is shown on that sharing's card only
 }
 
 // OfferView is a service the signed-in person is not part of yet, and what they can do about it.
@@ -142,6 +145,11 @@ type OwnedView struct {
 	AcceptMaxMB       int
 	LifetimeDays      int  // copies that arrive are moved to the owner's trash after this many days, 0: they stay
 	DeleteOK          bool // the administrator allows it (RECEIVER_DELETE)
+	DestOnly          bool   // its photos go only to destinations: the owner receives nothing
+	Dests             []DestView
+	DestChoices       []DestChoiceView // the destinations that can be added to it
+	OwnDests          []DestChoiceView // the network destinations the person entered (to forget when unused)
+	UserDests         bool             // the administrator lets people add network destinations of their own
 	BridgeOn          bool   // the administrator allows receivers on other servers (BRIDGE_ENABLE)
 	BridgeInvite      string // the open link for someone on another server, if there is one
 	HasBridge         bool   // the service has a receiver on another server
@@ -269,7 +277,20 @@ type LibraryView struct {
 	Available   bool
 	Dest, Album string
 	Followed    []FollowedView // the albums shared with the person that a rule follows
+	Imports     []ImportFollowView // the destinations that a rule follows
+	ImportOn    bool               // there is a destination the person may follow
 }
+
+// ImportFollowView is a destination that a rule follows, for the person's page.
+type ImportFollowView struct {
+	ID, Source, Prefix, Dest, Mode string
+	Always                         int
+	Paused, CanAuto                bool
+	Last, Problem                  string
+}
+
+// ImportOption is a destination the person may follow, in the form.
+type ImportOption struct{ Ref, Label string }
 
 // FolderRuleView is a rule that makes albums from the folders of an external library, for the person's page.
 type FolderRuleView struct {
@@ -311,6 +332,7 @@ type DashboardData struct {
 	Activity []ActivityView
 	TagsOff  bool // Tags are switched off in the person's Immich account, so they cannot add or see tags
 	CanOffer bool // people may create services on this install
+	DestsOn  bool // there are destinations (the administrator named some, or people may add their own)
 	DeleteOK bool // new receiver keys may move copies to their owner's trash (RECEIVER_DELETE), which the dialog that makes a key says
 	Last     *syncer.RunInfo
 
@@ -326,6 +348,7 @@ type DashboardData struct {
 	Memories   MemoriesView
 	Folders    FoldersView
 	Stacks     StacksView
+	Pairings   PairingsView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
 	Frames     []FrameView
@@ -677,6 +700,9 @@ templ Dashboard(d DashboardData) {
 			if d.Push.Available {
 				@PushCard(d.Push)
 			}
+			if d.Pairings.Available {
+				@PairingsCard(d.Pairings)
+			}
 			if d.Library.Available {
 				@LibraryCard(d.Library)
 			}
@@ -725,7 +751,7 @@ templ Dashboard(d DashboardData) {
 			if d.CanOffer {
 				<details class="offer">
 					<summary>{ t(ctx, "Offer a service of your own") }</summary>
-					@OfferForm(d.DeleteOK)
+					@OfferForm(d.DeleteOK, d.DestsOn)
 				</details>
 				@DropBoxSection(d.DropBoxes, d.Templates)
 				@RoomSection(d.Rooms)
@@ -1117,6 +1143,98 @@ templ LibraryCard(l LibraryView) {
 			<p class="meta">{ t(ctx, "Loading the albums shared with you...") }</p>
 		</div>
 	</details>
+	if l.ImportOn || len(l.Imports) > 0 {
+		<h3>{ t(ctx, "Destinations you follow") }</h3>
+		for _, f := range l.Imports {
+			<div class="card rule">
+				<p><b>
+					if f.Prefix != "" {
+						{ t(ctx, "{destination}, the folder {folder}", "destination", f.Source, "folder", f.Prefix) }
+					} else {
+						{ f.Source }
+					}
+				</b>
+					if f.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if f.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Adds by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				<p class="meta">{ f.Dest }</p>
+				if f.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", f.Last) }</p>
+				}
+				if f.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", f.Problem) }</p>
+				}
+				if f.Mode != "auto" && f.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it add files by itself from now on.", "n", f.Always) }</p>
+				}
+				<p class="row">
+					if f.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if f.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", f.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the files that appear in this destination are added to your library without asking you. Only files that appear from now on are added this way. Nothing in the destination is changed.") }>{ t(ctx, "Let it add by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", f.ID, "paused", pausedValue(f.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if f.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", f.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop following this destination? The files already added stay in your library, and nothing in the destination is touched.") } data-confirm-title={ t(ctx, "Stop following?") } data-confirm-label={ t(ctx, "Stop following") } data-danger="true">{ t(ctx, "Stop following") }</button>
+				</p>
+			</div>
+		}
+		if l.ImportOn {
+			<details class="offer">
+				<summary>{ t(ctx, "Follow a destination") }</summary>
+				<div hx-get="fragments/import-sources" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+					<p class="meta">{ t(ctx, "Loading the destinations...") }</p>
+				</div>
+			</details>
+		}
+	}
+}
+
+// ImportForm is the form that follows a destination: which one, the folder in it, what to start with, where the files go.
+templ ImportForm(sources []ImportOption) {
+	if len(sources) == 0 {
+		<p class="meta">{ t(ctx, "There is no destination you can follow.") }</p>
+	} else {
+		<form class="card offer-form" hx-post="rules/import" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<p class="meta">{ t(ctx, "The photos and videos that appear in the destination are offered to you with pictures, to add to your library, and once you have said Always three times you can let it add them by itself. The app only reads the destination: nothing in it is changed or deleted. Files the app handed over to it itself are not offered back.") }</p>
+			<div class="field">
+				<label for="import-source">{ t(ctx, "Which destination") }</label>
+				<select id="import-source" name="source">
+					for _, s := range sources {
+						<option value={ s.Ref }>{ s.Label }</option>
+					}
+				</select>
+			</div>
+			<div class="field">
+				<label for="import-prefix">{ t(ctx, "The folder in it (empty: all of it)") }</label>
+				<input id="import-prefix" name="prefix" maxlength="200" autocomplete="off" placeholder="phone/camera"/>
+			</div>
+			<div class="field">
+				<label><input type="radio" name="history" value="new" checked/> { t(ctx, "Only what appears from now on") }</label>
+				<label><input type="radio" name="history" value="all"/> { t(ctx, "What is there now, and what appears") }</label>
+			</div>
+			<div class="field">
+				<label for="import-dest">{ t(ctx, "Where the files go") }</label>
+				<select id="import-dest" name="dest">
+					<option value="tag">{ t(ctx, "In my library, tagged with where they came from") }</option>
+					<option value="plain">{ t(ctx, "In my library") }</option>
+					<option value="album">{ t(ctx, "In an album") }</option>
+				</select>
+				<input name="album" maxlength="100" autocomplete="off" placeholder={ t(ctx, "the name of the album, when the files go to one") } aria-label={ t(ctx, "The name of a new album") }/>
+			</div>
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Follow this destination") }</button></p>
+		</form>
+	}
 }
 
 // FollowForm is the form that follows an album shared with the person: which one, what to start with, where the copies go.
@@ -1717,6 +1835,7 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 					</div>
 				</div>
 			}
+			@DestinationsBox(o)
 			if o.BridgeOn {
 				<div class="field">
 					<label>{ t(ctx, "A receiver on another Immich server") }</label>
@@ -1756,7 +1875,7 @@ templ OwnedRow(o OwnedView, id string, open bool) {
 	</details>
 }
 
-templ OfferForm(deleteOK bool) {
+templ OfferForm(deleteOK, destsOn bool) {
 	<form class="card offer-form" hx-post="services" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ createConfirm(ctx, deleteOK) } data-confirm-title={ t(ctx, "Create this service?") } data-confirm-label={ t(ctx, "Create service") }>
 		<p class="meta">{ t(ctx, "Others can then send you photos by tagging them. You decide who may send; each sender decides what happens to their own originals.") }</p>
 		<div class="form-grid">
@@ -1788,6 +1907,12 @@ templ OfferForm(deleteOK bool) {
 			<small class="meta">{ t(ctx, "For a trip or a party. A photo anyone tags goes to everyone else in the pool, tagged with who took it, and everyone's originals stay where they are. People who join are told so before they do.") }</small>
 			<label for="svc-poolends">{ t(ctx, "The pool ends after (days, empty: when I end it)") } <input id="svc-poolends" name="poolends" type="number" min="1" max="366" class="narrow"/></label>
 		</div>
+		if destsOn {
+			<div class="field">
+				<label><input name="destonly" type="checkbox" value="1"/> { t(ctx, "Only to destinations: no copy goes to my own library") }</label>
+				<small class="meta">{ t(ctx, "For a service whose photos go only to a folder or a server you add after you make it. Nothing is received in your library, and it cannot be an event pool or use an album.") }</small>
+			</div>
+		}
 		<details class="more">
 			<summary>{ t(ctx, "More options") }</summary>
 			<div class="form-grid">
@@ -4411,16 +4536,29 @@ templ RulesBox(s ServiceView) {
 				if r.Problem != "" {
 					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
 				}
-				if r.Mode == "auto" {
+				if r.WaitMin > 0 {
+					<p class="meta">{ t(ctx, "Waits {n} min before offering a photo.", "n", r.WaitMin) }</p>
+				}
+				if len(r.PetExamples) > 0 {
+					<p class="meta">{ t(ctx, "The animal the pet helper found in each of your examples:") }</p>
+					<div class="petgrid">
+						for _, e := range r.PetExamples {
+							<span class="petpick petex"><img src={ "rules/pet-photo/" + e.Asset } alt="" width="96" height="96" loading="lazy"/><i style={ templ.SafeCSS(fmt.Sprintf("left:%d%%;top:%d%%;width:%d%%;height:%d%%", e.X, e.Y, e.W, e.H)) }></i></span>
+						}
+					</div>
+				}
+				if r.Mode == "auto" && r.WaitMin > 0 {
+					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there {n} min, within this service's limits and quiet hours. You can still take a hand-over back.", "n", 6*r.WaitMin) }</p>
+				} else if r.Mode == "auto" {
 					<p class="meta">{ t(ctx, "This rule sends by itself the photos that reach Immich after you switched it on, once they have been there half an hour, within this service's limits and quiet hours. You can still take a hand-over back.") }</p>
 				} else if r.CanAuto {
-					<p class="meta">{ t(ctx, "You have answered Always to this rule {n} times. You can let it send by itself from now on.", "n", r.Always) }</p>
+					<p class="meta">{ t(ctx, "This rule asks you first. You can let it send by itself from now on, without answering Always, and switch it back at any time.") }</p>
 				}
 				<p class="row">
 					if r.Mode == "auto" {
 						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
 					} else if r.CanAuto {
-						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on this rule sends the photos it finds without asking you, so a wrong photo can reach the service. Only photos that reach Immich from now on are sent, and you can switch it back at any time. Continue?") } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?", "rule", r.Sentence, "service", s.Name) } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
 					}
 					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" title={ t(ctx, "Suggest the older photos that match this rule too") }>{ t(ctx, "Also look back") }</button>
 					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
@@ -4434,6 +4572,12 @@ templ RulesBox(s ServiceView) {
 				</p>
 			</div>
 		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a rule for a pet") }</summary>
+			<div hx-get={ "fragments/pet-form?service=" + url.QueryEscape(s.Name) } hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your photos...") }</p>
+			</div>
+		</details>
 		<details class="offer">
 			<summary>{ t(ctx, "Make a rule") }</summary>
 			<div hx-get={ "fragments/rule-form?service=" + url.QueryEscape(s.Name) } hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
@@ -4505,6 +4649,7 @@ templ RuleForm(v RuleChoicesView) {
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
 		</div>
+		@WaitField(v.WaitMin)
 		if len(v.Others) > 0 {
 			<fieldset class="targets">
 				<legend>{ t(ctx, "Make the same rule for these services too") }</legend>
@@ -4537,6 +4682,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		} else if d.Folder {
 			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Import {
+			<h1>{ t(ctx, "New in {destination}", "destination", d.Owner) }</h1>
+			<p class="lead">{ t(ctx, "Files that appeared in the destination {destination}. Nothing in it is changed.", "destination", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Library {
 			<h1>{ t(ctx, "New in {album}", "album", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Photos added to the album {album}, shared by {owner}.", "album", d.Album, "owner", d.Owner) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
@@ -4576,6 +4724,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				} else if d.Folder {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
+				} else if d.Import {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked files to my library") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked files, and always") }</button>
 				} else if d.Library {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Add the ticked photos to my library") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Add the ticked photos, and always") }</button>
@@ -4588,5 +4739,356 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
 			</p>
 		</form>
+	}
+}
+
+// PairingsCard is the card for sharing the photos of chosen people with another person, both ways.
+templ PairingsCard(p PairingsView) {
+	<h2>{ t(ctx, "Share photos with someone") }</h2>
+	<div class="card pairingscard">
+		<p>{ t(ctx, "Share the photos of the people you choose with another person on this Immich server, and get theirs back, without remembering to send anything. Each of you keeps your own copy, and either of you can pause or stop it whenever you like. Photos already copied stay where they are.") }</p>
+		for _, it := range p.Items {
+			@PairingItem(it)
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Offer to share photos") }</summary>
+			<div hx-get="fragments/pair-form" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your people...") }</p>
+			</div>
+		</details>
+	</div>
+}
+
+// PairingItem is one sharing: who with, who sends whom, and what the person can do about it.
+templ PairingItem(it PairingView) {
+	<div class="card rule pairing" id={ "pairing-" + it.ID }>
+		<p><b>{ t(ctx, "You and {other}", "other", it.Other) }</b>
+			switch it.State {
+				case "invited":
+					<span class="chip warn">{ t(ctx, "Waiting for a yes") }</span>
+				case "paused":
+					<span class="chip warn">{ t(ctx, "Paused") }</span>
+				case "stopped":
+					<span class="chip bad">{ t(ctx, "Stopped") }</span>
+				default:
+					<span class="chip ok">{ t(ctx, "Sharing") }</span>
+			}
+		</p>
+		if it.Mine != "" {
+			<p class="meta">{ t(ctx, "You send photos of {people}.", "people", it.Mine) }</p>
+		}
+		if it.WaitMin > 0 {
+			<p class="meta">{ t(ctx, "Waits {n} min before offering a photo.", "n", it.WaitMin) }</p>
+		}
+		if it.Theirs != "" {
+			<p class="meta">{ t(ctx, "{other} sends photos of {people}.", "other", it.Other, "people", it.Theirs) }</p>
+		} else if it.State == "invited" && it.Starter {
+			<p class="meta">{ t(ctx, "{other} has not chosen who to send back yet.", "other", it.Other) }</p>
+		}
+		switch it.State {
+			case "invited":
+				if it.Starter {
+					<p>{ t(ctx, "Waiting for {other} to say yes. The offer lapses on {when}.", "other", it.Other, "when", it.Expires) }</p>
+					<div class="field">
+						<label for={ "pair-" + it.ID }>{ t(ctx, "Give this link to the other person") }</label>
+						<div class="row">
+							<input id={ "pair-" + it.ID } class="invite" readonly data-link={ it.Link }/>
+							<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+							<button type="button" class="show-qr" data-for={ "pair-" + it.ID } data-alt={ t(ctx, "QR code of the invitation link") }>{ t(ctx, "QR code") }</button>
+						</div>
+						<div class="qr" id={ "qr-pair-" + it.ID } hidden></div>
+					</div>
+					<p class="row">
+						<button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Cancel the offer to {other}?", "other", it.Other) } data-confirm-title={ t(ctx, "Cancel?") } data-confirm-label={ t(ctx, "Cancel the offer") } data-danger="true">{ t(ctx, "Cancel the offer") }</button>
+					</p>
+				} else {
+					<p>{ t(ctx, "{other} offered to share photos with you, both ways.", "other", it.Other) }</p>
+					<p class="row"><a class="button primary" href={ "pair/" + it.ID }>{ t(ctx, "Look at the offer") }</a></p>
+				}
+			case "stopped":
+				<p class="meta">{ it.Note }</p>
+				if it.Starter {
+					<p class="row"><button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Remove this sharing") }</button></p>
+				}
+			default:
+				<p class="row">
+					<button hx-post="pairings/pause" hx-vals={ vals2("pairing", it.ID, "paused", pausedValue(it.State == "paused")) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if it.State == "paused" {
+							{ t(ctx, "Resume sharing") }
+						} else {
+							{ t(ctx, "Pause sharing") }
+						}
+					</button>
+					<button hx-post="pairings/stop" hx-vals={ vals("pairing", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sharing photos with {other}? The photos already copied stay where they are, and nothing is deleted.", "other", it.Other) } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop sharing") }</button>
+				</p>
+				if it.Auto {
+					<p class="meta">{ t(ctx, "Your photos of {people} go to {other} by themselves, once they have settled. You can still take a hand-over back.", "people", it.Mine, "other", it.Other) }</p>
+				}
+				<p class="row">
+					if it.Auto {
+						<button hx-post="pairings/auto" hx-vals={ vals2("pairing", it.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else {
+						<button hx-post="pairings/auto" hx-vals={ vals2("pairing", it.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on, photos of {people} go to {other} without asking you, so a wrong photo can reach {other}. Only photos that reach Immich from now on are sent, once they have settled, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?", "people", it.Mine, "other", it.Other) } data-confirm-title={ t(ctx, "Send by themselves?") } data-confirm-label={ t(ctx, "Send by themselves") }>{ t(ctx, "Send by themselves from now on") }</button>
+					}
+				</p>
+				for _, r := range it.Rules {
+					<p class="row"><button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Suggest older photos of {people}", "people", r.Name) }</button></p>
+				}
+		}
+	</div>
+}
+
+// PairForm is the form that offers a sharing: the other person's email as Immich knows it, and which of the person's own people go to them.
+templ PairForm(people []PersonOption, waitMin int) {
+	<form class="card offer-form pick-form" hx-post="pairings" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="pair-email">{ t(ctx, "Email of the person") }</label>
+			<input id="pair-email" name="email" type="email" required maxlength="200" autocomplete="off"/>
+			<small class="meta">{ t(ctx, "They need an account on this Immich server. Use the email Immich knows them by.") }</small>
+		</div>
+		if len(people) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "Photos of") }</legend>
+				for _, p := range people {
+					<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
+				}
+			</fieldset>
+			<p class="meta">{ t(ctx, "These photos go to them. They choose which of their own people come back to you. Nothing is sent until they say yes, and only photos that arrive after that.") }</p>
+			@WaitField(waitMin)
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer to share these photos") }</button></p>
+		} else {
+			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to share. Name people in Immich and come back.") }</p>
+		}
+	</form>
+}
+
+// PairingPage is what the other person sees before they say yes, and what saying yes means.
+templ PairingPage(v PairingPageView, user string) {
+	@Layout("Immich Handoff", user) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<section class="invite-hero">
+			<h1>{ t(ctx, "{name} would like to share photos with you", "name", v.Starter) }</h1>
+			<p class="lead">
+				if v.Theirs != "" {
+					{ t(ctx, "{name} offers to copy photos of {people} into your library, and asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
+				} else {
+					{ t(ctx, "{name} offers to copy photos into your library, and asks for photos of the people you choose in return.", "name", v.Starter) }
+				}
+			</p>
+		</section>
+		<div class="invite-card card">
+			<p>{ t(ctx, "Only photos that arrive after you say yes are shared, in both directions. Each of you keeps your own copy, so shared photos use disk in both libraries and count against each person's Immich quota.") }</p>
+			<p>{ t(ctx, "You can pause or stop whenever you like. Photos already copied stay where they are, and nothing is ever deleted from anyone's library.") }</p>
+			<form class="pick-form" hx-post="pairings/accept" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+				<input type="hidden" name="pairing" value={ v.ID }/>
+				if len(v.People) > 0 {
+					<fieldset class="targets">
+						<legend>{ t(ctx, "Photos of your people to send to {name}", "name", v.Starter) }</legend>
+						for _, p := range v.People {
+							<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
+						}
+					</fieldset>
+					@WaitField(v.WaitMin)
+					<p class="row form-actions">
+						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
+						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
+					</p>
+				} else {
+					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to send back. Name people in Immich and come back to this page.") }</p>
+					<p class="row"><button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button></p>
+				}
+			</form>
+			<p class="meta">{ t(ctx, "This invitation lapses on {when}.", "when", v.Expires) }</p>
+		</div>
+		<p><a href="../">{ t(ctx, "Not now: open your own page") }</a></p>
+	}
+}
+
+// WaitField is the choice of how long a photo waits in Immich before a rule offers it: Immich never says when it has finished finding
+// the faces in a photo, so each rule's maker decides between seeing new photos sooner and being sure everyone in them has been found.
+templ WaitField(usual int) {
+	<div class="field">
+		<label for="rule-settle">{ t(ctx, "Wait before offering a photo") }</label>
+		<select id="rule-settle" name="settle">
+			<option value="0">{ t(ctx, "The usual wait ({n} min)", "n", usual) }</option>
+			for _, m := range []int{1, 2, 5, 10, 15, 30} {
+				<option value={ fmt.Sprint(m) }>{ t(ctx, "{n} min", "n", m) }</option>
+			}
+		</select>
+		<small class="meta">{ t(ctx, "Immich looks for the faces in a photo a little after it arrives. A shorter wait shows new photos sooner, but a person who is found late may be missing when the photo is offered. A rule that sends by itself waits six times as long.") }</small>
+	</div>
+}
+
+// PetForm is the form that makes a rule for a pet: the person picks three to eight photos of the animal from their newest ones.
+templ PetForm(service string, photos []PetPhoto, helper bool) {
+	<form class="card offer-form" hx-post="rules/pet" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="service" value={ service }/>
+		<p class="meta">{ t(ctx, "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.") }</p>
+		if helper {
+			<p class="meta">{ t(ctx, "This server has the pet helper on: the rule compares the animal in each photo with the animal in your examples, so every example must show the animal clearly. Photos are sent to the helper as previews and it keeps nothing.") }</p>
+		}
+		<p class="meta">{ t(ctx, "Be ready for a noisy start: Immich cannot tell animals apart, so the first batches may hold wrong photos until your answers have taught the rule. A pet that looks like another, or a small one beside people, is found badly. A pet rule always asks first and never sends by itself.") }</p>
+		if len(photos) == 0 {
+			<p class="meta">{ t(ctx, "There are no recent photos of yours to pick from.") }</p>
+		} else {
+			<div class="petgrid">
+				for _, p := range photos {
+					<label class="petpick"><input type="checkbox" name="photo" value={ p.ID }/><img src={ "rules/pet-photo/" + p.ID } alt="" width="96" height="96" loading="lazy"/></label>
+				}
+			</div>
+			<p class="row"><button class="primary" type="submit">{ t(ctx, "Make the pet rule") }</button></p>
+		}
+	</form>
+}
+
+// DestView is one destination of a service, for its owner's card.
+type DestView struct {
+	ID, Name, Kind, Template, Example string
+	CapPhotos, CapMB                  int
+	Used                              string
+	Paused, Failing, Own              bool
+	Note, Since                       string
+}
+
+// DestChoiceView is a destination that can be added to a service.
+type DestChoiceView struct {
+	Ref, Name, Kind string
+}
+
+func destKindLabel(ctx context.Context, kind string) string {
+	switch kind {
+	case "folder":
+		return t(ctx, "folder")
+	case "webdav":
+		return "WebDAV"
+	case "s3":
+		return "S3"
+	case "sftp":
+		return "SFTP"
+	}
+	return kind
+}
+
+// DestinationsBox is the owner's part of a service for the places it hands photos to that are not an Immich account.
+templ DestinationsBox(o OwnedView) {
+	if len(o.Dests) > 0 || len(o.DestChoices) > 0 || o.UserDests || o.DestOnly {
+		<div class="field dests">
+			<label>{ t(ctx, "Destinations") }</label>
+			if o.DestOnly {
+				<small class="meta">{ t(ctx, "This service has only destinations: nothing it handles is copied into your library. An original is moved or marked only when every destination holds the photo.") }</small>
+			} else {
+				<small class="meta">{ t(ctx, "A photo that is handed over to you also goes to each destination. An original is moved or marked only when you and every destination hold it.") }</small>
+			}
+			for _, d := range o.Dests {
+				<div class="card dest">
+					<p><b>{ d.Name }</b> <span class="meta">{ destKindLabel(ctx, d.Kind) }</span>
+						if d.Paused {
+							<span class="chip warn">{ t(ctx, "Paused") }</span>
+						} else if d.Failing {
+							<span class="chip bad">{ t(ctx, "Not answering") }</span>
+						} else {
+							<span class="chip ok">{ t(ctx, "Working") }</span>
+						}
+					</p>
+					if d.Failing {
+						<p class="meta bad-note">{ d.Note } { t(ctx, "Photos for it wait, still tagged, until it works.") }</p>
+					}
+					if d.Used != "" {
+						<p class="meta">{ d.Used }</p>
+					}
+					<form class="row" hx-post="services/destinations/edit" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+						<input type="hidden" name="service" value={ o.Name }/>
+						<input type="hidden" name="id" value={ d.ID }/>
+						<label>{ t(ctx, "Where files go") } <input name="template" value={ d.Template } placeholder="{service}/{sender}/{yyyy}/{mm}" maxlength="200" aria-describedby={ "ex-" + d.ID }/></label>
+						<small class="meta" id={ "ex-" + d.ID }>{ t(ctx, "For example: {path}", "path", d.Example) }</small>
+						<label>{ t(ctx, "Photos a day") } <input name="cap_photos" type="number" min="0" class="narrow" value={ capText(d.CapPhotos) }/></label>
+						<label>{ t(ctx, "MB a day") } <input name="cap_mb" type="number" min="0" class="narrow" value={ capText(d.CapMB) }/></label>
+						<button type="submit">{ t(ctx, "Save") }</button>
+					</form>
+					<p class="row">
+						<button hx-post="services/destinations/pause" hx-vals={ destVals(o.Name, d.ID, pausedValue(d.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+							if d.Paused {
+								{ t(ctx, "Resume this destination") }
+							} else {
+								{ t(ctx, "Pause this destination") }
+							}
+						</button>
+						<button class="danger" hx-post="services/destinations/remove" hx-vals={ vals2("service", o.Name, "id", d.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop sending {name} to {destination}? What it already received stays there, and photos waiting for it are no longer waited for.", "name", o.Name, "destination", d.Name) } data-confirm-title={ t(ctx, "Remove the destination?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+					</p>
+				</div>
+			}
+			if len(o.DestChoices) > 0 {
+				<form class="card offer-form" hx-post="services/destinations" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<input type="hidden" name="service" value={ o.Name }/>
+					<div class="field">
+						<label for={ "dest-ref-" + o.Name }>{ t(ctx, "Add a destination") }</label>
+						<select id={ "dest-ref-" + o.Name } name="ref">
+							for _, c := range o.DestChoices {
+								<option value={ c.Ref }>{ c.Name } ({ destKindLabel(ctx, c.Kind) })</option>
+							}
+						</select>
+					</div>
+					<div class="field">
+						<label for={ "dest-tpl-" + o.Name }>{ t(ctx, "Where files go (empty: by sender and date)") }</label>
+						<input id={ "dest-tpl-" + o.Name } name="template" placeholder="{service}/{sender}/{yyyy}/{mm}" maxlength="200"/>
+						<small class="meta">{ t(ctx, "You can use {service}, {sender}, {yyyy}, {mm}, {dd} and {name}. The file's own name is added unless the template has {name}.") }</small>
+					</div>
+					<div class="row">
+						<label>{ t(ctx, "Photos a day") } <input name="cap_photos" type="number" min="0" class="narrow"/></label>
+						<label>{ t(ctx, "MB a day") } <input name="cap_mb" type="number" min="0" class="narrow"/></label>
+						<button class="primary" type="submit">{ t(ctx, "Add") }</button>
+					</div>
+				</form>
+			}
+			if o.UserDests {
+				<details class="offer">
+					<summary>{ t(ctx, "Enter a network destination of my own") }</summary>
+					<form class="card offer-form" hx-post="destinations" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" autocomplete="off">
+						<p class="meta">{ t(ctx, "WebDAV (Nextcloud, ownCloud), S3-compatible storage or SFTP. The password or key is kept encrypted and is never shown again.") }</p>
+						<div class="field"><label>{ t(ctx, "Name") } <input name="name" maxlength="40" required/></label></div>
+						<div class="field"><label>{ t(ctx, "Kind") }
+							<select name="kind"><option value="webdav">WebDAV</option><option value="s3">S3</option><option value="sftp">SFTP</option></select></label></div>
+						<div class="field"><label>{ t(ctx, "WebDAV address") } <input name="url" placeholder="https://cloud.example.org/remote.php/dav/files/me"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 endpoint (empty for Amazon)") } <input name="endpoint" placeholder="https://s3.example.org"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 bucket") } <input name="bucket"/></label> <label>{ t(ctx, "S3 region (empty: us-east-1)") } <input name="region" class="narrow" placeholder="us-east-1"/></label></div>
+						<div class="field"><label>{ t(ctx, "SFTP host") } <input name="host"/></label> <label>{ t(ctx, "Port") } <input name="port" class="narrow" placeholder="22"/></label></div>
+						<div class="field"><label>{ t(ctx, "User name") } <input name="user" autocomplete="off"/></label></div>
+						<div class="field"><label>{ t(ctx, "Password") } <input name="password" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "S3 access key") } <input name="access_key" autocomplete="off"/></label> <label>{ t(ctx, "S3 secret key") } <input name="secret_key" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "SFTP private key (instead of a password)") } <textarea name="private_key" rows="3" autocomplete="off"></textarea></label> <label>{ t(ctx, "Passphrase of the key") } <input name="passphrase" type="password" autocomplete="new-password"/></label></div>
+						<div class="field"><label>{ t(ctx, "Folder on the SFTP server (empty: the home folder)") } <input name="root" placeholder="/photos"/></label></div>
+						<div class="field" id="hostkey-box">
+							<button type="button" hx-post="destinations/hostkey" hx-include="closest form" hx-target="next .hostkey-result" hx-swap="innerHTML">{ t(ctx, "Look at the SFTP server's key") }</button>
+							<small class="meta">{ t(ctx, "SFTP only: the app trusts a server by its key. Look at it, compare it with your server's, then save.") }</small>
+							<div class="hostkey-result"></div>
+						</div>
+						<button class="primary" type="submit">{ t(ctx, "Save the destination") }</button>
+					</form>
+				</details>
+			}
+			for _, c := range o.OwnDests {
+				<p class="meta">{ c.Name } ({ destKindLabel(ctx, c.Kind) })
+					<button hx-post="destinations/forget" hx-vals={ vals("ref", c.Ref) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Forget {destination}? Its address and password are deleted. It cannot be forgotten while a service uses it.", "destination", c.Name) } data-confirm-title={ t(ctx, "Forget the destination?") } data-confirm-label={ t(ctx, "Forget") } data-danger="true">{ t(ctx, "Forget") }</button>
+				</p>
+			}
+		</div>
+	}
+}
+
+func capText(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.Itoa(n)
+}
+
+// HostKeyBox is what looking at an SFTP server's key shows: the key to compare, kept in the form so that saving trusts exactly it.
+templ HostKeyBox(fingerprint, problem string) {
+	if problem != "" {
+		<p class="meta bad-note">{ problem }</p>
+	} else {
+		<p>{ t(ctx, "The server's key is") } <code>{ fingerprint }</code></p>
+		<input type="hidden" name="host_key" value={ fingerprint }/>
+		<small class="meta">{ t(ctx, "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.") }</small>
 	}
 }

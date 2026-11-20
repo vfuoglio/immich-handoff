@@ -16,11 +16,13 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/backup"
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
 	"github.com/vfuoglio/immich-handoff/internal/config"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/hub"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/mailin"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/push"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
@@ -143,6 +145,21 @@ func run(log *slog.Logger) error {
 		Wake:    func(reason string) { go s.Run(ctx, reason, false) },
 		Retry:   func() { s.ProvisionRetry(ctx, hook) },
 		Notify:  notifier.Send}
+	ds, err := dest.SettingsFrom(os.Getenv)
+	if err != nil {
+		return err
+	}
+	h.AdminDests, h.UserDests, h.DestNet = ds.Specs, ds.UserAdd, dest.Net{AllowPrivate: ds.AllowPrivate}
+	for _, svc := range services {
+		for _, d := range svc.DestRefs {
+			if _, ok := ds.Specs[d.Name]; !ok {
+				return fmt.Errorf("the routes file: service %s names the destination %q, which DESTINATIONS_FILE does not define", svc.Label(), d.Name)
+			}
+		}
+	}
+	if len(ds.Specs) > 0 || ds.UserAdd {
+		log.Info("destinations are on", "named", len(ds.Specs), "people may add their own", ds.UserAdd, "private addresses", ds.AllowPrivate)
+	}
 	if storeKey, err := readStoreKey(); err != nil {
 		return err
 	} else if storeKey == "" {
@@ -228,6 +245,14 @@ func run(log *slog.Logger) error {
 				return errors.New("RULES_SETTLE_MINUTES must be a number of minutes, from 0.01 to 1440")
 			}
 			h.RulesSettle = time.Duration(m * float64(time.Minute))
+		}
+		if v := env("PET_SIDECAR_URL", ""); v != "" {
+			c, err := pets.New(v)
+			if err != nil {
+				return err
+			}
+			h.Pets = c
+			log.Info("the pet helper is on: pet rules compare the animals in photos", "url", c.URL)
 		}
 		go h.RulesLoop(ctx)
 		if v := env("MEMORIES_CHECK_MINUTES", ""); v != "" {

@@ -135,63 +135,13 @@ func atoi(s string) int {
 // There is no total time limit: a large file may take as long as it likes while bytes move; callers bound a call
 // with a context.
 func (p Policy) HTTPClient() *http.Client {
-	resolve := p.resolve
-	if resolve == nil {
-		resolve = func(ctx context.Context, host string) ([]netip.Addr, error) {
-			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-		}
-	}
-	d := &net.Dialer{Timeout: dialTimeout}
-	if !p.AllowPrivate && p.dial == nil { // tests that replace the dialler connect to a local server on purpose
-		d.Control = func(network, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return ErrBadAddress
-			}
-			ip, err := netip.ParseAddr(host)
-			if err != nil || !Public(ip) {
-				return fmt.Errorf("%w: it points inside a private network", ErrBadAddress)
-			}
-			return nil
-		}
-	}
-	dial := p.dial
-	if dial == nil {
-		dial = func(ctx context.Context, d *net.Dialer, network, address string) (net.Conn, error) {
-			return d.DialContext(ctx, network, address)
-		}
-	}
 	tr := &http.Transport{
 		Proxy:                 nil, // a proxy from the environment would be a way around the rules
 		ResponseHeaderTimeout: headerTimeout,
 		TLSHandshakeTimeout:   dialTimeout,
 		MaxIdleConns:          4,
 		IdleConnTimeout:       30 * time.Second,
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, ErrBadAddress
-			}
-			ips, err := addrsOf(ctx, host, resolve)
-			if err != nil {
-				return nil, err
-			}
-			var last error
-			for _, ip := range ips {
-				if !p.AllowPrivate && !Public(ip) {
-					// one private answer among public ones is enough to refuse: the name is not trusted
-					return nil, fmt.Errorf("%w: its name points inside a private network", ErrBadAddress)
-				}
-			}
-			for _, ip := range ips {
-				c, err := dial(ctx, d, network, net.JoinHostPort(ip.String(), port))
-				if err == nil {
-					return c, nil
-				}
-				last = err
-			}
-			return nil, last
-		},
+		DialContext:           p.DialContext,
 	}
 	return &http.Client{
 		Transport: tr,
@@ -255,4 +205,59 @@ func SettingsFrom(env func(string) string) Settings {
 		s.RetryBase = time.Duration(m * float64(time.Minute))
 	}
 	return s
+}
+
+// DialContext opens a TCP connection to an address the way HTTPClient does and with the same rules: the name is resolved here, a name with
+// any non-public address is refused (unless private addresses are allowed), and the connection is made to an address that was judged.
+// It is what a protocol other than HTTP (SFTP) uses to reach a server someone else runs.
+func (p Policy) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	resolve := p.resolve
+	if resolve == nil {
+		resolve = func(ctx context.Context, host string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		}
+	}
+	d := &net.Dialer{Timeout: dialTimeout}
+	if !p.AllowPrivate && p.dial == nil { // tests that replace the dialler connect to a local server on purpose
+		d.Control = func(network, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return ErrBadAddress
+			}
+			ip, err := netip.ParseAddr(host)
+			if err != nil || !Public(ip) {
+				return fmt.Errorf("%w: it points inside a private network", ErrBadAddress)
+			}
+			return nil
+		}
+	}
+	dial := p.dial
+	if dial == nil {
+		dial = func(ctx context.Context, d *net.Dialer, network, address string) (net.Conn, error) {
+			return d.DialContext(ctx, network, address)
+		}
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, ErrBadAddress
+	}
+	ips, err := addrsOf(ctx, host, resolve)
+	if err != nil {
+		return nil, err
+	}
+	var last error
+	for _, ip := range ips {
+		if !p.AllowPrivate && !Public(ip) {
+			// one private answer among public ones is enough to refuse: the name is not trusted
+			return nil, fmt.Errorf("%w: its name points inside a private network", ErrBadAddress)
+		}
+	}
+	for _, ip := range ips {
+		c, err := dial(ctx, d, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return c, nil
+		}
+		last = err
+	}
+	return nil, last
 }

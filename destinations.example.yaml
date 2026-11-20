@@ -1,0 +1,40 @@
+# Where services may hand photos to besides an Immich account. Point DESTINATIONS_FILE at this file (mounted into the container), then give
+# a service one of these names: a service owner picks it on the service's card, or a service of the routes file names it under `destinations:`.
+# A value can be ${VAR} (read from the environment) and a setting called x_file reads x from that file, for Docker secrets.
+destinations:
+  # A folder inside the container: mount the share there (see docker-compose.yml). The app runs as user 65532 and must be able to write in it.
+  nas:
+    kind: folder
+    root: /destinations/nas
+    # import: true     # let people who may use it also follow it and add its files to their own library; only for a place that holds nobody else's files
+
+  # A WebDAV folder (Nextcloud, ownCloud and others). Use https; an address on your own network needs DESTINATIONS_ALLOW_PRIVATE=true.
+  # For Nextcloud and ownCloud make an app password (Settings, Security) instead of using the account's password.
+  cloud:
+    kind: webdav
+    url: https://cloud.example.org/remote.php/dav/files/me/Photos
+    user: me
+    password_file: /run/secrets/webdav_password
+
+  # S3-compatible storage: Amazon S3, MinIO, Backblaze B2, Wasabi, Cloudflare R2, Garage. The key needs to list, read, write and delete in the bucket.
+  bucket:
+    kind: s3
+    endpoint: https://s3.example.org     # empty for Amazon (then set region)
+    region: us-east-1                    # empty: us-east-1
+    bucket: photos
+    prefix: from-handoff                 # optional: everything goes under this "folder"
+    access_key: ${S3_ACCESS_KEY}
+    secret_key_file: /run/secrets/s3_secret
+
+  # An SFTP server. The app trusts a server only by its key: leave host_key out the first time, run `immich-handoff doctor`, which shows the
+  # server's key (SHA256:...); check that it is your server's (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it), then write it here.
+  # If the key ever changes the app stops sending and says so.
+  server:
+    kind: sftp
+    host: nas.example.org
+    port: "22"                           # optional
+    user: backup
+    private_key_file: /run/secrets/sftp_key    # or password / password_file
+    # passphrase_file: /run/secrets/sftp_key_passphrase
+    root: /photos                        # the folder on the server (empty: the login's home folder); it must exist
+    host_key: SHA256:replace-with-the-43-character-key-the-doctor-showed-you

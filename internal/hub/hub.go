@@ -13,11 +13,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/bridge"
+	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
 	"github.com/vfuoglio/immich-handoff/internal/live"
 	"github.com/vfuoglio/immich-handoff/internal/notify"
 	"github.com/vfuoglio/immich-handoff/internal/peer"
+	"github.com/vfuoglio/immich-handoff/internal/pets"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
@@ -41,15 +43,27 @@ type Options struct {
 }
 
 type Hub struct {
-	Static       []*syncer.Service // from the environment or the routes file
-	Store        *store.Store      // nil: self-service is switched off
-	Connect      func(key string) (*immich.API, error)
-	Hook         syncer.Webhook // used to create the sender's workflow when someone joins
-	Wake         func(reason string)
-	Retry        func()           // sets up missing workflows in the background (Immich may still be loading its plugins)
-	Notify       notify.Func      // tells an admin something needs attention (optional)
-	Bus          *live.Bus        // tells the open pages what changed, as it happens (optional)
-	People       *People          // writes to the people who asked for email (optional)
+	Static  []*syncer.Service // from the environment or the routes file
+	Store   *store.Store      // nil: self-service is switched off
+	Connect func(key string) (*immich.API, error)
+	Hook    syncer.Webhook // used to create the sender's workflow when someone joins
+	Wake    func(reason string)
+	Retry   func()      // sets up missing workflows in the background (Immich may still be loading its plugins)
+	Notify  notify.Func // tells an admin something needs attention (optional)
+	Bus     *live.Bus   // tells the open pages what changed, as it happens (optional)
+	People  *People     // writes to the people who asked for email (optional)
+	// Destinations gives the receivers outside Immich (folders, servers) a service sends to, besides its Immich receivers (nil: none).
+	Destinations func(service string) []syncer.Remote
+	// AdminDests are the destinations the administrator named (DESTINATIONS_FILE), by name. UserDests lets people add network ones of their own
+	// (DESTINATIONS_USER_ADD) and DestNet says whether addresses on a private network are allowed (DESTINATIONS_ALLOW_PRIVATE).
+	AdminDests   map[string]dest.Spec
+	UserDests    bool
+	DestNet      dest.Net
+	destMu       sync.Mutex
+	destRemotes  map[string]*boundRemote
+	importDests  map[string]dest.Destination
+	Pets         *pets.Client     // the optional pet sidecar (PET_SIDECAR_URL); nil: pet rules use Immich's own search
+	petNotes     sync.Map         // rule id -> what to tell the person about its last look (the pet helper was down)
 	Push         *Push            // sends notifications to the devices people allowed (optional)
 	MailIn       *MailIn          // reads the mailbox that photos are mailed to (optional)
 	AppURL       string           // how people reach the page; the links in messages are built from it (optional: without it a message carries no action links)
@@ -192,6 +206,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 	for _, svc := range h.Static {
 		cp := *svc
 		cp.Senders = append(append([]*syncer.Account(nil), svc.Senders...), extra[svc.Label()]...)
+		cp.Remotes = append([]syncer.Remote(nil), h.destinationsFor(ctx, svc.Label(), svc.DestRefs)...)
 		merged = append(merged, &cp)
 	}
 	for _, v := range owned {
@@ -200,9 +215,12 @@ func (h *Hub) Reload(ctx context.Context) error {
 		if v.Pool {
 			rcvMode = syncer.ModeCopy // the owner's own photos stay with them too
 		}
-		rcv := account(v.ID, v.OwnerName, v.OwnerID, v.Key, rcvMode, uuid.Nil, "", false)
-		if rcv == nil {
-			continue
+		var rcv *syncer.Account
+		if !v.DestOnly { // a service with only destinations has no Immich receiver: its owner makes no key
+			rcv = account(v.ID, v.OwnerName, v.OwnerID, v.Key, rcvMode, uuid.Nil, "", false)
+			if rcv == nil {
+				continue
+			}
 		}
 		svc := &syncer.Service{
 			Name: v.Name, Tag: v.Tag, InboxTag: v.InboxTag, RefusedTag: v.Refused, ExpiryDays: v.ExpiryDays,
@@ -211,8 +229,15 @@ func (h *Hub) Reload(ctx context.Context) error {
 			Paused: v.Paused, LimitPhotos: v.LimitPhotos, LimitMB: v.LimitMB, LifetimeDays: v.LifetimeDays,
 			Quiet:   syncer.Quiet{From: v.QuietFrom, To: v.QuietTo, LargeMB: v.QuietLargeMB},
 			Accept:  syncer.Accept{MinRating: v.AcceptRating, PhotosOnly: v.AcceptPhotos, Orientation: v.AcceptOrient, MaxMB: v.AcceptMaxMB},
-			Senders: extra[v.Name], Receivers: []*syncer.Account{rcv},
-			Pool: v.Pool, EndsAt: v.EndsAt,
+			Senders: extra[v.Name],
+			Pool:    v.Pool, EndsAt: v.EndsAt,
+		}
+		if rcv != nil {
+			svc.Receivers = []*syncer.Account{rcv}
+		}
+		svc.Remotes = append(svc.Remotes, h.destinationsFor(ctx, v.Name, nil)...)
+		if h.Destinations != nil {
+			svc.Remotes = append(svc.Remotes, h.Destinations(v.Name)...)
 		}
 		if v.Pool {
 			// everybody sends and everybody receives: the owner's account and each member's are in both lists
@@ -224,7 +249,7 @@ func (h *Hub) Reload(ctx context.Context) error {
 			// a service with a receiver on another server never runs without it: the original would be removed
 			// with a copy in only some of the places it was promised
 			if r, why := h.remoteFor(b); r != nil {
-				svc.Remote = r
+				svc.Remotes = append(svc.Remotes, r)
 			} else {
 				svc.Broken, svc.BrokenFix, svc.Receivers = why, "Set BRIDGE_ENABLE=true again, or remove the receiver on another server on the service's card.", nil
 			}
@@ -321,6 +346,9 @@ func (h *Hub) JoinWith(ctx context.Context, sess *immich.API, user immich.User, 
 	svc := h.service(service)
 	if svc == nil || !(svc.AllowJoin || svc.NeedsApproval) {
 		return ErrNotJoinable
+	}
+	if err := h.lockedService(ctx, service); err != nil { // a pairing's pool is joined only by the person it was offered to, through AcceptPairing
+		return err
 	}
 	if svc.Pool {
 		if svc.Ended(h.now()) {
@@ -445,6 +473,9 @@ func workflowName(service string) string {
 func (h *Hub) Leave(ctx context.Context, sess *immich.API, user immich.User, service string) error {
 	if !h.SelfService() {
 		return ErrNotJoined
+	}
+	if err := h.lockedService(ctx, service); err != nil {
+		return err
 	}
 	links, err := h.Store.Links(ctx)
 	if err != nil {

@@ -72,9 +72,11 @@ type fakeImmich struct {
 	named         []map[string]any // the named people of bob's library, for rules
 	countries     []string         // the countries bob's photos are from
 	cities        map[string][]string
-	ruleHits      []map[string]any // what a rule's search finds (raw photos)
-	lastSearch    map[string]any   // the body of the last rule search
-	smartOff      bool             // the server cannot do a smart search
+	ruleHits      []map[string]any            // what a rule's search finds (raw photos)
+	lastSearch    map[string]any              // the body of the last rule search
+	smartOff      bool                        // the server cannot do a smart search
+	similar       map[string][]map[string]any // what Immich ranks as look-alikes of a photo, nearest first (queryAssetId)
+	similarAsked  []string                    // the photos asked about, in order
 }
 
 type fakeUpload struct {
@@ -506,9 +508,24 @@ func (f *fakeImmich) handler() http.Handler {
 			j(w, 400, map[string]any{"message": "Smart search is not enabled"})
 			return
 		}
+		var body struct {
+			QueryAssetID string `json:"queryAssetId"`
+			Size         int    `json:"size"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
 		items := []any{}
-		for _, h := range f.ruleHits {
-			items = append(items, h)
+		if body.QueryAssetID != "" {
+			f.similarAsked = append(f.similarAsked, body.QueryAssetID)
+			for i, h := range f.similar[body.QueryAssetID] {
+				if body.Size > 0 && i >= body.Size {
+					break
+				}
+				items = append(items, h)
+			}
+		} else {
+			for _, h := range f.ruleHits {
+				items = append(items, h)
+			}
 		}
 		j(w, 200, map[string]any{"albums": map[string]any{"count": 0, "facets": []any{}, "items": []any{}, "total": 0}, "assets": map[string]any{"count": len(items), "facets": []any{}, "items": items, "total": len(items)}})
 	})
@@ -567,12 +584,13 @@ func (f *fakeImmich) handler() http.Handler {
 }
 
 type env struct {
-	h     *hub.Hub
-	f     *fakeImmich
-	sess  *immich.API
-	ann   *immich.API // the owner of services created in the tests
-	woken []string
-	st    *store.Store
+	h       *hub.Hub
+	f       *fakeImmich
+	sess    *immich.API
+	ann     *immich.API // the owner of services created in the tests
+	woken   []string
+	wokenMu sync.Mutex
+	st      *store.Store
 }
 
 func setup(t *testing.T, allowJoin bool) *env {
@@ -598,7 +616,7 @@ func setup(t *testing.T, allowJoin bool) *env {
 	e.h = &hub.Hub{Static: []*syncer.Service{svc}, Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Options: hub.Options{InboxTag: "inbox", RefusedTag: "share-duplicate", SentTag: "handed-over", ExpiryDays: 30},
 		Hook:    syncer.Webhook{URL: "http://app/webhook/immich", Header: "X-Webhook-Secret", Secret: "s"},
-		Wake:    func(reason string) { e.woken = append(e.woken, reason) }}
+		Wake:    func(reason string) { e.wokenMu.Lock(); e.woken = append(e.woken, reason); e.wokenMu.Unlock() }}
 	if err := e.h.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}

@@ -45,6 +45,7 @@ func (h *Hub) EnsureKeyPermissions(ctx context.Context, sess *immich.API, user i
 			}
 		}
 	}
+	h.syncPetKeys(ctx, sess, user)
 	if svcs, err := h.Store.Services(ctx); err != nil {
 		ok = false
 	} else {
@@ -88,4 +89,38 @@ func (h *Hub) ForgetGranted() {
 	h.mu.Lock()
 	h.granted = nil
 	h.mu.Unlock()
+}
+
+// syncPetKeys gives the sender key of each pet rule that uses the sidecar the permission to look at previews (the sidecar is sent a
+// preview, never the original), and takes it off again when the sidecar is switched off (PET_SIDECAR_URL removed).
+func (h *Hub) syncPetKeys(ctx context.Context, sess *immich.API, user immich.User) {
+	rules, err := h.Store.RulesOf(ctx, user.ID)
+	if err != nil {
+		return
+	}
+	links, err := h.Store.Links(ctx)
+	if err != nil {
+		return
+	}
+	done := map[uuid.UUID]bool{}
+	for _, r := range rules {
+		if !r.Cond.Pet() {
+			continue
+		}
+		for _, l := range links {
+			if l.ImmichUserID != user.ID || l.Service != r.Service || l.Role != store.RoleSender || l.KeyID == uuid.Nil || done[l.KeyID] {
+				continue
+			}
+			done[l.KeyID] = true
+			if h.Pets != nil {
+				if prints, _ := h.Store.PetPrints(ctx, r.ID); len(prints) > 0 {
+					if err := sess.AddKeyPermission(ctx, l.KeyID, "asset.view"); err != nil {
+						h.Log.Debug("could not add asset.view to a sender key for a pet rule", "service", l.Service, "err", err)
+					}
+				}
+			} else if err := sess.RemoveKeyPermission(ctx, l.KeyID, "asset.view"); err != nil {
+				h.Log.Debug("could not take asset.view off a sender key", "service", l.Service, "err", err)
+			}
+		}
+	}
 }

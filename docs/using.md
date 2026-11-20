@@ -9,6 +9,8 @@ The guides are organised by what you want to do. Each opens with who it is for, 
 | **Collect photos from guests** at an event, even without Immich | [Collect photos from guests](guides/events.md), then [gallery, wall, best-of](guides/events-extras.md) |
 | **Deliver a shoot to a client** | [Deliver a shoot to a client](guides/client-rooms.md) |
 | **Share an album with a friend on another server** | [Share albums across servers](guides/shared-albums.md) and [Receive on another Immich server](guides/other-server.md) |
+| **Share a person's photos with my partner, both ways** | [Share a person's photos](guides/share-people.md) |
+| **Also hand photos over to a folder, a Nextcloud, an S3 bucket or a server** | [Destinations](guides/destinations.md) |
 | **Stop tagging by hand** | [Rules and the button inside Immich](guides/automate.md) |
 | **Send from my phone** | [Send photos from a phone](guides/phone.md) |
 | **Limit or pause what is handed over** | [Control what is handed over](guides/controls.md) |

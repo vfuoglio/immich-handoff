@@ -140,6 +140,9 @@ func (h *Hub) SetMemberPaused(ctx context.Context, user immich.User, service str
 	if !h.SelfService() {
 		return ErrNotJoined
 	}
+	if err := h.lockedService(ctx, service); err != nil {
+		return err
+	}
 	link, err := h.senderLink(ctx, user.ID, service)
 	if err != nil {
 		return err

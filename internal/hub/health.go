@@ -17,6 +17,9 @@ import (
 
 // event appends to the activity log; problems writing it never stop the action it describes.
 func (h *Hub) event(ctx context.Context, service string, user uuid.UUID, kind, text string) {
+	if isPairingOp(ctx) && kind != "pairing" {
+		return // a pairing's pool and rules have generated names; the pairing writes its own, readable lines
+	}
 	h.eventWith(ctx, service, user, kind, text, nil)
 }
 
@@ -115,6 +118,9 @@ func (h *Hub) CheckKeys(ctx context.Context) {
 func (h *Hub) ReconnectService(ctx context.Context, sess *immich.API, owner immich.User, name string) error {
 	if !h.SelfService() {
 		return ErrNotJoinable
+	}
+	if err := h.lockedService(ctx, name); err != nil {
+		return err
 	}
 	stored, err := h.Store.Services(ctx)
 	if err != nil {

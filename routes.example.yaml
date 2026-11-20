@@ -23,6 +23,16 @@ services:
     # the receiving key then needs album.read, album.create and albumAsset.create), inbox_tag, refused_tag, inbox_expiry_days, sent_tag,
     # mode: copy (keep the senders' originals; default is move), allow_join: true
 
+  # Photos tagged "to-nas" also go to a destination named in DESTINATIONS_FILE (a folder, WebDAV, S3 or SFTP), here with a template for
+  # where its files go; a service may name several, or have only destinations and no receivers. The original is moved or marked only when
+  # every receiver and destination holds the photo.
+  # - name: to-nas
+  #   tag: to-nas
+  #   senders: [alice]
+  #   destinations:
+  #     - name: nas
+  #       template: "{service}/{sender}/{yyyy}/{mm}"
+
   # A feed for a photo frame: only well-rated landscape photos, handed over at night.
   - name: frame
     tag: for-frame

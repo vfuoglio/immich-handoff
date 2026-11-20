@@ -7,6 +7,13 @@ services:
       - handoff-data:/data                  # only used when HANDOFF_STORE_KEY is set
       # - ./routes.yaml:/routes.yaml:ro   # only with ROUTES_FILE=/routes.yaml
       # - ./notify.yaml:/notify.yaml:ro   # only with NOTIFY_FILE=/notify.yaml
+      # - ./destinations.yaml:/destinations.yaml:ro   # only with DESTINATIONS_FILE=/destinations.yaml
+      # A folder to hand photos to (a NAS share mounted on this machine, an SMB or NFS mount, an rclone mount). The path after the colon is
+      # the `root:` of a `kind: folder` destination in destinations.yaml. The app runs as user 65532, which must be allowed to write there.
+      # - /mnt/nas/photos:/destinations/nas
+    # If the folder belongs to another user (a NAS user, 1000 for example), run the app as that user instead (the /data volume then needs
+    # to be writable by it too):
+    # user: "1000:1000"
     ports:
       - "8080:8080"
     networks:

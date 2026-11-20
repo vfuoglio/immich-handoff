@@ -49,7 +49,7 @@ func buttonWords(ctx context.Context) map[string]string {
 func (w *Server) buttonServices(ctx context.Context, me *member) []ButtonService {
 	out := []ButtonService{}
 	for _, v := range w.servicesFor(ctx, me) {
-		if v.Role != "sender" || !v.CanWatch || v.Paused != "" {
+		if v.Role != "sender" || !v.CanWatch || v.Paused != "" || v.Pairing {
 			continue
 		}
 		note := v.Hold
