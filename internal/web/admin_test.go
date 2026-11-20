@@ -221,7 +221,7 @@ func TestTheBackupDownloadIsLimitedLoggedAndLeavesNothingBehind(t *testing.T) {
 	var told []string
 	var mu sync.Mutex
 	dir := t.TempDir()
-	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withDownload(&st, true, 300*time.Millisecond, &told, &mu, dir)(srv) })
+	app, _ := setup(t, withHub(t, &st), func(srv *web.Server) { withDownload(&st, true, 2*time.Second, &told, &mu, dir)(srv) })
 	url := app.URL + "/admin/backup/download"
 
 	if code, _ := do(t, "POST", url, "sess=admin", nil); code != 400 {
@@ -267,7 +267,7 @@ func TestTheBackupDownloadIsLimitedLoggedAndLeavesNothingBehind(t *testing.T) {
 	if code, _ := do(t, "POST", url, "sess=admin", change); code != 429 {
 		t.Errorf("a second download at once: %d, want 429", code)
 	}
-	time.Sleep(350 * time.Millisecond)
+	time.Sleep(2100 * time.Millisecond)
 	if code, _ := do(t, "POST", url, "sess=admin", change); code != 200 {
 		t.Errorf("a download after the gap: %d, want 200", code)
 	}
