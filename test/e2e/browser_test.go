@@ -64,7 +64,8 @@ func browse(t *testing.T, port, cookie string, l look) context.Context {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(chromePath(t)), chromedp.Flag("headless", true), chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-gpu", true), chromedp.Flag("hide-scrollbars", true), chromedp.Flag("lang", "en-US"),
-		chromedp.WindowSize(int(l.w), int(l.h)))
+		chromedp.WindowSize(int(l.w), int(l.h)),
+		chromedp.WSURLReadTimeout(60*time.Second)) // seven groups start Chrome at once on busy runners; the default 20 s once was not enough
 	if !l.touch {
 		// headless Chrome has no mouse, so it says its pointer is not fine; a person at a desktop has one
 		opts = append(opts, chromedp.Flag("blink-settings", "primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4"))
