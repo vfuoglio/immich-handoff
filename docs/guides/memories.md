@@ -8,7 +8,7 @@
 
 ## Turn it on
 
-The Overview has an **On this day** card when the person who runs the app has set up notifications on devices, email for people, or both (see [Be told](notifications.md)). Choose:
+**Settings** has an **On this day** card when the person who runs the app has set up notifications on devices, email for people, or both (see [Be told](notifications.md)). Choose:
 
 - **Time of day.** The message is sent once a day, when that time has come where you are. Your time zone is taken from your browser when you save.
 - **A notification on my devices** and/or **An email**, the ones that are set up. A notification needs a device: turn on notifications on this device in the card above first. The email goes to the address Immich shows for your account.

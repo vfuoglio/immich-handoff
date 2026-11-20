@@ -269,6 +269,14 @@ type adminKey struct{}
 
 type tabsKey struct{}
 
+type settingsKey struct{}
+
+// hasSettings is whether the dashboard has a Settings view: it does when at least one of the set-once cards is on.
+func hasSettings(ctx context.Context) bool {
+	b, _ := ctx.Value(settingsKey{}).(bool)
+	return b
+}
+
 // hasTabs is whether this page has views to switch between (the Overview, Services and Activity): the dashboard has,
 // the invitation, admin and notice pages do not.
 func hasTabs(ctx context.Context) bool {
@@ -511,6 +519,11 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 }
 
 // RowCount is how many service rows the page shows; with exactly one it starts open.
+// HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, pairing) is on for this person.
+func (d DashboardData) HasSettings() bool {
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available
+}
+
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
 
 // sceneDir is which way a stage's photos fly: "in" toward the person (they receive or offer), "out" away from them (they send).
@@ -681,7 +694,7 @@ var clientMessages = []string{
 	"Choose where it goes, then press Send", "{n} file shared with Handoff is waiting for you to choose where it goes", "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.",
 	"A large video on mobile data", "Cancel", "Locations go with your photos", "Send now", "Wait for Wi-Fi", "Waiting for Wi-Fi: this device is on mobile data", "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.", "{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed.",
 	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
-	"A sender", "Activity", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
+	"A sender", "Activity", "Settings", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
 	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
 	"Switch between the light and the dark theme", "Sync now", "The QR code could not be made.", "The backup could not be downloaded.", "The backup was downloaded.", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",

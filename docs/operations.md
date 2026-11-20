@@ -225,7 +225,7 @@ What it does with a mail: it reads one that was sent to an address of ours, take
 
 ## Notifications on devices
 
-A person can allow notifications on the phone or computer they use: the **Notifications on this device** card on the Overview. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.
+A person can allow notifications on the phone or computer they use: the **Notifications on this device** card in **Settings**. The notification arrives with the page closed. Each device has its own choice, *everything* or *only what needs me*, and the words come in the language the page was in when the person turned it on. A person can see their devices, send a test to one and remove it. What is sent is the lines of their Activity list, one notification for what happens within about ten seconds, plus short summaries: **N photos arrived from Bob in Holiday** to those who receive, and **N photos were not handed over** to a sender whose photos the receiver has in the trash. Notifications never carry a photo, a file name or a thumbnail.
 
 What it needs:
 

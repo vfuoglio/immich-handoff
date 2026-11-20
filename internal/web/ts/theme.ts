@@ -48,7 +48,7 @@ function effective(): Theme {
 // The dashboard has three views (Overview, Services, Activity) chosen by the address's #fragment. Marking the page as having
 // script, and which view is showing, before the first paint is what keeps a view from flashing and then hiding; without
 // script all three are simply shown one after the other.
-const VIEWS = ["overview", "services", "activity"];
+const VIEWS = ["overview", "services", "activity", "settings"];
 document.documentElement.classList.add("js");
 document.documentElement.dataset["view"] = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
 

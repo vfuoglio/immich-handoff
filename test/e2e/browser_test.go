@@ -218,8 +218,8 @@ func TestBrowser(t *testing.T) {
 		if got := js[string](t, ctx, `getComputedStyle(document.querySelector('header.bar')).backdropFilter`); !strings.Contains(got, "blur") {
 			t.Errorf("the bar is glass, backdrop-filter is %q", got)
 		}
-		// three views and the Send page in the bar, the first view current
-		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity,Send" {
+		// four views and the Send page in the bar, the first view current
+		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity,Settings,Send" {
 			t.Errorf("tabs: %v", got)
 		}
 		// the speaker icon sits right beside the theme icon, and both have a title for the pointer
@@ -305,10 +305,17 @@ func TestBrowser(t *testing.T) {
 		if !strings.Contains(card["blur"], "blur") || card["radius"] == "0px" {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
-		// the order down the page: live (the stream is the first thing under the headline), needs you, this week, get started, then the person's own settings cards (the pairing card, where Add to my library puts copies, and the folders that make albums)
+		// the order down the page: what needs the person first, then the live stream, this week, get started; the set-once cards are in the Settings view, by purpose
 		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(order, "|") != "Live as it happens|Needs you|This week|Get started|Share photos with someone|Add to my library|Albums from my folders|Stack photos that belong together" {
+		if strings.Join(order, "|") != "Needs you|Live as it happens|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
+		}
+		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
+		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Share photos with someone" {
+			t.Errorf("cards of the Settings view, top to bottom: %v", settings)
+		}
+		if groups := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .group-title')].map(h => h.textContent.trim())`); strings.Join(groups, "|") != "My library|Sharing with others" {
+			t.Errorf("groups of the Settings view: %v", groups)
 		}
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)
 		if scene["sceneTop"] >= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {

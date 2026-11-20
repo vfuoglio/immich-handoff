@@ -4,6 +4,7 @@
 // a command presses the very button the page has, so questions are still asked and nothing is bypassed.
 
 import { t } from "./i18n.ts";
+import { showSegment } from "./segments.ts";
 
 export interface Command {
   label: string;
@@ -41,8 +42,9 @@ function goTo(view: string): void {
 /** The commands this person has, from what the page shows. */
 function collect(): Command[] {
   const commands: Command[] = [];
-  const views = [["overview", t("Overview")], ["services", t("Services")], ["activity", t("Activity")]] as const;
+  const views = [["overview", t("Overview")], ["services", t("Services")], ["activity", t("Activity")], ["settings", t("Settings")]] as const;
   for (const [view, name] of views) {
+    if (!document.querySelector(`nav.tabs a[data-view="${view}"]`)) continue; // Settings is only there when something is on
     commands.push({ label: t("Go to {view}", { view: name }), hint: t("view"), run: () => goTo(view) });
   }
   const send = document.querySelector<HTMLAnchorElement>("nav.tabs a.send-tab");
@@ -59,14 +61,14 @@ function collect(): Command[] {
   // each service: open it, and pause or resume it
   document.querySelectorAll<HTMLDetailsElement>("#v-services details.svc").forEach((row) => {
     const name = row.querySelector(".title b")?.textContent?.trim() ?? "";
-    commands.push({ label: t("Open {name}", { name }), hint: t("service"), run: () => { goTo("services"); row.open = true; row.scrollIntoView({ block: "center" }); } });
+    commands.push({ label: t("Open {name}", { name }), hint: t("service"), run: () => { goTo("services"); showSegment(row.closest<HTMLElement>(".seg-panel")?.dataset["seg"] ?? "services"); row.open = true; row.scrollIntoView({ block: "center" }); } });
     row.querySelectorAll<HTMLButtonElement>("button[data-act]").forEach((button) => {
       // the buttons that pause or resume say so in data-act, whatever language their words are in
       commands.push({ label: `${button.textContent?.trim() ?? ""}: ${name}`, hint: t("service"), run: () => button.click() });
     });
   });
   const offer = document.querySelector<HTMLDetailsElement>("#v-services details.offer");
-  if (offer) commands.push({ label: t("Offer a service of your own"), hint: t("service"), run: () => { goTo("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
+  if (offer) commands.push({ label: t("Offer a service of your own"), hint: t("service"), run: () => { goTo("services"); showSegment("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
   if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });
   const admin = document.querySelector<HTMLAnchorElement>("a.adminlink");

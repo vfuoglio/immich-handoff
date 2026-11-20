@@ -617,6 +617,9 @@ templ Layout(title, user string) {
 						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
 						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
 						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+						if hasSettings(ctx) {
+							<a href="#settings" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg><span>{ t(ctx, "Settings") }</span></a>
+						}
 						<a href="send" class="send-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg><span>{ t(ctx, "Send") }</span></a>
 					</nav>
 				}
@@ -673,18 +676,24 @@ templ Dashboard(d DashboardData) {
 			<p class="eyebrow" data-today aria-hidden="true"></p>
 			<h1>{ d.Headline } <em>{ d.Gist }</em></h1>
 			<p class="lead">{ t(ctx, "Everything that was handed over went through; these are the only things that wait on a person. Tag a photo in the Immich app and it is handed over within seconds.") }</p>
-			if len(d.Scene) > 0 {
-				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
-				@Scene(d.Scene)
-			}
 			<button type="button" class="cmdbar" id="cmdbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="grow">{ t(ctx, "Type a command or the name of a service") }</span><span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
-			<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
-			if len(d.Needs) == 0 {
-				<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
-			}
-			<div class="needs">
-				for _, n := range d.Needs {
-					@NeedCard(n)
+			<div class={ "ov-main", templ.KV("with-live", len(d.Scene) > 0) }>
+				<div class="ov-needs">
+					<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
+					if len(d.Needs) == 0 {
+						<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
+					}
+					<div class="needs">
+						for _, n := range d.Needs {
+							@NeedCard(n)
+						}
+					</div>
+				</div>
+				if len(d.Scene) > 0 {
+					<div class="ov-live">
+						<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
+						@Scene(d.Scene)
+					</div>
 				}
 			</div>
 			if d.ShowNumber {
@@ -693,27 +702,6 @@ templ Dashboard(d DashboardData) {
 			}
 			if d.Guide != nil {
 				@Guide(*d.Guide)
-			}
-			if d.Mail.Available {
-				@MailCard(d.Mail)
-			}
-			if d.Push.Available {
-				@PushCard(d.Push)
-			}
-			if d.Pairings.Available {
-				@PairingsCard(d.Pairings)
-			}
-			if d.Library.Available {
-				@LibraryCard(d.Library)
-			}
-			if d.Memories.Available {
-				@MemoriesCard(d.Memories)
-			}
-			if d.Folders.Available {
-				@FoldersCard(d.Folders)
-			}
-			if d.Stacks.Available {
-				@StacksCard(d.Stacks)
 			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
@@ -724,43 +712,102 @@ templ Dashboard(d DashboardData) {
 			if d.RowCount() == 0 {
 				<div class="card empty">{ t(ctx, "You do not take part in any service yet.") }</div>
 			}
-			if len(d.Sending()) > 0 {
-				<h2>{ t(ctx, "You send to") }</h2>
-				for i, sv := range d.Sending() {
-					@SendRow(sv, fmt.Sprintf("send-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Receiving()) > 0 {
-				<h2>{ t(ctx, "You receive") }</h2>
-				for i, sv := range d.Receiving() {
-					@ReceiveRow(sv, fmt.Sprintf("recv-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Owned) > 0 {
-				<h2>{ t(ctx, "You offer") }</h2>
-				for i, o := range d.Owned {
-					@OwnedRow(o, fmt.Sprintf("own-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Offers) > 0 {
-				<h2>{ t(ctx, "You can join") }</h2>
-				for _, o := range d.Offers {
-					@OfferCard(o)
-				}
-			}
 			if d.CanOffer {
-				<details class="offer">
-					<summary>{ t(ctx, "Offer a service of your own") }</summary>
-					@OfferForm(d.DeleteOK, d.DestsOn)
-				</details>
-				@DropBoxSection(d.DropBoxes, d.Templates)
-				@RoomSection(d.Rooms)
-				if d.PeersOn {
-					@PeerSection(d.Peers, d.PeerInvites)
+				@Segments(d)
+			}
+			<div class="seg-panel" data-seg="services" id="seg-services" role="tabpanel">
+				if len(d.Sending()) > 0 {
+					<h2>{ t(ctx, "You send to") }</h2>
+					for i, sv := range d.Sending() {
+						@SendRow(sv, fmt.Sprintf("send-%d", i), d.RowCount() == 1)
+					}
 				}
-				@FrameSection(d.Frames)
+				if len(d.Receiving()) > 0 {
+					<h2>{ t(ctx, "You receive") }</h2>
+					for i, sv := range d.Receiving() {
+						@ReceiveRow(sv, fmt.Sprintf("recv-%d", i), d.RowCount() == 1)
+					}
+				}
+				if len(d.Owned) > 0 {
+					<h2>{ t(ctx, "You offer") }</h2>
+					for i, o := range d.Owned {
+						@OwnedRow(o, fmt.Sprintf("own-%d", i), d.RowCount() == 1)
+					}
+				}
+				if len(d.Offers) > 0 {
+					<h2>{ t(ctx, "You can join") }</h2>
+					for _, o := range d.Offers {
+						@OfferCard(o)
+					}
+				}
+				if d.CanOffer {
+					<details class="offer">
+						<summary>{ t(ctx, "Offer a service of your own") }</summary>
+						@OfferForm(d.DeleteOK, d.DestsOn)
+					</details>
+				}
+			</div>
+			if d.CanOffer {
+				<div class="seg-panel" data-seg="dropboxes" id="seg-dropboxes" role="tabpanel">
+					@DropBoxSection(d.DropBoxes, d.Templates)
+				</div>
+				<div class="seg-panel" data-seg="rooms" id="seg-rooms" role="tabpanel">
+					@RoomSection(d.Rooms)
+				</div>
+				<div class="seg-panel" data-seg="frames" id="seg-frames" role="tabpanel">
+					@FrameSection(d.Frames)
+				</div>
+				if d.PeersOn {
+					<div class="seg-panel" data-seg="shared" id="seg-shared" role="tabpanel">
+						@PeerSection(d.Peers, d.PeerInvites)
+					</div>
+				}
 			}
 		</section>
+		if d.HasSettings() {
+		<section class="view" id="v-settings" aria-label={ t(ctx, "Settings") }>
+			<h1>
+				@templ.Raw(h(ctx, "Your <em>settings</em>"))
+			</h1>
+			<p class="lead">{ t(ctx, "Set these up once; only what is switched on for you appears here.") }</p>
+			<div class="settings">
+				if d.Mail.Available || d.Push.Available {
+					<div class="group" role="group" aria-labelledby="g-notify">
+						<p class="group-title" id="g-notify">{ t(ctx, "Notifications") }</p>
+						if d.Mail.Available {
+							@MailCard(d.Mail)
+						}
+						if d.Push.Available {
+							@PushCard(d.Push)
+						}
+					</div>
+				}
+				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available {
+					<div class="group" role="group" aria-labelledby="g-library">
+						<p class="group-title" id="g-library">{ t(ctx, "My library") }</p>
+						if d.Library.Available {
+							@LibraryCard(d.Library)
+						}
+						if d.Memories.Available {
+							@MemoriesCard(d.Memories)
+						}
+						if d.Folders.Available {
+							@FoldersCard(d.Folders)
+						}
+						if d.Stacks.Available {
+							@StacksCard(d.Stacks)
+						}
+					</div>
+				}
+				if d.Pairings.Available {
+					<div class="group" role="group" aria-labelledby="g-sharing">
+						<p class="group-title" id="g-sharing">{ t(ctx, "Sharing with others") }</p>
+						@PairingsCard(d.Pairings)
+					</div>
+				}
+			</div>
+		</section>
+		}
 		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
 			<h1>
 				@templ.Raw(h(ctx, "What <em>happened</em>"))
@@ -788,6 +835,21 @@ templ Dashboard(d DashboardData) {
 		</section>
 		</div>
 	}
+}
+
+// Segments is the switch at the top of the Services view for an owner: the services themselves, then the other things
+// they can make (drop boxes, client rooms, frames, albums shared with other servers), one shown at a time, with how many
+// of each. Without script every part is shown one after the other and the switch is hidden.
+templ Segments(d DashboardData) {
+	<div class="seg" role="tablist" aria-label={ t(ctx, "What to manage") }>
+		<button type="button" role="tab" aria-controls="seg-services" data-seg="services" aria-selected="true">{ t(ctx, "Services") } <span class="n">{ fmt.Sprint(d.RowCount() + len(d.Offers)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-dropboxes" data-seg="dropboxes" aria-selected="false" tabindex="-1">{ t(ctx, "Drop boxes") } <span class="n">{ fmt.Sprint(len(d.DropBoxes)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-rooms" data-seg="rooms" aria-selected="false" tabindex="-1">{ t(ctx, "Client rooms") } <span class="n">{ fmt.Sprint(len(d.Rooms)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-frames" data-seg="frames" aria-selected="false" tabindex="-1">{ t(ctx, "Frames") } <span class="n">{ fmt.Sprint(len(d.Frames)) }</span></button>
+		if d.PeersOn {
+			<button type="button" role="tab" aria-controls="seg-shared" data-seg="shared" aria-selected="false" tabindex="-1">{ t(ctx, "Shared albums") } <span class="n">{ fmt.Sprint(len(d.Peers)) }</span></button>
+		}
+	</div>
 }
 
 // MailCard lets a person ask for email about what happens to their services.

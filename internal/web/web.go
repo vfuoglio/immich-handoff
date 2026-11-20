@@ -1008,7 +1008,9 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)
-	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
+	d := w.dashboardData(ctx, me)
+	ctx = context.WithValue(ctx, settingsKey{}, d.HasSettings())
+	Dashboard(d).Render(ctx, rw)
 }
 
 // hasDropBoxes says whether the person has a drop box of their own, which makes them a host the live scene is for.

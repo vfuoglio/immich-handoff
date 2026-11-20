@@ -4,11 +4,11 @@
 
 **What you get:** One offer, one yes. From then on the photos of the people you chose go to the other person, and theirs come to you, tagged `from/<name>`, offered first with pictures and, if you switch it on, sent by themselves.
 
-![The card of a sharing on the Overview: who sends what, Pause, Stop, Send by themselves and Suggest older photos](../images/pairing-card.png)
+![The card of a sharing in Settings: who sends what, Pause, Stop, Send by themselves and Suggest older photos](../images/pairing-card.png)
 
 ## In a few steps
 
-1. **Offer.** On the Overview, under **Offer to share photos**, give the other person's email (as Immich knows it) and tick the people **of your own library** whose photos go to them. Optionally choose how long a rule waits before it offers a photo.
+1. **Offer.** In **Settings**, under **Offer to share photos**, give the other person's email (as Immich knows it) and tick the people **of your own library** whose photos go to them. Optionally choose how long a rule waits before it offers a photo.
 2. **Give them the link.** The card shows a link and a QR code. Nothing is made for the other person until they say yes.
 3. **They say yes.** They open the link, read what it means (photos of the named people go both ways, only photos that arrive from then on, every copy stays if it ends) and tick which of **their own** people go back to you.
 4. **Photos are offered.** Each of you sees *Needs you* suggestions with pictures of the other person's photos to be sent: *Send*, *Not these* or *Always*. **Suggest older photos** looks back, again as suggestions.

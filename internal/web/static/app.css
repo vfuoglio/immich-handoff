@@ -157,7 +157,7 @@ nav.tabs .blob {
 
 /* the three views of the dashboard, chosen by the address's #fragment (theme.js marks the page before it paints) */
 html.js .view { display: none; }
-html.js[data-view="overview"] #v-overview, html.js[data-view="services"] #v-services, html.js[data-view="activity"] #v-activity { display: block; }
+html.js[data-view="overview"] #v-overview, html.js[data-view="services"] #v-services, html.js[data-view="activity"] #v-activity, html.js[data-view="settings"] #v-settings { display: block; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
 html.js .view > * { animation: reveal .85s var(--ease) backwards; }
 html.js .view > :nth-child(2) { animation-delay: 55ms; }
@@ -320,6 +320,36 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 .count-badge { font: 600 .74rem var(--font-mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: .02rem .5rem; margin-left: .4rem; letter-spacing: 0; }
 .needs { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
 .needs .card, .card.need { margin: 0; }
+
+/* Overview: what needs the person comes first; with a live scene, the two sit side by side on a wide screen */
+.ov-main > div > h2:first-child { margin-top: 1.4rem; }
+/* Settings: the set-once cards, grouped by what they are for */
+.settings { display: grid; gap: 0 1.6rem; }
+.settings .group { min-width: 0; }
+.group-title { margin: 2rem 0 -.4rem; font: 600 .74rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+@media (min-width: 1100px) {
+  html[data-view="overview"] .wrap, html[data-view="settings"] .wrap { max-width: 72rem; }
+  .ov-main.with-live { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 1.6rem; align-items: start; }
+  .ov-main.with-live .needs { grid-template-columns: 1fr; }
+  .settings { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+/* Services: a switch between the services and the other things an owner makes, shown when script runs */
+.seg { display: none; gap: .3rem; flex-wrap: wrap; margin: 1.2rem 0 .4rem; padding: .3rem; border: 1px solid var(--border); border-radius: 99px; background: var(--glass); width: fit-content; max-width: 100%; }
+.seg.on { display: flex; }
+.seg [role=tab] { font: 600 .88rem var(--font-body, inherit); padding: .45rem .95rem; border-radius: 99px; border: 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg [role=tab]:hover { color: var(--text); }
+.seg [role=tab][aria-selected="true"] { background: var(--grad); color: var(--on-accent); }
+.seg [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg .n { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }
+.seg-panel[hidden] { display: none; }
+@media (max-width: 640px) { .seg { border-radius: 18px; } }
+
+/* the pill gets four views: from 901 to 1180 pixels only the icons show, so it does not reach the buttons in the bar */
+@media (min-width: 901px) and (max-width: 1180px) {
+  nav.tabs a { padding: .5rem .8rem; }
+  nav.tabs a svg { display: block; }
+  nav.tabs a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "u a" "l a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
 .card.need > b { grid-area: t; }
 .card.need > p.meta { grid-area: m; }
