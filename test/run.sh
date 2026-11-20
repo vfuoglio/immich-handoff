@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts a throwaway Immich, runs the end-to-end tests against it, then tears it down.
-# Usage: test/run.sh [group]    no argument: every test; a group (browser, core, hub; see test/groups.sh): only that
-#                               group, which is what CI runs, three at a time, each with its own Immich
+# Usage: test/run.sh [group]    no argument: every test; a group (browser, core, hub, hub2, hub3, bridge; see test/groups.sh): only that
+#                               group, which is what CI runs, all at a time, each with its own Immich
 #        keep=1 test/run.sh     leaves Immich running afterwards, for inspection
 #        test/run-parallel.sh   runs the groups at the same time on this machine
 # E2E_PORT (Immich, default 2284), E2E_APP_PORT (the app, default 18080) and COMPOSE_PROJECT_NAME move one run
