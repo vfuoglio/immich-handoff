@@ -54,6 +54,10 @@ func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "backup" || os.Args[1] == "restore") {
 		os.Exit(runBackupCommand(context.Background(), os.Args[1], os.Args[2:], os.Stdout, os.Stderr))
 	}
+	// Sealing the stored keys again, with a new salt and perhaps a new store key: `immich-handoff rotate-key`.
+	if len(os.Args) == 2 && os.Args[1] == "rotate-key" {
+		os.Exit(runRotateKey(context.Background(), os.Stdout, os.Stderr))
+	}
 	// A check of the setup: `immich-handoff doctor` (run it inside the container; it reads the same settings).
 	if len(os.Args) >= 2 && os.Args[1] == "doctor" {
 		if len(os.Args) > 3 || (len(os.Args) == 3 && os.Args[2] != "--send-test") {
@@ -333,7 +337,7 @@ func run(log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		backups = &backup.Manager{Dir: backupDir(dir), Source: st, Idle: s, Log: log, Tell: notifier.Send, Problems: problems, Every: every, Keep: keep,
+		backups = &backup.Manager{Dir: backupDir(dir), Source: backupSource(st, v), Idle: s, Log: log, Tell: notifier.Send, Problems: problems, Every: every, Keep: keep,
 			Event: func(kind, text string) {
 				if err := st.AddEvent(context.WithoutCancel(ctx), store.Event{Kind: kind, Text: text}); err != nil {
 					log.Warn("could not write the activity log", "err", err)
@@ -451,4 +455,13 @@ func warnPlaceholder(log *slog.Logger, name, value string) {
 	if strings.HasPrefix(strings.ToLower(value), "change-me") {
 		log.Warn(name+" still has the sample value from .env.example: replace it with a random one (openssl rand -hex 24)", "setting", name)
 	}
+}
+
+// backupSource is what backups are copied from: the store itself, or, with BACKUP_ENCRYPT=true, the store with every
+// copy sealed as a whole with the store key.
+func backupSource(st backup.Source, v *vault.Vault) backup.Source {
+	if on, _ := strconv.ParseBool(os.Getenv("BACKUP_ENCRYPT")); on {
+		return backup.Encrypted{Source: st, Vault: v}
+	}
+	return st
 }

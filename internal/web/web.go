@@ -62,6 +62,7 @@ type Server struct {
 	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
 
 	limiter  limiter
+	badAuth  failures   // sign-in attempts Immich turned down, by address (see authenticate)
 	waker    phoneWaker // the hand-over pass that follows photos sent from a phone
 	gate     downloadGate
 	testGate downloadGate // one test of the notification destinations at a time, and not too often
@@ -369,6 +370,42 @@ func (w *Server) secure(next http.Handler) http.Handler {
 	})
 }
 
+// failures counts, per address, the requests whose cookie Immich did not accept in the last minute. Each one costs a
+// call to Immich, so an address that keeps sending cookies Immich rejects is answered without asking Immich again.
+type failures struct {
+	mu   sync.Mutex
+	seen map[string][]time.Time
+}
+
+const failedSignInsPerMinute = 20
+
+func (f *failures) blocked(addr string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	keep := time.Now().Add(-time.Minute)
+	recent := f.seen[addr][:0]
+	for _, t := range f.seen[addr] {
+		if t.After(keep) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) == 0 {
+		delete(f.seen, addr)
+	} else {
+		f.seen[addr] = recent
+	}
+	return len(recent) >= failedSignInsPerMinute
+}
+
+func (f *failures) add(addr string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.seen == nil || len(f.seen) > 20000 { // a flood from many addresses: start again rather than grow
+		f.seen = map[string][]time.Time{}
+	}
+	f.seen[addr] = append(f.seen[addr], time.Now())
+}
+
 // limiter allows each person a limited number of changes per minute.
 type limiter struct {
 	mu   sync.Mutex
@@ -466,12 +503,17 @@ func (w *Server) authenticate(r *http.Request) (*member, int, string) {
 	if cookie == "" {
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
+	addr := w.clientAddr(r)
+	if w.badAuth.blocked(addr) {
+		return nil, http.StatusTooManyRequests, "too many sign-in attempts that Immich turned down; wait a minute"
+	}
 	a, err := immich.New(w.BaseURL, immich.Auth{Cookie: cookie}, nil)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err.Error()
 	}
 	u, err := a.Me(r.Context())
 	if err != nil {
+		w.badAuth.add(addr)
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
 	return &member{user: u, sess: a}, 0, ""

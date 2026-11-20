@@ -172,7 +172,7 @@ func backupDirect(ctx context.Context, dir string, out, errOut io.Writer) int {
 		return exitFailed
 	}
 	defer st.Close()
-	job, err := backup.Direct(ctx, st, backupDir(dir), time.Now())
+	job, err := backup.Direct(ctx, backupSource(st, v), backupDir(dir), time.Now())
 	if err != nil {
 		fmt.Fprintln(errOut, "backup failed:", err)
 		return exitFailed

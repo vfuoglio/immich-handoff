@@ -176,7 +176,7 @@ func (w *WebDAV) propfind(ctx context.Context, ref string, depth int) ([]propEnt
 		return nil, failure(resp, "looking at "+path.Base("/"+ref))
 	}
 	var ms multistatus
-	if err := xml.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&ms); err != nil {
+	if err := xml.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&ms); err != nil {
 		return nil, fmt.Errorf("the WebDAV server's answer could not be read: %w", err)
 	}
 	var out []propEntry

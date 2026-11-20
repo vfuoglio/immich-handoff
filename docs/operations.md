@@ -76,6 +76,20 @@ Useful variations:
 - `backup --list` shows the backups in the folder, and the one in progress.
 - If the app is **not running**, the command copies at once and says so.
 
+### Encrypted backups
+
+A backup is the data file, and only the keys in it are sealed; names, email addresses and settings are readable by anyone who gets the file. With `BACKUP_ENCRYPT=true` every backup (automatic, by command or downloaded) is sealed as a whole (AES-256-GCM in chunks, under a key made from `HANDOFF_STORE_KEY` and a salt kept in the file by Argon2id). `restore` recognises such a file and opens it with the store key; a wrong key, or a file that was changed or cut short, is refused. Nothing else changes: the names, the list and the pruning are the same. Keep the store key apart from the backups: with both, anyone can read the file.
+
+### Changing the store key
+
+`HANDOFF_STORE_KEY` protects every key the app keeps. To change it, or to convert values sealed by an older version to the salted form, stop the app and run:
+
+```
+docker compose run --rm -e HANDOFF_STORE_KEY_NEW="$(openssl rand -hex 32)" immich-handoff rotate-key
+```
+
+(or `HANDOFF_STORE_KEY_NEW_FILE` with a path). It first makes a backup (which opens with the OLD key), then seals every stored value again with the new key and a new salt, all or nothing, and tells you how many it changed. Then set `HANDOFF_STORE_KEY` to the new value and start the app. Without `HANDOFF_STORE_KEY_NEW` the key stays and only the salt and the form change. Links sent by email before the change stop working (they are signed with a key made from the store key). Values are sealed in the salted form from the first start of this version on, so **a database started with this version cannot be opened by an older one**; restore a backup if you go back.
+
 ### Automatic backups
 
 The app also makes a backup **on its own**, so there is one even if nobody ever runs the command. It is on by default whenever the app keeps data (`HANDOFF_STORE_KEY` is set).

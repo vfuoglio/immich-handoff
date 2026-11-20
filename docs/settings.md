@@ -13,6 +13,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
 | `BACKUP_EVERY` | `24h` | How often the app makes a backup of its data on its own: a time such as `12h` (one hour at the least), or `off`. See [Automatic backups](operations.md#automatic-backups). |
 | `BACKUP_KEEP` | `7` | How many automatic backups to keep; older ones are removed. Backups you asked for are never removed. |
+| `BACKUP_ENCRYPT` | `false` | Seal every backup file as a whole with the store key (names, emails and settings then are as private as the keys). `restore` opens both kinds. See [Encrypted backups](operations.md#encrypted-backups). |
 | `BACKUP_DIR` | `/data/backups` | Where backups go. A second mounted folder is safer than one beside the data. |
 | `HANDOFF_ADMIN_BACKUP_DOWNLOAD` | off | `true` adds a **Download backup** button to the administrator's page. Off by default: the file holds every stored key (encrypted) and everyone's name and email. Read [the limits](operations.md#download-a-backup-from-the-administrators-page) first. |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |

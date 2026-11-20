@@ -751,3 +751,17 @@ func TestTheFooterShowsTheRunningVersionAndGuestsDoNotSeeIt(t *testing.T) {
 		t.Error("a guest must not be told the version")
 	}
 }
+
+// An address that keeps sending cookies Immich turns down stops costing Immich a call; signed-in people are not
+// counted and are still let in from that address.
+func TestFailedSignInsAreLimitedPerAddress(t *testing.T) {
+	app, _ := setup(t)
+	for i := 0; i < 20; i++ {
+		if code, _ := do(t, "GET", app.URL+"/", "sess=nobody", nil); code != 401 {
+			t.Fatalf("attempt %d = %d, want 401", i, code)
+		}
+	}
+	if code, _ := do(t, "GET", app.URL+"/", "sess=nobody", nil); code != 429 {
+		t.Errorf("the 21st attempt = %d, want 429", code)
+	}
+}

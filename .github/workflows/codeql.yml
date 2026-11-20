@@ -1,0 +1,32 @@
+name: codeql
+# A static analysis of the Go and TypeScript code (GitHub CodeQL). It runs on the pull request that releases into main, once a week
+# on develop, and by hand. Its findings are in the repository's Security tab (Code scanning); it is not one of the required checks.
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "31 5 * * 2"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # to put the findings in the Security tab
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ github.event_name == 'schedule' && 'develop' || '' }}" }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: go.mod }
+      - uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          category: "/language:${{ matrix.language }}"

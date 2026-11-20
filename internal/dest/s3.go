@@ -602,7 +602,7 @@ func (s *S3) List(ctx context.Context, prefix string) ([]Entry, error) {
 				Modified string `xml:"LastModified"`
 			} `xml:"Contents"`
 		}
-		err = xml.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(&page)
+		err = xml.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&page)
 		resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("the S3 server's listing could not be read: %w", err)

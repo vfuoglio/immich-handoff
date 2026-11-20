@@ -803,6 +803,10 @@ func Open(path string, v *vault.Vault) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.useSalt(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.checkKey(); err != nil {
 		db.Close()
 		return nil, err
