@@ -30,3 +30,13 @@ updates:
     directory: /
     target-branch: develop
     schedule: { interval: weekly, day: monday }
+  - package-ecosystem: pip               # the pet sidecar's Python libraries (pet-sidecar/requirements.txt)
+    directory: /pet-sidecar
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      pet-sidecar: { patterns: ["*"] }
+  - package-ecosystem: docker            # the pet sidecar's base image
+    directory: /pet-sidecar
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }

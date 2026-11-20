@@ -6,10 +6,31 @@ What you are agreeing to when you run this, or join a service. The short version
 > - The app asks for as little as possible: a restricted, named API key in *your own* Immich account, made with your own sign-in, kept encrypted, never shown to anyone.
 > - A photo is only removed after every receiver holds a verified copy (checked by checksum). If anything fails, the original stays.
 > - Leaving is easy: delete the key in Immich or press **Leave**, and everything stops without touching a photo.
-> - People without accounts (drop boxes, rooms, frames) get links that can only do one thing each, and cannot see your library.
+> - People without accounts (drop boxes, rooms, frames) get links that can only do one thing each, and see only what that link is for, never your library.
 > - The page accepts only people signed in to Immich, needs a cross-site header for every change, and has a strict content security policy.
 >
-> **Contents:** [What a key can do](#what-a-key-can-do) · [Bridges: a receiver on another server](#bridges-a-receiver-on-another-server) · [Drop boxes](#drop-boxes) · [Notifications](#notifications) · [Who decides what](#who-decides-what) · [What is stored](#what-is-stored) · [What other people can see](#what-other-people-can-see) · [Protections in the app](#protections-in-the-app) · [Backups](#backups) · [The image you run](#the-image-you-run) · [Reporting a problem](#reporting-a-problem)
+> **Contents:** [Threat model](#threat-model) · [What a key can do](#what-a-key-can-do) · [Bridges: a receiver on another server](#bridges-a-receiver-on-another-server) · [Drop boxes](#drop-boxes) · [Notifications](#notifications) · [Who decides what](#who-decides-what) · [What is stored](#what-is-stored) · [What other people can see](#what-other-people-can-see) · [Protections in the app](#protections-in-the-app) · [Backups](#backups) · [The image you run](#the-image-you-run) · [Reporting a problem](#reporting-a-problem)
+
+## Threat model
+
+**What is worth protecting:** the photos in each Immich library; the API keys the app holds (sealed with the store key); the names and email addresses in its data file; and the links that give people without accounts a way in (drop boxes, rooms, frames, walls, moderator and bridge links).
+
+**Who the app trusts:** Immich (it decides who is signed in and who is an administrator), and whoever runs the container and holds `HANDOFF_STORE_KEY`. Nobody else is trusted.
+
+**Who it defends against:**
+- *A person on the internet with no link.* Reaches only the sign-in-gated pages (which cost one call to Immich each) and the webhook (a shared secret). Link values are random (128 bits or more; the short `/d/` link is shorter, about 49 bits, and only leads to a box's own page, whose uploads, passwords and bridge attempts are limited).
+- *A signed-in person.* Sees what the page lists for them and can change only their own services and keys. Every change needs a header a page on another website cannot send.
+- *A holder of a guest link.* Can do the one thing the link is for. A guest cannot reach your library: the key behind a link is limited to what the link needs.
+- *A hostile file or server.* Pictures and mail from outside are read with size, count and pixel limits; filenames are reduced to a plain name; addresses typed for bridges, destinations and shared albums are checked when the connection is made, redirects are not followed and private addresses are refused unless the administrator allows them.
+- *A stolen data file or backup.* The keys are sealed; names, email addresses and settings are not. Keep backups where the data volume is kept, and the store key somewhere else.
+
+**What it does not defend against:** a person who can run commands on the host, read the container's environment or hold both the data file and the store key; an Immich server that lies; and a reverse proxy that is configured to let a client choose its own address (below).
+
+**Running behind a proxy.** The app speaks plain HTTP on its own port. Put a proxy with HTTPS (and, if you like, HSTS) in front of it and do not publish the port to the internet directly. If you set `DROPBOX_CLIENT_IP_HEADER`, the proxy must **overwrite** that header, and the app's port must not be reachable except through it; otherwise a guest can write any address there and get around the per-address limits. The cookies the app sets for guests are marked `Secure` when the request came in over HTTPS (the proxy's `X-Forwarded-Proto`).
+
+**The store key.** It must be random, at least 32 bytes (`openssl rand -hex 32`); it is stretched with HKDF, which is fast, so a short word or a passphrase a person chose would not hold up if someone got the data file. The app warns in its log when it still has the sample value from `.env.example`. There is no key rotation yet: changing the key makes the stored keys unreadable and people join again.
+
+**Accepted for now.** Pages behind a link have no per-address throttle on reading (the link itself is the secret); the limits that count attempts are kept in memory and start again after a restart; unlock cookies for a password-protected box are the same for every guest until the password changes (seven days at most). Each is its own issue if you want it tightened.
 
 ## What a key can do
 
@@ -175,14 +196,14 @@ An Immich **administrator** can also open the [administrator's page](admin.md), 
 
 ## Backups
 
-- A backup is a copy of the data file: every stored API key (encrypted with `HANDOFF_STORE_KEY`, which is **not** in the file) and names and emails in the clear. Treat it like the volume itself, and keep the store key separately.
+- A backup is a copy of the data file: every stored API key (encrypted with `HANDOFF_STORE_KEY`, which is **not** in the file) and names and emails in the clear. The file is private to the app's user (mode 0600) but not encrypted as a whole. Treat it like the volume itself, and keep the store key separately.
 - The app makes automatic backups into `/data/backups` by default. That is beside the data it protects, so point `BACKUP_DIR` at a second folder if you want to survive losing the volume.
 - **The administrator's page can hand a backup to a browser, but only if you switch that on** (`HANDOFF_ADMIN_BACKUP_DOWNLOAD=true`). It is off by default because a stolen administrator session could then take a copy of the names and emails and the encrypted keys. When on, it needs a POST with the header a page on another website cannot send, a signed-in Immich administrator, and a confirmation in the page; it is limited to one download every 10 minutes for the whole app; each one is written to the recent events and sent to `NOTIFY_URL`; the copy is made in a private folder, removed as soon as it is sent, and marked `no-store`. The encrypted keys are useful only to someone who also has `HANDOFF_STORE_KEY`, which the page never shows. Details: [Download a backup from the administrator's page](operations.md#download-a-backup-from-the-administrators-page).
 
 ## The image you run
 
-The published image is built by GitHub Actions from a tag of this repository, for amd64 and arm64, on a base with no shell or package manager (distroless). Each release is **signed** (cosign, keyless, tied to the release workflow), carries a software bill of materials and build provenance, and is checked by CI before it is published. [Releasing](releasing.md#verifying-an-image) shows how to verify an image yourself. The workflows pin every action by commit hash, and Dependabot proposes updates to the actions, the Go modules and the base images each week.
+The published image is built by GitHub Actions from a tag of this repository, for amd64 and arm64, on a base with no shell or package manager (distroless), and runs as a user without privileges (65532) with a built-in health check. It can also run with a read-only root and no capabilities, as the example `docker-compose.yml` does (only `/data` and the folders you mount are written to). Each release is **signed** (cosign, keyless, tied to the release workflow), carries a software bill of materials and build provenance, and is published only after the tests pass. CI also checks the Go packages against the Go vulnerability database (`govulncheck`). [Releasing](releasing.md#verifying-an-image) shows how to verify an image yourself. The workflows pin every action by commit hash, and Dependabot proposes updates to the actions, the Go modules and the base images each week.
 
 ## Reporting a problem
 
-If you find a security problem, please open a private security advisory on the GitHub repository rather than a public issue.
+If you find a security problem, please open a private security advisory on the GitHub repository rather than a public issue; [SECURITY.md](../SECURITY.md) says what to include and what to expect.

@@ -79,6 +79,7 @@ func run(log *slog.Logger) error {
 	if len(secret) < 16 {
 		return errors.New("WEBHOOK_SECRET is required and must be at least 16 characters (openssl rand -hex 24 makes a good one)")
 	}
+	warnPlaceholder(log, "WEBHOOK_SECRET", secret)
 	sweepH, _ := strconv.ParseFloat(env("SWEEP_INTERVAL_HOURS", "24"), 64)
 	tidyMin, _ := strconv.ParseFloat(env("CLEANUP_INTERVAL_MINUTES", "15"), 64)
 	albumMin, _ := strconv.ParseFloat(env("ALBUM_CHECK_MINUTES", "15"), 64)
@@ -171,6 +172,7 @@ func run(log *slog.Logger) error {
 		}
 		log.Info("HANDOFF_STORE_KEY is not set: people cannot join from the web page (keys from the configuration still work)")
 	} else {
+		warnPlaceholder(log, "HANDOFF_STORE_KEY", storeKey)
 		v, err := vault.New(storeKey)
 		if err != nil {
 			return err
@@ -440,4 +442,13 @@ func readStoreKey() (string, error) {
 		return strings.TrimSpace(string(b)), nil
 	}
 	return strings.TrimSpace(os.Getenv("HANDOFF_STORE_KEY")), nil
+}
+
+// warnPlaceholder says so in the log when a secret still has the sample value from .env.example (anyone who has
+// read the repository knows it). It only warns: refusing to start would lock out an installation that already has
+// data sealed with that key.
+func warnPlaceholder(log *slog.Logger, name, value string) {
+	if strings.HasPrefix(strings.ToLower(value), "change-me") {
+		log.Warn(name+" still has the sample value from .env.example: replace it with a random one (openssl rand -hex 24)", "setting", name)
+	}
 }

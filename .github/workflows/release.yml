@@ -12,8 +12,7 @@ on:
         description: "Image tag to publish (for example 0.0.0-test)"
         required: true
 permissions:
-  contents: read
-  packages: write
+  contents: read   # the jobs that publish say so themselves
 jobs:
   test:
     uses: ./.github/workflows/ci.yml

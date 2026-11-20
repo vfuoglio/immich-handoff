@@ -24,7 +24,7 @@ var ErrExists = errors.New("this data folder already has data: pass --force to r
 // Lock marks the data folder as in use. The app holds it for as long as it runs, so a restore can tell that
 // replacing the file now would corrupt it. The lock belongs to the process, so a crash never leaves it behind.
 func Lock(dir string) (release func(), err error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	f, err := os.OpenFile(filepath.Join(dir, "handoff.lock"), os.O_CREATE|os.O_RDWR, 0o600)

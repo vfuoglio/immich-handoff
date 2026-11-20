@@ -7,20 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/gif"
 	"image/jpeg"
-	"image/png"
 	"io"
 	"path"
 	"strings"
 
 	"github.com/google/uuid"
 	xdraw "golang.org/x/image/draw"
-	"golang.org/x/image/webp"
 
 	"github.com/vfuoglio/immich-handoff/internal/dest"
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/safeimg"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -406,19 +404,12 @@ func (h *Hub) ImportThumbnail(ctx context.Context, user uuid.UUID, ruleID, enc s
 	if err != nil || len(b) > 40<<20 {
 		return nil, ErrNoThumbnail
 	}
-	var img image.Image
 	switch strings.ToLower(path.Ext(ref)) {
-	case ".jpg", ".jpeg":
-		img, err = jpeg.Decode(bytes.NewReader(b))
-	case ".png":
-		img, err = png.Decode(bytes.NewReader(b))
-	case ".gif":
-		img, err = gif.Decode(bytes.NewReader(b))
-	case ".webp":
-		img, err = webp.Decode(bytes.NewReader(b))
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
 	default:
 		return nil, ErrNoThumbnail
 	}
+	img, err := safeimg.Decode(b, safeimg.Original)
 	if err != nil {
 		return nil, ErrNoThumbnail
 	}

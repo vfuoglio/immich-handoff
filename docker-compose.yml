@@ -14,6 +14,14 @@ services:
     # If the folder belongs to another user (a NAS user, 1000 for example), run the app as that user instead (the /data volume then needs
     # to be writable by it too):
     # user: "1000:1000"
+    # The app only writes to /data (and to the folders you mount for it), so the rest of the container can be locked.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8080:8080"
     networks:
