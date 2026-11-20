@@ -584,12 +584,13 @@ func (f *fakeImmich) handler() http.Handler {
 }
 
 type env struct {
-	h     *hub.Hub
-	f     *fakeImmich
-	sess  *immich.API
-	ann   *immich.API // the owner of services created in the tests
-	woken []string
-	st    *store.Store
+	h       *hub.Hub
+	f       *fakeImmich
+	sess    *immich.API
+	ann     *immich.API // the owner of services created in the tests
+	woken   []string
+	wokenMu sync.Mutex
+	st      *store.Store
 }
 
 func setup(t *testing.T, allowJoin bool) *env {
@@ -615,7 +616,7 @@ func setup(t *testing.T, allowJoin bool) *env {
 	e.h = &hub.Hub{Static: []*syncer.Service{svc}, Store: st, Connect: connect, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Options: hub.Options{InboxTag: "inbox", RefusedTag: "share-duplicate", SentTag: "handed-over", ExpiryDays: 30},
 		Hook:    syncer.Webhook{URL: "http://app/webhook/immich", Header: "X-Webhook-Secret", Secret: "s"},
-		Wake:    func(reason string) { e.woken = append(e.woken, reason) }}
+		Wake:    func(reason string) { e.wokenMu.Lock(); e.woken = append(e.woken, reason); e.wokenMu.Unlock() }}
 	if err := e.h.Reload(context.Background()); err != nil {
 		t.Fatal(err)
 	}
