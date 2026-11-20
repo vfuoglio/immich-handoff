@@ -1,0 +1,10 @@
+# Mail to the people who turn on "Email me" (and the On this day email): caught by Mailpit, never sent anywhere. Open http://localhost:8025
+destinations:
+  - name: people
+    format: email
+    host: mailpit
+    port: 1025
+    tls: none
+    from: Immich Handoff <handoff@demo.test>
+    people: true
+    group: 5s
