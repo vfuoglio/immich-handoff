@@ -684,8 +684,10 @@ func TestBrowser(t *testing.T) {
 		if !js[bool](t, ctx, `document.getElementById('handoff-link') !== null && !document.getElementById('handoff-link').classList.contains('floating')`) {
 			t.Error("the link was lost when the person moved to another page of Immich")
 		}
-		run(t, ctx, chromedp.Click(`#handoff-link`, chromedp.ByQuery))
-		until(t, ctx, "the app's page", `location.pathname === '/handoff/' && document.querySelector('header.bar') !== null`, 15*time.Second)
+		// it opens in a tab of its own, so Immich stays as the person left it
+		if got := js[string](t, ctx, `(() => { const a = document.getElementById('handoff-link'); return new URL(a.href).pathname + ' ' + a.target + ' ' + a.rel; })()`); got != "/handoff/ _blank noopener" {
+			t.Errorf("the header link: %q, want /handoff/ _blank noopener", got)
+		}
 	})
 
 	t.Run("the request is approved from the page", func(t *testing.T) {

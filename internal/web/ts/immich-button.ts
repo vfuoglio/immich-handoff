@@ -32,6 +32,8 @@ if (source) {
   const link = document.createElement("a");
   link.id = "handoff-link";
   link.href = page;
+  link.target = "_blank"; // in a tab of its own, so Immich stays as the person left it
+  link.rel = "noopener";
   link.title = "Immich Handoff";
   link.setAttribute("aria-label", "Immich Handoff");
   const image = document.createElement("img");

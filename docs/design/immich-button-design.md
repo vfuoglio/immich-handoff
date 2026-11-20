@@ -70,7 +70,7 @@ is a long press. Nothing here depends on the circle: the script only reads `data
   container of the three-dot menu. The toolbar scrolls sideways when it is crowded, so on a phone the button is there,
   further along. Immich redraws the toolbar when the person moves between photos; a `MutationObserver`, as for the
   header link, puts the button back at most once per frame.
-- **Selection bar.** A button is added in the right-hand group of the selection bar (`#control-bar`, or `[data-testid="control-bar"]` from Immich 3.4), before the three-dot menu. On a phone
+- **Selection bar.** A button is added in the right-hand group of the selection bar (`#control-bar`, or `[data-testid="control-bar"]` from Immich 3.4), before the three-dot menu. On a phone A bar with no three-dot menu (the page of a partner's photos has only Share, Add to album and Download) has the button at the end of its right-hand group, the last group of the `nav` that is not the first (which holds Close and the count).
   that bar is nearly full (Immich 3.2.0 at 390 px wide: about 70 px spare, and the button is 40 px, icon only), so
   after adding the button the script checks that the bar did not grow past its width (`scrollWidth > clientWidth`),
   and if it did, takes the button out again and leaves the menu entry as the only way.

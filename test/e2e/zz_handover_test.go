@@ -75,8 +75,8 @@ func TestHandOverButton(t *testing.T) {
 		run(t, ctx, chromedp.Click(`#handoff-toast button`, chromedp.ByQuery)) // Undo
 		until(t, ctx, "the undo to be said", `document.getElementById('handoff-toast').textContent.includes('Taken off again')`, 15*time.Second)
 		eventually(t, "the tag to be off the photo", 10*time.Second, func() bool { return !hasTag() })
-		if !js[bool](t, ctx, `document.querySelector('#handoff-toast a').href.endsWith('/handoff/')`) {
-			t.Error("the message links to the app on the same address")
+		if !js[bool](t, ctx, `(() => { const a = document.querySelector('#handoff-toast a'); return a.href.endsWith('/handoff/') && a.target === '_blank' && a.rel === 'noopener'; })()`) {
+			t.Error("the message links to the app on the same address, in a tab of its own")
 		}
 		// the service used is remembered in this browser and offered first; services needing approval can be asked for
 		run(t, ctx, chromedp.Click(`#handoff-viewer-act`, chromedp.ByQuery))
