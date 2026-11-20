@@ -53,7 +53,7 @@ One path, in this order. Everything that names the release is done on `develop` 
 
 ## What the workflow checks before it publishes
 
-- the whole CI: unit tests (with the race detector), generated code up to date, and the end-to-end tests against a real Immich
+- the whole CI: unit tests (with the race detector on the packages that have goroutines, the two biggest in shards), generated code up to date, and the end-to-end tests against a real Immich
 - the version looks like `1.2.3` or `1.2.3-rc1`
 - (tag pushes) `CHANGELOG.md` has a non-empty section for it
 - for **each** architecture, the freshly built image reports the right version with `--version`, and with no configuration it refuses to start and says `WEBHOOK_SECRET` is missing. That proves the binary runs, as the unprivileged user, on that architecture; it does not start a real Immich (the end-to-end tests do that with the binary, not the image)
