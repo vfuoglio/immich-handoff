@@ -243,4 +243,34 @@ func TestAddToMyLibrary(t *testing.T) {
 			t.Error("once the choice is remembered the press must not ask again")
 		}
 	})
+
+	t.Run("in a shared album, selecting several photos offers Add to my library in the bar and in the three-dot menu", func(t *testing.T) {
+		address := w.inFrontOfImmich(t)
+		ctx := browse(t, w.port, w.sender, look{})
+		run(t, ctx, chromedp.Navigate(address+"/albums/"+album.ID))
+		until(t, ctx, "the album's photos", `document.querySelectorAll('[data-thumbnail-focus-container][data-asset]').length >= 2`, 60*time.Second)
+		toggleTile(t, ctx, 0)
+		toggleTile(t, ctx, 1)
+		until(t, ctx, "two selected", `[...document.querySelectorAll(':is([data-testid=control-bar],#control-bar) p')].some(p => p.textContent.trim() === '2')`, 10*time.Second)
+		until(t, ctx, "Add to my library in the selection bar", `document.getElementById('handoff-bar-add') !== null`, 40*time.Second)
+		if js[bool](t, ctx, `document.getElementById('handoff-bar-act') !== null`) {
+			t.Error("Hand over must not be offered for photos that are not bob's")
+		}
+		if !js[bool](t, ctx, `(() => { const b = document.getElementById('handoff-bar-add'); const more = document.querySelector(':is([data-testid=control-bar],#control-bar) button[id^=context-menu-button]'); return b.getBoundingClientRect().right <= more.getBoundingClientRect().left + 1; })()`) {
+			t.Error("the button is before the three dots, in the bar")
+		}
+		run(t, ctx, chromedp.Click(`:is([data-testid=control-bar],#control-bar) button[id^=context-menu-button]`, chromedp.ByQuery))
+		until(t, ctx, "the line in the three-dot menu", `document.querySelector('ul[role=menu] li[data-handoff-item=add]') !== null`, 10*time.Second)
+	})
+
+	t.Run("on a partner's photos page, selecting photos offers Add to my library too", func(t *testing.T) {
+		address := w.inFrontOfImmich(t)
+		ctx := browse(t, w.port, w.sender, look{})
+		run(t, ctx, chromedp.Navigate(address+"/partners/"+alice.id))
+		until(t, ctx, "the partner's photos", `document.querySelectorAll('[data-thumbnail-focus-container][data-asset]').length >= 2`, 60*time.Second)
+		toggleTile(t, ctx, 0)
+		toggleTile(t, ctx, 1)
+		until(t, ctx, "two selected", `document.querySelectorAll('[data-thumbnail-focus-container][data-selected=true]').length === 2`, 10*time.Second)
+		until(t, ctx, "Add to my library", `document.getElementById('handoff-bar-add') !== null || document.querySelector('li[data-handoff-item=add]') !== null`, 30*time.Second)
+	})
 }

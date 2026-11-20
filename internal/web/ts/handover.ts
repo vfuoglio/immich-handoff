@@ -78,7 +78,8 @@ export function startHandover(app: string, icon: string): void {
     document.body.append(box);
     toastTimer = window.setTimeout(closeToast, 9000);
   };
-  const openApp = (): HTMLAnchorElement => element("a", { href: app, textContent: word("Open Handoff") });
+  // in a tab of its own: the person is in the middle of something in Immich and must find it as it was
+  const openApp = (): HTMLAnchorElement => element("a", { href: app, target: "_blank", rel: "noopener", textContent: word("Open Handoff") });
 
   const post = async (path: string, body: URLSearchParams): Promise<{ ok: boolean; message: string; data: Record<string, unknown> }> => {
     try {
@@ -466,7 +467,12 @@ export function startHandover(app: string, icon: string): void {
     mount("handoff-viewer-act", viewer, handOne, "hand");
     mount("handoff-viewer-add", viewer, addOne, "add");
     const selectionBar = bar?.querySelector("nav") ?? null;
-    const target = selectionBar?.querySelector('button[aria-haspopup][id^="context-menu-button"]')?.closest("nav > div") ?? null;
+    // the group of buttons before the three dots; a bar with no three dots (a partner's photos page: Share, Add to album, Download)
+    // has the group of actions at its right, the last group of the nav that is not the first (Close and the count)
+    const target =
+      selectionBar?.querySelector('button[aria-haspopup][id^="context-menu-button"]')?.closest("nav > div") ??
+      [...(selectionBar?.children ?? [])].filter((c, i) => i > 0 && c.tagName === "DIV" && c.querySelector("button")).pop() ??
+      null;
     const there = noRoom ? null : target;
     const hand = mount("handoff-bar-act", there, handMany, "hand");
     const add = mount("handoff-bar-add", there, addMany, "add");

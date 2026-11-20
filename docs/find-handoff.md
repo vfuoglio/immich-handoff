@@ -6,7 +6,7 @@ The page is reached by its address, and people who have never used it have to be
 
 ![Immich's header with the Handoff icon between the notification bell and the person's avatar, in the light and the dark theme](images/immich-header-link.png)
 
-Your reverse proxy adds one line to Immich's pages. A small script from this app then puts the Handoff icon **between the notification bell and the avatar**, in line with the other buttons, and a click opens the page. It works in the light and the dark theme, on a desktop and in a phone's browser, and it stays while people move around Immich.
+Your reverse proxy adds one line to Immich's pages. A small script from this app then puts the Handoff icon **between the notification bell and the avatar**, in line with the other buttons, and a click opens the page in a new tab, so Immich stays as you left it. It works in the light and the dark theme, on a desktop and in a phone's browser, and it stays while people move around Immich.
 
 **What you need**
 
