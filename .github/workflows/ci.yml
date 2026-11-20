@@ -15,7 +15,9 @@ on:
         type: string
         default: ""
 jobs:
-  test:
+  checks:
+    # Everything that is not the race detector: generated code, the scripts' own tests, vet, and the unit tests of the packages
+    # without goroutines (.github/scripts/unit.sh says which).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,8 +34,47 @@ jobs:
         run: .github/scripts/e2e_groups_test.sh
       - name: Every link and anchor in the documentation points at something that exists
         run: .github/scripts/doc_links_test.sh
+      - name: Every package is in exactly one group of unit tests (see race below)
+        run: .github/scripts/unit_test.sh
       - run: go vet ./... && go vet -tags e2e ./...
-      - run: go test -race ./...
+      - run: .github/scripts/unit.sh plain
+  race:
+    # The race detector makes tests 15 to 30 times slower, so it runs only on the packages with goroutines, and the two biggest of
+    # them (hub, web) are cut into shards that run at the same time. The wall time is the slowest shard.
+    name: race (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: hub 1/4, args: "shard internal/hub 1 4" }
+          - { name: hub 2/4, args: "shard internal/hub 2 4" }
+          - { name: hub 3/4, args: "shard internal/hub 3 4" }
+          - { name: hub 4/4, args: "shard internal/hub 4 4" }
+          - { name: web 1/3, args: "shard internal/web 1 3" }
+          - { name: web 2/3, args: "shard internal/web 2 3" }
+          - { name: web 3/3, args: "shard internal/web 3 3" }
+          - { name: the others, args: "race" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with: { go-version-file: go.mod }
+      - run: .github/scripts/unit.sh ${{ matrix.args }}
+  test:
+    # The one result that branch protection asks for (it used to be a single job of this name): green only when the checks and
+    # every race shard are.
+    needs: [checks, race]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: The checks and every race shard passed
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          RACE: ${{ needs.race.result }}
+        run: |
+          echo "checks: $CHECKS, race: $RACE"
+          [ "$CHECKS" = success ] && [ "$RACE" = success ]
   pets:
     # The optional pet sidecar (pet-sidecar/) is a second image: it is built here and the sample photos are posted to it, so a change to it
     # (or to a model it downloads) that stops it finding the animals is seen before a release.
