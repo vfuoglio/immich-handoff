@@ -528,6 +528,11 @@ dialog.help-drawer[open] { display: flex; flex-direction: column; animation: dra
 .tour-actions { display: flex; gap: .5rem; justify-content: flex-end; align-items: center; margin: 0; }
 .tour-skip { margin-right: auto; background: none; border: 0; color: var(--muted); padding-inline: 0; }
 @media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card { transition: none; } .tour-card { transform: none; } }
+dialog.tour-splash { text-align: center; }
+dialog.tour-splash img { border-radius: 26px; margin: 0 auto .8rem; display: block; box-shadow: 0 18px 50px -12px color-mix(in oklab, var(--accent) 60%, transparent); }
+dialog.tour-splash .meta { margin-bottom: .9rem; }
+.tour-ack { display: flex; align-items: center; justify-content: center; gap: .5rem; margin: 0 0 1rem; font-size: .9rem; text-align: left; cursor: pointer; }
+dialog.tour-splash button:disabled { opacity: .45; cursor: not-allowed; }
 .card.guide .steps li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .step-show { margin-left: .2rem; padding: .15rem .7rem; font-size: .8rem; }
 .help-tour { margin: .2rem 0 .8rem; }

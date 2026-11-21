@@ -70,6 +70,58 @@ function markSeen(kind: string): void {
   }).catch(() => { /* it will be offered again, which does no harm */ });
 }
 
+/**
+ * The welcome before a tour that starts by itself: the app's picture, a few lines on what is about to happen, and a way out that cannot be taken
+ * by mistake (Skip stays off until a box is ticked; Escape and a click outside do nothing). Resolves to what the person chose.
+ */
+function welcome(kind: "user" | "admin"): Promise<"start" | "skip"> {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm tour-splash";
+    dialog.setAttribute("aria-labelledby", "splash-title");
+    const logo = document.createElement("img");
+    logo.src = "static/icon-512.png";
+    logo.alt = "";
+    logo.width = 112;
+    logo.height = 112;
+    const title = document.createElement("h3");
+    title.id = "splash-title";
+    title.textContent = kind === "admin" ? t("Welcome to the administrator's page") : t("Welcome to Immich Handoff");
+    const lead = document.createElement("p");
+    lead.textContent = kind === "admin"
+      ? t("A one-minute tour of this page is about to start. It shows where to check the connections, look after the services and download a backup.")
+      : t("A one-minute tour is about to start. It points at the main things on this page, so you know where everything is.");
+    const later = document.createElement("p");
+    later.className = "meta";
+    later.textContent = t("You can take it again whenever you like, from Help or from Ctrl K.");
+    const label = document.createElement("label");
+    label.className = "tour-ack";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    label.append(box, " ", t("I understand: I can take the tour later from Help"));
+    const actions = document.createElement("p");
+    actions.className = "row confirm-actions";
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.textContent = t("Skip");
+    skip.disabled = true;
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "primary";
+    go.textContent = t("Start the tour");
+    actions.append(skip, go);
+    dialog.append(logo, title, lead, later, label, actions);
+    document.body.appendChild(dialog);
+    const done = (choice: "start" | "skip"): void => { dialog.close(); dialog.remove(); resolve(choice); };
+    box.addEventListener("change", () => { skip.disabled = !box.checked; });
+    skip.addEventListener("click", () => { if (box.checked) done("skip"); });
+    go.addEventListener("click", () => done("start"));
+    dialog.addEventListener("cancel", (e) => e.preventDefault()); // Escape does not skip
+    dialog.showModal();
+    go.focus();
+  });
+}
+
 let running = false;
 
 async function start(data: TourData): Promise<void> {
@@ -206,7 +258,11 @@ export function initTour(): void {
   // a browser driven by a test does not get the tour by itself (it would cover what the test clicks); #tour still starts it
   if (data.auto && !navigator.webdriver) {
     setTimeout(() => {
-      if (!document.querySelector("dialog[open]")) void start(data);
+      if (document.querySelector("dialog[open]")) return;
+      void welcome(data.kind).then((choice) => {
+        if (choice === "skip") markSeen(data.kind);
+        else void start(data);
+      });
     }, 900);
   }
 }
