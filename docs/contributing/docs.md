@@ -41,6 +41,22 @@ Text and code for the second tab.
 
 On GitHub the fence reads as two headings. Do not use MDX in a page.
 
+## How a guide is written
+
+The voice is warm and concrete: second person, short sentences, real people and places in the examples (Alice and Bob, a week in Lisbon), the benefit before the mechanism, and no pile of parenthetical asides. Call a button by the words on it, in bold, and say where to find it as it is today.
+
+A feature guide has this shape:
+
+1. **A title, one sentence that says what you get, and a picture** of the real thing.
+2. **Make it** (or **Set it up**): three to six numbered steps, each one action and one result, with a picture where it helps.
+3. **Good to know**: limits, privacy, keys and what is stored.
+4. **If something is off**: what the person sees when it goes wrong and what to do.
+5. **What next**: two or three related guides.
+
+Merge two guides only when they say the same thing; keep both when the reader differs (an owner setting up, a sender using) and link instead of repeating.
+
+Pictures are taken from the real app with `tools/screenshots` (see its README) against a throwaway Immich, in the English light variant of the default colour scheme; a new scene goes in `main.go` or a file of its own (`stories.go` is a small example that makes its own data through the app's own requests). Retake them when the layout changes.
+
 ## What runs where
 
 - `go generate ./...` runs `internal/docs/gen.go`: it checks every page's front matter (`docs.Validate`) and writes `internal/docs/bundle/` (the pages for users and administrators, `index.json` and `tips.json`). CI's "generated code is up to date" check fails when the bundle is behind the pages.

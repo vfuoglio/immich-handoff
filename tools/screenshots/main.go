@@ -3,6 +3,7 @@
 //	go run . gen   <dir> [count]   write sample photos (generated landscapes, no real people)
 //	go run . shots <set> <outdir>  take screenshots of a running demo with headless Chrome
 //	go run . hero  <outdir>        compose the README hero image from earlier shots
+//	go run . stories <outdir> <photos>  the Stories guide: the form, the card of a ready story, the story on a phone
 //	go run . room  <outdir> <photos>  a client room: the row, the client's page on a phone, a photo with its note, the review
 //	go run . send  <outdir> <photos>  the Send page on a phone: the card to install, photos chosen, the queue half way
 //	go run . film <scene> <framedir>  film a scene of the running demo as frames, for the README animations (see README.md)
@@ -77,6 +78,11 @@ func main() {
 			log.Fatal("shared needs an output directory and the folder of sample photos")
 		}
 		sharedShots(os.Args[2], os.Args[3])
+	case "stories":
+		if len(os.Args) < 4 {
+			log.Fatal("stories needs an output directory and the folder of sample photos")
+		}
+		storiesShots(os.Args[2], os.Args[3])
 	case "send":
 		if len(os.Args) < 4 {
 			log.Fatal("send needs an output directory and the folder of sample photos")

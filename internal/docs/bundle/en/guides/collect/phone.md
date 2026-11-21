@@ -45,7 +45,7 @@ Limits: Chrome offers the Share entry only to an **installed** app (without it t
 
 ### Sending the camera roll automatically
 
-Handoff cannot watch a phone's camera roll: a web page is not allowed to. The route that does is **Immich's own mobile app**, which backs up the camera roll to your account, together with Handoff's [whole-album hand-over](../share/household.md#handing-over-a-whole-album):
+Handoff cannot watch a phone's camera roll: a web page is not allowed to. The route that does is **Immich's own mobile app**, which backs up the camera roll to your account, together with Handoff's [whole-album hand-over](../share/household.md#more-ways-to-hand-over):
 
 1. On the phone, make an album (in the gallery) for what you want to hand over, for example "To share".
 2. In the Immich app, **Backup**: select that album for backup and switch on **Sync albums** (the name may differ between versions of the app), which makes an album of the same name in your Immich as the photos arrive.

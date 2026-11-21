@@ -64,7 +64,31 @@ func matches(q, w string) bool {
 	if strings.HasPrefix(w, q) {
 		return true
 	}
-	return len([]rune(q)) >= 4 && oneOff(q, w)
+	if sq, sw := stem(q), stem(w); (sq != q || sw != w) && len([]rune(sq)) >= 3 && strings.HasPrefix(sw, sq) {
+		return true // "stories" and "storys" are both "story"; "albums" is "album"
+	}
+	if len([]rune(q)) < 4 {
+		return false
+	}
+	if oneOff(q, w) {
+		return true
+	}
+	// a typo inside the start of a longer word ("storys" for "stories"): the same length of the word is one letter off
+	if r := []rune(w); len(r) > len([]rune(q)) {
+		return oneOff(q, string(r[:len([]rune(q))]))
+	}
+	return false
+}
+
+// stem takes the plural off a word, roughly: enough for a search box, not for a dictionary.
+func stem(w string) string {
+	switch {
+	case strings.HasSuffix(w, "ies") && len(w) > 4:
+		return w[:len(w)-3] + "y"
+	case strings.HasSuffix(w, "s") && !strings.HasSuffix(w, "ss") && len(w) > 3:
+		return w[:len(w)-1]
+	}
+	return w
 }
 
 func oneOff(a, b string) bool {
