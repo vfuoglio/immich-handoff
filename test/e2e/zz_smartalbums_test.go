@@ -84,6 +84,20 @@ func TestSmartAlbums(t *testing.T) {
 		t.Fatalf("the photo went in: %d", n)
 	}
 
+	// Immich has to have read and shown the older photos before a look back can offer them (a slower machine takes longer)
+	eventually(t, "Immich has processed the older photos", 120*time.Second, func() bool {
+		for _, id := range []string{older1, older2} {
+			var a struct {
+				HasMetadata bool    `json:"hasMetadata"`
+				Thumbhash   *string `json:"thumbhash"`
+			}
+			call(t, "GET", "/assets/"+id, keyAuth(bob), nil, &a)
+			if !a.HasMetadata || a.Thumbhash == nil || *a.Thumbhash == "" {
+				return false
+			}
+		}
+		return true
+	})
 	// the older photos come with a look back
 	form("/rules/lookback", url.Values{"rule": {rule}})
 	form("/rules/answer", url.Values{"rule": {rule}, "do": {"send"}})
