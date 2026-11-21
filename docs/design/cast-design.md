@@ -1,6 +1,6 @@
 # Cast to a TV
 
-**Built** in 1.5.0 (#269). Immich users ask for casting to a TV or a Chromecast (about 330 votes between the requests); Immich itself has no casting from a browser.
+**Built** in 1.4.0 (#269). Immich users ask for casting to a TV or a Chromecast (about 330 votes between the requests); Immich itself has no casting from a browser.
 
 ## What it does
 

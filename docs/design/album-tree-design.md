@@ -1,6 +1,6 @@
 # Album tree
 
-**Built** in 1.5.0 (#274). Immich's discussions 2073 (nested albums, 394 votes) and 5078 (tree-structured album folders, 146 votes) ask for it. Immich itself has no nested albums.
+**Built** in 1.4.0 (#274). Immich's discussions 2073 (nested albums, 394 votes) and 5078 (tree-structured album folders, 146 votes) ask for it. Immich itself has no nested albums.
 
 ## What it does
 

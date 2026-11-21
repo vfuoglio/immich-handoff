@@ -1,6 +1,6 @@
 # Smart albums
 
-**Built** in 1.5.0 (#271). Immich's discussion 1673 (rule-based smart albums, 188 votes) asks for it.
+**Built** in 1.4.0 (#271). Immich's discussion 1673 (rule-based smart albums, 188 votes) asks for it.
 
 ## What it does
 

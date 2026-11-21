@@ -1,6 +1,6 @@
 # Circles
 
-**Built** in 1.5.0 (#270). Immich's discussion 1633 (user groups, 146 votes) asks for it, and Immich froze changes to sharing (immich#12614).
+**Built** in 1.4.0 (#270). Immich's discussion 1633 (user groups, 146 votes) asks for it, and Immich froze changes to sharing (immich#12614).
 
 ## What it does
 
