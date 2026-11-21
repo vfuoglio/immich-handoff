@@ -101,6 +101,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/circles", w.adminCircles)
 	mux.HandleFunc("POST /admin/notify/test", w.adminNotifyTest)
 	mux.HandleFunc("POST /admin/backup/download", w.adminBackupDownload)
 	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
@@ -287,6 +288,16 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/rule-models", w.ruleModels)
 	mux.HandleFunc("GET /fragments/album-form", w.albumForm)
 	mux.HandleFunc("POST /rules/album", w.makeSmartAlbum)
+	mux.HandleFunc("GET /fragments/circle-form", w.circleForm)
+	mux.HandleFunc("GET /fragments/circle-add", w.circleAddForm)
+	mux.HandleFunc("POST /circles", w.makeCircle)
+	mux.HandleFunc("POST /circles/member", w.addCircleMember)
+	mux.HandleFunc("POST /circles/member/remove", w.removeCircleMember)
+	mux.HandleFunc("POST /circles/answer", w.answerCircle)
+	mux.HandleFunc("POST /circles/auto", w.autoCircle)
+	mux.HandleFunc("POST /circles/pause", w.pauseCircle)
+	mux.HandleFunc("POST /circles/delete", w.deleteCircle)
+	mux.HandleFunc("POST /circles/catchup", w.catchUpCircle)
 	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
 	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
@@ -716,6 +727,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Folders = w.folderViews(ctx, me)
 	d.Stacks = w.stackViews(ctx, me)
 	d.Albums = w.albumViews(ctx, me)
+	d.Circles, d.CircleAsks = w.circleViews(ctx, me)
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
@@ -794,6 +806,14 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: title,
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
+	}
+	for _, ca := range d.CircleAsks { // albums to share with a circle
+		acts := []NeedAction{
+			{Label: t(ctx, "Share them"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "send"), Primary: true},
+			{Label: t(ctx, "Not these"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "decline")},
+			{Label: t(ctx, "Always"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "always")}}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} album for the circle {circle}", "{n} albums for the circle {circle}", len(ca.Albums), "circle", ca.Name),
+			Text: t(ctx, "Albums: {names}. Share them with {people}? Immich may email each person.", "names", folderNames(ca.Albums), "people", ca.People), Actions: acts})
 	}
 	for _, sg := range d.Suggestions {
 		more := sg.Count - len(sg.Thumbs)

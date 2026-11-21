@@ -135,3 +135,74 @@ func TestASmartAlbumShowsOnTheSettingsCardAsASuggestionAndOnTheReviewPage(t *tes
 		t.Fatalf("stop: %d", code)
 	}
 }
+
+func TestCirclesCardMakesACircleOffersAlbumsAndTheAdministratorChoosesHowPeopleArePicked(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	ctx := context.Background()
+	if _, page := do(t, "GET", app.URL+"/", "sess=other", nil); !strings.Contains(page, "Make a circle") || !strings.Contains(page, "Every new album you make is offered to them") {
+		t.Fatal("the card is offered")
+	}
+	if code, _ := postForm(t, app.URL+"/circles", "", "name=x&emails=alice@x.test"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/circle-form", "", nil); code != 401 {
+		t.Errorf("form signed out: %d", code)
+	}
+	if code, body := do(t, "GET", app.URL+"/fragments/circle-form", "sess=other", nil); code != 200 || !strings.Contains(body, "Email addresses of their Immich accounts") {
+		t.Errorf("method 1 asks for emails: %d %s", code, body)
+	}
+	if code, _ := postForm(t, app.URL+"/circles", "sess=other", "name=Family&emails=nobody@x.test"); code != 409 {
+		t.Errorf("an email nobody has: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/circles", "sess=other", "name=Family&emails=other@x.test"); code != 409 {
+		t.Errorf("oneself: %d", code)
+	}
+	if code, b := postForm(t, app.URL+"/circles", "sess=other", "name=Family&role=editor&prefix=Trip&emails=alice@x.test"); code != 204 {
+		t.Fatalf("make the circle: %d %s", code, b)
+	}
+	_, page := do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"Family", "Alice", "alice@x.test", "Editors", "Albums whose name starts with Trip", "Asks you first", "Offer my existing albums"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the circle on the page lacks %q", want)
+		}
+	}
+	cs, _ := st.CirclesOf(ctx, mustUUID(otherID))
+	if len(cs) != 1 {
+		t.Fatalf("the circle is stored: %v", cs)
+	}
+	id := cs[0].ID
+	st.PutCircleShare(ctx, store.CircleShare{CircleID: id, AlbumID: mustUUID("77777777-0000-4000-8000-000000000001"), AlbumName: "Trip 2026", UserID: mustUUID(aliceID), State: store.CircleOffered})
+	_, page = do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"1 album for the circle Family", "Albums: Trip 2026", "Immich may email each person", "Share them", "Not these"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the suggestion card lacks %q", want)
+		}
+	}
+	if code, _ := postForm(t, app.URL+"/circles/answer", "sess=family", "circle="+id+"&do=decline"); code != 409 {
+		t.Errorf("another person cannot answer for the circle: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/circles/answer", "sess=other", "circle="+id+"&do=decline"); code != 204 {
+		t.Errorf("decline: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/circles/auto", "sess=other", "circle="+id+"&on=1"); code != 409 {
+		t.Errorf("by itself only after three Always: %d", code)
+	}
+
+	// the administrator allows picking from every account; nobody else can
+	if code, _ := postForm(t, app.URL+"/admin/circles", "sess=other", "method=2"); code != 404 {
+		t.Errorf("not for an ordinary person: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/admin/circles", "sess=admin", "method=2"); code != 204 {
+		t.Fatalf("the administrator chooses: %d", code)
+	}
+	if _, body := do(t, "GET", app.URL+"/fragments/circle-form", "sess=other", nil); !strings.Contains(body, "Alice") || !strings.Contains(body, "Family") || strings.Contains(body, "Other</b>") || strings.Contains(body, "Email addresses of their") {
+		t.Errorf("method 2 lists the other accounts and not oneself: %s", body)
+	}
+	if code, _ := postForm(t, app.URL+"/circles/member", "sess=other", "circle="+id+"&user="+aliceID); code != 204 && code != 409 {
+		t.Errorf("add a person by account: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/circles/delete", "sess=other", "circle="+id); code != 204 {
+		t.Fatalf("end the circle: %d", code)
+	}
+}

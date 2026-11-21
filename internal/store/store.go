@@ -796,6 +796,45 @@ var migrations = []string{
 	   key_enc    BLOB NOT NULL,
 	   created_at TEXT NOT NULL
 	 );`,
+	// circles: a named group of people that every new album is shared with, with the owner's own key
+	`CREATE TABLE circle_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE circles (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   role       TEXT NOT NULL,
+	   prefix     TEXT NOT NULL DEFAULT '',
+	   mode       TEXT NOT NULL,
+	   always     INTEGER NOT NULL DEFAULT 0,
+	   paused     INTEGER NOT NULL DEFAULT 0,
+	   since      TEXT NOT NULL,
+	   auto_since TEXT NOT NULL DEFAULT '',
+	   last_look  TEXT NOT NULL DEFAULT '',
+	   problem    TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE circle_members (
+	   circle_id TEXT NOT NULL,
+	   user_id   TEXT NOT NULL,
+	   name      TEXT NOT NULL,
+	   email     TEXT NOT NULL,
+	   PRIMARY KEY (circle_id, user_id)
+	 );
+	 CREATE TABLE circle_shares (
+	   circle_id  TEXT NOT NULL,
+	   album_id   TEXT NOT NULL,
+	   user_id    TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   state      TEXT NOT NULL,
+	   at         TEXT NOT NULL,
+	   PRIMARY KEY (circle_id, album_id, user_id)
+	 );
+	 CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

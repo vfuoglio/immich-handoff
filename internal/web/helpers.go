@@ -521,7 +521,7 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 // RowCount is how many service rows the page shows; with exactly one it starts open.
 // HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, smart albums, pairing) is on for this person.
 func (d DashboardData) HasSettings() bool {
-	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available
 }
 
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }

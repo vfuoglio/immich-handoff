@@ -336,6 +336,39 @@ type AlbumsView struct {
 	Rules     []AlbumRuleView
 }
 
+// CircleMemberView is a person in a circle.
+type CircleMemberView struct{ ID, Name, Email string }
+
+// CircleView is one circle, for the person's page.
+type CircleView struct {
+	ID, Name, Role, Prefix, Mode string
+	Always                       int
+	Paused, CanAuto              bool
+	Last, Problem                string
+	Members                      []CircleMemberView
+}
+
+// CirclesView is the person's "Circles" card.
+type CirclesView struct {
+	Available bool
+	Items     []CircleView
+}
+
+// CircleAskView is a circle with albums waiting for the person's answer.
+type CircleAskView struct {
+	ID, Name string
+	Albums   []string
+	People   string
+	Count    int
+}
+
+// CircleFormView is what the form that makes a circle (or adds a person) offers.
+type CircleFormView struct {
+	Circle  string // when adding a person to a circle: its id
+	ByUsers bool   // the administrator lets people be picked from every account
+	Users   []PersonOption
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -364,6 +397,8 @@ type DashboardData struct {
 	Folders    FoldersView
 	Stacks     StacksView
 	Albums     AlbumsView
+	Circles    CirclesView
+	CircleAsks []CircleAskView
 	Pairings   PairingsView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
@@ -818,10 +853,15 @@ templ Dashboard(d DashboardData) {
 						}
 					</div>
 				}
-				if d.Pairings.Available {
+				if d.Pairings.Available || d.Circles.Available {
 					<div class="group" role="group" aria-labelledby="g-sharing">
 						<p class="group-title" id="g-sharing">{ t(ctx, "Sharing with others") }</p>
-						@PairingsCard(d.Pairings)
+						if d.Circles.Available {
+							@CirclesCard(d.Circles)
+						}
+						if d.Pairings.Available {
+							@PairingsCard(d.Pairings)
+						}
 					</div>
 				}
 			</div>
@@ -2116,6 +2156,7 @@ type AdminData struct {
 	SelfOn   bool // people can join from the page, so there is a store to remove from
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+	CircleMethod int // how people are chosen for a circle: 1 type an email, 2 pick from every account
 }
 
 // NotifyView is a place messages for whoever runs the app go, as the administrator's page lists it (never its address).
@@ -2199,6 +2240,17 @@ templ AdminPage(d AdminData) {
 			<pre id="checkresult" class="checkresult" aria-live="polite"></pre>
 		</section>
 		@AdminNotify(d.Notify)
+		if d.SelfOn {
+			<h2>{ t(ctx, "Circles") }</h2>
+			<section class="card">
+				<p class="meta">{ t(ctx, "People can make a circle: a group that every new album of theirs is shared with. Choose how they name the people in it.") }</p>
+				<form hx-post="admin/circles" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<label class="target"><input type="radio" name="method" value="1" checked?={ d.CircleMethod != 2 }/><span><b>{ t(ctx, "They type each person's email address") }</b> <small class="meta">{ t(ctx, "Nobody else's address is shown. This is the default.") }</small></span></label>
+					<label class="target"><input type="radio" name="method" value="2" checked?={ d.CircleMethod == 2 }/><span><b>{ t(ctx, "They pick from everyone on this server") }</b> <small class="meta">{ t(ctx, "Easier, but every person who makes a circle sees the name of every account on this server.") }</small></span></label>
+					<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save") }</button></p>
+				</form>
+			</section>
+		}
 		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
@@ -4942,6 +4994,141 @@ templ SuggestionReviewPage(d SuggestionReview) {
 			</p>
 		</form>
 	}
+}
+
+// CirclesCard shares every new album of the person's with a group of people: the circles they have, and the form that makes one.
+templ CirclesCard(c CirclesView) {
+	<h2>{ t(ctx, "Circles") }</h2>
+	<div class="card circlescard">
+		<p>{ t(ctx, "A circle is a group of people on this Immich server. Every new album you make is offered to them, and with your yes it is shared with them, as viewers or editors. Immich may send each of them an email for every album. Taking a person out of a circle takes them off the albums the app shared with them, and only those.") }</p>
+		for _, it := range c.Items {
+			<div class="card rule circle" id={ "circle-" + it.ID }>
+				<p><b>{ it.Name }</b>
+					if it.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if it.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Shares by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+					if it.Role == "editor" {
+						<span class="chip">{ t(ctx, "Editors") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Viewers") }</span>
+					}
+				</p>
+				if it.Prefix != "" {
+					<p class="meta">{ t(ctx, "Albums whose name starts with {text}", "text", it.Prefix) }</p>
+				} else {
+					<p class="meta">{ t(ctx, "Every new album") }</p>
+				}
+				<ul class="events">
+					for _, m := range it.Members {
+						<li>{ m.Name } <span class="meta">{ m.Email }</span>
+							<button class="link" hx-post="circles/member/remove" hx-vals={ vals2("circle", it.ID, "member", m.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Take {name} out of this circle and off the albums the app shared with them?", "name", m.Name) } data-confirm-title={ t(ctx, "Take out?") } data-confirm-label={ t(ctx, "Take out") } data-danger="true">{ t(ctx, "Take out") }</button>
+						</li>
+					}
+				</ul>
+				if it.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", it.Last) }</p>
+				}
+				if it.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", it.Problem) }</p>
+				}
+				if it.Mode != "auto" && it.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it share new albums by itself from now on.", "n", it.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="circles/catchup" hx-vals={ vals("circle", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Offer my existing albums") }</button>
+					if it.Mode == "auto" {
+						<button hx-post="circles/auto" hx-vals={ vals2("circle", it.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if it.CanAuto {
+						<button class="primary" hx-post="circles/auto" hx-vals={ vals2("circle", it.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the albums you make are shared with this circle without asking you. Only albums made from now on are handled this way, and Immich may email each person.") }>{ t(ctx, "Let it share by itself") }</button>
+					}
+					<button hx-post="circles/pause" hx-vals={ vals2("circle", it.ID, "paused", pausedValue(it.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if it.Paused {
+							{ t(ctx, "Resume this circle") }
+						} else {
+							{ t(ctx, "Pause this circle") }
+						}
+					</button>
+					<button hx-post="circles/delete" hx-vals={ vals("circle", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "End this circle? The albums already shared stay shared.") } data-confirm-title={ t(ctx, "End?") } data-confirm-label={ t(ctx, "End") } data-danger="true">{ t(ctx, "End the circle") }</button>
+				</p>
+				<details class="offer">
+					<summary>{ t(ctx, "Add a person") }</summary>
+					<div hx-get={ "fragments/circle-add?circle=" + it.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+				</details>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a circle") }</summary>
+			<div hx-get="fragments/circle-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// CirclePeople is the part of a circle's forms that says who: an email to type, or accounts to pick, as the administrator allows.
+templ CirclePeople(v CircleFormView) {
+	if v.ByUsers {
+		<fieldset class="targets">
+			<legend>{ t(ctx, "People") }</legend>
+			for _, u := range v.Users {
+				<label class="target"><input type="checkbox" name="user" value={ u.ID }/><span><b>{ u.Name }</b></span></label>
+			}
+		</fieldset>
+	} else {
+		<div class="field">
+			<label for={ "circle-email-" + v.Circle }>{ t(ctx, "Email addresses of their Immich accounts, separated by commas") }</label>
+			<input id={ "circle-email-" + v.Circle } name="emails" autocomplete="off" required/>
+		</div>
+	}
+}
+
+// CircleForm is the form that makes a circle.
+templ CircleForm(v CircleFormView) {
+	<form class="card offer-form" hx-post="circles" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="circle-name">{ t(ctx, "Name of the circle") }</label>
+			<input id="circle-name" name="name" maxlength="60" autocomplete="off" required/>
+		</div>
+		@CirclePeople(v)
+		<div class="field">
+			<label for="circle-role">{ t(ctx, "They can") }</label>
+			<select id="circle-role" name="role">
+				<option value="viewer">{ t(ctx, "Look at the album") }</option>
+				<option value="editor">{ t(ctx, "Look at it and add photos") }</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for="circle-prefix">{ t(ctx, "Only albums whose name starts with (optional)") }</label>
+			<input id="circle-prefix" name="prefix" maxlength="100" autocomplete="off"/>
+		</div>
+		<p class="meta">{ t(ctx, "Only albums you make from now on are looked at. You can offer the ones you have already afterwards.") }</p>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the circle") }</button></p>
+	</form>
+}
+
+// CircleAddForm is the form that puts one more person in a circle.
+templ CircleAddForm(v CircleFormView) {
+	<form class="card offer-form" hx-post="circles/member" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="circle" value={ v.Circle }/>
+		if v.ByUsers {
+			<div class="field">
+				<label for={ "circle-pick-" + v.Circle }>{ t(ctx, "Person") }</label>
+				<select id={ "circle-pick-" + v.Circle } name="user">
+					for _, u := range v.Users {
+						<option value={ u.ID }>{ u.Name }</option>
+					}
+				</select>
+			</div>
+		} else {
+			<div class="field">
+				<label for={ "circle-email-" + v.Circle }>{ t(ctx, "Email address of their Immich account") }</label>
+				<input id={ "circle-email-" + v.Circle } name="emails" type="email" autocomplete="off" required/>
+			</div>
+		}
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Add to the circle") }</button></p>
+	</form>
 }
 
 // PairingsCard is the card for sharing the photos of chosen people with another person, both ways.

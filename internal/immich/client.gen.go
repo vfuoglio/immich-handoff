@@ -918,6 +918,12 @@ func (e WorkflowType) Valid() bool {
 	}
 }
 
+// AddUsersDto defines model for AddUsersDto.
+type AddUsersDto struct {
+	// AlbumUsers Album users to add
+	AlbumUsers []AlbumUserAddDto `json:"albumUsers"`
+}
+
 // AlbumResponseDto defines model for AlbumResponseDto.
 type AlbumResponseDto struct {
 	// AlbumName Album name
@@ -965,6 +971,15 @@ type AlbumResponseDto struct {
 
 	// UpdatedAt Last update date
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AlbumUserAddDto defines model for AlbumUserAddDto.
+type AlbumUserAddDto struct {
+	// Role Album user role
+	Role *AlbumUserRole `json:"role,omitempty"`
+
+	// UserId User ID
+	UserId openapi_types.UUID `json:"userId"`
 }
 
 // AlbumUserCreateDto defines model for AlbumUserCreateDto.
@@ -2754,6 +2769,12 @@ type GetAllAlbumsParams struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty"`
 }
 
+// GetAlbumInfoParams defines parameters for GetAlbumInfo.
+type GetAlbumInfoParams struct {
+	Key  *string `form:"key,omitempty" json:"key,omitempty"`
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty"`
+}
+
 // UploadAssetParams defines parameters for UploadAsset.
 type UploadAssetParams struct {
 	Key  *string `form:"key,omitempty" json:"key,omitempty"`
@@ -2899,6 +2920,9 @@ type RemoveAssetFromAlbumJSONRequestBody = BulkIdsDto
 
 // AddAssetsToAlbumJSONRequestBody defines body for AddAssetsToAlbum for application/json ContentType.
 type AddAssetsToAlbumJSONRequestBody = BulkIdsDto
+
+// AddUsersToAlbumJSONRequestBody defines body for AddUsersToAlbum for application/json ContentType.
+type AddUsersToAlbumJSONRequestBody = AddUsersDto
 
 // CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
 type CreateApiKeyJSONRequestBody = ApiKeyCreateDto
@@ -3053,6 +3077,13 @@ type ClientInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlbumInfo Retrieve an album
+	//
+	// Retrieve information about a specific album by its ID.
+	//
+	// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
+	GetAlbumInfo(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// RemoveAssetFromAlbumWithBody Remove assets from an album
 	//
 	// Remove multiple assets from a specific album by its ID.
@@ -3088,6 +3119,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
 	AddAssetsToAlbum(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveUserFromAlbum Remove user from album
+	//
+	// Remove a user from an album. Use an ID of "me" to leave a shared album.
+	//
+	// Corresponds with DELETE /albums/{id}/user/{userId} (the `RemoveUserFromAlbum` operationId).
+	RemoveUserFromAlbum(ctx context.Context, id openapi_types.UUID, userId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddUsersToAlbumWithBody Share album with users
+	//
+	// Share an album with multiple users. Each user can be given a specific role in the album.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+	AddUsersToAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddUsersToAlbum Share album with users
+	//
+	// Share an album with multiple users. Each user can be given a specific role in the album.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+	AddUsersToAlbum(ctx context.Context, id openapi_types.UUID, body AddUsersToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetApiKeys List all API keys
 	//
@@ -3611,6 +3667,23 @@ func (c *Client) CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBod
 	return c.Client.Do(req)
 }
 
+// GetAlbumInfo Retrieve an album
+//
+// Retrieve information about a specific album by its ID.
+//
+// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
+func (c *Client) GetAlbumInfo(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlbumInfoRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // RemoveAssetFromAlbumWithBody Remove assets from an album
 //
 // Remove multiple assets from a specific album by its ID.
@@ -3677,6 +3750,61 @@ func (c *Client) AddAssetsToAlbumWithBody(ctx context.Context, id openapi_types.
 // Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
 func (c *Client) AddAssetsToAlbum(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAddAssetsToAlbumRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RemoveUserFromAlbum Remove user from album
+//
+// Remove a user from an album. Use an ID of "me" to leave a shared album.
+//
+// Corresponds with DELETE /albums/{id}/user/{userId} (the `RemoveUserFromAlbum` operationId).
+func (c *Client) RemoveUserFromAlbum(ctx context.Context, id openapi_types.UUID, userId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveUserFromAlbumRequest(c.Server, id, userId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddUsersToAlbumWithBody Share album with users
+//
+// Share an album with multiple users. Each user can be given a specific role in the album.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+func (c *Client) AddUsersToAlbumWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddUsersToAlbumRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AddUsersToAlbum Share album with users
+//
+// Share an album with multiple users. Each user can be given a specific role in the album.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+func (c *Client) AddUsersToAlbum(ctx context.Context, id openapi_types.UUID, body AddUsersToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddUsersToAlbumRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4849,6 +4977,79 @@ func NewCreateAlbumRequestWithBody(server string, contentType string, body io.Re
 	return req, nil
 }
 
+// NewGetAlbumInfoRequest constructs an http.Request for the GetAlbumInfo method
+func NewGetAlbumInfoRequest(server string, id openapi_types.UUID, params *GetAlbumInfoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Key != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "key", *params.Key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Slug != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "slug", *params.Slug, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewRemoveAssetFromAlbumRequest calls the generic RemoveAssetFromAlbum builder with application/json body
 func NewRemoveAssetFromAlbumRequest(server string, id openapi_types.UUID, body RemoveAssetFromAlbumJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4924,6 +5125,94 @@ func NewAddAssetsToAlbumRequestWithBody(server string, id openapi_types.UUID, co
 	}
 
 	operationPath := fmt.Sprintf("/albums/%s/assets", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveUserFromAlbumRequest constructs an http.Request for the RemoveUserFromAlbum method
+func NewRemoveUserFromAlbumRequest(server string, id openapi_types.UUID, userId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "userId", userId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s/user/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAddUsersToAlbumRequest calls the generic AddUsersToAlbum builder with application/json body
+func NewAddUsersToAlbumRequest(server string, id openapi_types.UUID, body AddUsersToAlbumJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddUsersToAlbumRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAddUsersToAlbumRequestWithBody constructs an http.Request for the AddUsersToAlbum method, with any body, and a specified content type
+func NewAddUsersToAlbumRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s/users", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -7114,6 +7403,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /albums (the `CreateAlbum` operationId).
 	CreateAlbumWithResponse(ctx context.Context, body CreateAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlbumResponse, error)
 
+	// GetAlbumInfoWithResponse Retrieve an album
+	//
+	// Retrieve information about a specific album by its ID.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
+	GetAlbumInfoWithResponse(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*GetAlbumInfoResponse, error)
+
 	// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
 	//
 	// Remove multiple assets from a specific album by its ID.
@@ -7149,6 +7447,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /albums/{id}/assets (the `AddAssetsToAlbum` operationId).
 	AddAssetsToAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body AddAssetsToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*AddAssetsToAlbumResponse, error)
+
+	// RemoveUserFromAlbumWithResponse Remove user from album
+	//
+	// Remove a user from an album. Use an ID of "me" to leave a shared album.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /albums/{id}/user/{userId} (the `RemoveUserFromAlbum` operationId).
+	RemoveUserFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, userId string, reqEditors ...RequestEditorFn) (*RemoveUserFromAlbumResponse, error)
+
+	// AddUsersToAlbumWithBodyWithResponse Share album with users
+	//
+	// Share an album with multiple users. Each user can be given a specific role in the album.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+	AddUsersToAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddUsersToAlbumResponse, error)
+
+	// AddUsersToAlbumWithResponse Share album with users
+	//
+	// Share an album with multiple users. Each user can be given a specific role in the album.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+	AddUsersToAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body AddUsersToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*AddUsersToAlbumResponse, error)
 
 	// GetApiKeysWithResponse List all API keys
 	//
@@ -7749,6 +8074,47 @@ func (r CreateAlbumResponse) ContentType() string {
 	return ""
 }
 
+type GetAlbumInfoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlbumResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlbumInfoResponse) GetJSON200() *AlbumResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlbumInfoResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlbumInfoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlbumInfoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlbumInfoResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type RemoveAssetFromAlbumResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7825,6 +8191,81 @@ func (r AddAssetsToAlbumResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AddAssetsToAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RemoveUserFromAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r RemoveUserFromAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveUserFromAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveUserFromAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RemoveUserFromAlbumResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AddUsersToAlbumResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlbumResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AddUsersToAlbumResponse) GetJSON200() *AlbumResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AddUsersToAlbumResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AddUsersToAlbumResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddUsersToAlbumResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AddUsersToAlbumResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9501,6 +9942,21 @@ func (c *ClientWithResponses) CreateAlbumWithResponse(ctx context.Context, body 
 	return ParseCreateAlbumResponse(rsp)
 }
 
+// GetAlbumInfoWithResponse Retrieve an album
+//
+// Retrieve information about a specific album by its ID.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
+func (c *ClientWithResponses) GetAlbumInfoWithResponse(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*GetAlbumInfoResponse, error) {
+	rsp, err := c.GetAlbumInfo(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlbumInfoResponse(rsp)
+}
+
 // RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
 //
 // Remove multiple assets from a specific album by its ID.
@@ -9559,6 +10015,51 @@ func (c *ClientWithResponses) AddAssetsToAlbumWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseAddAssetsToAlbumResponse(rsp)
+}
+
+// RemoveUserFromAlbumWithResponse Remove user from album
+//
+// Remove a user from an album. Use an ID of "me" to leave a shared album.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /albums/{id}/user/{userId} (the `RemoveUserFromAlbum` operationId).
+func (c *ClientWithResponses) RemoveUserFromAlbumWithResponse(ctx context.Context, id openapi_types.UUID, userId string, reqEditors ...RequestEditorFn) (*RemoveUserFromAlbumResponse, error) {
+	rsp, err := c.RemoveUserFromAlbum(ctx, id, userId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveUserFromAlbumResponse(rsp)
+}
+
+// AddUsersToAlbumWithBodyWithResponse Share album with users
+//
+// Share an album with multiple users. Each user can be given a specific role in the album.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+func (c *ClientWithResponses) AddUsersToAlbumWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddUsersToAlbumResponse, error) {
+	rsp, err := c.AddUsersToAlbumWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddUsersToAlbumResponse(rsp)
+}
+
+// AddUsersToAlbumWithResponse Share album with users
+//
+// Share an album with multiple users. Each user can be given a specific role in the album.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /albums/{id}/users (the `AddUsersToAlbum` operationId).
+func (c *ClientWithResponses) AddUsersToAlbumWithResponse(ctx context.Context, id openapi_types.UUID, body AddUsersToAlbumJSONRequestBody, reqEditors ...RequestEditorFn) (*AddUsersToAlbumResponse, error) {
+	rsp, err := c.AddUsersToAlbum(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddUsersToAlbumResponse(rsp)
 }
 
 // GetApiKeysWithResponse List all API keys
@@ -10462,6 +10963,32 @@ func ParseCreateAlbumResponse(rsp *http.Response) (*CreateAlbumResponse, error) 
 	return response, nil
 }
 
+// ParseGetAlbumInfoResponse parses an HTTP response from a GetAlbumInfoWithResponse call
+func ParseGetAlbumInfoResponse(rsp *http.Response) (*GetAlbumInfoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlbumInfoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlbumResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseRemoveAssetFromAlbumResponse parses an HTTP response from a RemoveAssetFromAlbumWithResponse call
 func ParseRemoveAssetFromAlbumResponse(rsp *http.Response) (*RemoveAssetFromAlbumResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10504,6 +11031,48 @@ func ParseAddAssetsToAlbumResponse(rsp *http.Response) (*AddAssetsToAlbumRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []BulkIdResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveUserFromAlbumResponse parses an HTTP response from a RemoveUserFromAlbumWithResponse call
+func ParseRemoveUserFromAlbumResponse(rsp *http.Response) (*RemoveUserFromAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveUserFromAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseAddUsersToAlbumResponse parses an HTTP response from a AddUsersToAlbumWithResponse call
+func ParseAddUsersToAlbumResponse(rsp *http.Response) (*AddUsersToAlbumResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddUsersToAlbumResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlbumResponseDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

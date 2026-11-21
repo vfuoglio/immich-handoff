@@ -32,6 +32,9 @@ output-options:
     - getMyPreferences
     - updateMyPreferences
     - getAllAlbums
+    - addUsersToAlbum
+    - removeUserFromAlbum
+    - getAlbumInfo
     - createAlbum
     - addAssetsToAlbum
     - getApiKey

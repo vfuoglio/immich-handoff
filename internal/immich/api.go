@@ -254,9 +254,11 @@ func (a *API) FindAlbum(ctx context.Context, name string) (id *openapi_types.UUI
 
 // AlbumInfo is an album the account owns, as the page lists them.
 type AlbumInfo struct {
-	ID    openapi_types.UUID
-	Name  string
-	Count int
+	ID        openapi_types.UUID
+	Name      string
+	Count     int
+	CreatedAt time.Time
+	Members   []openapi_types.UUID // the people it is shared with (not its owner)
 }
 
 // InAnAlbum reports whether the photo is in at least one album of the account (a person who filed it somewhere has
@@ -284,7 +286,13 @@ func (a *API) OwnedAlbums(ctx context.Context) ([]AlbumInfo, error) {
 	}
 	out := make([]AlbumInfo, 0, len(*r.JSON200))
 	for _, al := range *r.JSON200 {
-		out = append(out, AlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount})
+		info := AlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, CreatedAt: al.CreatedAt}
+		for i, u := range al.AlbumUsers {
+			if i > 0 || u.Role != AlbumUserRole("owner") { // the first entry is the owner
+				info.Members = append(info.Members, u.User.Id)
+			}
+		}
+		out = append(out, info)
 	}
 	return out, nil
 }
