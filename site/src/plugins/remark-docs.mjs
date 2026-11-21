@@ -43,12 +43,14 @@ export default function remarkDocs({ base, docsRoot, repo }) {
 
     const asides = { NOTE: ['note', 'Note'], TIP: ['tip', 'Tip'], IMPORTANT: ['note', 'Important'], WARNING: ['caution', 'Warning'], CAUTION: ['danger', 'Caution'] };
     const walkAlerts = (parent) => {
-      parent.children.forEach((n, i) => {
-        if (n.type !== 'blockquote') { if (n.children) walkAlerts(n); return; }
+      // from the end, so that the nodes a splice adds do not move the ones still to be looked at
+      for (let i = parent.children.length - 1; i >= 0; i--) {
+        const n = parent.children[i];
+        if (n.type !== 'blockquote') { if (n.children) walkAlerts(n); continue; }
         const p = n.children[0];
         const t = p && p.type === 'paragraph' && p.children[0] && p.children[0].type === 'text' ? p.children[0] : null;
         const m = t && t.value.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*\n?/);
-        if (!m) return;
+        if (!m) continue;
         const [kind, title] = asides[m[1]];
         t.value = t.value.slice(m[0].length);
         if (!t.value && p.children.length === 1) n.children.shift();
@@ -56,7 +58,7 @@ export default function remarkDocs({ base, docsRoot, repo }) {
           { type: 'html', value: `<aside aria-label="${title}" class="starlight-aside starlight-aside--${kind}"><p class="starlight-aside__title" aria-hidden="true">${title}</p><div class="starlight-aside__content">` },
           ...n.children,
           { type: 'html', value: '</div></aside>' });
-      });
+      }
     };
     walkAlerts(tree);
 
