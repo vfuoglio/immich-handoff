@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/albumtree"
+	"github.com/vfuoglio/immich-handoff/internal/docs"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -621,12 +622,12 @@ templ Layout(title, user string) {
 						<span class="t">{ t(ctx, "Immich Handoff") }</span>
 					</div>
 					if hasTabs(ctx) {
-						<a href="send" class="icon-btn send-btn" aria-label={ t(ctx, "Send photos from this device") } title={ t(ctx, "Send photos from this device") }>
+						<a href="send" class="icon-btn send-btn" aria-label={ t(ctx, "Send photos from this device") } data-tip={ tipOf(ctx, "the-page", "send") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
 						</a>
 					}
 					<details class="lang">
-						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } title={ t(ctx, "Language") }>
+						<summary class="icon-btn wide" aria-label={ t(ctx, "Language") } data-tip={ tipOf(ctx, "the-page", "language") }>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path></svg>
 							<span class="lang-code">{ loc(ctx).Code() }</span>
 						</summary>
@@ -641,12 +642,13 @@ templ Layout(title, user string) {
 							if isAdmin(ctx) {
 								<a class="adminlink" href="admin">{ t(ctx, "Admin") }</a>
 							}
+							<a class="icon-btn help-btn" href="help" aria-label={ t(ctx, "Help") } data-tip={ t(ctx, "Guides for everything this page does") }><span aria-hidden="true">?</span></a>
 							if hasTabs(ctx) {
-								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } title={ t(ctx, "Jump anywhere or do something from the keyboard (Ctrl K)") }><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="lbl">{ t(ctx, "Search") }</span> <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
+								<button type="button" class="icon-btn wide" id="palette" aria-label={ t(ctx, "Open the command palette") } data-tip={ tipOf(ctx, "the-page", "palette") }><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="lbl">{ t(ctx, "Search") }</span> <span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
 							}
-							<span id="live" class="live off" title={ t(ctx, "Live updates") } role="img" aria-label={ t(ctx, "Live updates") }></span>
+							<span id="live" class="live off" data-tip={ tipOf(ctx, "the-page", "live") } role="img" aria-label={ t(ctx, "Live updates") }></span>
 							<details class="scheme">
-								<summary class="icon-btn" aria-label={ t(ctx, "Colour scheme") } title={ t(ctx, "Choose the colour scheme") }>
+								<summary class="icon-btn" aria-label={ t(ctx, "Colour scheme") } data-tip={ tipOf(ctx, "the-page", "scheme") }>
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.6-1.4-.6-2.2 0-.9.7-1.5 1.7-1.5H16a5 5 0 0 0 5-5c0-4.2-4-7.7-9-7.7z"></path><circle cx="7.5" cy="11" r="1" fill="currentColor"></circle><circle cx="10.5" cy="7" r="1" fill="currentColor"></circle><circle cx="15" cy="7.5" r="1" fill="currentColor"></circle></svg>
 								</summary>
 								<ul class="scheme-menu" role="menu">
@@ -655,11 +657,11 @@ templ Layout(title, user string) {
 									}
 								</ul>
 							</details>
-							<button type="button" class="icon-btn" id="theme" aria-label={ t(ctx, "Dark theme") } title={ t(ctx, "Switch between the light and the dark theme") } aria-pressed="false">
+							<button type="button" class="icon-btn" id="theme" aria-label={ t(ctx, "Dark theme") } data-tip={ tipOf(ctx, "the-page", "theme") } aria-pressed="false">
 								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17" ></path><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path></svg>
 							</button>
 							if hasTabs(ctx) {
-								<button type="button" class="icon-btn" id="sound" aria-label={ t(ctx, "Arrival chime and vibration") } title={ t(ctx, "Arrival chime and vibration when a photo lands") } aria-pressed="true">
+								<button type="button" class="icon-btn" id="sound" aria-label={ t(ctx, "Arrival chime and vibration") } data-tip={ tipOf(ctx, "the-page", "sound") } aria-pressed="true">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><g class="on"><path d="M16.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 6a8.5 8.5 0 0 1 0 12"></path></g><path class="off" d="M17 9l5 6M22 9l-5 6"></path></svg>
 								</button>
 							}
@@ -686,8 +688,11 @@ templ Layout(title, user string) {
 				if !isGuest(ctx) {
 					<footer>
 						{ t(ctx, "Photos you tag in Immich are handed over automatically.") }
+						if user != "" {
+							<a class="help-foot" href="help">{ t(ctx, "Help") }</a>
+						}
 						if v := versionOf(ctx); v != "" && user != "" {
-							<span class="version" title={ t(ctx, "The version of Immich Handoff that is running") }>· Immich Handoff { v }</span>
+							<span class="version" data-tip={ tipOf(ctx, "the-page", "version") }>· Immich Handoff { v }</span>
 						}
 					</footer>
 				}
@@ -695,6 +700,15 @@ templ Layout(title, user string) {
 					<dialog id="cmd" class="cmd" aria-label={ t(ctx, "Command palette") }>
 						<input id="cmd-q" type="text" placeholder={ t(ctx, "Type a command or the name of a service") } aria-label={ t(ctx, "Command") } autocomplete="off" role="combobox" aria-controls="cmd-list" aria-expanded="true"/>
 						<ul id="cmd-list" role="listbox"></ul>
+					</dialog>
+				}
+				if user != "" {
+					<dialog id="help-drawer" class="help-drawer" aria-label={ t(ctx, "Help") }>
+						<div class="help-drawer-bar">
+							<button type="button" id="help-back" class="icon-btn" hidden aria-label={ t(ctx, "Back") }>←</button>
+							<button type="button" id="help-close" class="icon-btn" aria-label={ t(ctx, "Close") }>×</button>
+						</div>
+						<div id="help-content"></div>
 					</dialog>
 				}
 				<dialog id="confirm" class="confirm" aria-labelledby="confirm-title">
@@ -950,7 +964,7 @@ templ Status(v StatusView) {
 
 // MailCard lets a person ask for email about what happens to their services.
 templ MailCard(m MailView) {
-	<h2>{ t(ctx, "Email me") } @Status(mailStatus(ctx, m))</h2>
+	<h2>{ t(ctx, "Email me") } @Status(mailStatus(ctx, m)) @HelpLink("notifications")</h2>
 	<div class="card mailcard">
 		if m.On {
 			<p>{ t(ctx, "You get an email about what happens to your services, at {email}.", "email", m.Email) }</p>
@@ -979,7 +993,7 @@ templ MailCard(m MailView) {
 
 // MemoriesCard is where a person turns on a daily message about the memories Immich has for the day.
 templ MemoriesCard(m MemoriesView) {
-	<h2>{ t(ctx, "On this day") } @Status(memoriesStatus(ctx, m))</h2>
+	<h2>{ t(ctx, "On this day") } @Status(memoriesStatus(ctx, m)) @HelpLink("memories")</h2>
 	<div class="card memoriescard">
 		if m.On && m.Broken {
 			<p class="bad-note">{ t(ctx, "The key the app made in your Immich is gone, so no message can be sent. Save to make a new one.") }</p>
@@ -1019,7 +1033,7 @@ templ MemoriesCard(m MemoriesView) {
 
 // FoldersCard makes albums from the folders of the person's external library: the rules they have, and the form that makes one.
 templ FoldersCard(f FoldersView) {
-	<h2>{ t(ctx, "Albums from my folders") } @Status(ruleStatus(ctx, len(f.Rules)))</h2>
+	<h2>{ t(ctx, "Albums from my folders") } @Status(ruleStatus(ctx, len(f.Rules))) @HelpLink("folder-albums")</h2>
 	<div class="card folderscard">
 		<p>{ t(ctx, "If part of your library is an external library (folders on the server), the app can offer an album for each folder, named after it, and put the photos in it. It only adds: nothing is ever removed, renamed or deleted.") }</p>
 		for _, r := range f.Rules {
@@ -1091,7 +1105,7 @@ templ FoldersCard(f FoldersView) {
 
 // AlbumsCard keeps albums of the person's up to date with a rule: the rules they have, and the form that makes one.
 templ AlbumsCard(a AlbumsView) {
-	<h2>{ t(ctx, "Smart albums") } @Status(ruleStatus(ctx, len(a.Rules)))</h2>
+	<h2>{ t(ctx, "Smart albums") } @Status(ruleStatus(ctx, len(a.Rules))) @HelpLink("smart-albums")</h2>
 	<div class="card albumscard">
 		<p>{ t(ctx, "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.") }</p>
 		for _, r := range a.Rules {
@@ -1171,7 +1185,7 @@ templ AlbumForm(v RuleChoicesView) {
 
 // PlacesCard offers a place to the person's photos that have none, from a photo of the same camera taken minutes from them.
 templ PlacesCard(p PlacesView) {
-	<h2>{ t(ctx, "Places for photos that have none") } @Status(placesStatus(ctx, p))</h2>
+	<h2>{ t(ctx, "Places for photos that have none") } @Status(placesStatus(ctx, p)) @HelpLink("places")</h2>
 	<div class="card placescard">
 		<p>{ t(ctx, "A camera with no GPS leaves no place on its photos. When a photo with no place was taken minutes from one that has a place, by the same camera on the same day, the app offers it that place, and shows you both photos and why. It never writes a place before you say so.") }</p>
 		<p class="meta bad-note">{ t(ctx, "A place the app writes cannot be taken back by the app (Immich does not let it). If one is wrong, remove it in Immich.") }</p>
@@ -1221,7 +1235,7 @@ templ PlacesCard(p PlacesView) {
 
 // StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
 templ StacksCard(s StacksView) {
-	<h2>{ t(ctx, "Stack photos that belong together") } @Status(ruleStatus(ctx, len(s.Rules)))</h2>
+	<h2>{ t(ctx, "Stack photos that belong together") } @Status(ruleStatus(ctx, len(s.Rules))) @HelpLink("stacking")</h2>
 	<div class="card stackscard">
 		<p>{ t(ctx, "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.") }</p>
 		for _, r := range s.Rules {
@@ -1371,7 +1385,7 @@ templ MemoriesPage(d MemoriesPageView) {
 
 // LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.
 templ LibraryCard(l LibraryView) {
-	<h2>{ t(ctx, "Add to my library") } @Status(libraryStatus(ctx, l))</h2>
+	<h2>{ t(ctx, "Add to my library") } @Status(libraryStatus(ctx, l)) @HelpLink("follow-album")</h2>
 	<div class="card librarycard">
 		<p>{ t(ctx, "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.") }</p>
 		<form class="limits" hx-post="me/library" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -1561,7 +1575,7 @@ templ FollowForm(albums []FollowOption) {
 // PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
 // The script (ts/push.ts) shows the controls only where the browser can do it, and says why when it cannot.
 templ PushCard(p PushView) {
-	<h2>{ t(ctx, "Notifications on this device") } @Status(pushStatus(ctx, p))</h2>
+	<h2>{ t(ctx, "Notifications on this device") } @Status(pushStatus(ctx, p)) @HelpLink("notifications")</h2>
 	<div class="card pushcard" id="pushcard" data-key={ p.Key }>
 		<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
 		<p class="meta" data-push-note hidden></p>
@@ -2303,7 +2317,7 @@ templ AdminPage(d AdminData) {
 			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Need attention") }</span><span class="num">{ fmt.Sprint(d.Attention) }</span><span class="sub">{ t(ctx, "paused, limited or disconnected") }</span></article>
 		</div>
 		<p class="meta">{ t(ctx, "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.") }</p>
-		<h2>{ t(ctx, "Share this page") }</h2>
+		<h2>{ t(ctx, "Share this page") } @HelpLink("admin-page")</h2>
 		<section class="card">
 			<p class="meta">{ t(ctx, "This is the address people use to join. Send it, or put the button in Immich's own header (see the guide on finding this page).") }</p>
 			<div class="field">
@@ -2317,7 +2331,7 @@ templ AdminPage(d AdminData) {
 				<div class="qr" id="qr-share-page" hidden></div>
 			</div>
 		</section>
-		<h2>{ t(ctx, "Check the connections") }</h2>
+		<h2>{ t(ctx, "Check the connections") } @HelpLink("admin-page")</h2>
 		<section class="card">
 			<p class="row">
 				<button class="primary" hx-post="admin/check" hx-target="#checkresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#checkresult">{ t(ctx, "Check now") }</button>
@@ -2329,7 +2343,7 @@ templ AdminPage(d AdminData) {
 		</section>
 		@AdminNotify(d.Notify)
 		if d.SelfOn {
-			<h2>{ t(ctx, "Circles") }</h2>
+			<h2>{ t(ctx, "Circles") } @HelpLink("circles")</h2>
 			<section class="card">
 				<p class="meta">{ t(ctx, "People can make a circle: a group that every new album of theirs is shared with. Choose how they name the people in it.") }</p>
 				<form hx-post="admin/circles" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -2339,7 +2353,7 @@ templ AdminPage(d AdminData) {
 				</form>
 			</section>
 		}
-		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
+		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span> @HelpLink("admin-page")</h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
 		}
@@ -2347,7 +2361,7 @@ templ AdminPage(d AdminData) {
 			@AdminServiceCard(s, d.SelfOn, fmt.Sprintf("adm-%d", i), len(d.Services) == 1)
 		}
 		if len(d.Leftover) > 0 {
-			<h2>{ t(ctx, "Waiting to clean up") }</h2>
+			<h2>{ t(ctx, "Waiting to clean up") } @HelpLink("operations")</h2>
 			<p class="meta">{ t(ctx, "Their service was removed. They still hold a key and a workflow in Immich and see a Clean up button on their page. Nothing is handed over for them.") }</p>
 			<section class="card">
 				<ul class="events">
@@ -2376,7 +2390,7 @@ templ AdminPage(d AdminData) {
 
 // AdminNotify lists where the app sends its messages for whoever runs it, with a test.
 templ AdminNotify(items []NotifyView) {
-	<h2>{ t(ctx, "Notifications") }</h2>
+	<h2>{ t(ctx, "Notifications") } @HelpLink("notifications")</h2>
 	<section class="card">
 		if len(items) == 0 {
 			<p class="meta">{ t(ctx, "No destination is set, so problems appear in the log and on the pages only. See NOTIFY_URL and NOTIFY_FILE.") }</p>
@@ -2422,7 +2436,7 @@ templ NotifyResults(results []NotifyResultView) {
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
 // PetsCard explains the rule for a pet, says whether the pet helper is on, and shows the person's pet rules, with where to make one.
 templ PetsCard(p PetsView) {
-	<h2>{ t(ctx, "Pets") } @Status(petsStatus(ctx, p))</h2>
+	<h2>{ t(ctx, "Pets") } @Status(petsStatus(ctx, p)) @HelpLink("pets")</h2>
 	<div class="card petscard">
 		<p>{ t(ctx, "Immich cannot recognise a pet by name, so a pet rule learns from photos you pick: 3 to 8 photos of the animal, and the rule suggests the photos most like them, with pictures, and always asks first. Every photo you send teaches it more.") }</p>
 		if p.Helper {
@@ -2450,7 +2464,7 @@ templ PetsCard(p PetsView) {
 
 // AdminPetHelper says whether the optional pet helper is running, and where to read how to switch it on.
 templ AdminPetHelper(state string) {
-	<h2>{ t(ctx, "Pet helper") }</h2>
+	<h2>{ t(ctx, "Pet helper") } @HelpLink("pets")</h2>
 	<section class="card" id="pethelper">
 		<p>
 			switch state {
@@ -2469,7 +2483,7 @@ templ AdminPetHelper(state string) {
 }
 
 templ AdminBackups(b AdminBackup) {
-	<h2>{ t(ctx, "Backups") }</h2>
+	<h2>{ t(ctx, "Backups") } @HelpLink("operations")</h2>
 	<section class="card" id="backups">
 		<p>
 			if b.Every != "" {
@@ -2683,7 +2697,7 @@ templ Numbers(n NumbersView) {
 
 // Guide is the first-run guide: a ring that fills as the steps are done.
 templ Guide(g GuideView) {
-	<h2>{ t(ctx, "Get started") }</h2>
+	<h2>{ t(ctx, "Get started") } @HelpLink("the-page")</h2>
 	<section class="card guide" aria-label={ t(ctx, "Getting started") }>
 		<div class={ "ring", fmt.Sprintf("r%d", g.Done) } role="img" aria-label={ t(ctx, "{done} of {total} steps done", "done", g.Done, "total", len(g.Steps)) }>
 			<span>{ fmt.Sprintf("%d/%d", g.Done, len(g.Steps)) }</span>
@@ -2772,7 +2786,7 @@ templ InvitePage(d DashboardData) {
 
 // DropBoxSection is where a person makes and looks after their drop boxes.
 templ DropBoxSection(boxes []DropBoxView, templates []TemplateView) {
-	<h2>{ t(ctx, "Drop boxes") }</h2>
+	<h2>{ t(ctx, "Drop boxes") } @HelpLink("events")</h2>
 	<p class="meta">{ t(ctx, "A drop box is a link for people who do not have Immich: relatives at a wedding, guests at an event. They open it, choose photos and send them. They see nothing of your library, not even what others sent. What arrives goes into your library under a tag of its own, to look through before you file it.") }</p>
 	for i, b := range boxes {
 		@DropBoxRow(b, fmt.Sprintf("drop-%d", i), len(boxes) == 1)
@@ -3779,7 +3793,7 @@ templ WallPage(name, token, mode string, logo bool) {
 
 // FrameSection is where a person makes frames: links that show one of their albums on a screen with no account.
 templ FrameSection(frames []FrameView) {
-	<h2>{ t(ctx, "Frames") }</h2>
+	<h2>{ t(ctx, "Frames") } @HelpLink("frames-and-digest")</h2>
 	<p class="meta">{ t(ctx, "A frame is a link that shows one of your albums full screen, on a photo frame, an old tablet or a TV, with no account on it. New photos in the album appear within a couple of minutes, and photos you take out disappear. The link is as private as its length: anyone who has it can see the album's photos, so end it when you no longer want that.") }</p>
 	for i, f := range frames {
 		@FrameRow(f, fmt.Sprintf("frame-%d", i), len(frames) == 1)
@@ -4063,7 +4077,7 @@ templ SendPage(d SendPageView) {
 // RoomSection is where a photographer makes client rooms: links where a client looks at an album through marked pictures,
 // chooses some and, when the photographer says so, takes the originals.
 templ RoomSection(rooms []RoomView) {
-	<h2>{ t(ctx, "Client rooms") }</h2>
+	<h2>{ t(ctx, "Client rooms") } @HelpLink("client-rooms")</h2>
 	<p class="meta">{ t(ctx, "A client room is a link where your client looks at one of your albums through pictures marked with your name, chooses their favourites and, when you release them, takes the originals. Anyone who has the link (and the PIN, if you set one) can see the marked pictures, so end the room when you no longer want that.") }</p>
 	for i, r := range rooms {
 		@RoomRow(r, fmt.Sprintf("room-%d", i), len(rooms) == 1)
@@ -4580,7 +4594,7 @@ templ RoomReviewPage(d ReviewData) {
 
 // PeerSection is where a person connects their app with the app of someone on another server, to share albums with them.
 templ PeerSection(peers []PeerView, invites bool) {
-	<h2>{ t(ctx, "Albums shared with other servers") }</h2>
+	<h2>{ t(ctx, "Albums shared with other servers") } @HelpLink("shared-albums")</h2>
 	<p class="meta">{ t(ctx, "Connect this app with the Handoff of someone whose Immich is on another server, so that you can share an album that stays the same in both libraries. Nothing is shared until you both agree on an album. Each app only ever touches its own Immich.") }</p>
 	for i, p := range peers {
 		@PeerRow(p, fmt.Sprintf("peer-%d", i), len(peers) == 1)
@@ -4910,7 +4924,7 @@ templ RulesBox(s ServiceView) {
 					} else if r.CanAuto {
 						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on, photos that match {rule} go to {service} without asking you, so a wrong photo can reach {service}. Only photos that reach Immich from now on are sent, once they have settled, within the service's limits and quiet hours, and you can take a hand-over back for 24 hours. You can switch this off at any time. Continue?", "rule", r.Sentence, "service", s.Name) } data-confirm-title={ t(ctx, "Send by itself?") } data-confirm-label={ t(ctx, "Send by itself") }>{ t(ctx, "Send by itself") }</button>
 					}
-					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" title={ t(ctx, "Suggest the older photos that match this rule too") }>{ t(ctx, "Also look back") }</button>
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" data-tip={ tipOf(ctx, "rules", "look-back") }>{ t(ctx, "Also look back") }</button>
 					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
 						if r.Paused {
 							{ t(ctx, "Resume this rule") }
@@ -5245,7 +5259,7 @@ type AlbumTreePageView struct {
 
 // StoriesCard makes short animated recaps of the person's photos, with a public link: the stories they have and the form that makes one.
 templ StoriesCard(s StoriesView) {
-	<h2>{ t(ctx, "Stories") } @Status(storiesStatus(ctx, s))</h2>
+	<h2>{ t(ctx, "Stories") } @Status(storiesStatus(ctx, s)) @HelpLink("stories")</h2>
 	<div class="card storiescard">
 		<p>{ t(ctx, "A story is a short animated recap of an album, of a person's photos, of a stretch of time or of a drop box: a title, a card for each chapter with its dates and places, about forty of the best photos, and an end. Anyone with its link can watch it on a phone or a TV, with no account, until the link ends.") }</p>
 		for _, it := range s.Items {
@@ -5491,7 +5505,7 @@ templ StoryPage(v StoryPageView) {
 
 // CastCard shows the person's albums, people and memories on a TV with a code: the TVs that are showing, with their remote, and the form.
 templ CastCard(c CastView) {
-	<h2>{ t(ctx, "Cast to a TV") } @Status(castStatus(ctx, c))</h2>
+	<h2>{ t(ctx, "Cast to a TV") } @Status(castStatus(ctx, c)) @HelpLink("cast-to-tv")</h2>
 	<div class="card castcard">
 		<p>{ t(ctx, "Open the address below in the browser of a TV: it shows a short code. Type the code here and choose what to show, and the TV shows those photos. The TV does not sign in to anything: it gets the photos through this app, and you stop it from here whenever you like.") }</p>
 		<div class="field">
@@ -5671,7 +5685,7 @@ templ TVPage(legacy bool) {
 
 // AlbumTreeCard is the entry to the album tree page, in Settings.
 templ AlbumTreeCard() {
-	<h2>{ t(ctx, "Album tree") }</h2>
+	<h2>{ t(ctx, "Album tree") } @HelpLink("album-tree")</h2>
 	<div class="card albumtreecard">
 		<p>{ t(ctx, "Immich has no folders for albums. If you name albums like Trips / 2024 / Rome, this shows them as a tree, with the cover of each, and helps you move an album into a folder by renaming it.") }</p>
 		<p class="row"><a class="button primary" href="albums">{ t(ctx, "Open the album tree") }</a></p>
@@ -5781,7 +5795,7 @@ templ AlbumMovePreview(oldName, newName string) {
 
 // CirclesCard shares every new album of the person's with a group of people: the circles they have, and the form that makes one.
 templ CirclesCard(c CirclesView) {
-	<h2>{ t(ctx, "Circles") } @Status(circlesStatus(ctx, c))</h2>
+	<h2>{ t(ctx, "Circles") } @Status(circlesStatus(ctx, c)) @HelpLink("circles")</h2>
 	<div class="card circlescard">
 		<p>{ t(ctx, "A circle is a group of people on this Immich server. Every new album you make is offered to them, and with your yes it is shared with them, as viewers or editors. Immich may send each of them an email for every album. Taking a person out of a circle takes them off the albums the app shared with them, and only those.") }</p>
 		for _, it := range c.Items {
@@ -5916,7 +5930,7 @@ templ CircleAddForm(v CircleFormView) {
 
 // PairingsCard is the card for sharing the photos of chosen people with another person, both ways.
 templ PairingsCard(p PairingsView) {
-	<h2>{ t(ctx, "Share photos with someone") } @Status(pairingsStatus(ctx, p))</h2>
+	<h2>{ t(ctx, "Share photos with someone") } @Status(pairingsStatus(ctx, p)) @HelpLink("share-people")</h2>
 	<div class="card pairingscard">
 		<p>{ t(ctx, "Share the photos of the people you choose with another person on this Immich server, and get theirs back, without remembering to send anything. Each of you keeps your own copy, and either of you can pause or stop it whenever you like. Photos already copied stay where they are.") }</p>
 		for _, it := range p.Items {
@@ -6306,4 +6320,56 @@ templ HostKeyBox(fingerprint, problem string) {
 		<input type="hidden" name="host_key" value={ fingerprint }/>
 		<small class="meta">{ t(ctx, "Check that this is your server's key (for example with ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub on it) before you save: from now on the app trusts only this key, and stops if it changes.") }</small>
 	}
+}
+
+// HelpLink is the "?" beside a card's heading: the guide of the feature, opened in a drawer when the page's script is running and in a
+// new tab otherwise. It shows nothing for a feature that has no guide, so it can never point nowhere.
+templ HelpLink(feature string) {
+	if title, tip, _, ok := docs.Tip(feature); ok {
+		<a class="help-link" href={ templ.URL("help/" + feature) } target="_blank" rel="noopener" data-help={ feature } aria-label={ t(ctx, "Help: {title}", "title", title) } title={ t(ctx, tip) }>?</a>
+	}
+}
+
+// HelpIndex is the first page of Help: a search box and every guide the person may read, by what they want to do.
+templ HelpIndex(d HelpIndexView) {
+	@Layout(t(ctx, "Help"), d.User) {
+		<h1>{ t(ctx, "Help") }</h1>
+		<p class="lead">{ t(ctx, "How to do things with Immich Handoff.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<form class="help-search" role="search" action="help" method="get" autocomplete="off">
+			<input id="help-q" type="search" name="q" placeholder={ t(ctx, "Search the guides") } aria-label={ t(ctx, "Search the guides") } autocomplete="off"/>
+			<ul id="help-hits" role="listbox" aria-label={ t(ctx, "Guides found") }></ul>
+		</form>
+		for _, g := range d.Groups {
+			<section class="help-group">
+				<h2>{ g.Title }</h2>
+				<ul class="help-list">
+					for _, e := range g.Entries {
+						<li><a href={ templ.URL("help/" + e.Feature) }>{ e.Title }</a><span class="meta">{ t(ctx, e.Tip) }</span></li>
+					}
+				</ul>
+			</section>
+		}
+	}
+}
+
+// HelpPage is one guide.
+templ HelpPage(d HelpPageView) {
+	@Layout(d.Title, d.User) {
+		<p class="help-crumbs"><a href="help">{ t(ctx, "Help") }</a> · <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<article class="help-body" data-feature={ d.Feature }>
+			<h1>{ d.Title }</h1>
+			@templ.Raw(d.Body)
+		</article>
+	}
+}
+
+// HelpDrawer is a guide without the page around it, for the drawer that the "?" opens.
+templ HelpDrawer(d HelpPageView) {
+	<header class="help-drawer-head">
+		<h2>{ d.Title }</h2>
+		<a class="help-full" href={ templ.URL("help/" + d.Feature) } target="_blank" rel="noopener">{ t(ctx, "Open the full page") }</a>
+	</header>
+	<article class="help-body" data-feature={ d.Feature }>
+		@templ.Raw(d.Body)
+	</article>
 }

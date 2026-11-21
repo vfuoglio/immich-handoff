@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/vfuoglio/immich-handoff/internal/docs"
 	"net/url"
 	"strconv"
 	"strings"
@@ -706,7 +707,7 @@ var clientMessages = []string{
 	"A large video on mobile data", "Cancel", "Locations go with your photos", "Send now", "Wait for Wi-Fi", "Waiting for Wi-Fi: this device is on mobile data", "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.", "{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed.",
 	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
 	"A sender", "Activity", "Settings", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
-	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open the album tree", "Cast to a TV", "Part {n}", "The end", "This story is not available any more.", "Open {name}", "Overview",
+	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open the album tree", "Open Help", "help", "Help: {title}", "This guide could not be loaded.", "Cast to a TV", "Part {n}", "The end", "This story is not available any more.", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
 	"Switch between the light and the dark theme", "Sync now", "The QR code could not be made.", "The backup could not be downloaded.", "The backup was downloaded.", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",
 	"{n} photo", "{n} photo waits", "{service} lost its connection", "{service} was paused by its owner", "{service} was reconnected", "{service} was resumed",
@@ -1175,4 +1176,13 @@ func settingsCatTitle(ctx context.Context, id string) string {
 		return t(ctx, "Sharing")
 	}
 	return t(ctx, "Screens")
+}
+
+// tipOf is the tooltip of one button, from the front matter of the guide of its feature (docs/), in the person's language where
+// the catalogue has it. It is empty for a key the guide does not have; a test keeps the templates and the guides in step.
+func tipOf(ctx context.Context, feature, key string) string {
+	if s, ok := docs.ButtonTip(feature, key); ok {
+		return t(ctx, s)
+	}
+	return ""
 }

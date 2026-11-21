@@ -91,6 +91,11 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /backup", w.backupStatus)
 	mux.HandleFunc("GET /backup/{id}", w.backupStatus)
 	mux.HandleFunc("GET /{$}", w.dashboard)
+	mux.HandleFunc("GET /help", w.helpIndex)
+	mux.HandleFunc("GET /help/search", w.helpSearch)
+	mux.HandleFunc("GET /help/img/{name}", w.helpImage)
+	mux.HandleFunc("GET /help/{feature}", w.helpPage)
+	mux.HandleFunc("GET /fragments/help/{feature}", w.helpDrawer)
 	mux.HandleFunc("GET /pair/{id}", w.pairingPage)
 	mux.HandleFunc("GET /fragments/pair-form", w.pairForm)
 	mux.HandleFunc("POST /pairings", w.startPairing)
@@ -400,6 +405,9 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") || strings.HasPrefix(r.URL.Path, "/pair/") {
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
+		if strings.HasPrefix(r.URL.Path, "/help/") { // a guide is one level down
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
 		}
 		if r.URL.Path == "/tv/legacy" {

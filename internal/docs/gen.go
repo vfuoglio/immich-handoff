@@ -9,13 +9,26 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/vfuoglio/immich-handoff/internal/docs"
+	xdraw "golang.org/x/image/draw"
 )
+
+type tipEntry struct {
+	Title string            `json:"title"`
+	Tip   string            `json:"tip"`
+	Path  string            `json:"path"`
+	Tips  map[string]string `json:"tips,omitempty"`
+}
 
 type indexEntry struct {
 	Path     string `json:"path"`
@@ -36,7 +49,7 @@ func main() {
 		}
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
-		if strings.HasPrefix(rel, "images/") {
+		if strings.HasPrefix(rel, "images/") || rel == "index.md" { // index.md is the site's landing page (Starlight front matter), not a page of Help
 			return nil
 		}
 		src, err := os.ReadFile(p)
@@ -64,8 +77,12 @@ func main() {
 	if err := os.RemoveAll(filepath.Join(out, "en")); err != nil {
 		panic(err)
 	}
+	if err := os.RemoveAll(filepath.Join(out, "img")); err != nil {
+		panic(err)
+	}
 	var index []indexEntry
-	tips := map[string]map[string]string{}
+	pictures := map[string]bool{}
+	tips := map[string]tipEntry{}
 	for _, p := range pages {
 		if p.Audience != "user" && p.Audience != "admin" {
 			continue
@@ -77,9 +94,13 @@ func main() {
 		if err := os.WriteFile(dest, []byte(p.Body), 0o644); err != nil {
 			panic(err)
 		}
+		for _, m := range picture.FindAllStringSubmatch(p.Body, -1) {
+			pictures[m[1]] = true
+		}
 		index = append(index, indexEntry{p.Path, p.Title, p.Feature, p.Audience, p.Goal, p.Order, p.Tip})
-		tips[p.Feature] = map[string]string{"title": p.Title, "tip": p.Tip, "path": p.Path}
+		tips[p.Feature] = tipEntry{p.Title, p.Tip, p.Path, p.Tips}
 	}
+	slim(root, filepath.Join(out, "img"), pictures)
 	sort.SliceStable(index, func(i, j int) bool {
 		a, b := index[i], index[j]
 		if gi, gj := rank(a.Goal), rank(b.Goal); gi != gj {
@@ -107,5 +128,68 @@ func write(path string, v any) {
 	}
 	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
 		panic(err)
+	}
+}
+
+var picture = regexp.MustCompile(`images/([A-Za-z0-9._-]+\.(?:png|jpg|jpeg|gif|svg))`)
+
+// maxWidth is the widest a picture is kept: Help shows pictures in a column, and the originals (17 MB) stay with the site.
+const maxWidth = 900
+
+// slim writes a small copy of each picture the pages show: a JPEG at most maxWidth wide (a GIF becomes its first frame, the
+// animation is on the site), and SVGs as they are. Pure Go, so the build needs no tools.
+func slim(from, to string, names map[string]bool) {
+	if err := os.MkdirAll(to, 0o755); err != nil {
+		panic(err)
+	}
+	for n := range names {
+		src := filepath.Join(from, "images", n)
+		f, err := os.Open(src)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "a page shows a picture that does not exist:", n)
+			os.Exit(1)
+		}
+		dest := filepath.Join(to, docs.ImageName(n))
+		if strings.HasSuffix(n, ".svg") {
+			b, _ := os.ReadFile(src)
+			f.Close()
+			os.WriteFile(dest, b, 0o644)
+			continue
+		}
+		var img image.Image
+		switch {
+		case strings.HasSuffix(n, ".png"):
+			img, err = png.Decode(f)
+		case strings.HasSuffix(n, ".gif"):
+			var g *gif.GIF
+			if g, err = gif.DecodeAll(f); err == nil {
+				img = g.Image[0]
+			}
+		default:
+			img, err = jpeg.Decode(f)
+		}
+		f.Close()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, n+":", err)
+			os.Exit(1)
+		}
+		b := img.Bounds()
+		if b.Dx() > maxWidth {
+			h := b.Dy() * maxWidth / b.Dx()
+			small := image.NewRGBA(image.Rect(0, 0, maxWidth, h))
+			xdraw.CatmullRom.Scale(small, small.Bounds(), img, b, xdraw.Src, nil)
+			img = small
+		}
+		flat := image.NewRGBA(img.Bounds()) // a JPEG has no transparency: flatten on white
+		xdraw.Draw(flat, flat.Bounds(), image.White, image.Point{}, xdraw.Src)
+		xdraw.Draw(flat, flat.Bounds(), img, img.Bounds().Min, xdraw.Over)
+		o, err := os.Create(dest)
+		if err != nil {
+			panic(err)
+		}
+		if err := jpeg.Encode(o, flat, &jpeg.Options{Quality: 78}); err != nil {
+			panic(err)
+		}
+		o.Close()
 	}
 }

@@ -306,7 +306,7 @@ func TestBrowser(t *testing.T) {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
 		// the order down the page: what needs the person first, then the live stream, this week, get started; the set-once cards are in the Settings view, by purpose
-		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
+		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s*\?$/, '').replace(/\s+\d*$/, '').trim())`)
 		if strings.Join(order, "|") != "Needs you|Live as it happens|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}

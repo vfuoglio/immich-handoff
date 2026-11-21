@@ -5,6 +5,15 @@ audience: user
 goal: start
 order: 270
 tip: "Find your way around the page and look up a word."
+tips:
+  send: "Send photos from this device"
+  language: "Language"
+  palette: "Jump anywhere or do something from the keyboard (Ctrl K)"
+  live: "Live updates"
+  scheme: "Choose the colour scheme"
+  theme: "Switch between the light and the dark theme"
+  sound: "Arrival chime and vibration when a photo lands"
+  version: "The version of Immich Handoff that is running"
 ---
 
 # Finding your way around the page

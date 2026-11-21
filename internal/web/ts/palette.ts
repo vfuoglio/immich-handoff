@@ -75,6 +75,7 @@ function collect(): Command[] {
   commands.push({ label: t("Open the album tree"), hint: t("action"), run: () => { location.href = "albums"; } });
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
   if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });
+  commands.push({ label: t("Open Help"), hint: t("help"), run: () => { location.href = "help"; } });
   const admin = document.querySelector<HTMLAnchorElement>("a.adminlink");
   if (admin) commands.push({ label: t("Open the administrator's page"), hint: t("admin"), run: () => { location.href = admin.href; } });
   const theme = document.getElementById("theme");
@@ -91,10 +92,13 @@ export function initPalette(): void {
   if (!(dialog instanceof HTMLDialogElement) || !(input instanceof HTMLInputElement) || !list) return;
   let all: Command[] = [];
   let shown: Command[] = [];
+  let guides: Command[] = []; // the guides that match what is typed, asked of the server
   let selected = 0;
+  let asked = 0;
+  let timer = 0;
 
   const draw = (): void => {
-    shown = rank(input.value, all);
+    shown = rank(input.value, all).concat(guides);
     selected = Math.min(selected, Math.max(0, shown.length - 1));
     list.replaceChildren();
     shown.forEach((command, i) => {
@@ -119,6 +123,7 @@ export function initPalette(): void {
   const open = (): void => {
     if (dialog.open) return;
     all = collect();
+    guides = [];
     input.value = "";
     selected = 0;
     draw();
@@ -132,7 +137,20 @@ export function initPalette(): void {
     setTimeout(command.run, 60); // after the dialog has closed, so a question it leads to can open
   };
 
-  input.addEventListener("input", () => { selected = 0; draw(); });
+  // the guides: what is typed is also searched in Help, a moment after the last key, and what is found is listed after the commands
+  const askGuides = async (): Promise<void> => {
+    const q = input.value.trim();
+    const mine = ++asked;
+    if (q.length < 2) { guides = []; return; }
+    try {
+      const res = await fetch(`help/search?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
+      if (!res.ok || mine !== asked) return;
+      const hits = (await res.json()) as { title: string; tip: string; url: string }[];
+      guides = hits.slice(0, 4).map((h) => ({ label: t("Help: {title}", { title: h.title }), hint: h.tip, run: () => { location.href = h.url; } }));
+      draw();
+    } catch { /* offline: the commands still work */ }
+  };
+  input.addEventListener("input", () => { selected = 0; draw(); clearTimeout(timer); timer = window.setTimeout(() => void askGuides(), 150); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { selected = Math.min(shown.length - 1, selected + 1); draw(); e.preventDefault(); }
     else if (e.key === "ArrowUp") { selected = Math.max(0, selected - 1); draw(); e.preventDefault(); }

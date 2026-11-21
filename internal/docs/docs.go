@@ -36,7 +36,10 @@ type Page struct {
 	Order     int    `yaml:"order"`
 	Tip       string `yaml:"tip"`        // one line, shown as the tooltip of the "?" that opens this page
 	SourceRev string `yaml:"source_rev"` // translations only: the revision of the English page it was translated from
-	Body      string `yaml:"-"`
+	// Tips are the tooltips of the page's buttons and switches by key ("send-by-itself": "Sends without asking, ..."), asked for by the
+	// templates with the feature and the key, so the words live with the guide that explains the feature.
+	Tips map[string]string `yaml:"tips"`
+	Body string            `yaml:"-"`
 }
 
 // Parse reads a page: an optional "---" front matter, then Markdown.
@@ -96,6 +99,14 @@ func Validate(pages []Page) []string {
 		}
 		if p.Tip == "" || len([]rune(p.Tip)) > 140 || strings.Contains(p.Tip, "\n") {
 			bad = append(bad, p.Path+": the tip is missing, longer than 140 characters or on more than one line")
+		}
+		for k, v := range p.Tips {
+			if !kebab.MatchString(k) {
+				bad = append(bad, fmt.Sprintf("%s: tip key %q is not a lower-case key with hyphens", p.Path, k))
+			}
+			if v == "" || len([]rune(v)) > 140 || strings.Contains(v, "\n") {
+				bad = append(bad, fmt.Sprintf("%s: the tip %q is empty, longer than 140 characters or on more than one line", p.Path, k))
+			}
 		}
 	}
 	sort.Strings(bad)

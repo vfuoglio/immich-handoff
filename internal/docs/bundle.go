@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // bundle is what gen.go made from docs/: the Markdown of the pages for users and administrators, in English (bundle/en), and
@@ -38,19 +39,52 @@ func Index() ([]Entry, error) {
 	return out, json.Unmarshal(b, &out)
 }
 
+type tipEntry struct {
+	Title string            `json:"title"`
+	Tip   string            `json:"tip"`
+	Path  string            `json:"path"`
+	Tips  map[string]string `json:"tips,omitempty"`
+}
+
+var tips = sync.OnceValue(func() map[string]tipEntry {
+	var m map[string]tipEntry
+	if b, err := bundle.ReadFile("bundle/tips.json"); err == nil {
+		json.Unmarshal(b, &m)
+	}
+	return m
+})
+
 // Tip is the title, one-line tip and page of a feature, for the "?" links and the tooltips. ok is false for a feature that
 // has no page, so a template can never link to nothing.
 func Tip(feature string) (title, tip, path string, ok bool) {
-	b, err := bundle.ReadFile("bundle/tips.json")
-	if err != nil {
-		return
+	t, ok := tips()[feature]
+	return t.Title, t.Tip, t.Path, ok
+}
+
+// ButtonTip is the tooltip of one button or switch of a feature, by the key the page's front matter gives it.
+func ButtonTip(feature, key string) (string, bool) {
+	t, ok := tips()[feature].Tips[key]
+	return t, ok
+}
+
+// Features lists the feature keys that have a page, sorted.
+func Features() []string {
+	var out []string
+	for f := range tips() {
+		out = append(out, f)
 	}
-	var m map[string]map[string]string
-	if json.Unmarshal(b, &m) != nil {
-		return
+	sort.Strings(out)
+	return out
+}
+
+// FeatureOfPath is the feature of a page, by its path in the bundle ("guides/show/stories.md").
+func FeatureOfPath(path string) (string, bool) {
+	for f, t := range tips() {
+		if t.Path == path {
+			return f, true
+		}
 	}
-	t, ok := m[feature]
-	return t["title"], t["tip"], t["path"], ok
+	return "", false
 }
 
 // Source returns one page's Markdown in a language, falling back to English as the app's own texts do.
@@ -65,6 +99,21 @@ func Source(lang, path string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no such page")
+}
+
+// Image returns a slimmed picture of the pages, by the name ImageName gives it, and its content type.
+func Image(name string) ([]byte, string, bool) {
+	if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+		return nil, "", false
+	}
+	b, err := fs.ReadFile(bundle, "bundle/img/"+name)
+	if err != nil {
+		return nil, "", false
+	}
+	if strings.HasSuffix(name, ".svg") {
+		return b, "image/svg+xml", true
+	}
+	return b, "image/jpeg", true
 }
 
 // Paths lists every page in the bundle, sorted.

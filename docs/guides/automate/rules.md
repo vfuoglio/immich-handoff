@@ -5,6 +5,8 @@ audience: user
 goal: automate
 order: 130
 tip: "Let a rule find photos of people, places and dates and ask before sending."
+tips:
+  look-back: "Suggest the older photos that match this rule too"
 ---
 
 # Rules: photos by who, where and when
