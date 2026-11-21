@@ -348,6 +348,12 @@ details.offer[open] > summary { margin-bottom: .6rem; }
   nav.tabs a svg { display: block; }
   nav.tabs a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+/* the same, for a language whose labels would reach the buttons at a wider window (tabs.ts measures and says so) */
+@media (min-width: 901px) {
+  nav.tabs[data-compact] a { padding: .5rem .8rem; }
+  nav.tabs[data-compact] a svg { display: block; }
+  nav.tabs[data-compact] a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "u a" "l a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
 .card.need > b { grid-area: t; }
 .card.need > p.meta { grid-area: m; }

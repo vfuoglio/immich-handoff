@@ -311,7 +311,7 @@ func TestBrowser(t *testing.T) {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
 		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Share photos with someone" {
+		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Cast to a TV|Stories|Album tree|Circles|Share photos with someone" {
 			t.Errorf("cards of the Settings view, top to bottom: %v", settings)
 		}
 		if groups := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .group-title')].map(h => h.textContent.trim())`); strings.Join(groups, "|") != "My library|Sharing with others" {

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -38,8 +39,9 @@ const UnlockLife = 7 * 24 * time.Hour
 // make one up or lengthen it, and a changed password ends every one at once.
 func unlockToken(secret string, until time.Time) string {
 	exp := strconv.FormatInt(until.Unix(), 10)
-	sum := sha256.Sum256([]byte(secret + "|" + exp))
-	return exp + "." + hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte(secret)) // a keyed signature of the end time; the secret is itself the stored hash of the password
+	mac.Write([]byte("unlock|" + exp))
+	return exp + "." + hex.EncodeToString(mac.Sum(nil))
 }
 
 func unlockTokenGood(secret, token string, now time.Time) bool {

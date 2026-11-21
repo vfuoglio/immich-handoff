@@ -23,6 +23,15 @@ export function initTabs(): void {
     nav.style.setProperty("--bx", `${on.offsetLeft}px`);
     nav.style.setProperty("--bw", `${on.offsetWidth}px`);
   };
+  // the pill is centred and the buttons are on the right: when the labels of a language (German has the longest) would reach the first
+  // of them, the pill shows icons only, whatever the width of the window (the style sheet does the same below 1181 pixels for every language)
+  const fit = (): void => {
+    if (!nav) return;
+    delete nav.dataset["compact"];
+    const first = document.querySelector<HTMLElement>("header.bar > :not(.brand)");
+    if (!first || matchMedia("(max-width: 900px)").matches) return; // a phone has a bar at the bottom
+    if (nav.getBoundingClientRect().right + 12 > first.getBoundingClientRect().left) nav.dataset["compact"] = "1";
+  };
   const show = (view: string): void => {
     document.documentElement.dataset["view"] = view;
     tabs.forEach((tab) => {
@@ -38,9 +47,10 @@ export function initTabs(): void {
     else show(view);
   };
 
+  fit();
   show(current());
-  addEventListener("resize", place);
-  document.fonts?.ready.then(place); // the labels change width when the font arrives
+  addEventListener("resize", () => { fit(); place(); });
+  document.fonts?.ready.then(() => { fit(); place(); }); // the labels change width when the font arrives
   tabs.forEach((tab) =>
     tab.addEventListener("click", (e) => {
       e.preventDefault(); // the page has a <base> on some routes, so a bare #fragment link must not navigate
