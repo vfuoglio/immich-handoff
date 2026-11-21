@@ -1,11 +1,9 @@
 package hub
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -14,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/safeimg"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -125,7 +124,7 @@ func (h *Hub) runHighlights(ctx context.Context, sess *immich.API, b store.DropB
 			if err != nil {
 				return
 			}
-			if img, _, err := image.Decode(bytes.NewReader(data)); err == nil {
+			if img, err := safeimg.Decode(data, safeimg.Preview); err == nil {
 				q := analyze(img)
 				results[i].q = &q
 			}

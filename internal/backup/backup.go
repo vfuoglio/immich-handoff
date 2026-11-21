@@ -159,6 +159,10 @@ func (m *Manager) run(ctx context.Context, j *Job) {
 		err = m.Source.Backup(ctx, dest)
 	}
 	release()
+	if err == nil {
+		// SQLite makes the copy with the process's umask; it holds everything that is not sealed.
+		err = os.Chmod(dest, 0o600)
+	}
 	var size int64
 	if err == nil {
 		if fi, e := os.Stat(dest); e == nil {
@@ -238,7 +242,11 @@ func Direct(ctx context.Context, src Source, dir string, now time.Time) (Job, er
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return j, err
 	}
-	if err := src.Backup(ctx, j.Path); err != nil {
+	err := src.Backup(ctx, j.Path)
+	if err == nil {
+		err = os.Chmod(j.Path, 0o600)
+	}
+	if err != nil {
 		j.State, j.Err = Failed, err.Error()
 		return j, err
 	}

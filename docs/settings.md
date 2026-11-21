@@ -9,10 +9,11 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `IMMICH_NETWORK` | `immich_default` | Docker network Immich runs on (used by `docker-compose.yml`). |
 | `IMMICH_BASE_URL` | `http://immich-server:2283` | Address of Immich as seen from this container. |
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app (not your browser). |
-| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos, and the link into a memory in an [On this day](guides/memories.md) message. |
+| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos, the link into a memory in an [On this day](guides/memories.md) message, the links from the [album tree](guides/album-tree.md) into Immich, and, for a [story](guides/stories.md)'s preview in chats, the address people use to reach this app (`PUBLIC_APP_URL`). |
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
 | `BACKUP_EVERY` | `24h` | How often the app makes a backup of its data on its own: a time such as `12h` (one hour at the least), or `off`. See [Automatic backups](operations.md#automatic-backups). |
 | `BACKUP_KEEP` | `7` | How many automatic backups to keep; older ones are removed. Backups you asked for are never removed. |
+| `BACKUP_ENCRYPT` | `false` | Seal every backup file as a whole with the store key (names, emails and settings then are as private as the keys). `restore` opens both kinds. See [Encrypted backups](operations.md#encrypted-backups). |
 | `BACKUP_DIR` | `/data/backups` | Where backups go. A second mounted folder is safer than one beside the data. |
 | `HANDOFF_ADMIN_BACKUP_DOWNLOAD` | off | `true` adds a **Download backup** button to the administrator's page. Off by default: the file holds every stored key (encrypted) and everyone's name and email. Read [the limits](operations.md#download-a-backup-from-the-administrators-page) first. |
 | `LISTEN_ADDR` | `:8080` | Where the app listens inside the container. The built-in health check uses it too. |

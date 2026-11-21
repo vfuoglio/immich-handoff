@@ -24,6 +24,9 @@ func loc(ctx context.Context) *i18n.Locale { return i18n.From(ctx) }
 func t(ctx context.Context, msg string, kv ...any) string { return i18n.From(ctx).T(msg, kv...) }
 
 // h is a message with a little markup of its own (<code>, <strong>, <em>); its values are escaped.
+// petHelperDocsURL is where the page sends someone to read about switching the pet helper on.
+const petHelperDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/guides/automate.md#the-optional-pet-helper"
+
 // backupDocsURL is where the page sends an administrator to read about switching the backup download on.
 const backupDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/operations.md#download-a-backup-from-the-administrators-page"
 
@@ -269,6 +272,14 @@ type adminKey struct{}
 
 type tabsKey struct{}
 
+type settingsKey struct{}
+
+// hasSettings is whether the dashboard has a Settings view: it does when at least one of the set-once cards is on.
+func hasSettings(ctx context.Context) bool {
+	b, _ := ctx.Value(settingsKey{}).(bool)
+	return b
+}
+
 // hasTabs is whether this page has views to switch between (the Overview, Services and Activity): the dashboard has,
 // the invitation, admin and notice pages do not.
 func hasTabs(ctx context.Context) bool {
@@ -511,6 +522,11 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 }
 
 // RowCount is how many service rows the page shows; with exactly one it starts open.
+// HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, smart albums, pairing) is on for this person.
+func (d DashboardData) HasSettings() bool {
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available || d.Cast.Available || d.Places.Available
+}
+
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
 
 // sceneDir is which way a stage's photos fly: "in" toward the person (they receive or offer), "out" away from them (they send).
@@ -665,6 +681,14 @@ func languages() []i18n.Lang { return i18n.All }
 
 func langName(l i18n.Lang) string { return i18n.Names[l] }
 
+// tabindex is 0 for the tab that is in the tab order and -1 for the others.
+func tabindex(first bool) string {
+	if first {
+		return "0"
+	}
+	return "-1"
+}
+
 func checked(b bool) string {
 	if b {
 		return "true"
@@ -681,8 +705,8 @@ var clientMessages = []string{
 	"Choose where it goes, then press Send", "{n} file shared with Handoff is waiting for you to choose where it goes", "Sharing to Handoff needs the app to be installed on this phone. Choose the photos here instead.",
 	"A large video on mobile data", "Cancel", "Locations go with your photos", "Send now", "Wait for Wi-Fi", "Waiting for Wi-Fi: this device is on mobile data", "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.", "{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed.",
 	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
-	"A sender", "Activity", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
-	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open {name}", "Overview",
+	"A sender", "Activity", "Settings", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
+	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open the album tree", "Cast to a TV", "Part {n}", "The end", "This story is not available any more.", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
 	"Switch between the light and the dark theme", "Sync now", "The QR code could not be made.", "The backup could not be downloaded.", "The backup was downloaded.", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",
 	"{n} photo", "{n} photo waits", "{service} lost its connection", "{service} was paused by its owner", "{service} was reconnected", "{service} was resumed",
@@ -974,6 +998,9 @@ func libraryTrigger(l LibraryView) string {
 
 // reviewTitle is the title of the page that shows what a rule found.
 func reviewTitle(ctx context.Context, d SuggestionReview) string {
+	if d.Smart {
+		return t(ctx, "For the album {album}", "album", d.Album)
+	}
 	if d.Folder {
 		return t(ctx, "Albums from {folder}", "folder", d.Album)
 	}
@@ -1003,4 +1030,139 @@ func stackSignalWords(ctx context.Context, signal string) string {
 		return t(ctx, "An edit with its original")
 	}
 	return t(ctx, "A burst")
+}
+
+// castPath is where the cast form posts: a new TV is paired by its code, a paired one is changed.
+func castPath(session string) string {
+	if session != "" {
+		return "cast/change"
+	}
+	return "cast/claim"
+}
+
+func legacyFlag(legacy bool) string {
+	if legacy {
+		return "1"
+	}
+	return "0"
+}
+
+// tvBody is the class of a TV page's body: the modern page takes the wall's styles, the legacy one only its own.
+func tvBody(legacy bool) string {
+	if legacy {
+		return "tv legacy"
+	}
+	return "tv wall"
+}
+
+// placeConfirm is what the review page of places asks before it writes anything: a place cannot be taken back by the app.
+func placeConfirm(ctx context.Context, place bool) string {
+	if !place {
+		return ""
+	}
+	return t(ctx, "The places are written into your photos. The app cannot take a place back (Immich does not let it), so if one is wrong you remove it in Immich. Go on?")
+}
+
+// StatusView is the short state a Settings card shows next to its title: what is on, at a glance.
+type StatusView struct {
+	On    bool
+	Words string
+}
+
+// onStatus is "On" or "Off".
+func onStatus(ctx context.Context, on bool) StatusView {
+	if on {
+		return StatusView{On: true, Words: t(ctx, "On")}
+	}
+	return StatusView{Words: t(ctx, "Off")}
+}
+
+// countStatus is how many of something there are ("2 rules"), or "Off" when there are none.
+func countStatus(ctx context.Context, count int, one, other string) StatusView {
+	if count == 0 {
+		return StatusView{Words: t(ctx, "Off")}
+	}
+	return StatusView{On: true, Words: n(ctx, one, other, count)}
+}
+
+func ruleStatus(ctx context.Context, rules int) StatusView {
+	return countStatus(ctx, rules, "{n} rule", "{n} rules")
+}
+
+func mailStatus(ctx context.Context, m MailView) StatusView { return onStatus(ctx, m.On) }
+
+func pushStatus(ctx context.Context, p PushView) StatusView {
+	return countStatus(ctx, len(p.Devices), "{n} device", "{n} devices")
+}
+
+func memoriesStatus(ctx context.Context, m MemoriesView) StatusView { return onStatus(ctx, m.On) }
+
+func libraryStatus(ctx context.Context, l LibraryView) StatusView {
+	if r := len(l.Followed) + len(l.Imports); r > 0 {
+		return ruleStatus(ctx, r)
+	}
+	return StatusView{Words: t(ctx, "Ready")}
+}
+
+func placesStatus(ctx context.Context, p PlacesView) StatusView { return onStatus(ctx, p.Rule != nil) }
+
+func circlesStatus(ctx context.Context, c CirclesView) StatusView {
+	return countStatus(ctx, len(c.Items), "{n} circle", "{n} circles")
+}
+
+func pairingsStatus(ctx context.Context, p PairingsView) StatusView {
+	return countStatus(ctx, len(p.Items), "{n} sharing", "{n} sharings")
+}
+
+func storiesStatus(ctx context.Context, s StoriesView) StatusView {
+	return countStatus(ctx, len(s.Items), "{n} story", "{n} stories")
+}
+
+func castStatus(ctx context.Context, c CastView) StatusView {
+	return countStatus(ctx, len(c.Sessions), "{n} TV showing", "{n} TVs showing")
+}
+
+// SettingsCat is a category of the Settings view with how many of its features are on.
+type SettingsCat struct {
+	ID string
+	On int
+}
+
+// SettingsCats lists the categories that have something to show, in order, each with the number of its features that are on. A
+// feature that is not available on this install is not in any category, and a category with none is not listed.
+func (d DashboardData) SettingsCats() []SettingsCat {
+	b := func(on bool) int {
+		if on {
+			return 1
+		}
+		return 0
+	}
+	var out []SettingsCat
+	if d.Mail.Available || d.Push.Available {
+		out = append(out, SettingsCat{"notifications", b(d.Mail.Available && d.Mail.On) + b(d.Push.Available && len(d.Push.Devices) > 0)})
+	}
+	on := b(d.Library.Available && len(d.Library.Followed)+len(d.Library.Imports) > 0) + b(d.Memories.Available && d.Memories.On) +
+		b(d.Folders.Available && len(d.Folders.Rules) > 0) + b(d.Stacks.Available && len(d.Stacks.Rules) > 0) + b(d.Places.Available && d.Places.Rule != nil) +
+		b(d.Albums.Available && len(d.Albums.Rules) > 0)
+	out = append(out, SettingsCat{"photos", on}) // the album tree is always there, so is this
+	if d.Circles.Available || d.Pairings.Available || d.Stories.Available {
+		out = append(out, SettingsCat{"sharing", b(d.Circles.Available && len(d.Circles.Items) > 0) + b(d.Pairings.Available && len(d.Pairings.Items) > 0) + b(d.Stories.Available && len(d.Stories.Items) > 0)})
+	}
+	if d.Cast.Available {
+		out = append(out, SettingsCat{"screens", b(len(d.Cast.Sessions) > 0)})
+	}
+	return out
+}
+
+// settingsCatTitle is the name of a category, in the person's language.
+func settingsCatTitle(ctx context.Context, id string) string {
+	switch id {
+	case "notifications":
+		return t(ctx, "Notifications")
+	case "photos":
+		return t(ctx, "Photos")
+	case "sharing":
+		return t(ctx, "Sharing")
+	}
+	return t(ctx, "Screens")
 }

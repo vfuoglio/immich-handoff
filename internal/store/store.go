@@ -789,6 +789,117 @@ var migrations = []string{
 	   vec      BLOB NOT NULL,
 	   PRIMARY KEY (rule_id, asset_id)
 	 );`,
+	// smart albums: the person's key for them
+	`CREATE TABLE album_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
+	// circles: a named group of people that every new album is shared with, with the owner's own key
+	`CREATE TABLE circle_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE circles (
+	   id         TEXT PRIMARY KEY,
+	   owner_id   TEXT NOT NULL,
+	   name       TEXT NOT NULL,
+	   role       TEXT NOT NULL,
+	   prefix     TEXT NOT NULL DEFAULT '',
+	   mode       TEXT NOT NULL,
+	   always     INTEGER NOT NULL DEFAULT 0,
+	   paused     INTEGER NOT NULL DEFAULT 0,
+	   since      TEXT NOT NULL,
+	   auto_since TEXT NOT NULL DEFAULT '',
+	   last_look  TEXT NOT NULL DEFAULT '',
+	   problem    TEXT NOT NULL DEFAULT '',
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE circle_members (
+	   circle_id TEXT NOT NULL,
+	   user_id   TEXT NOT NULL,
+	   name      TEXT NOT NULL,
+	   email     TEXT NOT NULL,
+	   PRIMARY KEY (circle_id, user_id)
+	 );
+	 CREATE TABLE circle_shares (
+	   circle_id  TEXT NOT NULL,
+	   album_id   TEXT NOT NULL,
+	   user_id    TEXT NOT NULL,
+	   album_name TEXT NOT NULL,
+	   state      TEXT NOT NULL,
+	   at         TEXT NOT NULL,
+	   PRIMARY KEY (circle_id, album_id, user_id)
+	 );
+	 CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);`,
+	// casting to a TV: the person's key for it, and the TVs that are paired (the code a TV shows is not kept)
+	`CREATE TABLE cast_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE cast_sessions (
+	   id          TEXT PRIMARY KEY,
+	   user_id     TEXT NOT NULL,
+	   kind        TEXT NOT NULL,
+	   source_id   TEXT NOT NULL DEFAULT '',
+	   source_name TEXT NOT NULL DEFAULT '',
+	   day         TEXT NOT NULL DEFAULT '',
+	   seconds     INTEGER NOT NULL DEFAULT 15,
+	   fx          TEXT NOT NULL DEFAULT 'fade',
+	   paused      INTEGER NOT NULL DEFAULT 0,
+	   seq         INTEGER NOT NULL DEFAULT 0,
+	   cmd         TEXT NOT NULL DEFAULT '',
+	   paired_at   TEXT NOT NULL,
+	   last_seen   TEXT NOT NULL,
+	   ended       INTEGER NOT NULL DEFAULT 0
+	 );`,
+	// stories: a short animated recap with a public link, a key of its own, and the end-of-year suggestion
+	`CREATE TABLE stories (
+	   id          TEXT PRIMARY KEY,
+	   token       TEXT NOT NULL UNIQUE,
+	   owner_id    TEXT NOT NULL,
+	   owner_name  TEXT NOT NULL,
+	   title       TEXT NOT NULL,
+	   kind        TEXT NOT NULL,
+	   source_id   TEXT NOT NULL DEFAULT '',
+	   source_name TEXT NOT NULL DEFAULT '',
+	   from_day    TEXT NOT NULL DEFAULT '',
+	   to_day      TEXT NOT NULL DEFAULT '',
+	   show_dates  INTEGER NOT NULL DEFAULT 1,
+	   show_places INTEGER NOT NULL DEFAULT 1,
+	   show_people INTEGER NOT NULL DEFAULT 0,
+	   preview     INTEGER NOT NULL DEFAULT 0,
+	   key_id      TEXT NOT NULL,
+	   key_enc     BLOB NOT NULL,
+	   ends_at     TEXT NOT NULL DEFAULT '',
+	   state       TEXT NOT NULL,
+	   problem     TEXT NOT NULL DEFAULT '',
+	   done        INTEGER NOT NULL DEFAULT 0,
+	   total       INTEGER NOT NULL DEFAULT 0,
+	   picks       TEXT NOT NULL DEFAULT '[]',
+	   chapters    TEXT NOT NULL DEFAULT '[]',
+	   created_at  TEXT NOT NULL,
+	   built_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX stories_owner ON stories (owner_id);
+	 CREATE TABLE story_offers (
+	   user_id TEXT NOT NULL,
+	   year    INTEGER NOT NULL,
+	   state   TEXT NOT NULL,
+	   PRIMARY KEY (user_id, year)
+	 );`,
+	// places: the person's key for writing the place of a photo
+	`CREATE TABLE place_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -800,6 +911,10 @@ func Open(path string, v *vault.Vault) (*Store, error) {
 	db.SetMaxOpenConns(1) // a handful of rows; one connection avoids lock contention entirely
 	s := &Store{db: db, vault: v}
 	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.useSalt(); err != nil {
 		db.Close()
 		return nil, err
 	}

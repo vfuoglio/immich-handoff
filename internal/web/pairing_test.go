@@ -112,6 +112,17 @@ func TestSharingPhotosWithSomeoneIsOfferedFromTheOverviewAndSaidYesToOnItsOwnPag
 			t.Errorf("the invited person's card lacks %q", want)
 		}
 	}
+	// the offer is also in Needs you of the person it is offered to, and not of the one who made it
+	needs := func(page string) string {
+		i := strings.Index(page, `id="v-overview"`)
+		return page[i:]
+	}
+	if n := needs(theirs); !strings.Contains(n, "Family offers to share photos with you") || !strings.Contains(n, `href="pair/`+p.ID+`"`) {
+		t.Errorf("the offer is not in the invited person's Needs you")
+	}
+	if strings.Contains(needs(mine), "offers to share photos with you") {
+		t.Errorf("the starter is told of their own offer in Needs you")
+	}
 	svcs, _ := st.Services(ctx)
 	var token string
 	for _, s := range svcs {
@@ -148,8 +159,8 @@ func TestSharingPhotosWithSomeoneIsOfferedFromTheOverviewAndSaidYesToOnItsOwnPag
 	if code, _ := postForm(t, app.URL+"/pairings/accept", "sess=other", "pairing="+p.ID+"&person="+leoID); code != 409 {
 		t.Errorf("a stranger cannot say yes: %d", code)
 	}
-	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID); code != 409 || !strings.Contains(b, "between one and ten named people") {
-		t.Errorf("a yes needs someone to send back: %d %s", code, b)
+	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID+"&person="+leoID+"&person="+leoID); code != 409 || !strings.Contains(b, "between one and ten named people") {
+		t.Errorf("the same person twice is refused: %d %s", code, b)
 	}
 	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID+"&person="+leoID); code != 204 {
 		t.Fatalf("the yes: %d %s", code, b)

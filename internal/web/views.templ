@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vfuoglio/immich-handoff/internal/albumtree"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -321,6 +322,54 @@ type StacksView struct {
 	Rules     []StackRuleView
 }
 
+// AlbumRuleView is a smart album rule, for the person's page.
+type AlbumRuleView struct {
+	ID, Album, Words, Mode string
+	Always                 int
+	Paused, CanAuto        bool
+	RemoveStale            bool
+	Last, Problem          string
+}
+
+// AlbumsView is the person's "Smart albums" card.
+type AlbumsView struct {
+	Available bool
+	Rules     []AlbumRuleView
+}
+
+// CircleMemberView is a person in a circle.
+type CircleMemberView struct{ ID, Name, Email string }
+
+// CircleView is one circle, for the person's page.
+type CircleView struct {
+	ID, Name, Role, Prefix, Mode string
+	Always                       int
+	Paused, CanAuto              bool
+	Last, Problem                string
+	Members                      []CircleMemberView
+}
+
+// CirclesView is the person's "Circles" card.
+type CirclesView struct {
+	Available bool
+	Items     []CircleView
+}
+
+// CircleAskView is a circle with albums waiting for the person's answer.
+type CircleAskView struct {
+	ID, Name string
+	Albums   []string
+	People   string
+	Count    int
+}
+
+// CircleFormView is what the form that makes a circle (or adds a person) offers.
+type CircleFormView struct {
+	Circle  string // when adding a person to a circle: its id
+	ByUsers bool   // the administrator lets people be picked from every account
+	Users   []PersonOption
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -348,6 +397,13 @@ type DashboardData struct {
 	Memories   MemoriesView
 	Folders    FoldersView
 	Stacks     StacksView
+	Albums     AlbumsView
+	Circles    CirclesView
+	Cast       CastView
+	Stories    StoriesView
+	Places     PlacesView
+	StoryYear  int // the year the end-of-year suggestion is for (0: none)
+	CircleAsks []CircleAskView
 	Pairings   PairingsView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
@@ -617,6 +673,9 @@ templ Layout(title, user string) {
 						<a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"></rect><rect x="13" y="3" width="8" height="5" rx="2"></rect><rect x="13" y="10" width="8" height="11" rx="2"></rect><rect x="3" y="13" width="8" height="8" rx="2"></rect></svg><span>{ t(ctx, "Overview") }</span></a>
 						<a href="#services" data-view="services"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8M13 8l4 4-4 4"></path></svg><span>{ t(ctx, "Services") }</span></a>
 						<a href="#activity" data-view="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg><span>{ t(ctx, "Activity") }</span></a>
+						if hasSettings(ctx) {
+							<a href="#settings" data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg><span>{ t(ctx, "Settings") }</span></a>
+						}
 						<a href="send" class="send-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"></path><path d="m7 9 5-5 5 5"></path><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg><span>{ t(ctx, "Send") }</span></a>
 					</nav>
 				}
@@ -673,18 +732,24 @@ templ Dashboard(d DashboardData) {
 			<p class="eyebrow" data-today aria-hidden="true"></p>
 			<h1>{ d.Headline } <em>{ d.Gist }</em></h1>
 			<p class="lead">{ t(ctx, "Everything that was handed over went through; these are the only things that wait on a person. Tag a photo in the Immich app and it is handed over within seconds.") }</p>
-			if len(d.Scene) > 0 {
-				<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
-				@Scene(d.Scene)
-			}
 			<button type="button" class="cmdbar" id="cmdbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span class="grow">{ t(ctx, "Type a command or the name of a service") }</span><span class="kbd">{ t(ctx, "Ctrl K") }</span></button>
-			<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
-			if len(d.Needs) == 0 {
-				<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
-			}
-			<div class="needs">
-				for _, n := range d.Needs {
-					@NeedCard(n)
+			<div class={ "ov-main", templ.KV("with-live", len(d.Scene) > 0) }>
+				<div class="ov-needs">
+					<h2>{ t(ctx, "Needs you") } <span class="count-badge">{ fmt.Sprint(len(d.Needs)) }</span></h2>
+					if len(d.Needs) == 0 {
+						<div class="card need allclear"><b><span class="chip ok">{ t(ctx, "All clear") }</span> { t(ctx, "Nothing needs you") }</b><p class="meta">{ t(ctx, "Nothing needs you right now. New requests and problems appear here first.") }</p></div>
+					}
+					<div class="needs">
+						for _, n := range d.Needs {
+							@NeedCard(n)
+						}
+					</div>
+				</div>
+				if len(d.Scene) > 0 {
+					<div class="ov-live">
+						<h2>{ t(ctx, "Live") } <span class="chip ok">{ t(ctx, "as it happens") }</span></h2>
+						@Scene(d.Scene)
+					</div>
 				}
 			</div>
 			if d.ShowNumber {
@@ -693,27 +758,6 @@ templ Dashboard(d DashboardData) {
 			}
 			if d.Guide != nil {
 				@Guide(*d.Guide)
-			}
-			if d.Mail.Available {
-				@MailCard(d.Mail)
-			}
-			if d.Push.Available {
-				@PushCard(d.Push)
-			}
-			if d.Pairings.Available {
-				@PairingsCard(d.Pairings)
-			}
-			if d.Library.Available {
-				@LibraryCard(d.Library)
-			}
-			if d.Memories.Available {
-				@MemoriesCard(d.Memories)
-			}
-			if d.Folders.Available {
-				@FoldersCard(d.Folders)
-			}
-			if d.Stacks.Available {
-				@StacksCard(d.Stacks)
 			}
 		</section>
 		<section class="view" id="v-services" aria-label={ t(ctx, "Services") }>
@@ -724,43 +768,129 @@ templ Dashboard(d DashboardData) {
 			if d.RowCount() == 0 {
 				<div class="card empty">{ t(ctx, "You do not take part in any service yet.") }</div>
 			}
-			if len(d.Sending()) > 0 {
-				<h2>{ t(ctx, "You send to") }</h2>
-				for i, sv := range d.Sending() {
-					@SendRow(sv, fmt.Sprintf("send-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Receiving()) > 0 {
-				<h2>{ t(ctx, "You receive") }</h2>
-				for i, sv := range d.Receiving() {
-					@ReceiveRow(sv, fmt.Sprintf("recv-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Owned) > 0 {
-				<h2>{ t(ctx, "You offer") }</h2>
-				for i, o := range d.Owned {
-					@OwnedRow(o, fmt.Sprintf("own-%d", i), d.RowCount() == 1)
-				}
-			}
-			if len(d.Offers) > 0 {
-				<h2>{ t(ctx, "You can join") }</h2>
-				for _, o := range d.Offers {
-					@OfferCard(o)
-				}
-			}
 			if d.CanOffer {
-				<details class="offer">
-					<summary>{ t(ctx, "Offer a service of your own") }</summary>
-					@OfferForm(d.DeleteOK, d.DestsOn)
-				</details>
-				@DropBoxSection(d.DropBoxes, d.Templates)
-				@RoomSection(d.Rooms)
-				if d.PeersOn {
-					@PeerSection(d.Peers, d.PeerInvites)
+				@Segments(d)
+			}
+			<div class="seg-panel" data-seg="services" id="seg-services" role="tabpanel">
+				if len(d.Sending()) > 0 {
+					<h2>{ t(ctx, "You send to") }</h2>
+					for i, sv := range d.Sending() {
+						@SendRow(sv, fmt.Sprintf("send-%d", i), d.RowCount() == 1)
+					}
 				}
-				@FrameSection(d.Frames)
+				if len(d.Receiving()) > 0 {
+					<h2>{ t(ctx, "You receive") }</h2>
+					for i, sv := range d.Receiving() {
+						@ReceiveRow(sv, fmt.Sprintf("recv-%d", i), d.RowCount() == 1)
+					}
+				}
+				if len(d.Owned) > 0 {
+					<h2>{ t(ctx, "You offer") }</h2>
+					for i, o := range d.Owned {
+						@OwnedRow(o, fmt.Sprintf("own-%d", i), d.RowCount() == 1)
+					}
+				}
+				if len(d.Offers) > 0 {
+					<h2>{ t(ctx, "You can join") }</h2>
+					for _, o := range d.Offers {
+						@OfferCard(o)
+					}
+				}
+				if d.CanOffer {
+					<details class="offer">
+						<summary>{ t(ctx, "Offer a service of your own") }</summary>
+						@OfferForm(d.DeleteOK, d.DestsOn)
+					</details>
+				}
+			</div>
+			if d.CanOffer {
+				<div class="seg-panel" data-seg="dropboxes" id="seg-dropboxes" role="tabpanel">
+					@DropBoxSection(d.DropBoxes, d.Templates)
+				</div>
+				<div class="seg-panel" data-seg="rooms" id="seg-rooms" role="tabpanel">
+					@RoomSection(d.Rooms)
+				</div>
+				<div class="seg-panel" data-seg="frames" id="seg-frames" role="tabpanel">
+					@FrameSection(d.Frames)
+				</div>
+				if d.PeersOn {
+					<div class="seg-panel" data-seg="shared" id="seg-shared" role="tabpanel">
+						@PeerSection(d.Peers, d.PeerInvites)
+					</div>
+				}
 			}
 		</section>
+		if d.HasSettings() {
+		<section class="view" id="v-settings" aria-label={ t(ctx, "Settings") }>
+			<h1>
+				@templ.Raw(h(ctx, "Your <em>settings</em>"))
+			</h1>
+			<p class="lead">{ t(ctx, "Set these up once; only what is switched on for you appears here.") }</p>
+			<div class="settings-shell">
+				<nav class="settings-nav" role="tablist" aria-label={ t(ctx, "Settings categories") }>
+					for i, c := range d.SettingsCats() {
+						<button type="button" role="tab" aria-controls={ "set-" + c.ID } data-cat={ c.ID } aria-selected={ checked(i == 0) } tabindex={ tabindex(i == 0) }>
+							<span class="cat-name">{ settingsCatTitle(ctx, c.ID) }</span>
+							if c.On > 0 {
+								<span class="n">{ fmt.Sprint(c.On) }</span>
+							}
+						</button>
+					}
+				</nav>
+				<div class="settings-panels">
+					if d.Mail.Available || d.Push.Available {
+						<div class="settings-panel" id="set-notifications" role="tabpanel" data-cat="notifications">
+							if d.Mail.Available {
+								@MailCard(d.Mail)
+							}
+							if d.Push.Available {
+								@PushCard(d.Push)
+							}
+						</div>
+					}
+					<div class="settings-panel" id="set-photos" role="tabpanel" data-cat="photos">
+						if d.Library.Available {
+							@LibraryCard(d.Library)
+						}
+						if d.Memories.Available {
+							@MemoriesCard(d.Memories)
+						}
+						if d.Folders.Available {
+							@FoldersCard(d.Folders)
+						}
+						if d.Stacks.Available {
+							@StacksCard(d.Stacks)
+						}
+						if d.Places.Available {
+							@PlacesCard(d.Places)
+						}
+						if d.Albums.Available {
+							@AlbumsCard(d.Albums)
+						}
+						@AlbumTreeCard()
+					</div>
+					if d.Circles.Available || d.Pairings.Available || d.Stories.Available {
+						<div class="settings-panel" id="set-sharing" role="tabpanel" data-cat="sharing">
+							if d.Circles.Available {
+								@CirclesCard(d.Circles)
+							}
+							if d.Pairings.Available {
+								@PairingsCard(d.Pairings)
+							}
+							if d.Stories.Available {
+								@StoriesCard(d.Stories)
+							}
+						</div>
+					}
+					if d.Cast.Available {
+						<div class="settings-panel" id="set-screens" role="tabpanel" data-cat="screens">
+							@CastCard(d.Cast)
+						</div>
+					}
+				</div>
+			</div>
+		</section>
+		}
 		<section class="view" id="v-activity" aria-label={ t(ctx, "Activity") }>
 			<h1>
 				@templ.Raw(h(ctx, "What <em>happened</em>"))
@@ -790,9 +920,33 @@ templ Dashboard(d DashboardData) {
 	}
 }
 
+// Segments is the switch at the top of the Services view for an owner: the services themselves, then the other things
+// they can make (drop boxes, client rooms, frames, albums shared with other servers), one shown at a time, with how many
+// of each. Without script every part is shown one after the other and the switch is hidden.
+templ Segments(d DashboardData) {
+	<div class="seg" role="tablist" aria-label={ t(ctx, "What to manage") }>
+		<button type="button" role="tab" aria-controls="seg-services" data-seg="services" aria-selected="true">{ t(ctx, "Services") } <span class="n">{ fmt.Sprint(d.RowCount() + len(d.Offers)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-dropboxes" data-seg="dropboxes" aria-selected="false" tabindex="-1">{ t(ctx, "Drop boxes") } <span class="n">{ fmt.Sprint(len(d.DropBoxes)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-rooms" data-seg="rooms" aria-selected="false" tabindex="-1">{ t(ctx, "Client rooms") } <span class="n">{ fmt.Sprint(len(d.Rooms)) }</span></button>
+		<button type="button" role="tab" aria-controls="seg-frames" data-seg="frames" aria-selected="false" tabindex="-1">{ t(ctx, "Frames") } <span class="n">{ fmt.Sprint(len(d.Frames)) }</span></button>
+		if d.PeersOn {
+			<button type="button" role="tab" aria-controls="seg-shared" data-seg="shared" aria-selected="false" tabindex="-1">{ t(ctx, "Shared albums") } <span class="n">{ fmt.Sprint(len(d.Peers)) }</span></button>
+		}
+	</div>
+}
+
+// Status is the short state of a Settings card, next to its title.
+templ Status(v StatusView) {
+	if v.On {
+		<span class="chip ok status">{ v.Words }</span>
+	} else {
+		<span class="chip status">{ v.Words }</span>
+	}
+}
+
 // MailCard lets a person ask for email about what happens to their services.
 templ MailCard(m MailView) {
-	<h2>{ t(ctx, "Email me") }</h2>
+	<h2>{ t(ctx, "Email me") } @Status(mailStatus(ctx, m))</h2>
 	<div class="card mailcard">
 		if m.On {
 			<p>{ t(ctx, "You get an email about what happens to your services, at {email}.", "email", m.Email) }</p>
@@ -821,7 +975,7 @@ templ MailCard(m MailView) {
 
 // MemoriesCard is where a person turns on a daily message about the memories Immich has for the day.
 templ MemoriesCard(m MemoriesView) {
-	<h2>{ t(ctx, "On this day") }</h2>
+	<h2>{ t(ctx, "On this day") } @Status(memoriesStatus(ctx, m))</h2>
 	<div class="card memoriescard">
 		if m.On && m.Broken {
 			<p class="bad-note">{ t(ctx, "The key the app made in your Immich is gone, so no message can be sent. Save to make a new one.") }</p>
@@ -861,7 +1015,7 @@ templ MemoriesCard(m MemoriesView) {
 
 // FoldersCard makes albums from the folders of the person's external library: the rules they have, and the form that makes one.
 templ FoldersCard(f FoldersView) {
-	<h2>{ t(ctx, "Albums from my folders") }</h2>
+	<h2>{ t(ctx, "Albums from my folders") } @Status(ruleStatus(ctx, len(f.Rules)))</h2>
 	<div class="card folderscard">
 		<p>{ t(ctx, "If part of your library is an external library (folders on the server), the app can offer an album for each folder, named after it, and put the photos in it. It only adds: nothing is ever removed, renamed or deleted.") }</p>
 		for _, r := range f.Rules {
@@ -931,9 +1085,139 @@ templ FoldersCard(f FoldersView) {
 	</div>
 }
 
+// AlbumsCard keeps albums of the person's up to date with a rule: the rules they have, and the form that makes one.
+templ AlbumsCard(a AlbumsView) {
+	<h2>{ t(ctx, "Smart albums") } @Status(ruleStatus(ctx, len(a.Rules)))</h2>
+	<div class="card albumscard">
+		<p>{ t(ctx, "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.") }</p>
+		for _, r := range a.Rules {
+			<div class="card rule">
+				<p><b>{ r.Album }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Fills itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+					if r.RemoveStale {
+						<span class="chip">{ t(ctx, "Takes out what no longer matches") }</span>
+					}
+				</p>
+				<p class="meta">{ r.Words }</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it fill the album by itself from now on.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Look for older photos") }</button>
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the photos that match are put in this album without asking you. Only photos that arrive from now on are handled this way.") }>{ t(ctx, "Let it fill the album by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop keeping this album up to date? The album and its photos stay as they are.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a smart album") }</summary>
+			<div hx-get="fragments/album-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// AlbumForm is the form that makes a smart album: the album, then the choices of any rule.
+templ AlbumForm(v RuleChoicesView) {
+	<form class="card offer-form" hx-post="rules/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="album-target">{ t(ctx, "The album") }</label>
+			<select id="album-target" name="target">
+				<option value="">{ t(ctx, "A new album, named below") }</option>
+				for _, a := range v.Albums {
+					<option value={ a.ID }>{ a.Label }</option>
+				}
+			</select>
+		</div>
+		<div class="field">
+			<label for="album-new">{ t(ctx, "Name of the new album") }</label>
+			<input id="album-new" name="newname" maxlength="100" autocomplete="off"/>
+		</div>
+		@RuleFields(v)
+		@WaitField(v.WaitMin)
+		<div class="field">
+			<label><input type="checkbox" name="stale" value="1"/> { t(ctx, "Take out photos that no longer match") }</label>
+			<small class="meta">{ t(ctx, "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the smart album") }</button></p>
+	</form>
+}
+
+// PlacesCard offers a place to the person's photos that have none, from a photo of the same camera taken minutes from them.
+templ PlacesCard(p PlacesView) {
+	<h2>{ t(ctx, "Places for photos that have none") } @Status(placesStatus(ctx, p))</h2>
+	<div class="card placescard">
+		<p>{ t(ctx, "A camera with no GPS leaves no place on its photos. When a photo with no place was taken minutes from one that has a place, by the same camera on the same day, the app offers it that place, and shows you both photos and why. It never writes a place before you say so.") }</p>
+		<p class="meta bad-note">{ t(ctx, "A place the app writes cannot be taken back by the app (Immich does not let it). If one is wrong, remove it in Immich.") }</p>
+		if p.Rule != nil {
+			<div class="card rule">
+				<p><b>{ t(ctx, "Give photos without a place the place next to them") }</b>
+					if p.Rule.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if p.Rule.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Writes places by itself when both sides agree") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				if p.Rule.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", p.Rule.Last) }</p>
+				}
+				if p.Rule.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", p.Rule.Problem) }</p>
+				}
+				if p.Rule.Mode != "auto" && p.Rule.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it write a place by itself from now on, only for a photo with a photo that has a place on both sides; the others always ask.", "n", p.Rule.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", p.Rule.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Look for older photos") }</button>
+					if p.Rule.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", p.Rule.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if p.Rule.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", p.Rule.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on a photo that has a photo with a place on both sides gets that place without asking you. Only photos that arrive from now on are handled this way, and the app cannot take a place back.") }>{ t(ctx, "Let it write places by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", p.Rule.ID, "paused", pausedValue(p.Rule.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if p.Rule.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", p.Rule.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop offering places? The places already written stay.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		} else {
+			<p class="row"><button class="primary" hx-post="rules/places" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Offer places to my photos that have none") }</button></p>
+			<p class="meta">{ t(ctx, "The app makes a key named handoff: places in your Immich that can read your photos and write a place. You can see it and delete it there.") }</p>
+		}
+	</div>
+}
+
 // StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
 templ StacksCard(s StacksView) {
-	<h2>{ t(ctx, "Stack photos that belong together") }</h2>
+	<h2>{ t(ctx, "Stack photos that belong together") } @Status(ruleStatus(ctx, len(s.Rules)))</h2>
 	<div class="card stackscard">
 		<p>{ t(ctx, "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.") }</p>
 		for _, r := range s.Rules {
@@ -1083,7 +1367,7 @@ templ MemoriesPage(d MemoriesPageView) {
 
 // LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.
 templ LibraryCard(l LibraryView) {
-	<h2>{ t(ctx, "Add to my library") }</h2>
+	<h2>{ t(ctx, "Add to my library") } @Status(libraryStatus(ctx, l))</h2>
 	<div class="card librarycard">
 		<p>{ t(ctx, "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.") }</p>
 		<form class="limits" hx-post="me/library" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -1273,7 +1557,7 @@ templ FollowForm(albums []FollowOption) {
 // PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
 // The script (ts/push.ts) shows the controls only where the browser can do it, and says why when it cannot.
 templ PushCard(p PushView) {
-	<h2>{ t(ctx, "Notifications on this device") }</h2>
+	<h2>{ t(ctx, "Notifications on this device") } @Status(pushStatus(ctx, p))</h2>
 	<div class="card pushcard" id="pushcard" data-key={ p.Key }>
 		<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
 		<p class="meta" data-push-note hidden></p>
@@ -1955,6 +2239,8 @@ type AdminData struct {
 	SelfOn   bool // people can join from the page, so there is a store to remove from
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
+	CircleMethod int // how people are chosen for a circle: 1 type an email, 2 pick from every account
+	PetHelper    string // the pet helper: "off" (PET_SIDECAR_URL is not set), "on" (it answers) or "down" (it is set and does not answer)
 }
 
 // NotifyView is a place messages for whoever runs the app go, as the administrator's page lists it (never its address).
@@ -2038,6 +2324,17 @@ templ AdminPage(d AdminData) {
 			<pre id="checkresult" class="checkresult" aria-live="polite"></pre>
 		</section>
 		@AdminNotify(d.Notify)
+		if d.SelfOn {
+			<h2>{ t(ctx, "Circles") }</h2>
+			<section class="card">
+				<p class="meta">{ t(ctx, "People can make a circle: a group that every new album of theirs is shared with. Choose how they name the people in it.") }</p>
+				<form hx-post="admin/circles" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+					<label class="target"><input type="radio" name="method" value="1" checked?={ d.CircleMethod != 2 }/><span><b>{ t(ctx, "They type each person's email address") }</b> <small class="meta">{ t(ctx, "Nobody else's address is shown. This is the default.") }</small></span></label>
+					<label class="target"><input type="radio" name="method" value="2" checked?={ d.CircleMethod == 2 }/><span><b>{ t(ctx, "They pick from everyone on this server") }</b> <small class="meta">{ t(ctx, "Easier, but every person who makes a circle sees the name of every account on this server.") }</small></span></label>
+					<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save") }</button></p>
+				</form>
+			</section>
+		}
 		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span></h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
@@ -2059,6 +2356,7 @@ templ AdminPage(d AdminData) {
 		if d.Backup.Has {
 			@AdminBackups(d.Backup)
 		}
+		@AdminPetHelper(d.PetHelper)
 		if len(d.Activity) > 0 {
 			<h2>{ t(ctx, "Recent events") }</h2>
 			<section class="card timeline-card" aria-label={ t(ctx, "Recent events") }>
@@ -2118,6 +2416,26 @@ templ NotifyResults(results []NotifyResultView) {
 }
 
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
+// AdminPetHelper says whether the optional pet helper is running, and where to read how to switch it on.
+templ AdminPetHelper(state string) {
+	<h2>{ t(ctx, "Pet helper") }</h2>
+	<section class="card" id="pethelper">
+		<p>
+			switch state {
+				case "on":
+					<span class="chip ok">{ t(ctx, "On") }</span> { t(ctx, "The pet helper answers. Rules for a pet compare the animal in each photo with the animal in their examples.") }
+				case "down":
+					<span class="chip bad">{ t(ctx, "Not answering") }</span> { t(ctx, "PET_SIDECAR_URL is set but the pet helper does not answer. Rules for a pet use Immich's own search until it does; run doctor to see why.") }
+				default:
+					<span class="chip">{ t(ctx, "Off") }</span> { t(ctx, "Rules for a pet work without it, with Immich's own search. The pet helper is a small second container that makes them much more accurate.") }
+			}
+		</p>
+		<p class="meta">
+			@templ.Raw(h(ctx, "How to switch it on: <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">the pet helper</a>.", "url", petHelperDocsURL))
+		</p>
+	</section>
+}
+
 templ AdminBackups(b AdminBackup) {
 	<h2>{ t(ctx, "Backups") }</h2>
 	<section class="card" id="backups">
@@ -4587,10 +4905,8 @@ templ RulesBox(s ServiceView) {
 	</div>
 }
 
-// RuleForm is the form that makes a rule: only choices Immich itself offers, plus dates and a phrase.
-templ RuleForm(v RuleChoicesView) {
-	<form class="card offer-form" hx-post="rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
-		<input type="hidden" name="service" value={ v.Service }/>
+// RuleFields are the choices of a rule, shared by the form of a service and the form of a smart album.
+templ RuleFields(v RuleChoicesView) {
 		<p class="meta">{ t(ctx, "Choose what to look for. Everything you choose must hold for a photo to match.") }</p>
 		if len(v.People) > 0 {
 			<fieldset class="targets">
@@ -4644,11 +4960,40 @@ templ RuleForm(v RuleChoicesView) {
 				}
 			</fieldset>
 		}
+		if len(v.Makes) > 0 {
+			<div class="field">
+				<label>{ t(ctx, "Taken with") }</label>
+				<div class="row">
+					<select name="make" hx-get="fragments/rule-models" hx-target="next select" hx-swap="innerHTML" hx-trigger="change">
+						<option value="">{ t(ctx, "Any camera") }</option>
+						for _, c := range v.Makes {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+					<select name="model"><option value="">{ t(ctx, "Any model") }</option></select>
+				</div>
+			</div>
+		}
+		if len(v.Tags) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "With the tags") }</legend>
+				for _, tg := range v.Tags {
+					<label class="target"><input type="checkbox" name="tag" value={ tg.ID }/><span><b>{ tg.Name }</b></span></label>
+				}
+			</fieldset>
+		}
 		<div class="field">
 			<label for="rule-phrase">{ t(ctx, "That look like (optional)") }</label>
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
 		</div>
+}
+
+// RuleForm is the form that makes a rule: only choices Immich itself offers, plus dates and a phrase.
+templ RuleForm(v RuleChoicesView) {
+	<form class="card offer-form" hx-post="rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="service" value={ v.Service }/>
+		@RuleFields(v)
 		@WaitField(v.WaitMin)
 		if len(v.Others) > 0 {
 			<fieldset class="targets">
@@ -4661,6 +5006,14 @@ templ RuleForm(v RuleChoicesView) {
 		}
 		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the rule") }</button></p>
 	</form>
+}
+
+// RuleModels is the model menu's options once a camera make is chosen.
+templ RuleModels(models []string) {
+	<option value="">{ t(ctx, "Any model") }</option>
+	for _, m := range models {
+		<option value={ m }>{ m }</option>
+	}
 }
 
 // RuleCities is the city menu's options once a country is chosen.
@@ -4679,6 +5032,12 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		if d.Stack {
 			<h1>{ t(ctx, "Photos to stack") }</h1>
 			<p class="lead">{ t(ctx, "Each box is a group that would become one stack, the cover first.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Place {
+			<h1>{ t(ctx, "Places for photos that have none") }</h1>
+			<p class="lead">{ t(ctx, "Each photo is shown next to the photo it would get its place from. The app cannot take a written place back, so untick any you are not sure of.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Smart {
+			<h1>{ t(ctx, "For the album {album}", "album", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Folder {
 			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
@@ -4692,7 +5051,7 @@ templ SuggestionReviewPage(d SuggestionReview) {
 			<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
 			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		}
-		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ placeConfirm(ctx, d.Place) }>
 			<input type="hidden" name="rule" value={ d.RuleID }/>
 			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
 			if d.Stack {
@@ -4712,8 +5071,14 @@ templ SuggestionReviewPage(d SuggestionReview) {
 					<li>
 						<label>
 							<img src={ p.URL + "?size=large" } alt={ p.Why } width="240" height="240" loading="lazy"/>
+							if p.Near != "" {
+								<img class="near" src={ p.Near + "?size=large" } alt={ t(ctx, "The photo the place comes from") } width="240" height="240" loading="lazy"/>
+							}
 							<span class="meta"><input type="checkbox" name="photo" value={ p.ID } checked/> { p.Why }</span>
 						</label>
+						if p.Map != "" {
+							<a class="meta" href={ templ.SafeURL(p.Map) } target="_blank" rel="noopener noreferrer">{ t(ctx, "Show on a map") }</a>
+						}
 					</li>
 				}
 			</ul>
@@ -4721,6 +5086,12 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				if d.Stack {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Stack the ticked groups") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Stack the ticked groups, and always") }</button>
+				} else if d.Place {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Give the ticked photos these places") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Give them these places, and always") }</button>
+				} else if d.Smart {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Put the ticked photos in the album") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Put them in, and always") }</button>
 				} else if d.Folder {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>
@@ -4742,9 +5113,768 @@ templ SuggestionReviewPage(d SuggestionReview) {
 	}
 }
 
+// PlaceRuleView is the person's rule that gives photos places, for their page.
+type PlaceRuleView struct {
+	ID, Mode        string
+	Always          int
+	Paused, CanAuto bool
+	Last, Problem   string
+}
+
+// PlacesView is the person's "Places for photos that have none" card.
+type PlacesView struct {
+	Available bool
+	Rule      *PlaceRuleView
+}
+
+// StoryItemView is one story, for the person's card.
+type StoryItemView struct {
+	ID, Token, Title, State, Problem, Source, Ends string
+	Done, Total, Photos, Chapters                  int
+	Preview                                        bool
+}
+
+// StoriesView is the person's "Stories" card.
+type StoriesView struct {
+	Available bool
+	Items     []StoryItemView
+}
+
+// StoryEditView is the editor page of one story.
+type StoryEditView struct {
+	User      string
+	Story     StoryItemView
+	Chapters  []StoryChapterView
+	Photos    []StoryPhotoView
+	ShowDates, ShowPlaces, ShowPeople, Preview bool
+	CanPreview bool // the address of this app is known, so a link preview can name its photo
+	Ends      string
+}
+
+// StoryChapterView is a chapter in the editor: its title (empty: its dates) and what the reader would see instead.
+type StoryChapterView struct {
+	N              int
+	Title, Dates   string
+	Photos         int
+}
+
+// StoryPhotoView is a photo in the editor, with where and when.
+type StoryPhotoView struct {
+	Asset, Words string
+}
+
+// StoryPageView is what the public page of a story needs.
+type StoryPageView struct {
+	Title, Token string
+	Preview      bool
+	AppURL       string // the app's own address, for the preview tags (empty: none)
+}
+
+// CastSessionView is one paired TV, for the person's card.
+type CastSessionView struct {
+	ID, Source, Since string
+	Paused            bool
+}
+
+// CastView is the person's "Cast to a TV" card.
+type CastView struct {
+	Available bool
+	Sessions  []CastSessionView
+}
+
+// CastFormView is what the cast form offers: the person's albums, shared albums and people; the code field only for a new TV.
+type CastFormView struct {
+	Session string // a TV already paired: the form changes what it shows (empty: a new TV)
+	Albums  []AlbumOption
+	Shared  []AlbumOption
+	Stories []AlbumOption
+	People  []PersonOption
+	Today   string
+}
+
+// AlbumTreePageView is the album tree page: the person's own albums, the ones shared with them, and the folders an album can move to.
+type AlbumTreePageView struct {
+	User      string
+	Mine      *albumtree.Node
+	Shared    *albumtree.Node
+	Folders   []string
+	ImmichURL string // where albums open in Immich (empty: no link)
+}
+
+// StoriesCard makes short animated recaps of the person's photos, with a public link: the stories they have and the form that makes one.
+templ StoriesCard(s StoriesView) {
+	<h2>{ t(ctx, "Stories") } @Status(storiesStatus(ctx, s))</h2>
+	<div class="card storiescard">
+		<p>{ t(ctx, "A story is a short animated recap of an album, of a person's photos, of a stretch of time or of a drop box: a title, a card for each chapter with its dates and places, about forty of the best photos, and an end. Anyone with its link can watch it on a phone or a TV, with no account, until the link ends.") }</p>
+		for _, it := range s.Items {
+			@StoryItem(it)
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a story") }</summary>
+			<div hx-get="fragments/story-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// StoryItem is one story on the card: its state, its link to share, and what the person can do. While it is being made it looks again
+// every few seconds, and stops when it is ready.
+templ StoryItem(it StoryItemView) {
+	<div class="card rule story" id={ "story-" + it.ID[:8] } if it.State == "building" { hx-get={ "fragments/story-item?story=" + it.ID } hx-trigger="load delay:4s" hx-swap="outerHTML" }>
+		<p><b>{ it.Title }</b>
+			switch it.State {
+				case "building":
+					<span class="chip warn">{ t(ctx, "Being made") }</span>
+				case "failed":
+					<span class="chip bad">{ t(ctx, "Could not be made") }</span>
+				case "ended":
+					<span class="chip warn">{ t(ctx, "Link ended") }</span>
+				default:
+					<span class="chip ok">{ t(ctx, "Ready") }</span>
+			}
+		</p>
+		<p class="meta">{ it.Source }
+			if it.State == "building" && it.Total > 0 {
+				· { t(ctx, "{done} of {total} photos looked at", "done", it.Done, "total", it.Total) }
+			}
+			if it.State == "ready" {
+				· { n(ctx, "{n} photo", "{n} photos", it.Photos) }, { n(ctx, "{n} chapter", "{n} chapters", it.Chapters) }
+			}
+			if it.Ends != "" {
+				· { t(ctx, "The link ends {when}.", "when", it.Ends) }
+			}
+		</p>
+		if it.Problem != "" {
+			<p class="meta bad-note">{ t(ctx, "The story could not be made: {reason}", "reason", t(ctx, it.Problem)) }</p>
+		}
+		if it.State == "ready" {
+			<div class="field">
+				<div class="row">
+					<input id={ "story-link-" + it.ID[:8] } class="invite" readonly data-link={ "story/" + it.Token }/>
+					<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+					<button type="button" class="show-qr" data-for={ "story-link-" + it.ID[:8] } data-alt={ t(ctx, "QR code of the story's address") }>{ t(ctx, "QR code") }</button>
+					<button type="button" class="share-link" data-for={ "story-link-" + it.ID[:8] } data-title={ it.Title }>{ t(ctx, "Share") }</button>
+				</div>
+				<div class="qr" id={ "qr-story-link-" + it.ID[:8] } hidden></div>
+			</div>
+		}
+		<p class="row">
+			<a class="button" href={ templ.SafeURL("stories/" + it.ID) }>{ t(ctx, "Edit") }</a>
+			if it.State == "ready" || it.State == "failed" {
+				<button hx-post="stories/rebuild" hx-vals={ vals("story", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pick the photos again") }</button>
+			}
+			<button hx-post="stories/end" hx-vals={ vals("story", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove this story? Its link stops working at once.") } data-confirm-title={ t(ctx, "Remove?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+		</p>
+	</div>
+}
+
+// StoryForm makes a story: where its photos come from, and how long its link lasts.
+templ StoryForm(v StoryFormView) {
+	<form class="card offer-form" hx-post="stories" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="story-title">{ t(ctx, "Title (optional)") }</label>
+			<input id="story-title" name="title" maxlength="60" autocomplete="off"/>
+		</div>
+		<div class="field">
+			<label for="story-kind">{ t(ctx, "Made from") }</label>
+			<select id="story-kind" name="kind">
+				if len(v.Albums) > 0 {
+					<option value="album">{ t(ctx, "An album") }</option>
+				}
+				if len(v.People) > 0 {
+					<option value="person">{ t(ctx, "A person's photos") }</option>
+				}
+				<option value="range">{ t(ctx, "Everything between two dates") }</option>
+				if len(v.Boxes) > 0 {
+					<option value="box">{ t(ctx, "A drop box") }</option>
+				}
+			</select>
+		</div>
+		if len(v.Albums) > 0 {
+			<div class="field">
+				<label for="story-album">{ t(ctx, "The album (for An album)") }</label>
+				<select id="story-album" name="album">
+					for _, a := range v.Albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.People) > 0 {
+			<div class="field">
+				<label for="story-person">{ t(ctx, "The person (for A person's photos)") }</label>
+				<select id="story-person" name="person">
+					for _, p := range v.People {
+						<option value={ p.ID }>{ p.Name }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Boxes) > 0 {
+			<div class="field">
+				<label for="story-box">{ t(ctx, "The drop box (for A drop box)") }</label>
+				<select id="story-box" name="box">
+					for _, b := range v.Boxes {
+						<option value={ b.ID }>{ b.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		<div class="field">
+			<label>{ t(ctx, "Between (needed for Everything between two dates, optional for the others)") }</label>
+			<div class="row"><input type="date" name="from" aria-label={ t(ctx, "From") }/> <input type="date" name="to" aria-label={ t(ctx, "To") }/></div>
+		</div>
+		<div class="field">
+			<label for="story-ends">{ t(ctx, "The link lasts") }</label>
+			<select id="story-ends" name="ends">
+				<option value="7">{ t(ctx, "7 days") }</option>
+				<option value="30" selected>{ t(ctx, "30 days") }</option>
+				<option value="90">{ t(ctx, "90 days") }</option>
+				<option value="0">{ t(ctx, "Until I remove it") }</option>
+			</select>
+			<small class="meta">{ t(ctx, "Anyone with the link can watch it. The story shows dates and the city and country of the photos; you can switch those off, and add the names of the people, when you edit it. Coordinates are never shown.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the story") }</button></p>
+	</form>
+}
+
+// StoryFormView is what the form that makes a story offers.
+type StoryFormView struct {
+	Albums, Boxes []AlbumOption
+	People        []PersonOption
+}
+
+// StoryEditPage is where a person changes a story: the title, what the page shows, the chapters and the photos.
+templ StoryEditPage(v StoryEditView) {
+	@Layout(v.Story.Title, v.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ v.Story.Title }</h1>
+		<p class="lead">{ t(ctx, "Change the title, what the page shows, the chapters and the photos.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		@StoryItem(v.Story)
+		<form class="card offer-form" hx-post="stories/edit" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="story" value={ v.Story.ID }/>
+			<div class="field">
+				<label for="se-title">{ t(ctx, "Title") }</label>
+				<input id="se-title" name="title" value={ v.Story.Title } maxlength="60" required/>
+			</div>
+			<fieldset class="targets">
+				<legend>{ t(ctx, "What the page shows") }</legend>
+				<label class="target"><input type="checkbox" name="dates" value="1" checked?={ v.ShowDates }/><span><b>{ t(ctx, "The dates") }</b></span></label>
+				<label class="target"><input type="checkbox" name="places" value="1" checked?={ v.ShowPlaces }/><span><b>{ t(ctx, "The city and country of each photo") }</b></span></label>
+				<label class="target"><input type="checkbox" name="people" value="1" checked?={ v.ShowPeople }/><span><b>{ t(ctx, "The names of the people in the photos") }</b> <small class="meta">{ t(ctx, "Only people Immich has named. Off unless you switch it on.") }</small></span></label>
+			</fieldset>
+			<div class="field">
+				<label><input type="checkbox" name="preview" value="1" checked?={ v.Preview } disabled?={ !v.CanPreview }/> { t(ctx, "Show a preview in chats") }</label>
+				<small class="meta">
+					if v.CanPreview {
+						{ t(ctx, "When the link is pasted in a chat, the chat service fetches the title and the first photo from the public link.") }
+					} else {
+						{ t(ctx, "This needs the person who runs this app to set PUBLIC_APP_URL.") }
+					}
+				</small>
+			</div>
+			<div class="field">
+				<label for="se-ends">{ t(ctx, "The link lasts") }</label>
+				<select id="se-ends" name="ends">
+					<option value="keep" selected>{ t(ctx, "As it is") }{ v.Ends }</option>
+					<option value="7">{ t(ctx, "7 days from now") }</option>
+					<option value="30">{ t(ctx, "30 days from now") }</option>
+					<option value="90">{ t(ctx, "90 days from now") }</option>
+					<option value="0">{ t(ctx, "Until I remove it") }</option>
+				</select>
+			</div>
+			if len(v.Chapters) > 0 {
+				<fieldset class="targets">
+					<legend>{ t(ctx, "Chapters") }</legend>
+					for _, c := range v.Chapters {
+						<div class="field">
+							<label for={ "se-ch-" + strconv.Itoa(c.N) }>{ c.Dates } <span class="meta">{ n(ctx, "{n} photo", "{n} photos", c.Photos) }</span></label>
+							<input id={ "se-ch-" + strconv.Itoa(c.N) } name={ "chapter" + strconv.Itoa(c.N) } value={ c.Title } maxlength="60" placeholder={ c.Dates } autocomplete="off"/>
+						</div>
+					}
+					<small class="meta">{ t(ctx, "Leave a chapter's name empty to show its dates.") }</small>
+				</fieldset>
+			}
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save") }</button></p>
+		</form>
+		if len(v.Photos) > 0 {
+			<h2>{ t(ctx, "Photos") } <span class="count-badge">{ fmt.Sprint(len(v.Photos)) }</span></h2>
+			<ul class="review-grid">
+				for _, p := range v.Photos {
+					<li>
+						<img src={ "stories/" + v.Story.ID + "/thumb/" + p.Asset } alt={ p.Words } width="240" height="240" loading="lazy"/>
+						<span class="meta">{ p.Words }</span>
+						<button hx-post="stories/photo/remove" hx-vals={ vals2("story", v.Story.ID, "asset", p.Asset) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Take out") }</button>
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+// StoryPage is the page a story's link opens: full screen, no sign-in, no sound.
+templ StoryPage(v StoryPageView) {
+	<!DOCTYPE html>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			if v.Preview && v.AppURL != "" {
+				<meta property="og:type" content="website"/>
+				<meta property="og:title" content={ v.Title }/>
+				<meta property="og:url" content={ v.AppURL + "/story/" + v.Token }/>
+				<meta property="og:image" content={ v.AppURL + "/story/" + v.Token + "/cover" }/>
+				<meta name="twitter:card" content="summary_large_image"/>
+			} else {
+				<meta name="robots" content="noindex"/>
+			}
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ v.Title }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/app.js" defer></script>
+		</head>
+		<body class="wall story">
+			<main id="story" data-doc={ "story/" + v.Token + "/data" } data-photo={ "story/" + v.Token + "/photo/" }>
+				<div class="wall-stage single" aria-live="off"></div>
+				<div class="st-progress" aria-hidden="true"><div class="st-bar"></div></div>
+				<p class="wall-wait">{ t(ctx, "Getting the story ready") }</p>
+				<button type="button" class="st-pause" hidden aria-label={ t(ctx, "Paused: tap to go on") }>{ t(ctx, "Paused") }</button>
+			</main>
+		</body>
+	</html>
+}
+
+// CastCard shows the person's albums, people and memories on a TV with a code: the TVs that are showing, with their remote, and the form.
+templ CastCard(c CastView) {
+	<h2>{ t(ctx, "Cast to a TV") } @Status(castStatus(ctx, c))</h2>
+	<div class="card castcard">
+		<p>{ t(ctx, "Open the address below in the browser of a TV: it shows a short code. Type the code here and choose what to show, and the TV shows those photos. The TV does not sign in to anything: it gets the photos through this app, and you stop it from here whenever you like.") }</p>
+		<div class="field">
+			<label for="cast-link">{ t(ctx, "Address to open on the TV") }</label>
+			<div class="row"><input id="cast-link" class="invite" readonly data-link="tv"/><button type="button" class="copy">{ t(ctx, "Copy") }</button></div>
+			<small class="meta">{ t(ctx, "An old TV whose browser shows nothing there can use this one instead:") } <input id="cast-link-legacy" class="invite" readonly data-link="tv/legacy"/> <button type="button" class="copy">{ t(ctx, "Copy") }</button></small>
+		</div>
+		for _, s := range c.Sessions {
+			<div class="card rule cast" id={ "cast-" + s.ID[:8] }>
+				<p><b>{ s.Source }</b>
+					if s.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else {
+						<span class="chip ok">{ t(ctx, "Showing") }</span>
+					}
+				</p>
+				<p class="meta">{ t(ctx, "Started {when}.", "when", s.Since) }</p>
+				<p class="row">
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "prev") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Previous") }</button>
+					if s.Paused {
+						<button class="primary" hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "resume") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Play") }</button>
+					} else {
+						<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "pause") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pause") }</button>
+					}
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "next") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Next") }</button>
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "stop") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop showing photos on this TV?") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+				<details class="offer">
+					<summary>{ t(ctx, "Show something else") }</summary>
+					<div hx-get={ "fragments/cast-form?tv=" + s.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+				</details>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Show photos on a TV") }</summary>
+			<div hx-get="fragments/cast-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// CastForm is the form that pairs a TV by its code, or changes what a paired TV shows.
+templ CastForm(v CastFormView) {
+	<form class="card offer-form" hx-post={ castPath(v.Session) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		if v.Session != "" {
+			<input type="hidden" name="tv" value={ v.Session }/>
+		} else {
+			<div class="field">
+				<label for="cast-code">{ t(ctx, "The code on the TV") }</label>
+				<input id="cast-code" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" required/>
+			</div>
+		}
+		<div class="field">
+			<label for={ "cast-kind-" + v.Session }>{ t(ctx, "What to show") }</label>
+			<select id={ "cast-kind-" + v.Session } name="kind">
+				<option value="new">{ t(ctx, "Everything new in the last 30 days") }</option>
+				if len(v.Albums) > 0 {
+					<option value="album">{ t(ctx, "An album of mine") }</option>
+				}
+				if len(v.Shared) > 0 {
+					<option value="shared">{ t(ctx, "An album shared with me") }</option>
+				}
+				if len(v.People) > 0 {
+					<option value="person">{ t(ctx, "Photos of a person") }</option>
+				}
+				if len(v.Stories) > 0 {
+					<option value="story">{ t(ctx, "A story of mine") }</option>
+				}
+				<option value="memory">{ t(ctx, "The memories of a day") }</option>
+			</select>
+		</div>
+		if len(v.Albums) > 0 {
+			<div class="field">
+				<label for={ "cast-album-" + v.Session }>{ t(ctx, "The album (for An album of mine)") }</label>
+				<select id={ "cast-album-" + v.Session } name="album">
+					for _, a := range v.Albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Shared) > 0 {
+			<div class="field">
+				<label for={ "cast-shared-" + v.Session }>{ t(ctx, "The shared album (for An album shared with me)") }</label>
+				<select id={ "cast-shared-" + v.Session } name="shared">
+					for _, a := range v.Shared {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Stories) > 0 {
+			<div class="field">
+				<label for={ "cast-story-" + v.Session }>{ t(ctx, "The story (for A story of mine)") }</label>
+				<select id={ "cast-story-" + v.Session } name="story">
+					for _, a := range v.Stories {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.People) > 0 {
+			<div class="field">
+				<label for={ "cast-person-" + v.Session }>{ t(ctx, "The person (for Photos of a person)") }</label>
+				<select id={ "cast-person-" + v.Session } name="person">
+					for _, p := range v.People {
+						<option value={ p.ID }>{ p.Name }</option>
+					}
+				</select>
+			</div>
+		}
+		<div class="field">
+			<label for={ "cast-day-" + v.Session }>{ t(ctx, "The day (for The memories of a day)") }</label>
+			<input id={ "cast-day-" + v.Session } type="date" name="day" value={ v.Today }/>
+		</div>
+		<div class="field">
+			<label for={ "cast-seconds-" + v.Session }>{ t(ctx, "How long each photo stays") }</label>
+			<select id={ "cast-seconds-" + v.Session } name="seconds">
+				<option value="8">{ t(ctx, "8 seconds") }</option>
+				<option value="15" selected>{ t(ctx, "15 seconds") }</option>
+				<option value="30">{ t(ctx, "30 seconds") }</option>
+				<option value="60">{ t(ctx, "60 seconds") }</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for={ "cast-fx-" + v.Session }>{ t(ctx, "Transition") }</label>
+			<select id={ "cast-fx-" + v.Session } name="fx">
+				<option value="fade">{ t(ctx, "Fade") }</option>
+				<option value="zoom">{ t(ctx, "Zoom") }</option>
+				<option value="slide">{ t(ctx, "Slide") }</option>
+				<option value="rise">{ t(ctx, "Rise") }</option>
+			</select>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">
+			if v.Session != "" {
+				{ t(ctx, "Show it") }
+			} else {
+				{ t(ctx, "Show it on the TV") }
+			}
+		</button></p>
+	</form>
+}
+
+// TVPage is the page a TV opens: a code to type on the person's phone, then the photos. legacy is the page for old browsers.
+templ TVPage(legacy bool) {
+	<!DOCTYPE html>
+	<html class="tvpage" lang={ loc(ctx).Code() } data-legacy={ legacyFlag(legacy) }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="robots" content="noindex"/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ t(ctx, "Photos on this TV") }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			if !legacy {
+				<link rel="stylesheet" href="static/app.css"/>
+			}
+			<link rel="stylesheet" href="static/tv.css"/>
+			<script src="static/tv-boot.js"></script>
+		</head>
+		<body class={ tvBody(legacy) }>
+			<main id="tv">
+				<div class="wall-stage single" aria-live="off"></div>
+				<div class="tvl-layer"></div>
+				<div class="tvl-layer"></div>
+				<div class="tv-pair">
+					<h1>{ t(ctx, "Show photos on this TV") }</h1>
+					<p class="tv-code" aria-live="polite">&nbsp;</p>
+					<p class="tv-hint" data-hint={ t(ctx, "On your phone, open {address}, go to Settings, choose Cast to a TV and type this code.") }></p>
+					<p class="tv-note">{ t(ctx, "The code is good for 10 minutes; a new one appears when it runs out.") }</p>
+				</div>
+			</main>
+		</body>
+	</html>
+}
+
+// AlbumTreeCard is the entry to the album tree page, in Settings.
+templ AlbumTreeCard() {
+	<h2>{ t(ctx, "Album tree") }</h2>
+	<div class="card albumtreecard">
+		<p>{ t(ctx, "Immich has no folders for albums. If you name albums like Trips / 2024 / Rome, this shows them as a tree, with the cover of each, and helps you move an album into a folder by renaming it.") }</p>
+		<p class="row"><a class="button primary" href="albums">{ t(ctx, "Open the album tree") }</a></p>
+	</div>
+}
+
+// AlbumTreePage shows the albums as a tree: folders that open, an album with its cover, and, for the person's own albums, a way to move it.
+templ AlbumTreePage(d AlbumTreePageView) {
+	@Layout(t(ctx, "Album tree"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "Album tree") }</h1>
+		<p class="lead">{ t(ctx, "Your albums, shown as folders by the slashes in their names. Nothing is renamed unless you ask.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Mine.AlbumCount == 0 && d.Shared.AlbumCount == 0 {
+			<div class="card empty">{ t(ctx, "You have no albums yet.") }</div>
+		}
+		if d.Mine.AlbumCount > 0 {
+			<h2>{ t(ctx, "My albums") } <span class="count-badge">{ fmt.Sprint(d.Mine.AlbumCount) }</span></h2>
+			<div class="card albumtree">
+				@AlbumTreeNode(d.Mine, d, true)
+			</div>
+		}
+		if d.Shared.AlbumCount > 0 {
+			<h2>{ t(ctx, "Shared with me") } <span class="count-badge">{ fmt.Sprint(d.Shared.AlbumCount) }</span></h2>
+			<div class="card albumtree">
+				@AlbumTreeNode(d.Shared, d, false)
+			</div>
+		}
+		if d.ImmichURL == "" {
+			<p class="meta">{ t(ctx, "To open an album in Immich from here, the person who runs this app sets PUBLIC_IMMICH_URL.") }</p>
+		}
+	}
+}
+
+// AlbumTreeNode is one folder: its albums, then its folders, each folder opening in place.
+templ AlbumTreeNode(node *albumtree.Node, d AlbumTreePageView, mine bool) {
+	<ul class="tree">
+		for _, a := range node.Albums {
+			<li class="tree-album">
+				if a.Cover != "" {
+					<img class="tree-cover" src={ "albums/" + a.ID + "/cover" } alt="" width="48" height="48" loading="lazy"/>
+				} else {
+					<span class="tree-cover empty" aria-hidden="true"></span>
+				}
+				<span class="tree-name">
+					if d.ImmichURL != "" {
+						<a href={ templ.SafeURL(strings.TrimRight(d.ImmichURL, "/") + "/albums/" + a.ID) } target="_blank" rel="noopener">{ a.Title }</a>
+					} else {
+						<b>{ a.Title }</b>
+					}
+					<span class="meta">{ n(ctx, "{n} photo", "{n} photos", a.Count) }
+						if a.Owner != "" {
+							· { t(ctx, "shared by {name}", "name", a.Owner) }
+						}
+					</span>
+				</span>
+				if mine {
+					<details class="tree-move">
+						<summary>{ t(ctx, "Move") }</summary>
+						<div hx-get={ "fragments/album-move?album=" + a.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+					</details>
+				}
+			</li>
+		}
+		for _, c := range node.Children {
+			<li class="tree-folder">
+				<details open?={ len(c.Path) < 40 && c.AlbumCount <= 12 }>
+					<summary><b>{ c.Name }</b> <span class="meta">{ n(ctx, "{n} album", "{n} albums", c.AlbumCount) }, { n(ctx, "{n} photo", "{n} photos", c.PhotoCount) }</span></summary>
+					@AlbumTreeNode(c, d, mine)
+				</details>
+			</li>
+		}
+	</ul>
+}
+
+// AlbumMoveForm previews the new name of an album and asks for the move: the folder is typed or chosen, the title stays.
+templ AlbumMoveForm(album, oldName, newName string, folder string, folders []string) {
+	<form class="card offer-form" hx-post="albums/move" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="album" value={ album }/>
+		<div class="field">
+			<label for={ "move-" + album }>{ t(ctx, "Move into the folder") }</label>
+			<input id={ "move-" + album } name="folder" value={ folder } list={ "folders-" + album } autocomplete="off" maxlength="100"
+				hx-get="fragments/album-move-preview" hx-vals={ vals("album", album) } hx-trigger="keyup changed delay:400ms" hx-target="next .move-preview" hx-swap="innerHTML" hx-include="this"/>
+			<datalist id={ "folders-" + album }>
+				for _, f := range folders {
+					<option value={ f }></option>
+				}
+			</datalist>
+			<small class="meta">{ t(ctx, "Write the folders with slashes, such as Trips / 2024. Leave it empty to take the album out of any folder.") }</small>
+		</div>
+		<div class="move-preview meta" aria-live="polite">
+			@AlbumMovePreview(oldName, newName)
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Rename the album") }</button></p>
+	</form>
+}
+
+// AlbumMovePreview says what the album would be called.
+templ AlbumMovePreview(oldName, newName string) {
+	if newName == "" {
+		{ t(ctx, "That name cannot be used.") }
+	} else if newName == oldName {
+		{ t(ctx, "The album already has that name.") }
+	} else {
+		{ t(ctx, "{old} will be renamed to {new}.", "old", oldName, "new", newName) }
+	}
+}
+
+// CirclesCard shares every new album of the person's with a group of people: the circles they have, and the form that makes one.
+templ CirclesCard(c CirclesView) {
+	<h2>{ t(ctx, "Circles") } @Status(circlesStatus(ctx, c))</h2>
+	<div class="card circlescard">
+		<p>{ t(ctx, "A circle is a group of people on this Immich server. Every new album you make is offered to them, and with your yes it is shared with them, as viewers or editors. Immich may send each of them an email for every album. Taking a person out of a circle takes them off the albums the app shared with them, and only those.") }</p>
+		for _, it := range c.Items {
+			<div class="card rule circle" id={ "circle-" + it.ID }>
+				<p><b>{ it.Name }</b>
+					if it.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if it.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Shares by itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+					if it.Role == "editor" {
+						<span class="chip">{ t(ctx, "Editors") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Viewers") }</span>
+					}
+				</p>
+				if it.Prefix != "" {
+					<p class="meta">{ t(ctx, "Albums whose name starts with {text}", "text", it.Prefix) }</p>
+				} else {
+					<p class="meta">{ t(ctx, "Every new album") }</p>
+				}
+				<ul class="events">
+					for _, m := range it.Members {
+						<li>{ m.Name } <span class="meta">{ m.Email }</span>
+							<button class="link" hx-post="circles/member/remove" hx-vals={ vals2("circle", it.ID, "member", m.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Take {name} out of this circle and off the albums the app shared with them?", "name", m.Name) } data-confirm-title={ t(ctx, "Take out?") } data-confirm-label={ t(ctx, "Take out") } data-danger="true">{ t(ctx, "Take out") }</button>
+						</li>
+					}
+				</ul>
+				if it.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", it.Last) }</p>
+				}
+				if it.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", it.Problem) }</p>
+				}
+				if it.Mode != "auto" && it.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it share new albums by itself from now on.", "n", it.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="circles/catchup" hx-vals={ vals("circle", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Offer my existing albums") }</button>
+					if it.Mode == "auto" {
+						<button hx-post="circles/auto" hx-vals={ vals2("circle", it.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if it.CanAuto {
+						<button class="primary" hx-post="circles/auto" hx-vals={ vals2("circle", it.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the albums you make are shared with this circle without asking you. Only albums made from now on are handled this way, and Immich may email each person.") }>{ t(ctx, "Let it share by itself") }</button>
+					}
+					<button hx-post="circles/pause" hx-vals={ vals2("circle", it.ID, "paused", pausedValue(it.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if it.Paused {
+							{ t(ctx, "Resume this circle") }
+						} else {
+							{ t(ctx, "Pause this circle") }
+						}
+					</button>
+					<button hx-post="circles/delete" hx-vals={ vals("circle", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "End this circle? The albums already shared stay shared.") } data-confirm-title={ t(ctx, "End?") } data-confirm-label={ t(ctx, "End") } data-danger="true">{ t(ctx, "End the circle") }</button>
+				</p>
+				<details class="offer">
+					<summary>{ t(ctx, "Add a person") }</summary>
+					<div hx-get={ "fragments/circle-add?circle=" + it.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+				</details>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a circle") }</summary>
+			<div hx-get="fragments/circle-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// CirclePeople is the part of a circle's forms that says who: an email to type, or accounts to pick, as the administrator allows.
+templ CirclePeople(v CircleFormView) {
+	if v.ByUsers {
+		<fieldset class="targets">
+			<legend>{ t(ctx, "People") }</legend>
+			for _, u := range v.Users {
+				<label class="target"><input type="checkbox" name="user" value={ u.ID }/><span><b>{ u.Name }</b></span></label>
+			}
+		</fieldset>
+	} else {
+		<div class="field">
+			<label for={ "circle-email-" + v.Circle }>{ t(ctx, "Email addresses of their Immich accounts, separated by commas") }</label>
+			<input id={ "circle-email-" + v.Circle } name="emails" autocomplete="off" required/>
+		</div>
+	}
+}
+
+// CircleForm is the form that makes a circle.
+templ CircleForm(v CircleFormView) {
+	<form class="card offer-form" hx-post="circles" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="circle-name">{ t(ctx, "Name of the circle") }</label>
+			<input id="circle-name" name="name" maxlength="60" autocomplete="off" required/>
+		</div>
+		@CirclePeople(v)
+		<div class="field">
+			<label for="circle-role">{ t(ctx, "They can") }</label>
+			<select id="circle-role" name="role">
+				<option value="viewer">{ t(ctx, "Look at the album") }</option>
+				<option value="editor">{ t(ctx, "Look at it and add photos") }</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for="circle-prefix">{ t(ctx, "Only albums whose name starts with (optional)") }</label>
+			<input id="circle-prefix" name="prefix" maxlength="100" autocomplete="off"/>
+		</div>
+		<p class="meta">{ t(ctx, "Only albums you make from now on are looked at. You can offer the ones you have already afterwards.") }</p>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the circle") }</button></p>
+	</form>
+}
+
+// CircleAddForm is the form that puts one more person in a circle.
+templ CircleAddForm(v CircleFormView) {
+	<form class="card offer-form" hx-post="circles/member" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="circle" value={ v.Circle }/>
+		if v.ByUsers {
+			<div class="field">
+				<label for={ "circle-pick-" + v.Circle }>{ t(ctx, "Person") }</label>
+				<select id={ "circle-pick-" + v.Circle } name="user">
+					for _, u := range v.Users {
+						<option value={ u.ID }>{ u.Name }</option>
+					}
+				</select>
+			</div>
+		} else {
+			<div class="field">
+				<label for={ "circle-email-" + v.Circle }>{ t(ctx, "Email address of their Immich account") }</label>
+				<input id={ "circle-email-" + v.Circle } name="emails" type="email" autocomplete="off" required/>
+			</div>
+		}
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Add to the circle") }</button></p>
+	</form>
+}
+
 // PairingsCard is the card for sharing the photos of chosen people with another person, both ways.
 templ PairingsCard(p PairingsView) {
-	<h2>{ t(ctx, "Share photos with someone") }</h2>
+	<h2>{ t(ctx, "Share photos with someone") } @Status(pairingsStatus(ctx, p))</h2>
 	<div class="card pairingscard">
 		<p>{ t(ctx, "Share the photos of the people you choose with another person on this Immich server, and get theirs back, without remembering to send anything. Each of you keeps your own copy, and either of you can pause or stop it whenever you like. Photos already copied stay where they are.") }</p>
 		for _, it := range p.Items {
@@ -4865,14 +5995,13 @@ templ PairForm(people []PersonOption, waitMin int) {
 // PairingPage is what the other person sees before they say yes, and what saying yes means.
 templ PairingPage(v PairingPageView, user string) {
 	@Layout("Immich Handoff", user) {
-		<p id="flash" class="toast" role="status" aria-live="polite"></p>
 		<section class="invite-hero">
 			<h1>{ t(ctx, "{name} would like to share photos with you", "name", v.Starter) }</h1>
 			<p class="lead">
 				if v.Theirs != "" {
-					{ t(ctx, "{name} offers to copy photos of {people} into your library, and asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
+					{ t(ctx, "{name} offers to copy photos of {people} into your library, and, if you like, asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
 				} else {
-					{ t(ctx, "{name} offers to copy photos into your library, and asks for photos of the people you choose in return.", "name", v.Starter) }
+					{ t(ctx, "{name} offers to copy photos into your library, and, if you like, asks for photos of the people you choose in return.", "name", v.Starter) }
 				}
 			</p>
 		</section>
@@ -4883,20 +6012,21 @@ templ PairingPage(v PairingPageView, user string) {
 				<input type="hidden" name="pairing" value={ v.ID }/>
 				if len(v.People) > 0 {
 					<fieldset class="targets">
-						<legend>{ t(ctx, "Photos of your people to send to {name}", "name", v.Starter) }</legend>
+						<legend>{ t(ctx, "Photos of your people to send to {name} (optional)", "name", v.Starter) }</legend>
 						for _, p := range v.People {
 							<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
 						}
 					</fieldset>
+					<p class="meta">{ t(ctx, "Choose nobody to only receive: you send nothing back.") }</p>
 					@WaitField(v.WaitMin)
-					<p class="row form-actions">
-						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
-						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
-					</p>
 				} else {
-					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to send back. Name people in Immich and come back to this page.") }</p>
-					<p class="row"><button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button></p>
+					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so you will only receive: you send nothing back.") }</p>
 				}
+				<p id="flash" class="toast" role="status" aria-live="polite"></p>
+				<p class="row form-actions">
+					<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
+					<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
+				</p>
 			</form>
 			<p class="meta">{ t(ctx, "This invitation lapses on {when}.", "when", v.Expires) }</p>
 		</div>
@@ -4924,6 +6054,11 @@ templ PetForm(service string, photos []PetPhoto, helper bool) {
 	<form class="card offer-form" hx-post="rules/pet" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 		<input type="hidden" name="service" value={ service }/>
 		<p class="meta">{ t(ctx, "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.") }</p>
+		if !helper {
+			<p class="meta">
+				@templ.Raw(h(ctx, "This works with Immich's own search. For much better results the person who runs this app can switch on the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">pet helper</a>.", "url", petHelperDocsURL))
+			</p>
+		}
 		if helper {
 			<p class="meta">{ t(ctx, "This server has the pet helper on: the rule compares the animal in each photo with the animal in your examples, so every example must show the animal clearly. Photos are sent to the helper as previews and it keeps nothing.") }</p>
 		}

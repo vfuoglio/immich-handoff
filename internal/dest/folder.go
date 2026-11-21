@@ -50,7 +50,32 @@ func (f *Folder) local(name string) (string, error) {
 	if rel, err := filepath.Rel(f.root, p); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%q is outside the folder", name)
 	}
+	if err := f.noEscape(p); err != nil {
+		return "", fmt.Errorf("%q is outside the folder: %w", name, err)
+	}
 	return p, nil
+}
+
+// noEscape refuses a path that, once the symbolic links on its way are followed, leaves the root: a link inside the
+// folder (put there by anyone who can write to the share) must not lead the app to a file elsewhere. Only the part
+// that exists can be followed; what is not there yet is made by the app under a part that was checked.
+func (f *Folder) noEscape(p string) error {
+	root, err := filepath.EvalSymlinks(f.root)
+	if err != nil {
+		return nil // the root is not there yet (or cannot be read): nothing in it can be a link
+	}
+	for q := p; ; q = filepath.Dir(q) {
+		real, err := filepath.EvalSymlinks(q)
+		if err == nil {
+			if rel, err := filepath.Rel(root, real); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return errors.New("a symbolic link leads out of it")
+			}
+			return nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) || q == filepath.Dir(q) {
+			return err
+		}
+	}
 }
 
 func (f *Folder) ref(p string) string {

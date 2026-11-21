@@ -14,6 +14,8 @@ on:
         description: "Branch or commit to test; empty means the one that started the run"
         type: string
         default: ""
+permissions:
+  contents: read
 jobs:
   checks:
     # Everything that is not the race detector: generated code, the scripts' own tests, vet, and the unit tests of the packages
@@ -24,6 +26,8 @@ jobs:
         with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
+      - name: No known vulnerability in the Go packages the app uses
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
       - name: Generated code (Immich client, templates, the page's script bundle) is up to date
         run: go generate ./... && git diff --exit-code
       - name: The release script that decides which version gets the latest tag

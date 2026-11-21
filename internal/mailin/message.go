@@ -181,7 +181,7 @@ func cleanName(name string) string {
 	name = path.Base(strings.NewReplacer(`\`, `/`).Replace(name))
 	var b strings.Builder
 	for _, r := range name {
-		if unicode.IsControl(r) || r == utf8.RuneError {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == utf8.RuneError {
 			continue
 		}
 		b.WriteRune(r)

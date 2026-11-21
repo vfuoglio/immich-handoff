@@ -12,6 +12,9 @@ services:
       DB_DATABASE_NAME: immich
       REDIS_HOSTNAME: redis
       IMMICH_MACHINE_LEARNING_ENABLED: "false"
+    volumes:
+      # a small folder tree for the external-library features: albums from folders and stacking (read-only)
+      - ../test/external-photos:/external:ro
     depends_on:
       database: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -45,21 +48,60 @@ services:
       IMMICH_BASE_URL: http://immich-server:2283
       PUBLIC_IMMICH_URL: http://localhost:2295
       PUBLIC_WEBHOOK_URL: http://immich-handoff:8080/webhook/immich
-      PUBLIC_APP_URL: http://localhost:2295/handoff
       WEBHOOK_SECRET: demo-webhook-secret-0123456789abcdef
       HANDOFF_STORE_KEY: demo-store-key-0123456789abcdef0123
       TZ: UTC
       RULES_CHECK_MINUTES: "0.1"    # a rule looks every few seconds and a photo is old enough after a few more, so a demonstration is not slow
       RULES_SETTLE_MINUTES: "0.05"
+      MEMORIES_CHECK_MINUTES: "0.1"
+      NOTIFY_FILE: /etc/handoff/notify.yaml          # mail to the people, caught by Mailpit (http://localhost:8025)
+      PUBLIC_APP_URL: http://localhost:2295/handoff
+      DESTINATIONS_FILE: /etc/handoff/destinations.yaml
+      DESTINATIONS_USER_ADD: "true"
+      DESTINATIONS_ALLOW_PRIVATE: "true"             # the demo's WebDAV, S3 and SFTP servers are on a private network
     volumes:
       - handoff-data:/data
+      - ./destinations.yaml:/etc/handoff/destinations.yaml:ro
+      - ./notify.yaml:/etc/handoff/notify.yaml:ro
+      - nas:/destinations/nas
     depends_on:
       immich-server: { condition: service_healthy }
+      prepare: { condition: service_completed_successfully }
+      mailpit: { condition: service_started }
+      webdav: { condition: service_started }
+      s3: { condition: service_started }
+
+  # the places photos can be handed to, besides a person's own Immich (see destinations.yaml)
+  prepare:
+    image: alpine:3.20
+    volumes:
+      - nas:/nas
+      - s3:/s3
+      - ./photos:/photos:ro
+    # the shared folder is writable by the app (user 65532) and already holds four photos that "appeared" there, for following a destination
+    command: ["sh", "-c", "mkdir -p /nas/incoming && cp /photos/0[1-4]-* /nas/incoming/ && mkdir -p /s3/photos && chown -R 65532:65532 /nas"]
+    restart: "no"
+  webdav:
+    image: rclone/rclone:1.68.2
+    command: ["serve", "webdav", "/data", "--addr", ":8080", "--user", "demo", "--pass", "demo-pass"]
+    volumes: ["webdav:/data"]
+  s3:
+    image: rclone/rclone:1.68.2
+    # an S3 server on the standard library of rclone: a folder in its volume is a bucket, and "photos" is made by prepare
+    command: ["serve", "s3", "/data", "--addr", ":9000", "--auth-key", "demo-access,demo-secret-key"]
+    volumes: ["s3:/data"]
+  sftp:
+    image: atmoz/sftp:alpine
+    command: ["demo:demo-pass:::photos"]       # user demo, password demo-pass, a writable folder "photos"; not named in destinations.yaml: add it yourself
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:8025:8025"
 
   front:
     image: nginx:1.27-alpine
     ports:
-      - "2295:80"
+      - "127.0.0.1:2295:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -84,3 +126,6 @@ services:
 
 volumes:
   handoff-data:
+  nas:
+  webdav:
+  s3:

@@ -62,6 +62,7 @@ type Server struct {
 	Notifier *notify.Notifier // where messages for whoever runs the app go; for the administrator's list and test (nil: none)
 
 	limiter  limiter
+	badAuth  failures   // sign-in attempts Immich turned down, by address (see authenticate)
 	waker    phoneWaker // the hand-over pass that follows photos sent from a phone
 	gate     downloadGate
 	testGate downloadGate // one test of the notification destinations at a time, and not too often
@@ -82,7 +83,7 @@ func (w *Server) Handler() http.Handler {
 func (w *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(http.FileServerFS(static), time.Hour)))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", revalidate(http.FileServerFS(static))))
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
 	mux.HandleFunc("GET /metrics", w.metrics)
@@ -100,6 +101,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /invite/{token}", w.invite)
 	mux.HandleFunc("GET /admin", w.adminPage)
 	mux.HandleFunc("POST /admin/check", w.adminCheck)
+	mux.HandleFunc("POST /admin/circles", w.adminCircles)
 	mux.HandleFunc("POST /admin/notify/test", w.adminNotifyTest)
 	mux.HandleFunc("POST /admin/backup/download", w.adminBackupDownload)
 	mux.HandleFunc("POST /admin/services/remove", w.adminRemoveService)
@@ -264,6 +266,36 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /me/mail", w.myMail)
 	mux.HandleFunc("POST /me/library", w.myLibrary)
 	mux.HandleFunc("POST /me/memories", w.myMemories)
+	mux.HandleFunc("GET /story/{token}", w.storyPage)
+	mux.HandleFunc("GET /story/{token}/data", w.storyData)
+	mux.HandleFunc("GET /story/{token}/photo/{id}", w.storyPhoto)
+	mux.HandleFunc("GET /story/{token}/cover", w.storyCover)
+	mux.HandleFunc("GET /stories/{id}", w.storyEditPage)
+	mux.HandleFunc("GET /stories/{id}/thumb/{asset}", w.storyThumb)
+	mux.HandleFunc("GET /fragments/story-form", w.storyForm)
+	mux.HandleFunc("GET /fragments/story-item", w.storyItem)
+	mux.HandleFunc("POST /stories", w.makeStory)
+	mux.HandleFunc("POST /stories/edit", w.editStory)
+	mux.HandleFunc("POST /stories/rebuild", w.rebuildStory)
+	mux.HandleFunc("POST /stories/end", w.endStory)
+	mux.HandleFunc("POST /stories/photo/remove", w.removeStoryPhoto)
+	mux.HandleFunc("POST /stories/year", w.storyYear)
+	mux.HandleFunc("POST /stories/year/dismiss", w.storyYearDismiss)
+	mux.HandleFunc("GET /tv", w.tvPage(false))
+	mux.HandleFunc("GET /tv/legacy", w.tvPage(true))
+	mux.HandleFunc("POST /tv/new", w.tvNew)
+	mux.HandleFunc("GET /tv/state", w.tvState)
+	mux.HandleFunc("GET /tv/feed", w.tvFeed)
+	mux.HandleFunc("GET /tv/photo", w.tvPhoto)
+	mux.HandleFunc("GET /fragments/cast-form", w.castForm)
+	mux.HandleFunc("POST /cast/claim", w.claimCast)
+	mux.HandleFunc("POST /cast/change", w.changeCast)
+	mux.HandleFunc("POST /cast/control", w.controlCast)
+	mux.HandleFunc("GET /albums", w.albumTreePage)
+	mux.HandleFunc("GET /albums/{album}/cover", w.albumCover)
+	mux.HandleFunc("GET /fragments/album-move", w.albumMoveForm)
+	mux.HandleFunc("GET /fragments/album-move-preview", w.albumMovePreview)
+	mux.HandleFunc("POST /albums/move", w.moveAlbum)
 	mux.HandleFunc("GET /memories/{day}", w.memoriesPage)
 	mux.HandleFunc("GET /memories/{day}/photo/{asset}", w.memoriesPhoto)
 	mux.HandleFunc("POST /memories/send", w.memoriesSend)
@@ -283,6 +315,19 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/albums", w.albumChoice)
 	mux.HandleFunc("GET /fragments/rule-form", w.ruleForm)
 	mux.HandleFunc("GET /fragments/rule-cities", w.ruleCities)
+	mux.HandleFunc("GET /fragments/rule-models", w.ruleModels)
+	mux.HandleFunc("GET /fragments/album-form", w.albumForm)
+	mux.HandleFunc("POST /rules/album", w.makeSmartAlbum)
+	mux.HandleFunc("GET /fragments/circle-form", w.circleForm)
+	mux.HandleFunc("GET /fragments/circle-add", w.circleAddForm)
+	mux.HandleFunc("POST /circles", w.makeCircle)
+	mux.HandleFunc("POST /circles/member", w.addCircleMember)
+	mux.HandleFunc("POST /circles/member/remove", w.removeCircleMember)
+	mux.HandleFunc("POST /circles/answer", w.answerCircle)
+	mux.HandleFunc("POST /circles/auto", w.autoCircle)
+	mux.HandleFunc("POST /circles/pause", w.pauseCircle)
+	mux.HandleFunc("POST /circles/delete", w.deleteCircle)
+	mux.HandleFunc("POST /circles/catchup", w.catchUpCircle)
 	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
 	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
@@ -305,6 +350,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/folder", w.followFolder)
 	mux.HandleFunc("GET /fragments/stack-check", w.stackCheck)
 	mux.HandleFunc("POST /rules/stack", w.followStack)
+	mux.HandleFunc("POST /rules/places", w.followPlaces)
 	mux.HandleFunc("POST /rules/stack-undo", w.undoStack)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
@@ -355,6 +401,9 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/invite/") || strings.HasPrefix(r.URL.Path, "/pair/") {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
 		}
+		if r.URL.Path == "/tv/legacy" {
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
 		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
 			base := strings.Repeat("../", len(strings.Split(strings.Trim(r.URL.Path, "/"), "/"))-1)
 			r = r.WithContext(context.WithValue(context.WithValue(r.Context(), baseKey{}, base), guestKey{}, &guestInfo{}))
@@ -367,6 +416,42 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(rw, r)
 	})
+}
+
+// failures counts, per address, the requests whose cookie Immich did not accept in the last minute. Each one costs a
+// call to Immich, so an address that keeps sending cookies Immich rejects is answered without asking Immich again.
+type failures struct {
+	mu   sync.Mutex
+	seen map[string][]time.Time
+}
+
+const failedSignInsPerMinute = 20
+
+func (f *failures) blocked(addr string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	keep := time.Now().Add(-time.Minute)
+	recent := f.seen[addr][:0]
+	for _, t := range f.seen[addr] {
+		if t.After(keep) {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) == 0 {
+		delete(f.seen, addr)
+	} else {
+		f.seen[addr] = recent
+	}
+	return len(recent) >= failedSignInsPerMinute
+}
+
+func (f *failures) add(addr string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.seen == nil || len(f.seen) > 20000 { // a flood from many addresses: start again rather than grow
+		f.seen = map[string][]time.Time{}
+	}
+	f.seen[addr] = append(f.seen[addr], time.Now())
 }
 
 // limiter allows each person a limited number of changes per minute.
@@ -418,9 +503,11 @@ func (w *Server) metrics(rw http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(rw, "# TYPE handoff_build_info gauge\nhandoff_build_info{version=%q} 1\n", w.Version)
 }
 
-func cacheFor(h http.Handler, d time.Duration) http.Handler {
+// revalidate has the browser ask again for a script or style before it uses its copy. The files carry no version in their address, so
+// a copy kept for an hour would show the old page, or the old page with the new markup, for an hour after an upgrade.
+func revalidate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(d.Seconds())))
+		rw.Header().Set("Cache-Control", "no-cache")
 		h.ServeHTTP(rw, r)
 	})
 }
@@ -466,12 +553,17 @@ func (w *Server) authenticate(r *http.Request) (*member, int, string) {
 	if cookie == "" {
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
+	addr := w.clientAddr(r)
+	if w.badAuth.blocked(addr) {
+		return nil, http.StatusTooManyRequests, "too many sign-in attempts that Immich turned down; wait a minute"
+	}
 	a, err := immich.New(w.BaseURL, immich.Auth{Cookie: cookie}, nil)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err.Error()
 	}
 	u, err := a.Me(r.Context())
 	if err != nil {
+		w.badAuth.add(addr)
 		return nil, http.StatusUnauthorized, "not signed in to Immich"
 	}
 	return &member{user: u, sess: a}, 0, ""
@@ -670,6 +762,14 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Memories = w.memoriesView(ctx, me)
 	d.Folders = w.folderViews(ctx, me)
 	d.Stacks = w.stackViews(ctx, me)
+	d.Albums = w.albumViews(ctx, me)
+	d.Circles, d.CircleAsks = w.circleViews(ctx, me)
+	d.Cast = w.castViews(ctx, me)
+	d.Stories = w.storyViews(ctx, me)
+	d.Places = w.placeViews(ctx, me)
+	if w.storyOn() {
+		d.StoryYear, _ = w.Hub.StoryYearOffer(ctx, me.sess, me.user)
+	}
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
@@ -749,6 +849,29 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
 	}
+	if d.StoryYear > 0 { // the end-of-year suggestion
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: t(ctx, "Make your {year} story", "year", d.StoryYear),
+			Text: t(ctx, "You have many photos from {year}. The app can pick the best of them and make a short animated story, with a link you can share."),
+			Actions: []NeedAction{
+				{Label: t(ctx, "Make my story"), Path: "stories/year", Vals: vals("year", strconv.Itoa(d.StoryYear)), Primary: true},
+				{Label: t(ctx, "Not this year"), Path: "stories/year/dismiss", Vals: vals("year", strconv.Itoa(d.StoryYear))}}})
+	}
+	for _, pv := range d.Pairings.Items { // an offer of photo sharing that waits for this person's yes
+		if !pv.Incoming {
+			continue
+		}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Request"), Title: t(ctx, "{name} offers to share photos with you", "name", pv.Other),
+			Text: t(ctx, "{name} would share the photos of {people} with you, and you can share yours back. Nothing is shared until you say yes. The offer lapses {expires}.", "name", pv.Other, "people", pv.Theirs, "expires", pv.Expires),
+			Link: "pair/" + pv.ID, LinkLabel: t(ctx, "Look at the offer")})
+	}
+	for _, ca := range d.CircleAsks { // albums to share with a circle
+		acts := []NeedAction{
+			{Label: t(ctx, "Share them"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "send"), Primary: true},
+			{Label: t(ctx, "Not these"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "decline")},
+			{Label: t(ctx, "Always"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "always")}}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} album for the circle {circle}", "{n} albums for the circle {circle}", len(ca.Albums), "circle", ca.Name),
+			Text: t(ctx, "Albums: {names}. Share them with {people}? Immich may email each person.", "names", folderNames(ca.Albums), "people", ca.People), Actions: acts})
+	}
 	for _, sg := range d.Suggestions {
 		more := sg.Count - len(sg.Thumbs)
 		if sg.Import { // a destination the person follows: the files are added to their own library
@@ -776,6 +899,26 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} group of photos to stack", "{n} groups of photos to stack", sg.Count),
 				Text: t(ctx, "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.", "found", sg.Signals), Thumbs: sg.Thumbs, More: sg.Count - len(sg.Thumbs), Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at the groups one by one")})
+			continue
+		}
+		if sg.Place { // photos that can get a place from a photo next to them
+			acts := []NeedAction{
+				{Label: t(ctx, "Give them these places"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true, Confirm: placeConfirm(ctx, true)},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always"), Confirm: placeConfirm(ctx, true)}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} photo can get a place from a photo next to it", "{n} photos can get a place from the photos next to them", sg.Count),
+				Text: t(ctx, "Taken by the same camera minutes from a photo that has a place. Look at them one by one to see where each place comes from; the app cannot take a written place back."), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
+			continue
+		}
+		if sg.Smart { // photos that match a smart album
+			acts := []NeedAction{
+				{Label: t(ctx, "Put them in the album"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")}}
+			if !sg.Phrase {
+				acts = append(acts, NeedAction{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")})
+			}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo for the album {album}", "{n} new photos for the album {album}", sg.Count, "album", sg.Album),
+				Text: t(ctx, "Found by your rule: {rule}. Photos are only added, nothing is removed.", "rule", sg.Sentence), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 			continue
 		}
 		if sg.Folder { // albums to make from the folders of an external library
@@ -963,10 +1106,13 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 			w.Hub.EnsureKeyPermissions(ctx, me.sess, me.user)
+			w.Hub.CastHousekeeping(ctx, me.sess, me.user.ID)
 		}()
 	}
 	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)
-	Dashboard(w.dashboardData(ctx, me)).Render(ctx, rw)
+	d := w.dashboardData(ctx, me)
+	ctx = context.WithValue(ctx, settingsKey{}, d.HasSettings())
+	Dashboard(d).Render(ctx, rw)
 }
 
 // hasDropBoxes says whether the person has a drop box of their own, which makes them a host the live scene is for.

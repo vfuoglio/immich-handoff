@@ -157,7 +157,7 @@ nav.tabs .blob {
 
 /* the three views of the dashboard, chosen by the address's #fragment (theme.js marks the page before it paints) */
 html.js .view { display: none; }
-html.js[data-view="overview"] #v-overview, html.js[data-view="services"] #v-services, html.js[data-view="activity"] #v-activity { display: block; }
+html.js[data-view="overview"] #v-overview, html.js[data-view="services"] #v-services, html.js[data-view="activity"] #v-activity, html.js[data-view="settings"] #v-settings { display: block; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; }
 html.js .view > * { animation: reveal .85s var(--ease) backwards; }
 html.js .view > :nth-child(2) { animation-delay: 55ms; }
@@ -277,6 +277,7 @@ input[type="checkbox"]:focus-visible { outline: 3px solid color-mix(in oklab, va
 .notice.bad { border-left-color: var(--bad); }
 .gated { opacity: .38; filter: grayscale(1); pointer-events: none; user-select: none; transition: opacity .2s, filter .2s; }
 .toast { color: var(--ok); font-weight: 600; font-size: .9rem; }
+.toast[data-error] { color: var(--bad); }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .live { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 22%, transparent); }
 .live.off { background: var(--muted); box-shadow: none; }
@@ -318,20 +319,64 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 
 /* Overview: the "Needs you" strip, the numbers and the first-run guide */
 .count-badge { font: 600 .74rem var(--font-mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: .02rem .5rem; margin-left: .4rem; letter-spacing: 0; }
-.needs { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.needs { display: grid; gap: .7rem; grid-template-columns: minmax(0, 1fr); } /* one above the other, never side by side */
 .needs .card, .card.need { margin: 0; }
-.card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "u a" "l a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
+
+/* Overview: what needs the person, then the live scene, then the week, each as wide as the page */
+.ov-main > div > h2:first-child { margin-top: 1.4rem; }
+/* Settings: the set-once cards, one category at a time: the categories on the left, the chosen one's cards on the right (a row of
+   chips above on a narrow screen), so a new feature joins a category and never makes the page longer */
+.settings-shell { display: grid; gap: 1rem 2rem; margin-top: 1rem; }
+.settings-nav { display: flex; gap: .4rem; flex-wrap: wrap; }
+.settings-nav [role=tab] { display: flex; align-items: center; justify-content: space-between; gap: .8rem; font: 600 .92rem var(--font-body, inherit); padding: .55rem .95rem; border-radius: 99px; border: 1px solid var(--border); background: var(--glass); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.settings-nav [role=tab]:hover { color: var(--text); }
+.settings-nav [role=tab][aria-selected="true"] { background: var(--grad); color: var(--on-accent); border-color: transparent; }
+.settings-nav [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-nav .n { font: 700 .72rem var(--font-mono); padding: .05rem .45rem; border-radius: 99px; background: color-mix(in oklab, currentColor 16%, transparent); }
+.settings-panels { min-width: 0; }
+.settings-panel > h2:first-child { margin-top: 0; }
+.settings-panel[hidden] { display: none; }
+.card h2 .status, h2 .status { margin-left: .6rem; vertical-align: middle; font-size: .68rem; }
+@media (min-width: 900px) {
+  html[data-view="settings"] .wrap { max-width: 72rem; }
+  .settings-shell { grid-template-columns: 14rem minmax(0, 1fr); align-items: start; }
+  .settings-nav { flex-direction: column; position: sticky; top: 5.5rem; }
+  .settings-nav [role=tab] { border-radius: 14px; }
+}
+/* Services: a switch between the services and the other things an owner makes, shown when script runs */
+.seg { display: none; gap: .3rem; flex-wrap: wrap; margin: 1.2rem 0 .4rem; padding: .3rem; border: 1px solid var(--border); border-radius: 99px; background: var(--glass); width: fit-content; max-width: 100%; }
+.seg.on { display: flex; }
+.seg [role=tab] { font: 600 .88rem var(--font-body, inherit); padding: .45rem .95rem; border-radius: 99px; border: 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg [role=tab]:hover { color: var(--text); }
+.seg [role=tab][aria-selected="true"] { background: var(--grad); color: var(--on-accent); }
+.seg [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg .n { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }
+.seg-panel[hidden] { display: none; }
+@media (max-width: 640px) { .seg { border-radius: 18px; } }
+
+/* the pill gets four views: from 901 to 1180 pixels only the icons show, so it does not reach the buttons in the bar */
+@media (min-width: 901px) and (max-width: 1180px) {
+  nav.tabs a { padding: .5rem .8rem; }
+  nav.tabs a svg { display: block; }
+  nav.tabs a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* the same, for a language whose labels would reach the buttons at a wider window (tabs.ts measures and says so) */
+@media (min-width: 901px) {
+  nav.tabs[data-compact] a { padding: .5rem .8rem; }
+  nav.tabs[data-compact] a svg { display: block; }
+  nav.tabs[data-compact] a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* what is asked on top (the title, the words, the photos), the buttons that answer it underneath, whatever the width */
+.card.need { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "u" "l" "a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
 .card.need > b { grid-area: t; }
 .card.need > p.meta { grid-area: m; }
 .card.need > ul.thumbs { grid-area: u; }
 .card.need > p.meta ~ p.meta { grid-area: l; }
-.card.need > p.row { grid-area: a; flex-wrap: nowrap; justify-content: flex-end; }
-.card.need:not(:has(> p.row)) { grid-template-areas: "t" "m" "u" "l"; grid-template-columns: minmax(0, 1fr); }
+.card.need > p.row { grid-area: a; flex-wrap: wrap; justify-content: flex-start; margin-top: .5rem; }
 /* a button that a key presses wears the key */
 button[data-key]::after { content: attr(data-key); margin-left: .55rem; padding: 0 .4rem; border-radius: 6px; font: 700 .68rem var(--font-mono); background: color-mix(in oklab, currentColor 16%, transparent); border: 1px solid color-mix(in oklab, currentColor 28%, transparent); border-bottom-width: 2px; }
 @media (pointer: coarse) { button[data-key]::after { display: none; } }
 @media (max-width: 560px) {
-  .card.need { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "u" "l" "a"; }
   .card.need > p.row { justify-content: stretch; margin-top: .4rem; }
   .card.need > p.row button { flex: 1; }
 }
@@ -896,7 +941,7 @@ body.wall #glow { display: none; }
 .wall-stage[data-fx="zoom"].single figure.single.alt img { animation-name: wall-zoom-alt; }
 @keyframes wall-zoom { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.2%, -.9%); } }
 @keyframes wall-zoom-alt { from { transform: scale(1.09) translate(1.2%, .9%); } to { transform: scale(1); } }
-:is(#wall, #frame)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
+:is(#wall, #frame, #story, #tv)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
 /* a new arrival is given a moment: a ring of the scheme's light settles round the picture and fades */
 .wall-stage figure.single.fresh::after { content: ""; position: absolute; inset: 1.4vmin; border-radius: 2.4vmin; pointer-events: none; animation: wall-fresh 3.2s ease-out both;
   box-shadow: inset 0 0 0 .45vmin color-mix(in oklab, var(--accent) 80%, transparent), inset 0 0 7vmin color-mix(in oklab, var(--accent) 55%, transparent); }
@@ -952,3 +997,38 @@ body.wall #glow { display: none; }
 .petpick:has(input:checked) img{border-color:var(--accent,#5b5fc7)}
 .petex{display:block}.petex img{aspect-ratio:auto;height:auto;border:0;border-radius:6px}
 .petex i{position:absolute;border:2px solid var(--accent,#5b5fc7);border-radius:4px;pointer-events:none;box-shadow:0 0 0 1px #fff8}
+
+/* the album tree page */
+.albumtree { padding: .8rem 1rem; }
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree .tree { margin-left: 1.1rem; padding-left: .8rem; border-left: 1px solid var(--border); }
+.tree-album { display: flex; align-items: center; gap: .7rem; padding: .35rem 0; flex-wrap: wrap; }
+.tree-cover { width: 48px; height: 48px; border-radius: .4rem; object-fit: cover; background: var(--border); flex: none; }
+.tree-cover.empty { display: inline-block; }
+.tree-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 12rem; overflow-wrap: anywhere; }
+.tree-folder > details > summary { cursor: pointer; padding: .45rem 0; list-style: none; }
+.tree-folder > details > summary::-webkit-details-marker { display: none; }
+.tree-folder > details > summary::before { content: "+"; display: inline-block; width: 1.1rem; font-weight: 700; }
+.tree-folder > details[open] > summary::before { content: "\2212"; }
+.tree-move { flex: 1 1 100%; }
+.tree-move > summary { cursor: pointer; font-size: .85rem; color: var(--accent-ink); }
+.move-preview { margin: .4rem 0; }
+
+/* a story: a full-screen recap with a title, cards for its chapters, the photos, and an end; the stage is the wall's */
+body.story { overscroll-behavior: none; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#story { position: fixed; inset: 0; background: #000; overflow: hidden; height: 100vh; height: 100dvh; cursor: pointer; }
+#story .wall-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #cfd8e3; z-index: 2; }
+#story .wall-wait[hidden] { display: none; }
+#story .wall-stage figure.single img { position: relative; z-index: 1; }
+#story .wall-stage figure.single .st-back { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; opacity: .5; filter: blur(28px) saturate(1.2); transform: scale(1.15); }
+#story[data-lite] .wall-stage figure.single .st-back { display: none; }
+#story .wall-stage figcaption { padding-bottom: max(1.2rem, env(safe-area-inset-bottom)); z-index: 2; font-size: clamp(1rem, 2.6vw, 2rem); }
+#story .wall-stage figure.st-card { background: radial-gradient(60vmax 50vmax at 30% 20%, color-mix(in oklab, var(--accent) 38%, #000), #000 70%); }
+.st-cardbox { display: grid; gap: 2.4vmin; padding: 8vmin; text-align: center; max-width: 90vw; }
+.st-title { margin: 0; font-size: clamp(2.2rem, 9vmin, 6rem); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.st-chapter { margin: 0; font-size: clamp(1.8rem, 7vmin, 4.4rem); font-weight: 600; overflow-wrap: anywhere; }
+.st-sub { margin: 0; font-size: clamp(1rem, 3vmin, 2rem); color: #cfd8e3; }
+.st-progress { position: absolute; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); height: 3px; background: rgba(255, 255, 255, .25); border-radius: 2px; z-index: 3; overflow: hidden; pointer-events: none; }
+.st-bar { height: 100%; width: 100%; background: #fff; transform-origin: left; transform: scaleX(0); }
+.st-pause { position: absolute; z-index: 3; right: max(12px, env(safe-area-inset-right)); top: max(20px, calc(env(safe-area-inset-top) + 10px)); background: rgba(0, 0, 0, .5); color: #fff; border: 0; border-radius: 1rem; padding: .3rem .8rem; font-size: .9rem; }
+@media (prefers-reduced-motion: no-preference) { .st-bar { transition: transform .3s linear; } }

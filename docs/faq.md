@@ -16,7 +16,19 @@ No. The app makes a named, restricted key in *your* account with your own sign-i
 No. Senders use Immich as they do now: add a tag, or press the **Hand over...** button if your administrator [added it](find-handoff.md#hand-over-from-inside-immich). Guests without an account use a link or QR code in their browser.
 
 **Can I share the photos of a person with my partner, both ways, without doing anything each time?**
-Yes: on the Overview, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
+Yes: in **Settings**, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
+
+**Can the app give photos from a camera without GPS the place they were taken?**
+Yes, with care: in **Settings**, **Places for photos that have none**. A photo with no place that was taken minutes from one that has a place, by the same camera on the same day, is offered that place, with both photos side by side and the reason; nothing is written until you say yes, and the app cannot take a written place back (Immich does not allow it). See [Places for photos that have none](guides/places.md).
+
+**Can I make a shareable recap of a trip or a year, like a story?**
+Yes: **Stories** in **Settings** makes a short animated recap of an album, a person, a stretch of time or a drop box, with about forty of the best photos, a card for each chapter and a link anyone can open on a phone or a TV, with no account. It shows dates and the city and country (you can switch them off) and never coordinates; names of people are off unless you switch them on. See [Stories](guides/stories.md).
+
+**Can I show photos on my TV with a code, and control it from my phone?**
+Yes: open the address `/tv` of this app in the TV's browser, then type the code it shows into **Settings**, **Cast to a TV**, and choose an album, a person, everything new or a day of memories. Pause, skip and stop from your phone. Most TVs from about 2022 work; older TVs from about 2016 can use `/tv/legacy`. See [Cast to a TV](guides/cast-to-tv.md).
+
+**Can I see my albums as folders, like Trips / 2024 / Rome?**
+Yes, as a tree on a page of its own, though not inside Immich, which has no folders for albums. Name albums with slashes and open **Album tree** in **Settings** (or the palette): the names become folders with covers, and **Move** renames an album into a folder after showing the new name. See [Album tree](guides/album-tree.md).
 
 **Can photos go to a NAS, a Nextcloud, an S3 bucket or an SFTP server instead of, or as well as, another Immich account?**
 Yes: the administrator names the places (a folder, WebDAV, S3, SFTP) in a file, and the owner of a service adds one to it. The photo is written as a file with a sidecar and a record, checked, and only then is the original moved or marked; if a place is down, the original stays tagged until it holds the photo. Clouds without their own kind (Google Drive, OneDrive, Dropbox) are reached through a folder mounted with rclone. Taking a hand-over back deletes the files there. See [Destinations](guides/destinations.md).

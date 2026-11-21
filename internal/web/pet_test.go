@@ -94,3 +94,18 @@ func TestThePetFormSaysTheHelperIsOnWhenItIs(t *testing.T) {
 		t.Error("the form says what the helper is and does")
 	}
 }
+
+// Without the helper the form still works, and says so, with where to read how to switch the helper on; the administrator's page
+// says whether the helper is off, on or not answering.
+func TestThePetFormAndTheAdminPageSayWhenTheHelperIsOff(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPairings(t, &st))
+	_, form := do(t, "GET", app.URL+"/fragments/pet-form?service=club", "sess=other", nil)
+	if !strings.Contains(form, "This works with Immich") || !strings.Contains(form, "guides/automate.md#the-optional-pet-helper") || strings.Contains(form, "This server has the pet helper on") {
+		t.Errorf("the form without the helper: %.600s", form)
+	}
+	_, admin := do(t, "GET", app.URL+"/admin", "sess=admin", nil)
+	if !strings.Contains(admin, `id="pethelper"`) || !strings.Contains(admin, "Rules for a pet work without it") {
+		t.Errorf("the administrator's page says the helper is off")
+	}
+}

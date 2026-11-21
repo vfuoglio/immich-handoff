@@ -4,6 +4,7 @@
 
 import { initCard, initDrop, initGuestBook, initSecure, initShare } from "./drop.ts";
 import { initFrame } from "./frame.ts";
+import { initStory } from "./story.ts";
 import { initGallery } from "./gallery.ts";
 import { initWall } from "./wall.ts";
 import { initSend } from "./send.ts";
@@ -22,13 +23,25 @@ import { initPalette } from "./palette";
 import { initRows } from "./rows";
 import { initSound } from "./sound";
 import { initTabs } from "./tabs";
+import { initSegments } from "./segments";
+import { initSettingsNav } from "./settingsnav.ts";
 
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
   if (e.detail.xhr.status >= 400 && e.detail.xhr.status < 600) {
     e.detail.shouldSwap = true;
     e.detail.isError = false;
+    // the message is red, and brought into view: a button far down a page must not seem to do nothing
+    const target = e.detail.target;
+    if (target instanceof HTMLElement) {
+      target.dataset["error"] = "1";
+      requestAnimationFrame(() => target.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    }
   }
+});
+document.addEventListener("htmx:beforeRequest", (e) => {
+  const target = e.detail.target;
+  if (target instanceof HTMLElement) delete target.dataset["error"];
 });
 
 // Questions (hx-confirm) are asked in the page's own dialog, in its own style and words, not the browser's. A button
@@ -87,6 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCatalog();
   initLanguage();
   initTabs();
+  initSegments();
+  initSettingsNav();
   initToday();
   initKeys();
   initRows();
@@ -103,6 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSend();
   initRoom();
   initFrame();
+  initStory();
   initPalette();
   initSound();
   enhance(document); // numbers that are already on the page roll up to their value
@@ -167,6 +183,22 @@ document.addEventListener("click", (e) => {
   if (!(input instanceof HTMLInputElement) || !navigator.clipboard) return;
   const message = (button.dataset.message ?? "{link}").replace("{link}", input.value);
   void navigator.clipboard.writeText(message).then(() => {
+    button.textContent = t("Copied");
+  });
+});
+
+// "Share": the phone's own share sheet where it has one, otherwise the address is copied.
+document.addEventListener("click", (e) => {
+  const button = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button.share-link") : null;
+  if (!button) return;
+  const input = document.getElementById(button.dataset.for ?? "");
+  if (!(input instanceof HTMLInputElement)) return;
+  const nav = navigator as Navigator & { share?: (data: { title?: string; url?: string }) => Promise<void> };
+  if (nav.share) {
+    void nav.share({ title: button.dataset.title ?? "", url: input.value }).catch(() => undefined);
+    return;
+  }
+  void navigator.clipboard.writeText(input.value).then(() => {
     button.textContent = t("Copied");
   });
 });

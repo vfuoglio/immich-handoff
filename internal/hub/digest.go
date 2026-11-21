@@ -1,12 +1,10 @@
 package hub
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
 	"sort"
 	"strings"
 	"sync"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/i18n"
 	"github.com/vfuoglio/immich-handoff/internal/immich"
+	"github.com/vfuoglio/immich-handoff/internal/safeimg"
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
@@ -321,7 +320,7 @@ func (h *Hub) runDigest(ctx context.Context, v *store.Service, prev store.Digest
 			if err != nil {
 				return
 			}
-			if img, _, err := image.Decode(bytes.NewReader(data)); err == nil {
+			if img, err := safeimg.Decode(data, safeimg.Preview); err == nil {
 				q := analyze(img)
 				results[i].q = &q
 			}

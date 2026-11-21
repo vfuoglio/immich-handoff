@@ -44,10 +44,10 @@ func TestTheOverviewLeadsWithWhatNeedsThePerson(t *testing.T) {
 	}
 	owner = get(t, app.URL, "sess=family")
 	has(t, owner, "<em>One thing needs you.</em>", "Dana wants to send to club", "dana@x.test", "Approve", "Decline", `class="count-badge">1<`)
-	// the two answers wear the keys that press them (A and D), the date line is there for the browser to fill, and the stream comes first
+	// the two answers wear the keys that press them (A and D), the date line is there for the browser to fill, and what needs the person comes before the stream
 	has(t, owner, `data-key="A"`, `data-key="D"`, `data-today`)
-	if i, j, k := strings.Index(owner, `id="scene"`), strings.Index(owner, `id="cmdbar"`), strings.Index(owner, "Dana wants to send to"); i < 0 || j < i || k < j {
-		t.Errorf("the Overview runs: stream, search bar, what needs you (%d, %d, %d)", i, j, k)
+	if i, j, k := strings.Index(owner, `id="cmdbar"`), strings.Index(owner, "Dana wants to send to"), strings.Index(owner, `id="scene"`); i < 0 || j < i || k < j {
+		t.Errorf("the Overview runs: search bar, what needs you, stream (%d, %d, %d)", i, j, k)
 	}
 	lacks(t, owner, "All clear")
 	if n := strings.Count(owner, ">Approve<"); n != 1 {
@@ -255,4 +255,53 @@ func TestTheRefreshedNumbersDoNotAskForThemselvesAgainAtOnce(t *testing.T) {
 	if !strings.Contains(fragment, `hx-trigger="handoff:run from:body"`) {
 		t.Error("the refreshed numbers must still refresh after the next pass")
 	}
+}
+
+// The set-once cards live in a Settings view of their own, grouped by what they are for, and the view and its tab are
+// there only when one of the cards is on; the Overview keeps the live status.
+func TestSettingsViewHoldsTheSetOnceCards(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	body := get(t, app.URL, "sess=family")
+	has(t, body, `href="#settings" data-view="settings"`, `id="v-settings"`, "Your <em>settings</em>", `class="settings-nav"`, `data-cat="photos"`, `id="set-photos"`)
+	// one category at a time: each card sits in the panel of its category, and the categories are tabs
+	for card, panel := range map[string]string{"Add to my library": "set-photos", "Share photos with someone": "set-sharing"} {
+		i := strings.Index(body, `id="`+panel+`"`)
+		if i < 0 || !strings.Contains(body[i:], card) || strings.Index(body[i:], card) > strings.Index(body[i:], "</section>") {
+			t.Errorf("%q belongs in the %s panel", card, panel)
+		}
+	}
+	view := func(id string) string {
+		i := strings.Index(body, `id="`+id+`"`)
+		j := strings.Index(body[i+1:], `<section class="view"`)
+		if j < 0 {
+			return body[i:]
+		}
+		return body[i : i+1+j]
+	}
+	for _, card := range []string{"Add to my library", "Albums from my folders", "Share photos with someone"} {
+		if strings.Contains(view("v-overview"), card) || !strings.Contains(view("v-settings"), card) {
+			t.Errorf("%q belongs in Settings and not in the Overview", card)
+		}
+	}
+	// without self-service there is nothing to set up: no tab, no view
+	plain, _ := setup(t)
+	nobody := get(t, plain.URL, "sess=alice")
+	lacks(t, nobody, `data-view="settings"`, `id="v-settings"`)
+}
+
+// Someone who can make more than services gets a switch at the top of the Services view; each thing they make has a
+// part of its own, and the services come first.
+func TestServicesViewIsSplitIntoParts(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	body := get(t, app.URL, "sess=family")
+	has(t, body, `class="seg" role="tablist"`, `data-seg="services" aria-selected="true"`, `data-seg="dropboxes"`, `data-seg="rooms"`, `data-seg="frames"`,
+		`id="seg-services"`, `id="seg-dropboxes"`, `id="seg-rooms"`, `id="seg-frames"`)
+	if a, b, c := strings.Index(body, `id="seg-services"`), strings.Index(body, `id="seg-dropboxes"`), strings.Index(body, `id="seg-frames"`); a < 0 || b < a || c < b {
+		t.Errorf("the parts run: services, drop boxes, ..., frames (%d, %d, %d)", a, b, c)
+	}
+	// the one who only takes part has no switch: there is only one part
+	plain, _ := setup(t)
+	lacks(t, get(t, plain.URL, "sess=alice"), `role="tablist"`)
 }

@@ -13,6 +13,7 @@ declare const htmx: {
 /** The parts of htmx's `htmx:beforeSwap` event that the page reads and changes. */
 interface HtmxBeforeSwapDetail {
   xhr: XMLHttpRequest;
+  target: Element | null;
   shouldSwap: boolean;
   isError: boolean;
 }
@@ -32,6 +33,7 @@ interface HtmxConfirmDetail {
 /** The parts of htmx's `htmx:beforeRequest` event the page reads. */
 interface HtmxBeforeRequestDetail {
   elt: Element;
+  target: Element | null;
 }
 
 interface DocumentEventMap {

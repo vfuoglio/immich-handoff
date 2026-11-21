@@ -1,0 +1,20 @@
+# The destinations of the demonstration (see ../destinations.example.yaml). An SFTP server is also running ("sftp", port 22, user demo,
+# password demo-pass): it is not here, because an SFTP server is trusted only by a key someone has looked at, so add it yourself as a
+# person (a service's card, Destinations, Add my own) and press "Look at the SFTP server's key".
+destinations:
+  nas:
+    kind: folder
+    root: /destinations/nas
+    import: true            # people may also follow it: it already holds four photos in "incoming"
+  cloud:
+    kind: webdav
+    url: http://webdav:8080
+    user: demo
+    password: demo-pass
+  bucket:
+    kind: s3
+    endpoint: http://s3:9000
+    region: us-east-1
+    bucket: photos
+    access_key: demo-access
+    secret_key: demo-secret-key

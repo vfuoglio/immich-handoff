@@ -20,7 +20,7 @@ import (
 // joined. This file is making, listing, pausing and ending rules.
 
 var (
-	ErrRuleEmpty     = errors.New("choose at least one thing for the rule to look for: a person, dates, a place, an album or a phrase")
+	ErrRuleEmpty     = errors.New("choose at least one thing for the rule to look for: a person, dates, a place, an album, a phrase, a camera or a tag")
 	ErrBadRuleDate   = errors.New("the dates must be real dates, and the first must not be after the last")
 	ErrBadRulePhrase = errors.New("the phrase can be up to 100 characters")
 	ErrBadSettle     = errors.New("the wait before a photo is offered can be from 1 to 60 minutes")
@@ -29,6 +29,8 @@ var (
 	ErrRulePerson    = errors.New("that person is not among the people Immich has named in your library")
 	ErrRulePlace     = errors.New("that place is not one your library holds photos from")
 	ErrRuleSame      = errors.New("a person cannot be both looked for and left out")
+	ErrRuleCamera    = errors.New("that camera is not one your library holds photos from")
+	ErrRuleTag       = errors.New("that tag is not one of yours")
 )
 
 const maxRules = 20
@@ -45,6 +47,9 @@ type RuleParams struct {
 	Album     uuid.UUID
 	NotAlbums []uuid.UUID
 	Phrase    string
+	Make      string      // a camera make, one the library holds photos from
+	Model     string      // a model of that make
+	Tags      []uuid.UUID // tags a photo must all have
 	Examples  []uuid.UUID // a pet rule: photos of the person's own library that it looks for look-alikes of
 	Also      []string    // other services of the person's to make the same rule for
 	// SettleMinutes is how long a photo waits in Immich before the rule offers it (and a sixth of how long before it sends one by itself),
@@ -61,10 +66,13 @@ type RuleChoices struct {
 	Albums    []immich.AlbumInfo
 	Countries []string
 	Cities    []string
+	Makes     []string
+	Models    []string
+	Tags      []immich.TagInfo
 }
 
 // RuleChoicesFor reads the people, albums and places the form offers.
-func (h *Hub) RuleChoicesFor(ctx context.Context, sess *immich.API, country string) (RuleChoices, error) {
+func (h *Hub) RuleChoicesFor(ctx context.Context, sess *immich.API, country string, make ...string) (RuleChoices, error) {
 	var c RuleChoices
 	var err error
 	if c.People, err = sess.People(ctx); err != nil {
@@ -79,6 +87,11 @@ func (h *Hub) RuleChoicesFor(ctx context.Context, sess *immich.API, country stri
 	if country != "" {
 		c.Cities, _ = sess.Places(ctx, country)
 	}
+	c.Makes, _ = sess.Cameras(ctx, "") // a server without them (or a key without the right) just has no camera to choose
+	if len(make) > 0 && make[0] != "" {
+		c.Models, _ = sess.Cameras(ctx, make[0])
+	}
+	c.Tags, _ = sess.Tags(ctx)
 	return c, nil
 }
 
@@ -124,133 +137,9 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 	} else if len(list) >= maxRules {
 		return store.Rule{}, ErrTooManyRules
 	}
-	var cond store.RuleCond
-	var prints []store.PetPrint
-	phrase := strings.TrimSpace(p.Phrase)
-	if utf8.RuneCountInString(phrase) > 100 || strings.ContainsAny(phrase, "\r\n\x00") {
-		return store.Rule{}, ErrBadRulePhrase
-	}
-	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes {
-		return store.Rule{}, ErrBadSettle
-	}
-	cond.Phrase = phrase
-	if len(p.Examples) > 0 {
-		if len(p.Examples) < petMinExamples || len(p.Examples) > petMaxExamples {
-			return store.Rule{}, ErrBadExamples
-		}
-		seen := map[uuid.UUID]bool{}
-		for _, id := range p.Examples {
-			if seen[id] {
-				return store.Rule{}, ErrBadExamples
-			}
-			seen[id] = true
-			a, err := sess.Asset(ctx, id)
-			if err != nil || a.OwnerId != user.ID || a.IsTrashed {
-				return store.Rule{}, ErrBadExamples // only the person's own photos
-			}
-			cond.Examples = append(cond.Examples, id.String())
-		}
-		cond.Rank = petStartRank
-		if h.Pets != nil { // with the pet sidecar on: the animal in each example, so that rules compare crops instead of whole photos
-			var err error
-			prints, err = h.examplePrints(ctx, sess, p.Examples)
-			if errors.Is(err, pets.ErrDown) {
-				prints, err = nil, nil // it is down now: the rule works with Immich's search, and says so when it looks
-			}
-			if err != nil {
-				return store.Rule{}, err
-			}
-		}
-	}
-	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
-		return store.Rule{}, ErrBadRuleDate
-	}
-	cond.After, cond.Before = p.After, p.Before
-	if len(p.People)+len(p.NotPeople) > 0 {
-		people, err := sess.People(ctx)
-		if err != nil {
-			return store.Rule{}, fmt.Errorf("could not list the people in your library: %w", err)
-		}
-		pick := func(ids []uuid.UUID) ([]store.RuleRef, error) {
-			var out []store.RuleRef
-			for _, id := range ids {
-				found := false
-				for _, x := range people {
-					if uuid.UUID(x.ID) == id {
-						out, found = append(out, store.RuleRef{ID: id.String(), Name: x.Name}), true
-					}
-				}
-				if !found {
-					return nil, ErrRulePerson
-				}
-			}
-			return out, nil
-		}
-		if cond.People, err = pick(p.People); err != nil {
-			return store.Rule{}, err
-		}
-		if cond.NotPeople, err = pick(p.NotPeople); err != nil {
-			return store.Rule{}, err
-		}
-		for _, a := range cond.People {
-			for _, b := range cond.NotPeople {
-				if a.ID == b.ID {
-					return store.Rule{}, ErrRuleSame
-				}
-			}
-		}
-	}
-	if p.Country != "" {
-		countries, err := sess.Places(ctx, "")
-		if err != nil {
-			return store.Rule{}, fmt.Errorf("could not list the places in your library: %w", err)
-		}
-		if !contains(countries, p.Country) {
-			return store.Rule{}, ErrRulePlace
-		}
-		cond.Country = p.Country
-		if p.City != "" {
-			cities, err := sess.Places(ctx, p.Country)
-			if err != nil || !contains(cities, p.City) {
-				return store.Rule{}, ErrRulePlace
-			}
-			cond.City = p.City
-		}
-	}
-	needAlbums := p.Album != uuid.Nil || len(p.NotAlbums) > 0
-	if needAlbums {
-		albums, err := sess.OwnedAlbums(ctx)
-		if err != nil {
-			return store.Rule{}, fmt.Errorf("could not list your albums: %w", err)
-		}
-		find := func(id uuid.UUID) (store.RuleRef, error) {
-			for _, a := range albums {
-				if uuid.UUID(a.ID) == id {
-					return store.RuleRef{ID: id.String(), Name: a.Name}, nil
-				}
-			}
-			return store.RuleRef{}, ErrNoAlbum
-		}
-		if p.Album != uuid.Nil {
-			ref, err := find(p.Album)
-			if err != nil {
-				return store.Rule{}, err
-			}
-			cond.Album = &ref
-		}
-		for _, id := range p.NotAlbums {
-			ref, err := find(id)
-			if err != nil {
-				return store.Rule{}, err
-			}
-			cond.NotAlbums = append(cond.NotAlbums, ref)
-		}
-	}
-	if cond.Pet() && (len(p.People)+len(p.NotPeople) > 0 || cond.After != "" || cond.Before != "" || cond.Country != "" || cond.Album != nil || len(cond.NotAlbums) > 0 || cond.Phrase != "") {
-		return store.Rule{}, ErrPetAlone
-	}
-	if !cond.Pet() && len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" {
-		return store.Rule{}, ErrRuleEmpty
+	cond, prints, needAlbums, err := h.ruleCond(ctx, sess, user, p, false)
+	if err != nil {
+		return store.Rule{}, err
 	}
 	if needAlbums { // reading albums for the timer: the key gets album.read through the person's own session, as for a linked album
 		if err := sess.AddKeyPermission(ctx, link.KeyID, "album.read"); err != nil {
@@ -274,6 +163,177 @@ func (h *Hub) addRule(ctx context.Context, sess *immich.API, user immich.User, p
 	}
 	h.event(ctx, p.Service, user.ID, "rule", i18n.Pack("{name} made a rule for {service}: {rule}", "name", user.Name, "service", p.Service, "rule", RuleSentence(r.Cond)))
 	return r, nil
+}
+
+// ruleCond checks what a person chose against their own Immich and makes the conditions of a rule from it. album says that the rule is
+// for an album of theirs (a smart album): it cannot look for look-alikes of examples (a pet).
+func (h *Hub) ruleCond(ctx context.Context, sess *immich.API, user immich.User, p RuleParams, album bool) (cond store.RuleCond, prints []store.PetPrint, needAlbums bool, err error) {
+	phrase := strings.TrimSpace(p.Phrase)
+	if utf8.RuneCountInString(phrase) > 100 || strings.ContainsAny(phrase, "\r\n\x00") {
+		return store.RuleCond{}, nil, false, ErrBadRulePhrase
+	}
+	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes {
+		return store.RuleCond{}, nil, false, ErrBadSettle
+	}
+	cond.Phrase = phrase
+	if album && len(p.Examples) > 0 {
+		return store.RuleCond{}, nil, false, ErrPetAlone
+	}
+	if p.Make != "" {
+		makes, err := sess.Cameras(ctx, "")
+		if err != nil {
+			return store.RuleCond{}, nil, false, fmt.Errorf("could not list the cameras in your library: %w", err)
+		}
+		if !contains(makes, p.Make) {
+			return store.RuleCond{}, nil, false, ErrRuleCamera
+		}
+		cond.Make = p.Make
+		if p.Model != "" {
+			models, err := sess.Cameras(ctx, p.Make)
+			if err != nil || !contains(models, p.Model) {
+				return store.RuleCond{}, nil, false, ErrRuleCamera
+			}
+			cond.Model = p.Model
+		}
+	} else if p.Model != "" {
+		return store.RuleCond{}, nil, false, ErrRuleCamera
+	}
+	if len(p.Tags) > 0 {
+		have, err := sess.Tags(ctx)
+		if err != nil {
+			return store.RuleCond{}, nil, false, fmt.Errorf("could not list your tags: %w", err)
+		}
+		for _, id := range p.Tags {
+			ok := false
+			for _, t := range have {
+				if uuid.UUID(t.ID) == id {
+					cond.Tags, ok = append(cond.Tags, store.RuleRef{ID: id.String(), Name: t.Value}), true
+				}
+			}
+			if !ok {
+				return store.RuleCond{}, nil, false, ErrRuleTag
+			}
+		}
+	}
+	if len(p.Examples) > 0 {
+		if len(p.Examples) < petMinExamples || len(p.Examples) > petMaxExamples {
+			return store.RuleCond{}, nil, false, ErrBadExamples
+		}
+		seen := map[uuid.UUID]bool{}
+		for _, id := range p.Examples {
+			if seen[id] {
+				return store.RuleCond{}, nil, false, ErrBadExamples
+			}
+			seen[id] = true
+			a, err := sess.Asset(ctx, id)
+			if err != nil || a.OwnerId != user.ID || a.IsTrashed {
+				return store.RuleCond{}, nil, false, ErrBadExamples // only the person's own photos
+			}
+			cond.Examples = append(cond.Examples, id.String())
+		}
+		cond.Rank = petStartRank
+		if h.Pets != nil { // with the pet sidecar on: the animal in each example, so that rules compare crops instead of whole photos
+			var err error
+			prints, err = h.examplePrints(ctx, sess, p.Examples)
+			if errors.Is(err, pets.ErrDown) {
+				prints, err = nil, nil // it is down now: the rule works with Immich's search, and says so when it looks
+			}
+			if err != nil {
+				return store.RuleCond{}, nil, false, err
+			}
+		}
+	}
+	if p.After != "" && !validDay(p.After) || p.Before != "" && !validDay(p.Before) || p.After != "" && p.Before != "" && p.After > p.Before {
+		return store.RuleCond{}, nil, false, ErrBadRuleDate
+	}
+	cond.After, cond.Before = p.After, p.Before
+	if len(p.People)+len(p.NotPeople) > 0 {
+		people, err := sess.People(ctx)
+		if err != nil {
+			return store.RuleCond{}, nil, false, fmt.Errorf("could not list the people in your library: %w", err)
+		}
+		pick := func(ids []uuid.UUID) ([]store.RuleRef, error) {
+			var out []store.RuleRef
+			for _, id := range ids {
+				found := false
+				for _, x := range people {
+					if uuid.UUID(x.ID) == id {
+						out, found = append(out, store.RuleRef{ID: id.String(), Name: x.Name}), true
+					}
+				}
+				if !found {
+					return nil, ErrRulePerson
+				}
+			}
+			return out, nil
+		}
+		if cond.People, err = pick(p.People); err != nil {
+			return store.RuleCond{}, nil, false, err
+		}
+		if cond.NotPeople, err = pick(p.NotPeople); err != nil {
+			return store.RuleCond{}, nil, false, err
+		}
+		for _, a := range cond.People {
+			for _, b := range cond.NotPeople {
+				if a.ID == b.ID {
+					return store.RuleCond{}, nil, false, ErrRuleSame
+				}
+			}
+		}
+	}
+	if p.Country != "" {
+		countries, err := sess.Places(ctx, "")
+		if err != nil {
+			return store.RuleCond{}, nil, false, fmt.Errorf("could not list the places in your library: %w", err)
+		}
+		if !contains(countries, p.Country) {
+			return store.RuleCond{}, nil, false, ErrRulePlace
+		}
+		cond.Country = p.Country
+		if p.City != "" {
+			cities, err := sess.Places(ctx, p.Country)
+			if err != nil || !contains(cities, p.City) {
+				return store.RuleCond{}, nil, false, ErrRulePlace
+			}
+			cond.City = p.City
+		}
+	}
+	needAlbums = p.Album != uuid.Nil || len(p.NotAlbums) > 0
+	if needAlbums {
+		albums, err := sess.OwnedAlbums(ctx)
+		if err != nil {
+			return store.RuleCond{}, nil, false, fmt.Errorf("could not list your albums: %w", err)
+		}
+		find := func(id uuid.UUID) (store.RuleRef, error) {
+			for _, a := range albums {
+				if uuid.UUID(a.ID) == id {
+					return store.RuleRef{ID: id.String(), Name: a.Name}, nil
+				}
+			}
+			return store.RuleRef{}, ErrNoAlbum
+		}
+		if p.Album != uuid.Nil {
+			ref, err := find(p.Album)
+			if err != nil {
+				return store.RuleCond{}, nil, false, err
+			}
+			cond.Album = &ref
+		}
+		for _, id := range p.NotAlbums {
+			ref, err := find(id)
+			if err != nil {
+				return store.RuleCond{}, nil, false, err
+			}
+			cond.NotAlbums = append(cond.NotAlbums, ref)
+		}
+	}
+	if cond.Pet() && (len(p.People)+len(p.NotPeople) > 0 || cond.After != "" || cond.Before != "" || cond.Country != "" || cond.Album != nil || len(cond.NotAlbums) > 0 || cond.Phrase != "" || cond.Make != "" || len(cond.Tags) > 0) {
+		return store.RuleCond{}, nil, false, ErrPetAlone
+	}
+	if !cond.Pet() && len(cond.People) == 0 && cond.After == "" && cond.Before == "" && cond.Country == "" && cond.Album == nil && cond.Phrase == "" && cond.Make == "" && len(cond.Tags) == 0 {
+		return store.RuleCond{}, nil, false, ErrRuleEmpty
+	}
+	return cond, prints, needAlbums, nil
 }
 
 func contains(l []string, s string) bool {
@@ -330,6 +390,16 @@ func RuleSentence(c store.RuleCond) string {
 	}
 	if c.Phrase != "" {
 		parts = append(parts, "that look like \""+c.Phrase+"\"")
+	}
+	if c.Make != "" {
+		parts = append(parts, "taken with "+strings.TrimSpace(c.Make+" "+c.Model))
+	}
+	if len(c.Tags) > 0 {
+		var n []string
+		for _, t := range c.Tags {
+			n = append(n, t.Name)
+		}
+		parts = append(parts, "tagged "+joinAnd(n))
 	}
 	if c.Pet() {
 		parts = append(parts, fmt.Sprintf("that look like your %d example photos", len(c.Examples)))
@@ -416,6 +486,16 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 	if r.Kind == store.RuleKindStack {
 		h.dropStackKeyIfUnused(ctx, sess, user.ID)
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped stacking photos by rule", "name", user.Name))
+		return nil
+	}
+	if r.Kind == store.RuleKindPlace {
+		h.dropPlaceKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped offering places to photos that have none", "name", user.Name))
+		return nil
+	}
+	if r.Kind == store.RuleKindAlbum {
+		h.dropAlbumKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped keeping the album {album} up to date", "name", user.Name, "album", r.DestAlbum))
 		return nil
 	}
 	if r.Kind == store.RuleKindFolder {

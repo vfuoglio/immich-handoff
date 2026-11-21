@@ -1,8 +1,8 @@
 // Keys for the dashboard, for people who like them (nothing needs them): A and D answer the request that is waiting
-// (the buttons say so), and G followed by O, S or A goes to Overview, Services or Activity. They never fire while
+// (the buttons say so), and G followed by O, S, A or T goes to Overview, Services, Activity or Settings. They never fire while
 // someone is typing, with a dialog open, or with Ctrl, Cmd or Alt held (Ctrl K belongs to the command palette).
 
-const GO: Record<string, string> = { o: "overview", s: "services", a: "activity" };
+const GO: Record<string, string> = { o: "overview", s: "services", a: "activity", t: "settings" };
 
 function typing(): boolean {
   const el = document.activeElement;

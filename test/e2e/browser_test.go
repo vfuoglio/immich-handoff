@@ -218,8 +218,8 @@ func TestBrowser(t *testing.T) {
 		if got := js[string](t, ctx, `getComputedStyle(document.querySelector('header.bar')).backdropFilter`); !strings.Contains(got, "blur") {
 			t.Errorf("the bar is glass, backdrop-filter is %q", got)
 		}
-		// three views and the Send page in the bar, the first view current
-		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity,Send" {
+		// four views and the Send page in the bar, the first view current
+		if got := js[[]string](t, ctx, `[...document.querySelectorAll('nav.tabs a')].map(a => a.textContent.trim() + (a.getAttribute('aria-current') ? '*' : ''))`); strings.Join(got, ",") != "Overview*,Services,Activity,Settings,Send" {
 			t.Errorf("tabs: %v", got)
 		}
 		// the speaker icon sits right beside the theme icon, and both have a title for the pointer
@@ -305,11 +305,34 @@ func TestBrowser(t *testing.T) {
 		if !strings.Contains(card["blur"], "blur") || card["radius"] == "0px" {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
-		// the order down the page: live (the stream is the first thing under the headline), needs you, this week, get started, then the person's own settings cards (the pairing card, where Add to my library puts copies, and the folders that make albums)
+		// the order down the page: what needs the person first, then the live stream, this week, get started; the set-once cards are in the Settings view, by purpose
 		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(order, "|") != "Live as it happens|Needs you|This week|Get started|Share photos with someone|Add to my library|Albums from my folders|Stack photos that belong together" {
+		if strings.Join(order, "|") != "Needs you|Live as it happens|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
+		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.childNodes[0].textContent.trim())`)
+		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Album tree|Circles|Share photos with someone|Stories|Cast to a TV" {
+			t.Errorf("cards of the Settings view, top to bottom: %v", settings)
+		}
+		// the categories are on the left, one at a time; the first one's cards show and the others' do not
+		if cats := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-nav [role=tab] .cat-name')].map(h => h.textContent.trim())`); strings.Join(cats, "|") != "Photos|Sharing|Screens" {
+			t.Errorf("categories of the Settings view: %v", cats)
+		}
+		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "photos" {
+			t.Errorf("only the first category shows at first: %v", shown)
+		}
+		// the Settings view is shown for the next checks, then the Overview is back
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('nav.tabs a[data-view="settings"]').click()`, nil))
+		until(t, ctx, "the Settings view", `getComputedStyle(document.getElementById('v-settings')).display !== 'none'`, 10*time.Second)
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('#v-settings .settings-nav [data-cat="sharing"]').click()`, nil))
+		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "sharing" {
+			t.Errorf("choosing Sharing shows Sharing alone: %v", shown)
+		}
+		if side := js[bool](t, ctx, `(() => { const n = document.querySelector('.settings-nav').getBoundingClientRect(), p = document.querySelector('.settings-panel:not([hidden])').getBoundingClientRect(); return n.right <= p.left + 1 && Math.abs(n.top - p.top) < 120; })()`); !side {
+			t.Error("the categories sit to the left of the cards on a wide screen")
+		}
+		run(t, ctx, chromedp.Evaluate(`document.querySelector('nav.tabs a[data-view="overview"]').click()`, nil))
+		until(t, ctx, "the Overview again", `getComputedStyle(document.getElementById('v-overview')).display !== 'none'`, 10*time.Second)
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)
 		if scene["sceneTop"] >= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {
 			t.Errorf("the live scene is at the top of the Overview, above the guide, with a lane for bob and a gate: %v", scene)

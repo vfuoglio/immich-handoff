@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,8 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	if me == nil {
 		return
 	}
-	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), Backup: w.backupSummary(r.Context()), Notify: w.notifyViews(r.Context())}
+	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), CircleMethod: w.Hub.CircleMethod(r.Context()), Backup: w.backupSummary(r.Context()), Notify: w.notifyViews(r.Context())}
+	d.PetHelper = w.petHelperState(r.Context())
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)
@@ -286,4 +288,31 @@ func (w *Server) adminNotifyTest(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	NotifyResults(results).Render(ctx, rw)
+}
+
+// adminCircles keeps the administrator's choice of how people are named for a circle: 1, they type an email; 2, they pick from every account.
+func (w *Server) adminCircles(rw http.ResponseWriter, r *http.Request) {
+	w.adminChange(rw, r, "circle method", func(ctx context.Context, _ *member) error {
+		return w.Hub.SetCircleMethod(ctx, atoiOr(r.PostFormValue("method"), 1))
+	})
+}
+
+func atoiOr(s string, def int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+		return n
+	}
+	return def
+}
+
+// petHelperState is "off" when the pet helper is not set up, "on" when it answers and "down" when it is set up and does not.
+func (w *Server) petHelperState(ctx context.Context) string {
+	if w.Hub == nil || w.Hub.Pets == nil {
+		return "off"
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := w.Hub.Pets.Ping(ctx); err != nil {
+		return "down"
+	}
+	return "on"
 }

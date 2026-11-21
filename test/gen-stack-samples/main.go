@@ -1,6 +1,7 @@
 // Command gen-stack-samples writes the small sample photos the stacking tests use (test/external-photos/stacks): tiny JPEGs that
 // carry real EXIF (camera make and model, and the moment they were taken) and, where a RAW is wanted, a file with a RAW's name and
 // extension whose bytes are a JPEG followed by padding (Immich keeps the path and reads the EXIF; the checksum must differ).
+// With the argument "places" it writes the five photos the places tests use (test/external-photos/places), which carry no GPS.
 // They are made here, not taken from anyone, so they are free of any licence. Run: go run ./test/gen-stack-samples test/external-photos/stacks
 package main
 
@@ -28,19 +29,17 @@ func main() {
 	base := time.Date(2025, 7, 4, 12, 0, 0, 0, time.UTC)
 	at := func(s int) time.Time { return base.Add(time.Duration(s) * time.Second) }
 	canon, nikon := [2]string{"Canon", "EOS R5"}, [2]string{"Nikon", "Z 6"}
-	samples := []sample{
-		// a RAW and a JPEG of one shot
-		{"trip/IMG_1001.JPG", canon[0], canon[1], at(0), false}, {"trip/IMG_1001.DNG", canon[0], canon[1], at(0), true},
-		// a photo and its edit
-		{"trip/IMG_1002.jpg", canon[0], canon[1], at(60), false}, {"trip/IMG_1002-edited.jpg", canon[0], canon[1], at(60), false},
-		// the same name in another folder, and later: not the same shot
-		{"other/IMG_1001.JPG", canon[0], canon[1], at(7200), false},
-		// a burst of three, a second apart
-		{"burst/DSC_0101.jpg", nikon[0], nikon[1], at(300), false}, {"burst/DSC_0102.jpg", nikon[0], nikon[1], at(301), false}, {"burst/DSC_0103.jpg", nikon[0], nikon[1], at(302), false},
-		// two shots a second apart: not a burst
-		{"pairs/DSC_0200.jpg", nikon[0], nikon[1], at(600), false}, {"pairs/DSC_0201.jpg", nikon[0], nikon[1], at(601), false},
-		// a photo on its own
-		{"alone/IMG_2000.jpg", canon[0], canon[1], at(900), false},
+	var samples []sample
+	if len(os.Args) > 2 && os.Args[2] == "places" { // the photos the places tests use: no GPS in them; the test writes the place of two
+		samples = []sample{
+			{"walk/IMG_3001.jpg", canon[0], canon[1], at(0), false},     // gets a place from the test
+			{"walk/IMG_3002.jpg", canon[0], canon[1], at(180), false},   // no place: between the two
+			{"walk/IMG_3003.jpg", canon[0], canon[1], at(540), false},   // gets a place from the test
+			{"walk/IMG_3004.jpg", canon[0], canon[1], at(10800), false}, // three hours on: no neighbour near
+			{"walk/DSC_4001.jpg", nikon[0], nikon[1], at(240), false},   // another camera: no neighbour of its own
+		}
+	} else {
+		samples = stackSamples(at, canon, nikon)
 	}
 	for i, s := range samples {
 		img := image.NewRGBA(image.Rect(0, 0, 64, 48))
@@ -110,4 +109,22 @@ func withExif(jpg []byte, camMake, camModel string, taken time.Time) []byte {
 	out.Write(seg)
 	out.Write(jpg[2:]) // the encoder's own start marker is dropped
 	return out.Bytes()
+}
+
+// stackSamples are the photos the stacking tests use.
+func stackSamples(at func(int) time.Time, canon, nikon [2]string) []sample {
+	return []sample{
+		// a RAW and a JPEG of one shot
+		{"trip/IMG_1001.JPG", canon[0], canon[1], at(0), false}, {"trip/IMG_1001.DNG", canon[0], canon[1], at(0), true},
+		// a photo and its edit
+		{"trip/IMG_1002.jpg", canon[0], canon[1], at(60), false}, {"trip/IMG_1002-edited.jpg", canon[0], canon[1], at(60), false},
+		// the same name in another folder, and later: not the same shot
+		{"other/IMG_1001.JPG", canon[0], canon[1], at(7200), false},
+		// a burst of three, a second apart
+		{"burst/DSC_0101.jpg", nikon[0], nikon[1], at(300), false}, {"burst/DSC_0102.jpg", nikon[0], nikon[1], at(301), false}, {"burst/DSC_0103.jpg", nikon[0], nikon[1], at(302), false},
+		// two shots a second apart: not a burst
+		{"pairs/DSC_0200.jpg", nikon[0], nikon[1], at(600), false}, {"pairs/DSC_0201.jpg", nikon[0], nikon[1], at(601), false},
+		// a photo on its own
+		{"alone/IMG_2000.jpg", canon[0], canon[1], at(900), false},
+	}
 }

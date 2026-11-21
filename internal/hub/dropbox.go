@@ -595,10 +595,9 @@ func (h *Hub) CheckDropPassword(ctx context.Context, b store.DropBox, who, given
 
 // DropUnlockToken is what a guest's browser holds after giving the right password to a box whose password guards the
 // whole page. It is made from the stored hash of the password, which no guest can see, so it cannot be made up, and it
-// stops working when the password changes.
+// stops working when the password changes or after a week.
 func DropUnlockToken(b store.DropBox) string {
-	sum := sha256.Sum256([]byte("drop-unlock|" + b.ID + "|" + b.Password))
-	return hex.EncodeToString(sum[:])
+	return unlockToken("drop-unlock|"+b.ID+"|"+b.Password, time.Now().Add(UnlockLife))
 }
 
 // DropPageLocked reports whether a guest who holds this token (empty: none) is kept out of the box's page: the
@@ -607,7 +606,7 @@ func DropPageLocked(b store.DropBox, token string) bool {
 	if b.Password == "" || b.PasswordScope != store.DropScopePage {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(DropUnlockToken(b))) != 1
+	return !unlockTokenGood("drop-unlock|"+b.ID+"|"+b.Password, token, time.Now())
 }
 
 // RejectDrop writes down a file that was turned away.

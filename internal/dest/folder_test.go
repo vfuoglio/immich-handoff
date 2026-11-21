@@ -293,3 +293,37 @@ func TestWhenTheSidecarOrTheClipCannotBeWrittenThePhotoIsRemovedAgainSoARetrySta
 		}
 	}
 }
+
+func TestFolderDoesNotFollowALinkOutOfTheRoot(t *testing.T) {
+	outside, root := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.jpg"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Skip("no symbolic links here:", err)
+	}
+	f, err := dest.NewFolder(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := f.Open(ctx, "link/secret.jpg"); err == nil {
+		t.Error("Open followed a link out of the folder")
+	}
+	if _, err := f.Put(ctx, "link/new.jpg", strings.NewReader("x"), 1); err == nil {
+		t.Error("Put followed a link out of the folder")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new.jpg")); err == nil {
+		t.Error("a file was written outside the folder")
+	}
+	if err := f.Delete(ctx, "link/secret.jpg"); err == nil {
+		t.Error("Delete followed a link out of the folder")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "secret.jpg")); err != nil {
+		t.Error("the file outside was removed")
+	}
+	// a plain folder inside the root still works
+	if _, err := f.Put(ctx, "a/b.jpg", strings.NewReader("ok"), 2); err != nil {
+		t.Errorf("a normal write failed: %v", err)
+	}
+}

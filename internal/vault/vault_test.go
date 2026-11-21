@@ -54,3 +54,54 @@ func TestAMACBelongsToOnePurposeAndOneKey(t *testing.T) {
 		t.Error("a signature must differ by purpose, key and message")
 	}
 }
+
+func TestSaltedFormatIsReadAlongsideTheFirst(t *testing.T) {
+	old, err := New("0123456789abcdef-store-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := old.Seal([]byte("api-key-1"), "ctx")
+	salt, _ := NewSalt()
+	v, err := old.WithSalt(salt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Salted() || old.Salted() {
+		t.Fatal("only the vault given a salt is salted")
+	}
+	second, err := v.Seal([]byte("api-key-2"), "ctx")
+	if err != nil || second[0] != version2 {
+		t.Fatalf("sealed = %v %v", second, err)
+	}
+	if got, err := v.Open(first, "ctx"); err != nil || string(got) != "api-key-1" {
+		t.Errorf("a value of the first form: %q %v", got, err)
+	}
+	if got, err := v.Open(second, "ctx"); err != nil || string(got) != "api-key-2" {
+		t.Errorf("a value of the second form: %q %v", got, err)
+	}
+	if _, err := v.Open(second, "other"); err == nil {
+		t.Error("the context is not authenticated in the second form")
+	}
+	if _, err := old.Open(second, "ctx"); err == nil {
+		t.Error("a vault without the salt opened the second form")
+	}
+	if v.Current(first) || !v.Current(second) || !old.Current(first) {
+		t.Error("Current does not tell the forms apart")
+	}
+	// another salt, another key
+	salt2, _ := NewSalt()
+	v2, _ := old.WithSalt(salt2)
+	if _, err := v2.Open(second, "ctx"); err == nil {
+		t.Error("a different salt opened the value")
+	}
+	// a first-form value whose first byte happens to be 0x02 still opens
+	for i := 0; i < 2000; i++ {
+		b, _ := old.Seal([]byte("x"), "c")
+		if b[0] == version2 {
+			if _, err := v.Open(b, "c"); err != nil {
+				t.Fatalf("first-form value starting with 0x02: %v", err)
+			}
+			return
+		}
+	}
+}

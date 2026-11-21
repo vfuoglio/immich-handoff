@@ -24,7 +24,7 @@ var ErrExists = errors.New("this data folder already has data: pass --force to r
 // Lock marks the data folder as in use. The app holds it for as long as it runs, so a restore can tell that
 // replacing the file now would corrupt it. The lock belongs to the process, so a crash never leaves it behind.
 func Lock(dir string) (release func(), err error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	f, err := os.OpenFile(filepath.Join(dir, "handoff.lock"), os.O_CREATE|os.O_RDWR, 0o600)
@@ -66,7 +66,7 @@ func Restore(ctx context.Context, file, dir string, v *vault.Vault, force bool) 
 	}
 	cleanup()
 	defer cleanup()
-	if err := copyFile(file, tmp); err != nil {
+	if err := materialise(file, tmp, v); err != nil {
 		return fmt.Errorf("reading %s: %w", file, err)
 	}
 	st, err := store.Open(tmp, v) // runs the schema check and the store-key check
@@ -107,6 +107,34 @@ func copyFile(from, to string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// materialise puts the data file of a backup at to: a plain backup is copied, an encrypted one is opened with the store key.
+func materialise(from, to string, v *vault.Vault) error {
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	head := make([]byte, len(magic))
+	n, _ := io.ReadFull(in, head)
+	in.Close()
+	if !IsEncrypted(head[:n]) {
+		return copyFile(from, to)
+	}
+	src, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	out, err := os.OpenFile(to, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := Decrypt(out, src, v); err != nil {
 		out.Close()
 		return err
 	}

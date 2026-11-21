@@ -3,3 +3,6 @@
 services:
   immich-handoff:
     build: .
+  # the pet helper too, when the pets service in docker-compose.yml is switched on (it downloads its models while it builds)
+  # pets:
+  #   build: ./pet-sidecar

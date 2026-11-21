@@ -122,6 +122,35 @@ def main():
     tag = j[0]["id"]
     call("PUT", f"{IMMICH}/tags/{tag}/assets", {"ids": ids["bob"][:5]}, {"Authorization": "Bearer " + tokens["bob"]})
     print("bob tagged five photos 'family'")
+    seed_1_4(adm, tokens, ids, now)
+
+def seed_1_4(adm, tokens, ids, now):
+    """What the features after 1.3.0 need from Immich itself: people (for sharing a person's photos both ways), memories (for On this day),
+    and an external library for Bob (for albums from folders and for stacking). The rest is done by hand, as demo/README.md says."""
+    H = lambda n: {"Authorization": "Bearer " + tokens[n]}
+    # people with a face on a few photos each (machine learning is off in the demo, so Immich finds none by itself)
+    for name, person in (("alice", "Mia"), ("bob", "Leo")):
+        s, p, _ = call("POST", IMMICH + "/people", {"name": person}, H(name))
+        if s not in (200, 201): print("person", person, s, p); continue
+        for a in ids[name][:4]:
+            call("POST", IMMICH + "/faces", {"assetId": a, "personId": p["id"], "imageWidth": 64, "imageHeight": 64, "x": 10, "y": 10, "width": 30, "height": 30}, H(name))
+        print(name, "has a person called", person, "on four photos")
+    # On this day: photos of Alice and Bob taken on today's date in earlier years, and a memory for each year
+    for name, n in (("alice", 3), ("bob", 2)):
+        files = photos({"alice": 1, "bob": 2}[name])
+        for y in range(1, n + 1):
+            when = now.replace(year=now.year - y, hour=10, minute=y, second=0, microsecond=0)
+            fname, data = files[y]
+            aid = upload(tokens[name], "memory-" + fname, data, when)
+            s, j, _ = call("POST", IMMICH + "/memories", {"type": "on_this_day", "memoryAt": now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace("+00:00", "Z"),
+                                                          "data": {"year": now.year - y}, "assetIds": [aid]}, H(name))
+            print(name, "memory", now.year - y, s)
+    # Bob's external library: /external/photos (folders), /external/photos-old and /external/stacks (RAW, edits and a burst)
+    _, bobme, _ = call("GET", IMMICH + "/users/me", None, H("bob"))
+    A = {"Authorization": "Bearer " + adm}
+    s, lib, _ = call("POST", IMMICH + "/libraries", {"ownerId": bobme["id"], "name": "Bob's folders", "importPaths": ["/external/photos", "/external/photos-old", "/external/stacks"]}, A)
+    print("bob's external library:", s)
+    if s in (200, 201): print("scan:", call("POST", f"{IMMICH}/libraries/{lib['id']}/scan", None, A)[0])
 
 if __name__ == "__main__":
     main()

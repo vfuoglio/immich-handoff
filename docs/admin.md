@@ -2,6 +2,8 @@
 
 Anyone who administers the Immich server can open **Admin** (a link in the header, only they see it) to look at everything the app is doing, and to remove a service or a member that is stuck. Everyone else, signed in or not, gets "not found" for that address, so the page does not show itself.
 
+The page also has a **Pet helper** card: *On* when the optional [pet helper](guides/automate.md#the-optional-pet-helper) answers, *Not answering* when `PET_SIDECAR_URL` is set but it does not, and *Off* with a link to how to switch it on.
+
 ## Who is an administrator
 
 The app keeps no list of its own. When someone opens the page it asks Immich, with that person's own sign-in, whether they are an administrator, which is the same setting as **Administrator** on their account in Immich. Make someone an administrator or take it away in Immich, and the next page they open follows.
@@ -16,6 +18,7 @@ At the top, three numbers: how many **services** are offered, how many **senders
 - **Waiting to clean up**: people whose service was removed and who still hold a key in Immich.
 - **Backups**: whether automatic backups are on (how often, how many are kept, which folder), the newest backup and when it was made, or why the last one failed. If you set `HANDOFF_ADMIN_BACKUP_DOWNLOAD=true` a **Download backup** button is here too (after a confirmation, at most one every 10 minutes, each one written to the recent events). Without that setting the page says the download is off and links to [how to turn it on and what to know first](operations.md#download-a-backup-from-the-administrators-page). Only installs that keep data have this section.
 - **Notifications**: where the app sends its messages for you (the name, format and kinds of each destination, never its address) and a **Send a test notification** button that shows how each destination answered. See [Testing it](operations.md#notifications).
+- **Circles** (only where people can join from the page): how people name the others when they make a [circle](guides/circles.md): they type an email address (the default), or pick from every account on the server, which shows every account's name and email to everyone who makes a circle.
 - **Recent events** across all services.
 - **Check now**: runs the same setup check as `immich-handoff doctor` (see [Troubleshooting](troubleshooting.md#check-your-setup-first)) and shows the result on the page: every key and its permissions, Tags, each sender's workflow and how Immich's recent runs of it ended. It only reads.
 

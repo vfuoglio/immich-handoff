@@ -29,6 +29,7 @@ type PairingView struct {
 	Mine, Theirs     string // the people each way, in words (names only)
 	Note             string // why it stopped, in the reader's language
 	Expires          string // while it waits for a yes: when the offer lapses
+	Incoming         bool   // an offer to this person that waits for their yes (it shows in Needs you)
 	Link             string // for the starter, while it waits: the page the other person opens
 	WaitMin          int    // the person's own wait before their rules offer a photo, when they chose one (0: the usual)
 	Auto             bool   // the person's own rules here send by themselves
@@ -96,6 +97,8 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 			it.Expires = loc(ctx).Stamp(p.ExpiresAt.Local())
 			if starter {
 				it.Link = "pair/" + p.ID
+			} else if time.Now().Before(p.ExpiresAt) {
+				it.Incoming = true
 			}
 		}
 		if p.State != store.PairingStopped {

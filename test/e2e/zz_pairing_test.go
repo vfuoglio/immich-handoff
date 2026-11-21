@@ -61,12 +61,14 @@ func TestPairingPages(t *testing.T) {
 	}
 	home := func(cookie string) context.Context {
 		ctx := browse(t, port, cookie, look{})
-		run(t, ctx, chromedp.Navigate(base), chromedp.WaitVisible("header.bar", chromedp.ByQuery))
-		until(t, ctx, "the Overview", `document.querySelector('#v-overview') !== null`, 10*time.Second)
+		run(t, ctx, chromedp.Navigate(base+"#settings"), chromedp.WaitVisible("header.bar", chromedp.ByQuery))
+		until(t, ctx, "the Settings view", `document.querySelector('#v-settings') !== null`, 10*time.Second)
+		// Settings shows one category at a time, and the sharing card is in Sharing
+		run(t, ctx, chromedp.Click(`.settings-nav [data-cat="sharing"]`, chromedp.ByQuery))
 		return ctx
 	}
 
-	// the starter offers it from the Overview
+	// the starter offers it from the Settings view
 	a := home(owner)
 	until(t, a, "the card", `document.querySelector('.pairingscard') !== null`, 10*time.Second)
 	run(t, a, chromedp.Click(".pairingscard details.offer summary", chromedp.ByQuery))
@@ -144,7 +146,9 @@ func TestPairingPages(t *testing.T) {
 	run(t, a, chromedp.Click(`#confirm-ok`, chromedp.ByQuery))
 	until(t, a, "the sharing to be gone", `document.querySelector('.pairing') === null`, 15*time.Second)
 
-	b = home(other)
+	// the notice that it was removed is a thing that needs the person, so it is on the Overview
+	b = browse(t, port, other, look{})
+	run(t, b, chromedp.Navigate(base), chromedp.WaitVisible("header.bar", chromedp.ByQuery))
 	until(t, b, "the removed sharing", `document.body.innerText.includes('Removed by its owner')`, 15*time.Second)
 	if got := text(b, "body"); !strings.Contains(got, "Photo sharing") || regexp.MustCompile(`pair-[0-9a-f]{8}`).MatchString(got) {
 		t.Errorf("the other person is told in words, not by the pool's name: %q", got)
