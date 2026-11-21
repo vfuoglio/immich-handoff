@@ -153,6 +153,7 @@ type SuggestionView struct {
 	Signals                   string   // for such a rule: how many groups of each kind, in words
 	Folder                    bool     // the rule makes albums from folders: Service is empty
 	Smart                     bool     // the rule keeps an album of the person's up to date: Service is empty, Album is its name
+	Place                     bool     // the rule gives photos places: Service is empty
 	Albums                    []string // the albums the waiting photos would go in, for such a rule
 	Library                   bool     // the rule follows an album shared with the person: Service is empty
 	Import                    bool     // the rule follows a destination: Owner is its name, Album the folder
@@ -193,6 +194,9 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 		}
 		if s.Rule.Kind == store.RuleKindAlbum {
 			v.Smart, v.Album = true, s.Rule.DestAlbum
+		}
+		if s.Rule.Kind == store.RuleKindPlace {
+			v.Place = true
 		}
 		if s.Rule.Kind == "folder" {
 			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
@@ -489,6 +493,7 @@ type SuggestionReview struct {
 	Album, Owner                    string // for such a rule
 	Folder                          bool   // the rule makes albums from folders (Album is the folder)
 	Smart                           bool   // the rule keeps an album up to date (Album is its name)
+	Place                           bool   // the rule gives photos places
 	Stack                           bool   // the rule stacks photos: the page shows Groups
 	Groups                          []StackReviewGroup
 }
@@ -500,7 +505,8 @@ type StackReviewGroup struct {
 }
 
 // RuleReviewPhoto is one photo on the review page.
-type RuleReviewPhoto struct{ ID, URL, Why string }
+// RuleReviewPhoto is one photo on the review page; for a place, Near is the photo its place comes from and Map a link to the place.
+type RuleReviewPhoto struct{ ID, URL, Why, Near, Map string }
 
 func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	me, code, msg := w.authenticate(r)
@@ -526,6 +532,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	if sg.Rule.Kind == store.RuleKindAlbum {
 		d.Smart, d.Album = true, sg.Rule.DestAlbum
 	}
+	if sg.Rule.Kind == store.RuleKindPlace {
+		d.Place = true
+	}
 	if sg.Rule.Kind == "folder" {
 		d.Folder, d.Album = true, sg.Rule.Cond.Folder
 	}
@@ -547,7 +556,12 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 		if sg.Rule.Kind == store.RuleKindImport {
 			url = "rules/import-photo/" + sg.Rule.ID + "/" + hub.EncodeImportRef(p.AssetID)
 		}
-		d.Photos = append(d.Photos, RuleReviewPhoto{ID: p.AssetID, URL: url, Why: p.Why})
+		photo := RuleReviewPhoto{ID: p.AssetID, URL: url, Why: p.Why}
+		if reason, ok := hub.ParsePlaceWhy(p.Why); sg.Rule.Kind == store.RuleKindPlace && ok {
+			photo.Why = strings.TrimSpace(reason.Place + " · " + t(r.Context(), "same camera, {min} min away, a photo with a place {sides}", "min", reason.Minutes, "sides", placeSides(r.Context(), reason)))
+			photo.Near, photo.Map = "rules/photo/"+sg.Rule.ID+"/"+reason.Near, hub.PlaceMapLink(reason.Lat, reason.Lon)
+		}
+		d.Photos = append(d.Photos, photo)
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	SuggestionReviewPage(d).Render(r.Context(), rw)
@@ -847,4 +861,43 @@ func (w *Server) importPhoto(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "private, max-age=3600")
 	rw.Header().Set("X-Content-Type-Options", "nosniff")
 	rw.Write(b)
+}
+
+// placeSides says on how many sides the photo had a photo with a place.
+func placeSides(ctx context.Context, r hub.PlaceReason) string {
+	if r.TwoSided() {
+		return t(ctx, "on both sides")
+	}
+	return t(ctx, "on one side")
+}
+
+// placeViews is the person's rule that gives places, for their page.
+func (w *Server) placeViews(ctx context.Context, me *member) PlacesView {
+	if w.Hub == nil || !w.Hub.SelfService() {
+		return PlacesView{}
+	}
+	v := PlacesView{Available: true}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return v
+	}
+	for _, r := range rules {
+		if r.Kind != store.RuleKindPlace {
+			continue
+		}
+		pv := PlaceRuleView{ID: r.ID, Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			pv.Last = loc(ctx).Stamp(r.LastLook.Local())
+		}
+		v.Rule = &pv
+	}
+	return v
+}
+
+// followPlaces makes the rule that gives photos places.
+func (w *Server) followPlaces(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "places rule made", func(ctx context.Context, me *member, _ string) error {
+		_, err := w.Hub.FollowPlaces(ctx, me.sess, me.user)
+		return err
+	})
 }

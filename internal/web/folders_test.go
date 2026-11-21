@@ -206,3 +206,56 @@ func TestCirclesCardMakesACircleOffersAlbumsAndTheAdministratorChoosesHowPeopleA
 		t.Fatalf("end the circle: %d", code)
 	}
 }
+
+func TestThePlacesCardOffersTheRuleAndTheReviewPageShowsEachPhotoNextToWhereItsPlaceComesFrom(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	ctx := context.Background()
+	if _, page := do(t, "GET", app.URL+"/", "sess=other", nil); !strings.Contains(page, "Places for photos that have none") || !strings.Contains(page, "cannot be taken back by the app") || !strings.Contains(page, "Offer places to my photos that have none") {
+		t.Fatal("the card says what it does and that a place cannot be taken back")
+	}
+	if code, _ := postForm(t, app.URL+"/rules/places", "", ""); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, b := postForm(t, app.URL+"/rules/places", "sess=other", ""); code != 204 {
+		t.Fatalf("make the rule: %d %s", code, b)
+	}
+	if code, _ := postForm(t, app.URL+"/rules/places", "sess=other", ""); code != 409 {
+		t.Errorf("one rule only: %d", code)
+	}
+	rules, _ := st.RulesOf(ctx, mustUUID(otherID))
+	var id string
+	for _, r := range rules {
+		if r.Kind == store.RuleKindPlace {
+			id = r.ID
+		}
+	}
+	if id == "" {
+		t.Fatal("the rule is stored")
+	}
+	st.PutRulePhoto(ctx, id, "55555555-0000-4000-8000-0000000000d1", store.RuleSuggested, "2|38.722300|-9.139300|55555555-0000-4000-8000-0000000000d9|3|90|Lisbon, Portugal")
+	st.PutRulePhoto(ctx, id, "55555555-0000-4000-8000-0000000000d2", store.RuleSuggested, "1|38.722300|-9.139300|55555555-0000-4000-8000-0000000000d9|8|0|Lisbon, Portugal")
+	st.PutRulePhoto(ctx, id, "55555555-0000-4000-8000-0000000000d9", store.RuleSeen, "")
+	_, page := do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"2 photos can get a place from the photos next to them", "Give them these places", "Not these", "Always", "cannot take a written place back"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the suggestion card lacks %q", want)
+		}
+	}
+	code, review := do(t, "GET", app.URL+"/rules/review/"+id, "sess=other", nil)
+	if code != 200 {
+		t.Fatalf("the review page: %d", code)
+	}
+	for _, want := range []string{"Places for photos that have none", "The photo the place comes from", "rules/photo/" + id + "/55555555-0000-4000-8000-0000000000d9", "Show on a map",
+		"https://www.openstreetmap.org/?mlat=38.72230&amp;mlon=-9.13930", "rel=\"noopener noreferrer\"", "Lisbon, Portugal", "on both sides", "on one side", "Give the ticked photos these places", "The places are written into your photos"} {
+		if !strings.Contains(review, want) {
+			t.Errorf("the review page lacks %q", want)
+		}
+	}
+	if strings.Contains(review, "<img src=\"https://") || strings.Contains(review, "tile.openstreetmap") {
+		t.Error("no map or picture is loaded from outside")
+	}
+	if code, _ := postForm(t, app.URL+"/rules/delete", "sess=other", "rule="+id); code != 204 {
+		t.Fatalf("stop: %d", code)
+	}
+}

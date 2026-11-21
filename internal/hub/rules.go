@@ -488,6 +488,11 @@ func (h *Hub) DeleteRuleWith(ctx context.Context, sess *immich.API, user immich.
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped stacking photos by rule", "name", user.Name))
 		return nil
 	}
+	if r.Kind == store.RuleKindPlace {
+		h.dropPlaceKeyIfUnused(ctx, sess, user.ID)
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped offering places to photos that have none", "name", user.Name))
+		return nil
+	}
 	if r.Kind == store.RuleKindAlbum {
 		h.dropAlbumKeyIfUnused(ctx, sess, user.ID)
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} stopped keeping the album {album} up to date", "name", user.Name, "album", r.DestAlbum))

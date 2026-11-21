@@ -401,6 +401,7 @@ type DashboardData struct {
 	Circles    CirclesView
 	Cast       CastView
 	Stories    StoriesView
+	Places     PlacesView
 	StoryYear  int // the year the end-of-year suggestion is for (0: none)
 	CircleAsks []CircleAskView
 	Pairings   PairingsView
@@ -837,7 +838,7 @@ templ Dashboard(d DashboardData) {
 						}
 					</div>
 				}
-				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available {
+				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Places.Available {
 					<div class="group" role="group" aria-labelledby="g-library">
 						<p class="group-title" id="g-library">{ t(ctx, "My library") }</p>
 						if d.Library.Available {
@@ -851,6 +852,9 @@ templ Dashboard(d DashboardData) {
 						}
 						if d.Stacks.Available {
 							@StacksCard(d.Stacks)
+						}
+						if d.Places.Available {
+							@PlacesCard(d.Places)
 						}
 						if d.Albums.Available {
 							@AlbumsCard(d.Albums)
@@ -1141,6 +1145,56 @@ templ AlbumForm(v RuleChoicesView) {
 		</div>
 		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the smart album") }</button></p>
 	</form>
+}
+
+// PlacesCard offers a place to the person's photos that have none, from a photo of the same camera taken minutes from them.
+templ PlacesCard(p PlacesView) {
+	<h2>{ t(ctx, "Places for photos that have none") }</h2>
+	<div class="card placescard">
+		<p>{ t(ctx, "A camera with no GPS leaves no place on its photos. When a photo with no place was taken minutes from one that has a place, by the same camera on the same day, the app offers it that place, and shows you both photos and why. It never writes a place before you say so.") }</p>
+		<p class="meta bad-note">{ t(ctx, "A place the app writes cannot be taken back by the app (Immich does not let it). If one is wrong, remove it in Immich.") }</p>
+		if p.Rule != nil {
+			<div class="card rule">
+				<p><b>{ t(ctx, "Give photos without a place the place next to them") }</b>
+					if p.Rule.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if p.Rule.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Writes places by itself when both sides agree") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+				</p>
+				if p.Rule.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", p.Rule.Last) }</p>
+				}
+				if p.Rule.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", p.Rule.Problem) }</p>
+				}
+				if p.Rule.Mode != "auto" && p.Rule.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it write a place by itself from now on, only for a photo with a photo that has a place on both sides; the others always ask.", "n", p.Rule.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", p.Rule.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Look for older photos") }</button>
+					if p.Rule.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", p.Rule.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if p.Rule.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", p.Rule.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on a photo that has a photo with a place on both sides gets that place without asking you. Only photos that arrive from now on are handled this way, and the app cannot take a place back.") }>{ t(ctx, "Let it write places by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", p.Rule.ID, "paused", pausedValue(p.Rule.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if p.Rule.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", p.Rule.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop offering places? The places already written stay.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		} else {
+			<p class="row"><button class="primary" hx-post="rules/places" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Offer places to my photos that have none") }</button></p>
+			<p class="meta">{ t(ctx, "The app makes a key named handoff: places in your Immich that can read your photos and write a place. You can see it and delete it there.") }</p>
+		}
+	</div>
 }
 
 // StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
@@ -4938,6 +4992,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		if d.Stack {
 			<h1>{ t(ctx, "Photos to stack") }</h1>
 			<p class="lead">{ t(ctx, "Each box is a group that would become one stack, the cover first.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Place {
+			<h1>{ t(ctx, "Places for photos that have none") }</h1>
+			<p class="lead">{ t(ctx, "Each photo is shown next to the photo it would get its place from. The app cannot take a written place back, so untick any you are not sure of.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Smart {
 			<h1>{ t(ctx, "For the album {album}", "album", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
@@ -4954,7 +5011,7 @@ templ SuggestionReviewPage(d SuggestionReview) {
 			<h1>{ t(ctx, "Photos for {service}", "service", d.Service) }</h1>
 			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		}
-		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<form hx-post="rules/review" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button" hx-confirm={ placeConfirm(ctx, d.Place) }>
 			<input type="hidden" name="rule" value={ d.RuleID }/>
 			<p class="meta">{ t(ctx, "Untick the photos that should not go. Ticked photos are sent; unticked ones are left out and this rule will not offer them again.") }</p>
 			if d.Stack {
@@ -4974,8 +5031,14 @@ templ SuggestionReviewPage(d SuggestionReview) {
 					<li>
 						<label>
 							<img src={ p.URL + "?size=large" } alt={ p.Why } width="240" height="240" loading="lazy"/>
+							if p.Near != "" {
+								<img class="near" src={ p.Near + "?size=large" } alt={ t(ctx, "The photo the place comes from") } width="240" height="240" loading="lazy"/>
+							}
 							<span class="meta"><input type="checkbox" name="photo" value={ p.ID } checked/> { p.Why }</span>
 						</label>
+						if p.Map != "" {
+							<a class="meta" href={ templ.SafeURL(p.Map) } target="_blank" rel="noopener noreferrer">{ t(ctx, "Show on a map") }</a>
+						}
 					</li>
 				}
 			</ul>
@@ -4983,6 +5046,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				if d.Stack {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Stack the ticked groups") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Stack the ticked groups, and always") }</button>
+				} else if d.Place {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Give the ticked photos these places") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Give them these places, and always") }</button>
 				} else if d.Smart {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Put the ticked photos in the album") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Put them in, and always") }</button>
@@ -5005,6 +5071,20 @@ templ SuggestionReviewPage(d SuggestionReview) {
 			</p>
 		</form>
 	}
+}
+
+// PlaceRuleView is the person's rule that gives photos places, for their page.
+type PlaceRuleView struct {
+	ID, Mode        string
+	Always          int
+	Paused, CanAuto bool
+	Last, Problem   string
+}
+
+// PlacesView is the person's "Places for photos that have none" card.
+type PlacesView struct {
+	Available bool
+	Rule      *PlaceRuleView
 }
 
 // StoryItemView is one story, for the person's card.

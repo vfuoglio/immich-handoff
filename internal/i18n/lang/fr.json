@@ -15,6 +15,7 @@
  "90 days from now": "90 jours à partir de maintenant",
  "A backup was downloaded a moment ago. To limit what a stolen session could take, only one is handed out every few minutes. Try again shortly.": "Une sauvegarde vient d'être téléchargée. Pour limiter ce qu'une session volée pourrait emporter, une seule est remise toutes les quelques minutes. Réessayez dans un instant.",
  "A box with a password cannot take photos by email: nobody can type the password into a mail.": "Une boîte avec mot de passe ne peut pas recevoir de photos par e-mail : personne ne peut saisir le mot de passe dans un e-mail.",
+ "A camera with no GPS leaves no place on its photos. When a photo with no place was taken minutes from one that has a place, by the same camera on the same day, the app offers it that place, and shows you both photos and why. It never writes a place before you say so.": "Un appareil sans GPS ne laisse aucun lieu sur ses photos. Quand une photo sans lieu a été prise à quelques minutes d'une photo qui en a un, par le même appareil le même jour, l'app lui propose ce lieu et vous montre les deux photos et pourquoi. Elle n'écrit jamais un lieu avant votre accord.",
  "a circle can hold up to 20 people": "un cercle peut contenir jusqu'à 20 personnes",
  "a circle can share by itself after you have answered Always three times": "un cercle peut partager seul après trois réponses Toujours",
  "A circle is a group of people on this Immich server. Every new album you make is offered to them, and with your yes it is shared with them, as viewers or editors. Immich may send each of them an email for every album. Taking a person out of a circle takes them off the albums the app shared with them, and only those.": "Un cercle est un groupe de personnes sur ce serveur Immich. Chaque nouvel album que vous faites leur est proposé et, avec votre accord, partagé avec elles, en lecture ou en modification. Immich peut envoyer un e-mail à chacune pour chaque album. Retirer une personne d'un cercle la retire des albums que l'app a partagés avec elle, et seulement de ceux-là.",
@@ -27,6 +28,7 @@
  "A new album, named below": "Un nouvel album, nommé ci-dessous",
  "A person's photos": "Les photos d'une personne",
  "a photo can stay 5 to 120 seconds": "une photo peut rester de 5 à 120 secondes",
+ "A place the app writes cannot be taken back by the app (Immich does not let it). If one is wrong, remove it in Immich.": "Un lieu écrit par l'app ne peut pas être repris par l'app (Immich ne le permet pas). Si l'un est faux, retirez-le dans Immich.",
  "a preview in chats needs the address of this app (PUBLIC_APP_URL) to be set": "un aperçu dans les messageries nécessite l'adresse de cette app (PUBLIC_APP_URL)",
  "A sender": "Un expéditeur",
  "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.": "Un album intelligent se remplit tout seul : dites ce qui doit y figurer (personnes, dates, un lieu, un appareil, une étiquette ou une phrase) et l'app vous propose les photos qui correspondent ou, quand vous l'y autorisez, les y met d'elle-même. Elle ne fait qu'ajouter, sauf si vous lui demandez de retirer ce qui ne correspond plus, et alors seulement les photos qu'elle y a mises.",
@@ -175,6 +177,7 @@
  "Download the messages": "Télécharger les messages",
  "Download the photos you chose (ZIP)": "Télécharger les photos choisies (ZIP)",
  "Downloading a backup from this page is off. To turn it on, and what to know first, see <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Backups</a>.": "Le téléchargement d'une sauvegarde depuis cette page est désactivé. Pour l'activer, et ce qu'il faut savoir avant, voir <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">Sauvegardes</a>.",
+ "Each photo is shown next to the photo it would get its place from. The app cannot take a written place back, so untick any you are not sure of.": "Chaque photo est montrée à côté de la photo dont elle recevrait son lieu. L'app ne peut pas reprendre un lieu écrit : décochez donc toute photo dont vous n'êtes pas sûr.",
  "Easier, but every person who makes a circle sees the name of every account on this server.": "Plus simple, mais chaque personne qui crée un cercle voit le nom de chaque compte du serveur.",
  "Edit": "Modifier",
  "Editors": "Modification",
@@ -227,6 +230,7 @@
  "Frames": "Cadres",
  "From configuration": "Depuis la configuration",
  "From everything": "De tout",
+ "From now on a photo that has a photo with a place on both sides gets that place without asking you. Only photos that arrive from now on are handled this way, and the app cannot take a place back.": "Désormais, une photo qui a une photo avec lieu des deux côtés reçoit ce lieu sans vous demander. Seules les photos qui arrivent à partir de maintenant sont traitées ainsi, et l'app ne peut pas reprendre un lieu.",
  "From now on the albums you make are shared with this circle without asking you. Only albums made from now on are handled this way, and Immich may email each person.": "Désormais, les albums que vous faites sont partagés avec ce cercle sans vous demander. Seuls les albums faits à partir de maintenant sont traités ainsi, et Immich peut envoyer un e-mail à chaque personne.",
  "From now on the photos that match are put in this album without asking you. Only photos that arrive from now on are handled this way.": "Désormais, les photos qui correspondent sont mises dans cet album sans vous demander. Seules les photos qui arrivent à partir de maintenant sont traitées ainsi.",
  "From the album {name}": "De l'album {name}",
@@ -240,8 +244,12 @@
  "Get started": "Pour commencer",
  "Getting started": "Premiers pas",
  "Getting the story ready": "Préparation de l'histoire",
+ "Give photos without a place the place next to them": "Donner aux photos sans lieu le lieu voisin",
  "give the day of the memories as a date": "donnez le jour des souvenirs sous forme de date",
  "give the story a title of one to sixty characters": "donnez à l'histoire un titre de un à soixante caractères",
+ "Give the ticked photos these places": "Donner ces lieux aux photos cochées",
+ "Give them these places": "Leur donner ces lieux",
+ "Give them these places, and always": "Leur donner ces lieux, et toujours",
  "Give this box an email address": "Donner une adresse e-mail à cette boîte",
  "Glow": "Halo",
  "Go to {view}": "Aller à {view}",
@@ -322,6 +330,7 @@
  "Let it end after (days from now, empty: never)": "Le laisser se terminer après (jours à partir de maintenant, vide : jamais)",
  "Let it fill the album by itself": "La laisser remplir l'album seule",
  "Let it share by itself": "La laisser partager seule",
+ "Let it write places by itself": "La laisser écrire les lieux seule",
  "Letting copies expire does not work across servers. Taking a hand-over back works only if you add the optional permission. What arrives is yours to keep or remove.": "Faire expirer des copies ne fonctionne pas d’un serveur à l’autre. Reprendre une remise ne fonctionne que si vous ajoutez la permission facultative. Ce qui arrive est à vous : gardez-le ou retirez-le.",
  "Limit": "Limite",
  "Limit per sender: {limit}.": "Limite par expéditeur : {limit}.",
@@ -390,6 +399,7 @@
  "No file was sent.": "Aucun fichier n'a été envoyé.",
  "No more emails": "Plus d'e-mails",
  "No photo has been kept yet.": "Aucune photo n'a encore été gardée.",
+ "no photo without a place has a located photo of the same camera close to it": "aucune photo sans lieu n'a près d'elle une photo avec lieu du même appareil",
  "No photos yet. They appear here by themselves as they are kept.": "Pas encore de photos. Elles apparaissent ici toutes seules à mesure qu'elles sont gardées.",
  "No run yet since the app started.": "Aucune exécution depuis le démarrage de l’application.",
  "No senders yet.": "Aucun expéditeur pour l’instant.",
@@ -424,10 +434,13 @@
  "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.": "Désactivé par défaut. Seules sont retirées les photos que l'app a mises elle-même dans l'album, jamais celles que vous avez ajoutées. Cela ne marche pas avec une phrase. La clé de l'app reçoit alors aussi le droit de retirer des photos des albums.",
  "Offer a service of your own": "Proposer votre propre service",
  "Offer my existing albums": "Proposer mes albums existants",
+ "Offer places to my photos that have none": "Proposer des lieux à mes photos qui n'en ont pas",
  "Offered by {name}.": "Proposé par {name}.",
  "Older photos": "Photos plus anciennes",
  "On": "Activé",
  "On an iPhone or iPad, add this page to the Home Screen first, then open it from there.": "Sur un iPhone ou un iPad, ajoutez d'abord cette page à l'écran d'accueil, puis ouvrez-la à partir de là.",
+ "on both sides": "des deux côtés",
+ "on one side": "d'un seul côté",
  "On your phone, open {address}, go to Settings, choose Cast to a TV and type this code.": "Sur votre téléphone, ouvrez {address}, allez dans Réglages, choisissez « Diffuser sur une télé » et saisissez ce code.",
  "One message to each destination, whatever it takes. Nothing else is changed.": "Un message à chaque destination, quoi qu'elle reçoive. Rien d'autre n'est modifié.",
  "One notice on this device for everything you sent, also with the screen off where the browser lets the app go on in the background (Android). On an iPhone files go only while this page is open.": "Une seule notification sur cet appareil pour tout ce que vous avez envoyé, aussi écran éteint là où le navigateur laisse l'application continuer en arrière-plan (Android). Sur un iPhone, les fichiers ne partent que tant que cette page est ouverte.",
@@ -522,6 +535,7 @@
  "Pin": "Épingler",
  "Pin a photo so it is always in the best-of. Hide one and guests no longer see it (the gallery, the wall and the ZIP); it stays in the owner's library.": "Épingle une photo pour qu'elle soit toujours dans la sélection. Cache-en une et les invités ne la voient plus (galerie, mur et ZIP) ; elle reste dans la bibliothèque du propriétaire.",
  "Pinned": "Épinglée",
+ "Places for photos that have none": "Lieux pour les photos qui n'en ont pas",
  "Play": "Lecture",
  "Please confirm": "Veuillez confirmer",
  "Please wait a little": "Patientez un instant",
@@ -575,6 +589,7 @@
  "Resume your sending to {service}?": "Reprendre votre envoi vers {service} ?",
  "Rise": "Montée",
  "Round {n}": "Tour {n}",
+ "same camera, {min} min away, a photo with a place {sides}": "même appareil, à {min} min, une photo avec un lieu {sides}",
  "Save": "Enregistrer",
  "Save lifetime": "Enregistrer la durée de vie",
  "Save limits": "Enregistrer les limites",
@@ -634,6 +649,7 @@
  "Show it": "Montrer",
  "Show it on the TV": "Montrer sur la télé",
  "Show more": "Afficher plus",
+ "Show on a map": "Voir sur une carte",
  "Show photos on a TV": "Montrer des photos sur une télé",
  "Show photos on this TV": "Montrer des photos sur cette télé",
  "Show something else": "Montrer autre chose",
@@ -652,6 +668,7 @@
  "Started {when}.": "Démarré {when}.",
  "Stop handing over this album": "Ne plus transmettre cet album",
  "Stop keeping this album up to date? The album and its photos stay as they are.": "Ne plus tenir cet album à jour ? L'album et ses photos restent tels quels.",
+ "Stop offering places? The places already written stay.": "Ne plus proposer de lieux ? Les lieux déjà écrits restent.",
  "Stop recording": "Arrêter l'enregistrement",
  "Stop showing photos on this TV?": "Arrêter d'afficher des photos sur cette télé ?",
  "Stop the emails": "Arrêter les e-mails",
@@ -678,6 +695,7 @@
  "Take the heart back": "Retirer le cœur",
  "Take {name} out of this circle and off the albums the app shared with them?": "Retirer {name} de ce cercle et des albums que l'app a partagés avec elle ?",
  "Taken back. It is in the owner's trash, not in their library.": "Repris. C'est dans la corbeille du propriétaire, pas dans sa bibliothèque.",
+ "Taken by the same camera minutes from a photo that has a place. Look at them one by one to see where each place comes from; the app cannot take a written place back.": "Prises par le même appareil à quelques minutes d'une photo qui a un lieu. Regardez-les une à une pour voir d'où vient chaque lieu ; l'app ne peut pas reprendre un lieu écrit.",
  "Taken off again": "Retiré à nouveau",
  "Taken with": "Prises avec",
  "Takes out what no longer matches": "Retire ce qui ne correspond plus",
@@ -701,6 +719,7 @@
  "The album already has that name.": "L'album porte déjà ce nom.",
  "The album {name}": "L'album {name}",
  "the app could not read your albums with its key": "l'app n'a pas pu lire vos albums avec sa clé",
+ "The app makes a key named handoff: places in your Immich that can read your photos and write a place. You can see it and delete it there.": "L'app crée dans votre Immich une clé nommée handoff: places qui peut lire vos photos et écrire un lieu. Vous pouvez la voir et la supprimer là-bas.",
  "The city and country of each photo": "La ville et le pays de chaque photo",
  "The code is good for 10 minutes; a new one appears when it runs out.": "Le code est valable 10 minutes ; un nouveau apparaît quand il expire.",
  "The code on the TV": "Le code sur la télé",
@@ -709,6 +728,7 @@
  "The drop box (for A drop box)": "La boîte de dépôt (pour « Une boîte de dépôt »)",
  "The end": "Fin",
  "the key the app uses for casting is gone: cast again": "la clé que l'app utilise pour diffuser a disparu : relancez la diffusion",
+ "the key the app uses for places is gone: make the rule again": "la clé que l'app utilise pour les lieux a disparu : refaites la règle",
  "the key the app uses for your circles is gone: make the circle again": "la clé que l'app utilise pour vos cercles a disparu : refaites le cercle",
  "The link ends {when}.": "Le lien se termine {when}.",
  "The link lasts": "Le lien dure",
@@ -717,7 +737,9 @@
  "The names of the people in the photos": "Les noms des personnes sur les photos",
  "The person (for A person's photos)": "La personne (pour « Les photos d'une personne »)",
  "The person (for Photos of a person)": "La personne (pour « Photos d'une personne »)",
+ "The photo the place comes from": "La photo d'où vient le lieu",
  "The PIN is not right. Try again.": "Le PIN n'est pas correct. Réessayez.",
+ "The places are written into your photos. The app cannot take a place back (Immich does not let it), so if one is wrong you remove it in Immich. Go on?": "Les lieux sont écrits dans vos photos. L'app ne peut pas reprendre un lieu (Immich ne le permet pas) ; si l'un est faux, vous le retirez dans Immich. Continuer ?",
  "The QR code could not be made.": "Le code QR n'a pas pu être créé.",
  "The address stops working. Photos already received are kept.": "L'adresse cesse de fonctionner. Les photos déjà reçues sont conservées.",
  "The address to paste": "L'adresse à coller",
@@ -889,10 +911,12 @@
  "With the tags": "Avec les étiquettes",
  "write the folders and the album's own name, up to 100 characters in all": "écrivez les dossiers et le nom propre de l'album, 100 caractères au plus en tout",
  "Write the folders with slashes, such as Trips / 2024. Leave it empty to take the album out of any folder.": "Écrivez les dossiers avec des barres obliques, par exemple Voyages / 2024. Laissez vide pour sortir l'album de tout dossier.",
+ "Writes places by itself when both sides agree": "Écrit les lieux seul quand les deux côtés concordent",
  "Wrong password": "Mot de passe incorrect",
  "you already have 10 circles; end one first": "vous avez déjà 10 cercles ; mettez-en un à fin d'abord",
  "you already have 10 stories; remove one first": "vous avez déjà 10 histoires ; supprimez-en une d'abord",
  "you already have 5 TVs showing photos; stop one first": "vous avez déjà 5 télés qui montrent des photos ; arrêtez-en une d'abord",
+ "you already have a rule that gives photos places": "vous avez déjà une règle qui donne des lieux aux photos",
  "You approve senders": "Vous approuvez les expéditeurs",
  "You are helping to look after this box. Approve the photos that may stay, reject the others.": "Tu aides à t'occuper de cette boîte. Approuve les photos qui peuvent rester et rejette les autres.",
  "You are invited to <em>{name}</em>": "Vous êtes invité à <em>{name}</em>",
@@ -908,6 +932,7 @@
  "You get this email because you turned it on in Immich Handoff.": "Vous recevez cet e-mail parce que vous l'avez activé dans Immich Handoff.",
  "You have answered Always {n} times. You can let it fill the album by itself from now on.": "Vous avez répondu Toujours {n} fois. Vous pouvez désormais la laisser remplir l'album seule.",
  "You have answered Always {n} times. You can let it share new albums by itself from now on.": "Vous avez répondu Toujours {n} fois. Vous pouvez désormais la laisser partager les nouveaux albums seule.",
+ "You have answered Always {n} times. You can let it write a place by itself from now on, only for a photo with a photo that has a place on both sides; the others always ask.": "Vous avez répondu Toujours {n} fois. Vous pouvez désormais la laisser écrire un lieu seule, seulement pour une photo ayant une photo avec lieu des deux côtés ; les autres demandent toujours.",
  "You have chosen {n} of {limit}. Send your choice anyway?": "Vous avez choisi {n} sur {limit}. Envoyer quand même votre choix ?",
  "You have many photos from {year}. The app can pick the best of them and make a short animated story, with a link you can share.": "Vous avez beaucoup de photos de {year}. L'app peut choisir les meilleures et en faire une courte histoire animée, avec un lien à partager.",
  "You have no albums of your own yet. Make one in Immich, then come back.": "Vous n’avez pas encore d’album à vous. Créez-en un dans Immich, puis revenez.",
@@ -1128,12 +1153,15 @@
  "{name} is choosing for this room. You can look at the photos.": "{name} choisit pour cet espace. Vous pouvez regarder les photos.",
  "{name} is making the story {title}": "{name} crée l'histoire {title}",
  "{name} keeps the album {album} up to date: {rule}": "{name} tient l'album {album} à jour : {rule}",
+ "{name} let places be written by themselves for photos with a located photo on both sides": "{name} laisse les lieux s'écrire seuls pour les photos ayant une photo avec lieu des deux côtés",
  "{name} let the album {album} fill itself": "{name} laisse l'album {album} se remplir seul",
  "{name} let the circle {circle} share new albums by itself": "{name} laisse le cercle {circle} partager seul les nouveaux albums",
+ "{name} lets the app offer places to photos that have none": "{name} laisse l'app proposer des lieux aux photos qui n'en ont pas",
  "{name} linked the album {album} to {service}: everything in it is handed over": "{name} a lié l’album {album} à {service} : tout son contenu est transmis",
  "{name} made a new invitation link for {service}": "{name} a créé un nouveau lien d’invitation pour {service}",
  "{name} made the circle {circle} ask first again": "{name} fait de nouveau demander d'abord le cercle {circle}",
  "{name} made the circle {circle}: new albums are offered to {people}": "{name} a créé le cercle {circle} : les nouveaux albums sont proposés à {people}",
+ "{name} made the places ask first again": "{name} fait de nouveau demander d'abord pour les lieux",
  "{name} paused sending to {service}": "{name} a suspendu l’envoi à {service}",
  "{name} paused the service {service}": "{name} a suspendu le service {service}",
  "{name} put {person} in the circle {circle}": "{name} a ajouté {person} au cercle {circle}",
@@ -1171,6 +1199,7 @@
  "{name} started sending to {service} (originals are moved to their trash)": "{name} envoie désormais à {service} (les originaux sont déplacés dans leur corbeille)",
  "{name} stopped handing over the album {album} to {service}": "{name} ne transmet plus l’album {album} à {service}",
  "{name} stopped keeping the album {album} up to date": "{name} ne tient plus l'album {album} à jour",
+ "{name} stopped offering places to photos that have none": "{name} ne propose plus de lieux aux photos qui n'en ont pas",
  "{name} stopped sending to {service}": "{name} n’envoie plus à {service}",
  "{name} stopped the TV that showed {source}": "{name} a arrêté la télé qui montrait {source}",
  "{name} switched the guests' gallery off": "{name} a désactivé la galerie des invités",
@@ -1290,6 +1319,10 @@
   "one": "{n} photo plus ancienne trouvée pour l'album {album} par une règle",
   "other": "{n} photos plus anciennes trouvées pour l'album {album} par une règle"
  },
+ "{n} older photo found that can get a place from a photo next to it": {
+  "one": "{n} photo plus ancienne trouvée qui peut recevoir un lieu d'une photo voisine",
+  "other": "{n} photos plus anciennes trouvées qui peuvent recevoir un lieu des photos voisines"
+ },
  "{n} person": {
   "one": "{n} personne",
   "other": "{n} personnes"
@@ -1310,6 +1343,14 @@
   "one": "{n} photo est arrivée dans {box}",
   "other": "{n} photos sont arrivées dans {box}"
  },
+ "{n} photo can get a place from a photo next to it": {
+  "one": "{n} photo peut recevoir un lieu d'une photo voisine",
+  "other": "{n} photos peuvent recevoir un lieu des photos voisines"
+ },
+ "{n} photo can get a place from a photo next to it. Look at it on the Overview.": {
+  "one": "{n} photo peut recevoir un lieu d'une photo voisine. Voyez-la dans l'aperçu.",
+  "other": "{n} photos peuvent recevoir un lieu des photos voisines. Voyez-les dans l'aperçu."
+ },
  "{n} photo chosen": {
   "one": "{n} photo choisie",
   "other": "{n} photos choisies"
@@ -1321,6 +1362,14 @@
  "{n} photo from the album {album} handed over to {service}": {
   "one": "{n} photo de l’album {album} transmise à {service}",
   "other": "{n} photos de l’album {album} transmises à {service}"
+ },
+ "{n} photo got a place from a photo next to it": {
+  "one": "{n} photo a reçu un lieu d'une photo voisine",
+  "other": "{n} photos ont reçu un lieu des photos voisines"
+ },
+ "{n} photo got a place from the photos around it on its own": {
+  "one": "{n} photo a reçu d'elle-même un lieu des photos qui l'entourent",
+  "other": "{n} photos ont reçu d'elles-mêmes un lieu des photos qui les entourent"
  },
  "{n} photo handed over to {service}": {
   "one": "{n} photo transmise à {service}",
@@ -1345,6 +1394,10 @@
  "{n} photo left out of the album {album}": {
   "one": "{n} photo laissée de côté pour l'album {album}",
   "other": "{n} photos laissées de côté pour l'album {album}"
+ },
+ "{n} photo left without a place": {
+  "one": "{n} photo laissée sans lieu",
+  "other": "{n} photos laissées sans lieu"
  },
  "{n} photo of the week from {people} in the album {album}": {
   "one": "{n} photo de la semaine de {people} dans l'album {album}",

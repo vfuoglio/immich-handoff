@@ -218,6 +218,15 @@ func (h *Hub) AnswerSuggestion(ctx context.Context, user immich.User, ruleID, an
 		}
 		return nil
 	}
+	if r.Kind == store.RuleKindPlace {
+		switch {
+		case len(yes) > 0:
+			h.event(ctx, "", user.ID, "place", i18n.PackN("{n} photo got a place from a photo next to it", "{n} photos got a place from the photos next to them", len(yes)))
+		case len(no) > 0:
+			h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} photo left without a place", "{n} photos left without a place", len(no)))
+		}
+		return nil
+	}
 	if r.Kind == store.RuleKindAlbum {
 		switch {
 		case len(yes) > 0:
@@ -255,6 +264,9 @@ func (h *Hub) sendForRule(ctx context.Context, r store.Rule, assets []string) er
 	}
 	if r.Kind == store.RuleKindFolder { // the photos are put in the albums they were offered for
 		return h.folderForRule(ctx, r, assets)
+	}
+	if r.Kind == store.RuleKindPlace { // the photos get the place they were offered
+		return h.placeForRule(ctx, r, assets)
 	}
 	if r.Kind == store.RuleKindAlbum { // the photos are put in the album the rule fills
 		return h.albumForRule(ctx, r, assets)
@@ -348,6 +360,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the album {album} ask first again", "name", user.Name, "album", r.Cond.Album.Name))
 			return nil
 		}
+		if r.Kind == store.RuleKindPlace {
+			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the places ask first again", "name", user.Name))
+			return nil
+		}
 		if r.Kind == store.RuleKindAlbum {
 			h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} made the album {album} ask first again", "name", user.Name, "album", r.DestAlbum))
 			return nil
@@ -384,6 +400,10 @@ func (h *Hub) SetRuleAuto(ctx context.Context, user immich.User, id string, on b
 	}
 	if r.Kind == store.RuleKindLibrary {
 		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let the album {album} add photos to the library by itself", "name", user.Name, "album", r.Cond.Album.Name))
+		return nil
+	}
+	if r.Kind == store.RuleKindPlace {
+		h.event(ctx, "", user.ID, "rule", i18n.Pack("{name} let places be written by themselves for photos with a located photo on both sides", "name", user.Name))
 		return nil
 	}
 	if r.Kind == store.RuleKindAlbum {

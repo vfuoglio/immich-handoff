@@ -893,6 +893,13 @@ var migrations = []string{
 	   state   TEXT NOT NULL,
 	   PRIMARY KEY (user_id, year)
 	 );`,
+	// places: the person's key for writing the place of a photo
+	`CREATE TABLE place_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

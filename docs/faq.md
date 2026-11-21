@@ -18,6 +18,9 @@ No. Senders use Immich as they do now: add a tag, or press the **Hand over...** 
 **Can I share the photos of a person with my partner, both ways, without doing anything each time?**
 Yes: in **Settings**, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
 
+**Can the app give photos from a camera without GPS the place they were taken?**
+Yes, with care: in **Settings**, **Places for photos that have none**. A photo with no place that was taken minutes from one that has a place, by the same camera on the same day, is offered that place, with both photos side by side and the reason; nothing is written until you say yes, and the app cannot take a written place back (Immich does not allow it). See [Places for photos that have none](guides/places.md).
+
 **Can I make a shareable recap of a trip or a year, like a story?**
 Yes: **Stories** in **Settings** makes a short animated recap of an album, a person, a stretch of time or a drop box, with about forty of the best photos, a card for each chapter and a link anyone can open on a phone or a TV, with no account. It shows dates and the city and country (you can switch them off) and never coordinates; names of people are off unless you switch them on. See [Stories](guides/stories.md).
 

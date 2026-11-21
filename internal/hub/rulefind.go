@@ -238,6 +238,9 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	if r.Kind == store.RuleKindAlbum {
 		return h.lookAlbum(ctx, r)
 	}
+	if r.Kind == store.RuleKindPlace {
+		return h.lookPlace(ctx, r, false)
+	}
 	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
 	if err != nil {
 		return 0, err
@@ -357,6 +360,20 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 	r, err := h.ruleOf(ctx, user.ID, id)
 	if err != nil {
 		return 0, err
+	}
+	if r.Kind == store.RuleKindPlace { // older photos are looked at too, up to what one search reads
+		if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {
+			return 0, ErrLookBackBusy
+		}
+		n, err := h.lookPlace(ctx, r, true)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, ErrPlacesNothing
+		}
+		h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} older photo found that can get a place from a photo next to it", "{n} older photos found that can get a place from the photos next to them", n))
+		return n, nil
 	}
 	if r.Kind == store.RuleKindLibrary || r.Kind == store.RuleKindFolder || r.Kind == store.RuleKindStack || r.Kind == store.RuleKindImport { // these look at everything there is: there is nothing older to look back at
 		return 0, ErrNothingOlder

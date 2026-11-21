@@ -350,6 +350,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/folder", w.followFolder)
 	mux.HandleFunc("GET /fragments/stack-check", w.stackCheck)
 	mux.HandleFunc("POST /rules/stack", w.followStack)
+	mux.HandleFunc("POST /rules/places", w.followPlaces)
 	mux.HandleFunc("POST /rules/stack-undo", w.undoStack)
 	mux.HandleFunc("POST /services/album", w.linkAlbum)
 	mux.HandleFunc("POST /services/album/stop", w.unlinkAlbum)
@@ -763,6 +764,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Circles, d.CircleAsks = w.circleViews(ctx, me)
 	d.Cast = w.castViews(ctx, me)
 	d.Stories = w.storyViews(ctx, me)
+	d.Places = w.placeViews(ctx, me)
 	if w.storyOn() {
 		d.StoryYear, _ = w.Hub.StoryYearOffer(ctx, me.sess, me.user)
 	}
@@ -887,6 +889,15 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} group of photos to stack", "{n} groups of photos to stack", sg.Count),
 				Text: t(ctx, "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.", "found", sg.Signals), Thumbs: sg.Thumbs, More: sg.Count - len(sg.Thumbs), Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at the groups one by one")})
+			continue
+		}
+		if sg.Place { // photos that can get a place from a photo next to them
+			acts := []NeedAction{
+				{Label: t(ctx, "Give them these places"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true, Confirm: placeConfirm(ctx, true)},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")},
+				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always"), Confirm: placeConfirm(ctx, true)}}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} photo can get a place from a photo next to it", "{n} photos can get a place from the photos next to them", sg.Count),
+				Text: t(ctx, "Taken by the same camera minutes from a photo that has a place. Look at them one by one to see where each place comes from; the app cannot take a written place back."), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 			continue
 		}
 		if sg.Smart { // photos that match a smart album

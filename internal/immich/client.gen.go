@@ -1089,6 +1089,42 @@ type AssetBulkDeleteDto struct {
 	Ids []openapi_types.UUID `json:"ids"`
 }
 
+// AssetBulkUpdateDto defines model for AssetBulkUpdateDto.
+type AssetBulkUpdateDto struct {
+	// DateTimeOriginal Original date and time
+	DateTimeOriginal *string `json:"dateTimeOriginal,omitempty"`
+
+	// DateTimeRelative Relative time offset in minutes
+	DateTimeRelative *int `json:"dateTimeRelative,omitempty"`
+
+	// Description Asset description
+	Description *string `json:"description,omitempty"`
+
+	// DuplicateId Duplicate ID
+	DuplicateId *string `json:"duplicateId,omitempty"`
+
+	// Ids Asset IDs to update
+	Ids []openapi_types.UUID `json:"ids"`
+
+	// IsFavorite Mark as favorite
+	IsFavorite *bool `json:"isFavorite,omitempty"`
+
+	// Latitude Latitude coordinate
+	Latitude *float64 `json:"latitude,omitempty"`
+
+	// Longitude Longitude coordinate
+	Longitude *float64 `json:"longitude,omitempty"`
+
+	// Rating Rating in range [1-5] (starred), -1 (rejected), or null (unrated)
+	Rating *int `json:"rating,omitempty"`
+
+	// TimeZone Time zone (IANA timezone)
+	TimeZone *string `json:"timeZone,omitempty"`
+
+	// Visibility Asset visibility
+	Visibility *AssetVisibility `json:"visibility,omitempty"`
+}
+
 // AssetMediaCreateDto defines model for AssetMediaCreateDto.
 type AssetMediaCreateDto struct {
 	// AssetData Asset file data
@@ -2959,6 +2995,11 @@ type DeleteAssetsJSONRequestBody = AssetBulkDeleteDto
 // UploadAssetMultipartRequestBody defines body for UploadAsset for multipart/form-data ContentType.
 type UploadAssetMultipartRequestBody = AssetMediaCreateDto
 
+// UpdateAssetsJSONRequestBody defines body for UpdateAssets for application/json ContentType.
+//
+// Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+type UpdateAssetsJSONRequestBody = AssetBulkUpdateDto
+
 // CreateMemoryJSONRequestBody defines body for CreateMemory for application/json ContentType.
 type CreateMemoryJSONRequestBody = MemoryCreateDto
 
@@ -3278,6 +3319,28 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /assets (the `UploadAsset` operationId).
 	UploadAssetWithBody(ctx context.Context, params *UploadAssetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAssetsWithBody Update assets
+	//
+	// Updates multiple assets at the same time.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateAssetsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAssets Update assets
+	//
+	// Updates multiple assets at the same time.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateAssets(ctx context.Context, body UpdateAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAssetInfo Retrieve an asset
 	//
@@ -4085,6 +4148,46 @@ func (c *Client) DeleteAssets(ctx context.Context, body DeleteAssetsJSONRequestB
 // Corresponds with POST /assets (the `UploadAsset` operationId).
 func (c *Client) UploadAssetWithBody(ctx context.Context, params *UploadAssetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUploadAssetRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAssetsWithBody Update assets
+//
+// Updates multiple assets at the same time.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateAssetsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAssetsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAssets Update assets
+//
+// Updates multiple assets at the same time.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *Client) UpdateAssets(ctx context.Context, body UpdateAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAssetsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5684,6 +5787,46 @@ func NewUploadAssetRequestWithBody(server string, params *UploadAssetParams, con
 		}
 
 	}
+
+	return req, nil
+}
+
+// NewUpdateAssetsRequest calls the generic UpdateAssets builder with application/json body
+func NewUpdateAssetsRequest(server string, body UpdateAssetsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAssetsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateAssetsRequestWithBody constructs an http.Request for the UpdateAssets method, with any body, and a specified content type
+func NewUpdateAssetsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/assets")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -7720,6 +7863,28 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /assets (the `UploadAsset` operationId).
 	UploadAssetWithBodyWithResponse(ctx context.Context, params *UploadAssetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadAssetResponse, error)
 
+	// UpdateAssetsWithBodyWithResponse Update assets
+	//
+	// Updates multiple assets at the same time.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateAssetsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAssetsResponse, error)
+
+	// UpdateAssetsWithResponse Update assets
+	//
+	// Updates multiple assets at the same time.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+	//
+	// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	UpdateAssetsWithResponse(ctx context.Context, body UpdateAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAssetsResponse, error)
+
 	// GetAssetInfoWithResponse Retrieve an asset
 	//
 	// Retrieve detailed information about a specific asset.
@@ -8770,6 +8935,40 @@ func (r UploadAssetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UploadAssetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateAssetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateAssetsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAssetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAssetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateAssetsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10443,6 +10642,39 @@ func (c *ClientWithResponses) UploadAssetWithBodyWithResponse(ctx context.Contex
 	return ParseUploadAssetResponse(rsp)
 }
 
+// UpdateAssetsWithBodyWithResponse Update assets
+//
+// Updates multiple assets at the same time.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+//
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateAssetsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAssetsResponse, error) {
+	rsp, err := c.UpdateAssetsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAssetsResponse(rsp)
+}
+
+// UpdateAssetsWithResponse Update assets
+//
+// Updates multiple assets at the same time.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /assets (the `UpdateAssets` operationId).
+// Deprecated: this operation has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+func (c *ClientWithResponses) UpdateAssetsWithResponse(ctx context.Context, body UpdateAssetsJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAssetsResponse, error) {
+	rsp, err := c.UpdateAssets(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAssetsResponse(rsp)
+}
+
 // GetAssetInfoWithResponse Retrieve an asset
 //
 // Retrieve detailed information about a specific asset.
@@ -11512,6 +11744,22 @@ func ParseUploadAssetResponse(rsp *http.Response) (*UploadAssetResponse, error) 
 		}
 		response.JSON201 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAssetsResponse parses an HTTP response from a UpdateAssetsWithResponse call
+func ParseUpdateAssetsResponse(rsp *http.Response) (*UpdateAssetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAssetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

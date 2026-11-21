@@ -61,6 +61,7 @@ var sealedColumns = []struct {
 	{"album_keys", "key_enc", "user_id", prefix("albums:")},
 	{"circle_keys", "key_enc", "user_id", prefix("circles:")},
 	{"cast_keys", "key_enc", "user_id", prefix("cast:")},
+	{"place_keys", "key_enc", "user_id", prefix("places:")},
 	{"stories", "key_enc", "id", same},
 	{"destinations", "secret_enc", "id", prefix("destination:")},
 	{"meta", "v", "k", metaContext},

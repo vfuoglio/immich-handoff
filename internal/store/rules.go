@@ -33,6 +33,8 @@ const (
 	// RuleKindImport follows a destination (a folder, a bucket, a server): the files that appear in it are offered, and added to the
 	// person's library, with the sender's own key. Cond.Source names the destination, Cond.Prefix the folder under it.
 	RuleKindImport = "import"
+	// RuleKindPlace gives the person's photos that have no place the place of a located photo of the same camera taken minutes from it.
+	RuleKindPlace = "place"
 	// RuleKindAlbum keeps one of the person's albums up to date with what a rule finds (Dest is the album's id and DestAlbum its name; the
 	// conditions are the ordinary ones). See docs/design/albums-design.md.
 	RuleKindAlbum = "album"

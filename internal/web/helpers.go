@@ -521,7 +521,7 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 // RowCount is how many service rows the page shows; with exactly one it starts open.
 // HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, smart albums, pairing) is on for this person.
 func (d DashboardData) HasSettings() bool {
-	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available || d.Cast.Available
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available || d.Cast.Available || d.Places.Available
 }
 
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
@@ -1042,4 +1042,12 @@ func tvBody(legacy bool) string {
 		return "tv legacy"
 	}
 	return "tv wall"
+}
+
+// placeConfirm is what the review page of places asks before it writes anything: a place cannot be taken back by the app.
+func placeConfirm(ctx context.Context, place bool) string {
+	if !place {
+		return ""
+	}
+	return t(ctx, "The places are written into your photos. The app cannot take a place back (Immich does not let it), so if one is wrong you remove it in Immich. Go on?")
 }

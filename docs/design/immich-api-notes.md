@@ -30,6 +30,10 @@ Facts verified against a real Immich v3.2.0 (see `test/`); the test suite now ru
 - A tag applied in the first moments after an upload is occasionally dropped by Immich itself (about 1 in 50 in tests with no handoff app running). The same happens to a tag added and another removed on one photo within milliseconds, so the app adds the new tag, checks it, and only then removes the old one. The end-to-end tests' tagging helpers (`tagAsset`, `tagLikeThePhone`) check that a tag stuck and apply it again when it did not, so a dropped tag does not fail a run; they log when they had to.
 - Immich is "healthy" about 30 seconds before its workflow plugins are loaded; creating a workflow earlier fails with `Unknown method`.
 
+## Notes from writing places (Immich 3.4.1)
+
+Checked by `TestPlacesSpike`: `PUT /assets` with `ids`, `latitude` and `longitude` answers 204 and the photo has the place at once; Immich finds the city and country itself within a minute. A place written into a photo of an external library with read-only files is accepted (204) and not kept (30 seconds later the photo still has no place); uploaded photos keep it. A null `latitude` or `longitude` is refused with 400 (`expected number, received null`), in `PUT /assets/{id}` and in `PUT /assets`, so a place cannot be cleared through the programming interface. `updateAsset` and `updateAssets` are marked deprecated in the spec but work. There is no search filter for photos with no location; the EXIF of a search result (`withExif`) holds `latitude`, `longitude`, `dateTimeOriginal`, `make`, `model`, `lensModel` and `timeZone`.
+
 ## Notes from handing over photos on a date, taking a hand-over back, and letting copies expire
 
 Checked against a real Immich 3.2.0 (`test/e2e`):
