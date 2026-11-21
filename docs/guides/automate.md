@@ -44,7 +44,11 @@ Ending a rule never touches photos already handed over, and leaving the service 
 
 ### The optional pet helper
 
-The pet rule is much more accurate with a small second container, the **pet helper**. It finds the cat or dog in each photo and compares **that animal** with the animal in your examples, so a pet that is small beside people is not lost among them, and about six times fewer wrong photos are offered at the same recall (measured in [#228](../design/pairing-design.md)). It is optional and the person who runs the app switches it on once for everybody:
+The pet rule is much more accurate with a small second container, the **pet helper**. It finds the cat or dog in each photo and compares **that animal** with the animal in your examples, so a pet that is small beside people is not lost among them, and about six times fewer wrong photos are offered at the same recall (measured in [#228](../design/pairing-design.md)). It is optional: **without it the rule still works**, with Immich's own search (the form says so). The person who runs the app switches it on once for everybody:
+
+1. In `docker-compose.yml`, remove the `#` from the `pets` service (it is there, commented out). The image is `vfuoglio/immich-handoff-pets`, tagged `nightly` today and `1` from the next release. To build it from this folder instead, remove the `#` from the `pets` lines of `docker-compose.build.yml` and run `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`; the build downloads its models.
+2. Add `PET_SIDECAR_URL=http://pets:8090` to your `.env`, and run `docker compose up -d`.
+3. Check: the administrator's page has a **Pet helper** card that says *On* when it answers, and `doctor` checks the address too. The pet form then says "This server has the pet helper on".
 
 ```yaml
 services:
@@ -52,7 +56,7 @@ services:
     environment:
       PET_SIDECAR_URL: http://pets:8090
   pets:
-    image: vfuoglio/immich-handoff-pets:1
+    image: vfuoglio/immich-handoff-pets:nightly   # :1 from the next release
     restart: unless-stopped
     mem_limit: 512m
     # nothing outside the app needs to reach it, and it needs no network of its own beyond the app

@@ -27,6 +27,18 @@ services:
     networks:
       - immich
 
+  # The optional pet helper: a small second container that finds the cat or dog in each photo, so a rule for a pet is much more accurate.
+  # Without it the rule still works, with Immich's own search. To use it, remove the # from the lines below (the service and everything
+  # under it), and add PET_SIDECAR_URL=http://pets:8090 to your .env. See docs/guides/automate.md#the-optional-pet-helper
+  # pets:
+  #   image: vfuoglio/immich-handoff-pets:nightly   # becomes :1 with the next release
+  #   restart: unless-stopped
+  #   mem_limit: 512m
+  #   read_only: true
+  #   cap_drop: [ALL]
+  #   security_opt: ["no-new-privileges:true"]
+  #   networks: [immich]
+
 volumes:
   handoff-data:
 

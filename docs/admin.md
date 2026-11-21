@@ -2,6 +2,8 @@
 
 Anyone who administers the Immich server can open **Admin** (a link in the header, only they see it) to look at everything the app is doing, and to remove a service or a member that is stuck. Everyone else, signed in or not, gets "not found" for that address, so the page does not show itself.
 
+The page also has a **Pet helper** card: *On* when the optional [pet helper](guides/automate.md#the-optional-pet-helper) answers, *Not answering* when `PET_SIDECAR_URL` is set but it does not, and *Off* with a link to how to switch it on.
+
 ## Who is an administrator
 
 The app keeps no list of its own. When someone opens the page it asks Immich, with that person's own sign-in, whether they are an administrator, which is the same setting as **Administrator** on their account in Immich. Make someone an administrator or take it away in Immich, and the next page they open follows.

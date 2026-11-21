@@ -54,6 +54,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), CircleMethod: w.Hub.CircleMethod(r.Context()), Backup: w.backupSummary(r.Context()), Notify: w.notifyViews(r.Context())}
+	d.PetHelper = w.petHelperState(r.Context())
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)
@@ -301,4 +302,17 @@ func atoiOr(s string, def int) int {
 		return n
 	}
 	return def
+}
+
+// petHelperState is "off" when the pet helper is not set up, "on" when it answers and "down" when it is set up and does not.
+func (w *Server) petHelperState(ctx context.Context) string {
+	if w.Hub == nil || w.Hub.Pets == nil {
+		return "off"
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := w.Hub.Pets.Ping(ctx); err != nil {
+		return "down"
+	}
+	return "on"
 }

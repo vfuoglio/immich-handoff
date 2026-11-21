@@ -2,6 +2,7 @@ name: nightly
 # Every night at about 09:17 UTC (4 AM in winter, in New York), with a second chance at 15:43, the container image is
 # built from `main` and published to Docker Hub and GitHub's registry, but only if `main` has changed since the last nightly image was built.
 #   - tags: the dated one, 20261107-nightly, and `nightly`, which always points at the newest
+#   - the pet helper (pet-sidecar/) is built, checked and published the same night as `immich-handoff-pets:nightly`
 #   - never touches `latest`, `X.Y` or any release tag
 #   - the same tests as a release run first; if anything fails nothing is published and `nightly` stays where it was
 #   - only the newest 14 dated nightly tags are kept (see .github/scripts/prune_nightly.sh)
@@ -262,3 +263,101 @@ jobs:
               echo "::warning::could not remove $tag from Docker Hub (the token may lack delete rights)"
             fi
           done
+
+  pets-image:
+    # The optional pet helper (pet-sidecar/) is built and checked in the same night, so that the address the guide gives for it exists
+    # before a release does. It has one tag, `nightly` (it changes rarely, so there are no dated tags to tidy), and is signed and
+    # has an SBOM like the main image. An untick of "publish" builds and checks it and publishes nothing.
+    needs: [changed, image]
+    if: needs.changed.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      PUBLISH: ${{ needs.changed.outputs.publish }}
+      DOCKERHUB_IMAGE: vfuoglio/immich-handoff-pets
+      GHCR_IMAGE: ghcr.io/${{ github.repository }}-pets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # the same check as the release workflow: both architectures build, and the sample photos find the sample animals
+      - name: Build each architecture and check that the sample photos find the sample animals
+        run: |
+          for arch in amd64 arm64; do
+            docker buildx build --platform linux/$arch -t pets-smoke:$arch --load pet-sidecar
+          done
+          docker run -d --name pets --platform linux/amd64 -p 8090:8090 pets-smoke:amd64
+          for i in $(seq 1 30); do curl -fs http://localhost:8090/ping >/dev/null && break; sleep 2; done
+          python3 -m pip install --quiet pillow
+          (cd pet-sidecar && python3 check.py http://localhost:8090)
+
+      - name: Nothing is published from this run
+        if: env.PUBLISH != 'true'
+        run: echo "Built and checked the pet helper for both architectures; publishing was switched off for this run." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        if: env.PUBLISH == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - id: meta
+        if: env.PUBLISH == 'true'
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=raw,value=nightly
+
+      - name: Publish the multi-architecture image
+        id: push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: pet-sidecar
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: env.PUBLISH == 'true'
+
+      - name: Sign the image, then check the signature and the attached SBOM
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          [ -n "$DIGEST" ] || { echo "::error::the publish step gave no image digest"; exit 1; }
+          for img in "$DOCKERHUB_IMAGE" "$GHCR_IMAGE"; do
+            cosign sign --yes --new-bundle-format=false --use-signing-config=false "$img@$DIGEST"
+            ok=false
+            for attempt in 1 2 3 4 5; do
+              if cosign verify --new-bundle-format=false \
+                --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/nightly\.yml@" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                "$img@$DIGEST" > /dev/null; then ok=true; break; fi
+              echo "::warning::signature of $img not found yet (attempt $attempt of 5)"; sleep 10
+            done
+            $ok || { echo "::error::the signature of $img could not be verified"; exit 1; }
+            docker buildx imagetools inspect "$img@$DIGEST" --format '{{json .SBOM}}' \
+              | jq -e '[.. | .packages? // empty | length] | add > 0' > /dev/null \
+              || { echo "::error::$img has no SBOM"; exit 1; }
+            echo "$img: signed, signature verified, SBOM present"
+          done
+          echo "Published the pet helper as \`nightly\` to Docker Hub and GitHub's registry (digest \`$DIGEST\`)." >> "$GITHUB_STEP_SUMMARY"

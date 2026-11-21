@@ -2240,6 +2240,7 @@ type AdminData struct {
 	Senders   int  // senders across all services
 	Attention int  // services and senders that are paused, limited or disconnected, and people waiting to clean up
 	CircleMethod int // how people are chosen for a circle: 1 type an email, 2 pick from every account
+	PetHelper    string // the pet helper: "off" (PET_SIDECAR_URL is not set), "on" (it answers) or "down" (it is set and does not answer)
 }
 
 // NotifyView is a place messages for whoever runs the app go, as the administrator's page lists it (never its address).
@@ -2355,6 +2356,7 @@ templ AdminPage(d AdminData) {
 		if d.Backup.Has {
 			@AdminBackups(d.Backup)
 		}
+		@AdminPetHelper(d.PetHelper)
 		if len(d.Activity) > 0 {
 			<h2>{ t(ctx, "Recent events") }</h2>
 			<section class="card timeline-card" aria-label={ t(ctx, "Recent events") }>
@@ -2414,6 +2416,26 @@ templ NotifyResults(results []NotifyResultView) {
 }
 
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
+// AdminPetHelper says whether the optional pet helper is running, and where to read how to switch it on.
+templ AdminPetHelper(state string) {
+	<h2>{ t(ctx, "Pet helper") }</h2>
+	<section class="card" id="pethelper">
+		<p>
+			switch state {
+				case "on":
+					<span class="chip ok">{ t(ctx, "On") }</span> { t(ctx, "The pet helper answers. Rules for a pet compare the animal in each photo with the animal in their examples.") }
+				case "down":
+					<span class="chip bad">{ t(ctx, "Not answering") }</span> { t(ctx, "PET_SIDECAR_URL is set but the pet helper does not answer. Rules for a pet use Immich's own search until it does; run doctor to see why.") }
+				default:
+					<span class="chip">{ t(ctx, "Off") }</span> { t(ctx, "Rules for a pet work without it, with Immich's own search. The pet helper is a small second container that makes them much more accurate.") }
+			}
+		</p>
+		<p class="meta">
+			@templ.Raw(h(ctx, "How to switch it on: <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">the pet helper</a>.", "url", petHelperDocsURL))
+		</p>
+	</section>
+}
+
 templ AdminBackups(b AdminBackup) {
 	<h2>{ t(ctx, "Backups") }</h2>
 	<section class="card" id="backups">
@@ -6032,6 +6054,11 @@ templ PetForm(service string, photos []PetPhoto, helper bool) {
 	<form class="card offer-form" hx-post="rules/pet" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
 		<input type="hidden" name="service" value={ service }/>
 		<p class="meta">{ t(ctx, "Pick 3 to 8 photos of your pet. The rule offers the photos that Immich finds most like them, and every photo you send teaches it more.") }</p>
+		if !helper {
+			<p class="meta">
+				@templ.Raw(h(ctx, "This works with Immich's own search. For much better results the person who runs this app can switch on the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">pet helper</a>.", "url", petHelperDocsURL))
+			</p>
+		}
 		if helper {
 			<p class="meta">{ t(ctx, "This server has the pet helper on: the rule compares the animal in each photo with the animal in your examples, so every example must show the animal clearly. Photos are sent to the helper as previews and it keeps nothing.") }</p>
 		}
