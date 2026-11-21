@@ -31,6 +31,9 @@ function initTV(): void {
 
   let secret = "";
   let items: string[] | null = null;
+  let captions: Record<string, string> = {};
+  let ordered = false;
+  let cursor = -1;
   let show: Show = { shown: [], fresh: [], last: "" };
   let history: string[] = [];
   let seq = 0;
@@ -58,6 +61,12 @@ function initTV(): void {
     if (!img) return false;
     const fig = document.createElement("figure");
     fig.append(img);
+    const words = captions[id];
+    if (words) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = words;
+      fig.append(cap);
+    }
     present(stage, fig, holdFor(holdMs, false), false);
     return true;
   };
@@ -72,7 +81,10 @@ function initTV(): void {
     try {
       for (let tries = 0; tries < 3; tries++) {
         let id: string | undefined;
-        if (way === "prev" && history.length > 1) {
+        if (ordered) { // a story is played in the order it was made, and goes round again
+          cursor = (cursor + (way === "prev" ? items.length - 1 : 1)) % items.length;
+          id = items[cursor];
+        } else if (way === "prev" && history.length > 1) {
           history.pop();
           id = history[history.length - 1];
         } else {
@@ -94,13 +106,16 @@ function initTV(): void {
   const feed = (reset: boolean): void => {
     clearTimeout(feedTimer);
     void fetch(`tv/feed?s=${secret}`, { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ items?: { id: string }[]; refresh?: number }>) : Promise.reject(new Error(String(r.status)))))
+      .then((r) => (r.ok ? (r.json() as Promise<{ items?: { id: string; caption?: string }[]; refresh?: number; ordered?: boolean }>) : Promise.reject(new Error(String(r.status)))))
       .then((data) => {
         const ids = (data.items ?? []).map((i) => i.id);
+        ordered = data.ordered === true;
+        captions = {};
+        for (const i of data.items ?? []) if (i.caption) captions[i.id] = i.caption;
         const first = items === null || reset;
         const fresh = reset ? [] : arrivals(items, ids);
         items = ids;
-        if (reset) { show = { shown: [], fresh: [], last: "" }; history = []; }
+        if (reset) { show = { shown: [], fresh: [], last: "" }; history = []; cursor = -1; }
         show = { ...show, fresh: show.fresh.concat(fresh) };
         failures = 0;
         if (first) void step("next");
@@ -116,6 +131,7 @@ function initTV(): void {
     items = null;
     show = { shown: [], fresh: [], last: "" };
     history = [];
+    cursor = -1;
     seq = 0;
     started = false;
     clearTimeout(slide);

@@ -19,6 +19,7 @@ const (
 	CastPerson = "person"
 	CastNew    = "new"
 	CastMemory = "memory"
+	CastStory  = "story" // one of the person's stories, played in order
 )
 
 // CastSession is one paired TV.

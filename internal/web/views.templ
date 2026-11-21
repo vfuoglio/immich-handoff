@@ -400,6 +400,8 @@ type DashboardData struct {
 	Albums     AlbumsView
 	Circles    CirclesView
 	Cast       CastView
+	Stories    StoriesView
+	StoryYear  int // the year the end-of-year suggestion is for (0: none)
 	CircleAsks []CircleAskView
 	Pairings   PairingsView
 	Library    LibraryView
@@ -855,6 +857,9 @@ templ Dashboard(d DashboardData) {
 						}
 						if d.Cast.Available {
 							@CastCard(d.Cast)
+						}
+						if d.Stories.Available {
+							@StoriesCard(d.Stories)
 						}
 						@AlbumTreeCard()
 					</div>
@@ -5002,6 +5007,49 @@ templ SuggestionReviewPage(d SuggestionReview) {
 	}
 }
 
+// StoryItemView is one story, for the person's card.
+type StoryItemView struct {
+	ID, Token, Title, State, Problem, Source, Ends string
+	Done, Total, Photos, Chapters                  int
+	Preview                                        bool
+}
+
+// StoriesView is the person's "Stories" card.
+type StoriesView struct {
+	Available bool
+	Items     []StoryItemView
+}
+
+// StoryEditView is the editor page of one story.
+type StoryEditView struct {
+	User      string
+	Story     StoryItemView
+	Chapters  []StoryChapterView
+	Photos    []StoryPhotoView
+	ShowDates, ShowPlaces, ShowPeople, Preview bool
+	CanPreview bool // the address of this app is known, so a link preview can name its photo
+	Ends      string
+}
+
+// StoryChapterView is a chapter in the editor: its title (empty: its dates) and what the reader would see instead.
+type StoryChapterView struct {
+	N              int
+	Title, Dates   string
+	Photos         int
+}
+
+// StoryPhotoView is a photo in the editor, with where and when.
+type StoryPhotoView struct {
+	Asset, Words string
+}
+
+// StoryPageView is what the public page of a story needs.
+type StoryPageView struct {
+	Title, Token string
+	Preview      bool
+	AppURL       string // the app's own address, for the preview tags (empty: none)
+}
+
 // CastSessionView is one paired TV, for the person's card.
 type CastSessionView struct {
 	ID, Source, Since string
@@ -5019,6 +5067,7 @@ type CastFormView struct {
 	Session string // a TV already paired: the form changes what it shows (empty: a new TV)
 	Albums  []AlbumOption
 	Shared  []AlbumOption
+	Stories []AlbumOption
 	People  []PersonOption
 	Today   string
 }
@@ -5030,6 +5079,252 @@ type AlbumTreePageView struct {
 	Shared    *albumtree.Node
 	Folders   []string
 	ImmichURL string // where albums open in Immich (empty: no link)
+}
+
+// StoriesCard makes short animated recaps of the person's photos, with a public link: the stories they have and the form that makes one.
+templ StoriesCard(s StoriesView) {
+	<h2>{ t(ctx, "Stories") }</h2>
+	<div class="card storiescard">
+		<p>{ t(ctx, "A story is a short animated recap of an album, of a person's photos, of a stretch of time or of a drop box: a title, a card for each chapter with its dates and places, about forty of the best photos, and an end. Anyone with its link can watch it on a phone or a TV, with no account, until the link ends.") }</p>
+		for _, it := range s.Items {
+			@StoryItem(it)
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a story") }</summary>
+			<div hx-get="fragments/story-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// StoryItem is one story on the card: its state, its link to share, and what the person can do. While it is being made it looks again
+// every few seconds, and stops when it is ready.
+templ StoryItem(it StoryItemView) {
+	<div class="card rule story" id={ "story-" + it.ID[:8] } if it.State == "building" { hx-get={ "fragments/story-item?story=" + it.ID } hx-trigger="load delay:4s" hx-swap="outerHTML" }>
+		<p><b>{ it.Title }</b>
+			switch it.State {
+				case "building":
+					<span class="chip warn">{ t(ctx, "Being made") }</span>
+				case "failed":
+					<span class="chip bad">{ t(ctx, "Could not be made") }</span>
+				case "ended":
+					<span class="chip warn">{ t(ctx, "Link ended") }</span>
+				default:
+					<span class="chip ok">{ t(ctx, "Ready") }</span>
+			}
+		</p>
+		<p class="meta">{ it.Source }
+			if it.State == "building" && it.Total > 0 {
+				· { t(ctx, "{done} of {total} photos looked at", "done", it.Done, "total", it.Total) }
+			}
+			if it.State == "ready" {
+				· { n(ctx, "{n} photo", "{n} photos", it.Photos) }, { n(ctx, "{n} chapter", "{n} chapters", it.Chapters) }
+			}
+			if it.Ends != "" {
+				· { t(ctx, "The link ends {when}.", "when", it.Ends) }
+			}
+		</p>
+		if it.Problem != "" {
+			<p class="meta bad-note">{ t(ctx, "The story could not be made: {reason}", "reason", t(ctx, it.Problem)) }</p>
+		}
+		if it.State == "ready" {
+			<div class="field">
+				<div class="row">
+					<input id={ "story-link-" + it.ID[:8] } class="invite" readonly data-link={ "story/" + it.Token }/>
+					<button type="button" class="copy">{ t(ctx, "Copy") }</button>
+					<button type="button" class="show-qr" data-for={ "story-link-" + it.ID[:8] } data-alt={ t(ctx, "QR code of the story's address") }>{ t(ctx, "QR code") }</button>
+					<button type="button" class="share-link" data-for={ "story-link-" + it.ID[:8] } data-title={ it.Title }>{ t(ctx, "Share") }</button>
+				</div>
+				<div class="qr" id={ "qr-story-link-" + it.ID[:8] } hidden></div>
+			</div>
+		}
+		<p class="row">
+			<a class="button" href={ templ.SafeURL("stories/" + it.ID) }>{ t(ctx, "Edit") }</a>
+			if it.State == "ready" || it.State == "failed" {
+				<button hx-post="stories/rebuild" hx-vals={ vals("story", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pick the photos again") }</button>
+			}
+			<button hx-post="stories/end" hx-vals={ vals("story", it.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Remove this story? Its link stops working at once.") } data-confirm-title={ t(ctx, "Remove?") } data-confirm-label={ t(ctx, "Remove") } data-danger="true">{ t(ctx, "Remove") }</button>
+		</p>
+	</div>
+}
+
+// StoryForm makes a story: where its photos come from, and how long its link lasts.
+templ StoryForm(v StoryFormView) {
+	<form class="card offer-form" hx-post="stories" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="story-title">{ t(ctx, "Title (optional)") }</label>
+			<input id="story-title" name="title" maxlength="60" autocomplete="off"/>
+		</div>
+		<div class="field">
+			<label for="story-kind">{ t(ctx, "Made from") }</label>
+			<select id="story-kind" name="kind">
+				if len(v.Albums) > 0 {
+					<option value="album">{ t(ctx, "An album") }</option>
+				}
+				if len(v.People) > 0 {
+					<option value="person">{ t(ctx, "A person's photos") }</option>
+				}
+				<option value="range">{ t(ctx, "Everything between two dates") }</option>
+				if len(v.Boxes) > 0 {
+					<option value="box">{ t(ctx, "A drop box") }</option>
+				}
+			</select>
+		</div>
+		if len(v.Albums) > 0 {
+			<div class="field">
+				<label for="story-album">{ t(ctx, "The album (for An album)") }</label>
+				<select id="story-album" name="album">
+					for _, a := range v.Albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.People) > 0 {
+			<div class="field">
+				<label for="story-person">{ t(ctx, "The person (for A person's photos)") }</label>
+				<select id="story-person" name="person">
+					for _, p := range v.People {
+						<option value={ p.ID }>{ p.Name }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Boxes) > 0 {
+			<div class="field">
+				<label for="story-box">{ t(ctx, "The drop box (for A drop box)") }</label>
+				<select id="story-box" name="box">
+					for _, b := range v.Boxes {
+						<option value={ b.ID }>{ b.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		<div class="field">
+			<label>{ t(ctx, "Between (needed for Everything between two dates, optional for the others)") }</label>
+			<div class="row"><input type="date" name="from" aria-label={ t(ctx, "From") }/> <input type="date" name="to" aria-label={ t(ctx, "To") }/></div>
+		</div>
+		<div class="field">
+			<label for="story-ends">{ t(ctx, "The link lasts") }</label>
+			<select id="story-ends" name="ends">
+				<option value="7">{ t(ctx, "7 days") }</option>
+				<option value="30" selected>{ t(ctx, "30 days") }</option>
+				<option value="90">{ t(ctx, "90 days") }</option>
+				<option value="0">{ t(ctx, "Until I remove it") }</option>
+			</select>
+			<small class="meta">{ t(ctx, "Anyone with the link can watch it. The story shows dates and the city and country of the photos; you can switch those off, and add the names of the people, when you edit it. Coordinates are never shown.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the story") }</button></p>
+	</form>
+}
+
+// StoryFormView is what the form that makes a story offers.
+type StoryFormView struct {
+	Albums, Boxes []AlbumOption
+	People        []PersonOption
+}
+
+// StoryEditPage is where a person changes a story: the title, what the page shows, the chapters and the photos.
+templ StoryEditPage(v StoryEditView) {
+	@Layout(v.Story.Title, v.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ v.Story.Title }</h1>
+		<p class="lead">{ t(ctx, "Change the title, what the page shows, the chapters and the photos.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		@StoryItem(v.Story)
+		<form class="card offer-form" hx-post="stories/edit" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+			<input type="hidden" name="story" value={ v.Story.ID }/>
+			<div class="field">
+				<label for="se-title">{ t(ctx, "Title") }</label>
+				<input id="se-title" name="title" value={ v.Story.Title } maxlength="60" required/>
+			</div>
+			<fieldset class="targets">
+				<legend>{ t(ctx, "What the page shows") }</legend>
+				<label class="target"><input type="checkbox" name="dates" value="1" checked?={ v.ShowDates }/><span><b>{ t(ctx, "The dates") }</b></span></label>
+				<label class="target"><input type="checkbox" name="places" value="1" checked?={ v.ShowPlaces }/><span><b>{ t(ctx, "The city and country of each photo") }</b></span></label>
+				<label class="target"><input type="checkbox" name="people" value="1" checked?={ v.ShowPeople }/><span><b>{ t(ctx, "The names of the people in the photos") }</b> <small class="meta">{ t(ctx, "Only people Immich has named. Off unless you switch it on.") }</small></span></label>
+			</fieldset>
+			<div class="field">
+				<label><input type="checkbox" name="preview" value="1" checked?={ v.Preview } disabled?={ !v.CanPreview }/> { t(ctx, "Show a preview in chats") }</label>
+				<small class="meta">
+					if v.CanPreview {
+						{ t(ctx, "When the link is pasted in a chat, the chat service fetches the title and the first photo from the public link.") }
+					} else {
+						{ t(ctx, "This needs the person who runs this app to set PUBLIC_APP_URL.") }
+					}
+				</small>
+			</div>
+			<div class="field">
+				<label for="se-ends">{ t(ctx, "The link lasts") }</label>
+				<select id="se-ends" name="ends">
+					<option value="keep" selected>{ t(ctx, "As it is") }{ v.Ends }</option>
+					<option value="7">{ t(ctx, "7 days from now") }</option>
+					<option value="30">{ t(ctx, "30 days from now") }</option>
+					<option value="90">{ t(ctx, "90 days from now") }</option>
+					<option value="0">{ t(ctx, "Until I remove it") }</option>
+				</select>
+			</div>
+			if len(v.Chapters) > 0 {
+				<fieldset class="targets">
+					<legend>{ t(ctx, "Chapters") }</legend>
+					for _, c := range v.Chapters {
+						<div class="field">
+							<label for={ "se-ch-" + strconv.Itoa(c.N) }>{ c.Dates } <span class="meta">{ n(ctx, "{n} photo", "{n} photos", c.Photos) }</span></label>
+							<input id={ "se-ch-" + strconv.Itoa(c.N) } name={ "chapter" + strconv.Itoa(c.N) } value={ c.Title } maxlength="60" placeholder={ c.Dates } autocomplete="off"/>
+						</div>
+					}
+					<small class="meta">{ t(ctx, "Leave a chapter's name empty to show its dates.") }</small>
+				</fieldset>
+			}
+			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Save") }</button></p>
+		</form>
+		if len(v.Photos) > 0 {
+			<h2>{ t(ctx, "Photos") } <span class="count-badge">{ fmt.Sprint(len(v.Photos)) }</span></h2>
+			<ul class="review-grid">
+				for _, p := range v.Photos {
+					<li>
+						<img src={ "stories/" + v.Story.ID + "/thumb/" + p.Asset } alt={ p.Words } width="240" height="240" loading="lazy"/>
+						<span class="meta">{ p.Words }</span>
+						<button hx-post="stories/photo/remove" hx-vals={ vals2("story", v.Story.ID, "asset", p.Asset) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Take out") }</button>
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+// StoryPage is the page a story's link opens: full screen, no sign-in, no sound.
+templ StoryPage(v StoryPageView) {
+	<!DOCTYPE html>
+	<html lang={ loc(ctx).Code() } { htmlTheme(ctx)... }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			if v.Preview && v.AppURL != "" {
+				<meta property="og:type" content="website"/>
+				<meta property="og:title" content={ v.Title }/>
+				<meta property="og:url" content={ v.AppURL + "/story/" + v.Token }/>
+				<meta property="og:image" content={ v.AppURL + "/story/" + v.Token + "/cover" }/>
+				<meta name="twitter:card" content="summary_large_image"/>
+			} else {
+				<meta name="robots" content="noindex"/>
+			}
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ v.Title }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="static/app.css"/>
+			@templ.JSONScript("i18n", clientCatalog(ctx))
+			<script src="static/app.js" defer></script>
+		</head>
+		<body class="wall story">
+			<main id="story" data-doc={ "story/" + v.Token + "/data" } data-photo={ "story/" + v.Token + "/photo/" }>
+				<div class="wall-stage single" aria-live="off"></div>
+				<div class="st-progress" aria-hidden="true"><div class="st-bar"></div></div>
+				<p class="wall-wait">{ t(ctx, "Getting the story ready") }</p>
+				<button type="button" class="st-pause" hidden aria-label={ t(ctx, "Paused: tap to go on") }>{ t(ctx, "Paused") }</button>
+			</main>
+		</body>
+	</html>
 }
 
 // CastCard shows the person's albums, people and memories on a TV with a code: the TVs that are showing, with their remote, and the form.
@@ -5099,6 +5394,9 @@ templ CastForm(v CastFormView) {
 				if len(v.People) > 0 {
 					<option value="person">{ t(ctx, "Photos of a person") }</option>
 				}
+				if len(v.Stories) > 0 {
+					<option value="story">{ t(ctx, "A story of mine") }</option>
+				}
 				<option value="memory">{ t(ctx, "The memories of a day") }</option>
 			</select>
 		</div>
@@ -5117,6 +5415,16 @@ templ CastForm(v CastFormView) {
 				<label for={ "cast-shared-" + v.Session }>{ t(ctx, "The shared album (for An album shared with me)") }</label>
 				<select id={ "cast-shared-" + v.Session } name="shared">
 					for _, a := range v.Shared {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Stories) > 0 {
+			<div class="field">
+				<label for={ "cast-story-" + v.Session }>{ t(ctx, "The story (for A story of mine)") }</label>
+				<select id={ "cast-story-" + v.Session } name="story">
+					for _, a := range v.Stories {
 						<option value={ a.ID }>{ a.Label }</option>
 					}
 				</select>

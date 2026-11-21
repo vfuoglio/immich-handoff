@@ -858,6 +858,41 @@ var migrations = []string{
 	   last_seen   TEXT NOT NULL,
 	   ended       INTEGER NOT NULL DEFAULT 0
 	 );`,
+	// stories: a short animated recap with a public link, a key of its own, and the end-of-year suggestion
+	`CREATE TABLE stories (
+	   id          TEXT PRIMARY KEY,
+	   token       TEXT NOT NULL UNIQUE,
+	   owner_id    TEXT NOT NULL,
+	   owner_name  TEXT NOT NULL,
+	   title       TEXT NOT NULL,
+	   kind        TEXT NOT NULL,
+	   source_id   TEXT NOT NULL DEFAULT '',
+	   source_name TEXT NOT NULL DEFAULT '',
+	   from_day    TEXT NOT NULL DEFAULT '',
+	   to_day      TEXT NOT NULL DEFAULT '',
+	   show_dates  INTEGER NOT NULL DEFAULT 1,
+	   show_places INTEGER NOT NULL DEFAULT 1,
+	   show_people INTEGER NOT NULL DEFAULT 0,
+	   preview     INTEGER NOT NULL DEFAULT 0,
+	   key_id      TEXT NOT NULL,
+	   key_enc     BLOB NOT NULL,
+	   ends_at     TEXT NOT NULL DEFAULT '',
+	   state       TEXT NOT NULL,
+	   problem     TEXT NOT NULL DEFAULT '',
+	   done        INTEGER NOT NULL DEFAULT 0,
+	   total       INTEGER NOT NULL DEFAULT 0,
+	   picks       TEXT NOT NULL DEFAULT '[]',
+	   chapters    TEXT NOT NULL DEFAULT '[]',
+	   created_at  TEXT NOT NULL,
+	   built_at    TEXT NOT NULL DEFAULT ''
+	 );
+	 CREATE INDEX stories_owner ON stories (owner_id);
+	 CREATE TABLE story_offers (
+	   user_id TEXT NOT NULL,
+	   year    INTEGER NOT NULL,
+	   state   TEXT NOT NULL,
+	   PRIMARY KEY (user_id, year)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.

@@ -324,6 +324,7 @@ func run(log *slog.Logger) error {
 				}
 				h.DigestMaintenance(ctx)
 				h.FrameMaintenance(ctx)
+				h.StoryMaintenance(ctx)
 				h.RoomMaintenance(ctx)
 				h.PeerMaintenance(ctx)
 				select {

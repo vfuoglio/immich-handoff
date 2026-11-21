@@ -4,6 +4,7 @@
 
 import { initCard, initDrop, initGuestBook, initSecure, initShare } from "./drop.ts";
 import { initFrame } from "./frame.ts";
+import { initStory } from "./story.ts";
 import { initGallery } from "./gallery.ts";
 import { initWall } from "./wall.ts";
 import { initSend } from "./send.ts";
@@ -105,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSend();
   initRoom();
   initFrame();
+  initStory();
   initPalette();
   initSound();
   enhance(document); // numbers that are already on the page roll up to their value
@@ -169,6 +171,22 @@ document.addEventListener("click", (e) => {
   if (!(input instanceof HTMLInputElement) || !navigator.clipboard) return;
   const message = (button.dataset.message ?? "{link}").replace("{link}", input.value);
   void navigator.clipboard.writeText(message).then(() => {
+    button.textContent = t("Copied");
+  });
+});
+
+// "Share": the phone's own share sheet where it has one, otherwise the address is copied.
+document.addEventListener("click", (e) => {
+  const button = e.target instanceof Element ? e.target.closest<HTMLButtonElement>("button.share-link") : null;
+  if (!button) return;
+  const input = document.getElementById(button.dataset.for ?? "");
+  if (!(input instanceof HTMLInputElement)) return;
+  const nav = navigator as Navigator & { share?: (data: { title?: string; url?: string }) => Promise<void> };
+  if (nav.share) {
+    void nav.share({ title: button.dataset.title ?? "", url: input.value }).catch(() => undefined);
+    return;
+  }
+  void navigator.clipboard.writeText(input.value).then(() => {
     button.textContent = t("Copied");
   });
 });

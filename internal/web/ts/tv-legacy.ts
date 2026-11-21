@@ -20,6 +20,8 @@
   var seq = 0;
   var paused = false;
   var holdMs = 15000;
+  var ordered = false;
+  var cursor = -1;
   var front = 0;
   var slideTimer: number | undefined;
   var busy = false;
@@ -54,6 +56,10 @@
   }
   function chooseNext(): string {
     if (!items || items.length === 0) return "";
+    if (ordered) { // a story is played in the order it was made
+      cursor = (cursor + 1) % items.length;
+      return items[cursor] as string;
+    }
     var pool: string[] = [];
     var i: number;
     for (i = 0; i < items.length; i++) if (!contains(shown, items[i] as string)) pool.push(items[i] as string);
@@ -114,7 +120,8 @@
         for (var i = 0; i < data.items.length; i++) ids.push(data.items[i].id);
         var first = items === null || reset;
         items = ids;
-        if (reset) { shown = []; history = []; }
+        ordered = data.ordered === true;
+        if (reset) { shown = []; history = []; cursor = -1; }
         wait = Math.max(5, data.refresh || 120) * 1000;
         if (first) step("next");
       }
@@ -151,7 +158,7 @@
           seq = st.seq || 0;
           if (st.cmd === "next") step("next");
           else if (st.cmd === "prev") step("prev");
-          else if (st.cmd === "source") { items = null; shown = []; history = []; get("tv/feed?s=" + secret, function (s2: number, b2: string): void { var d2 = s2 === 200 ? parse(b2) : null; if (d2 && d2.items) { var ids2: string[] = []; for (var j = 0; j < d2.items.length; j++) ids2.push(d2.items[j].id); items = ids2; step("next"); } }); }
+          else if (st.cmd === "source") { items = null; shown = []; history = []; cursor = -1; get("tv/feed?s=" + secret, function (s2: number, b2: string): void { var d2 = s2 === 200 ? parse(b2) : null; if (d2 && d2.items) { var ids2: string[] = []; for (var j = 0; j < d2.items.length; j++) ids2.push(d2.items[j].id); items = ids2; ordered = d2.ordered === true; step("next"); } }); }
         }
         if (was !== paused) arm();
       }

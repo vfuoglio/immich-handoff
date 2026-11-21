@@ -7,7 +7,7 @@
 ## In a few steps
 
 1. **Open the address on the TV.** In **Settings**, under **My library**, **Cast to a TV** shows the address to open in the TV's browser: your Handoff address followed by `/tv` (and `/tv/legacy` for an old TV, see below). The TV shows a code in large letters and the address of the page to open on the phone.
-2. **Type the code on your phone.** Open **Show photos on a TV**, type the code, and choose **what to show**: everything new in the last 30 days, one of your albums, an album shared with you, the photos of a person, or the memories of a day. Choose how long each photo stays (8, 15, 30 or 60 seconds) and how one gives way to the next (fade, zoom, slide or rise). **Show it on the TV.**
+2. **Type the code on your phone.** Open **Show photos on a TV**, type the code, and choose **what to show**: everything new in the last 30 days, one of your albums, an album shared with you, the photos of a person, the memories of a day, or one of your [stories](stories.md) (played in order, with its captions). Choose how long each photo stays (8, 15, 30 or 60 seconds) and how one gives way to the next (fade, zoom, slide or rise). **Show it on the TV.**
 3. **The TV starts.** Photos are shown once each in a random order before any comes round again, and the list is read again every two minutes (`FRAME_REFRESH`), so a photo you add shows up.
 4. **Use your phone as the remote.** Under the TV on the same card: **Previous**, **Pause** or **Play**, **Next**, **Show something else** (the same choices again) and **Stop**. You can have up to 5 TVs at once.
 

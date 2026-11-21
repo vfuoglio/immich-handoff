@@ -231,7 +231,7 @@ func castPlay(src CastSource) (int, string, error) {
 }
 
 // castSourceOf checks a choice against the person's own Immich, with their own session, and names it.
-func (h *Hub) castSourceOf(ctx context.Context, sess *immich.API, src CastSource) (kind, id, name, day string, err error) {
+func (h *Hub) castSourceOf(ctx context.Context, sess *immich.API, me uuid.UUID, src CastSource) (kind, id, name, day string, err error) {
 	switch src.Kind {
 	case store.CastAlbum:
 		albums, err := sess.OwnedAlbums(ctx)
@@ -264,6 +264,12 @@ func (h *Hub) castSourceOf(ctx context.Context, sess *immich.API, src CastSource
 			}
 		}
 		return "", "", "", "", ErrRulePerson
+	case store.CastStory:
+		st, err := h.Store.StoryByID(ctx, me, src.ID.String())
+		if err != nil || st.State != store.StoryReady {
+			return "", "", "", "", ErrNoStory
+		}
+		return src.Kind, st.ID, st.Title, "", nil
 	case store.CastNew:
 		return src.Kind, "", "", "", nil
 	case store.CastMemory:
@@ -363,7 +369,7 @@ func (h *Hub) ClaimCast(ctx context.Context, sess *immich.API, user immich.User,
 	} else if n >= castMostTVs {
 		return store.CastSession{}, ErrCastTooMany
 	}
-	kind, id, name, day, err := h.castSourceOf(ctx, sess, src)
+	kind, id, name, day, err := h.castSourceOf(ctx, sess, me, src)
 	if err != nil {
 		return store.CastSession{}, err
 	}
@@ -405,6 +411,8 @@ func castWords(s store.CastSession) string {
 		return "photos of " + s.SourceName
 	case store.CastMemory:
 		return "the memories of " + s.Day
+	case store.CastStory:
+		return "the story " + s.SourceName
 	}
 	return "everything new in the last 30 days"
 }
@@ -424,6 +432,19 @@ func (h *Hub) castList(ctx context.Context, api *immich.API, s store.CastSession
 		return l.list, nil
 	}
 	c.mu.Unlock()
+	if s.Kind == store.CastStory { // a story is played in the order it was made, and is not listed again from the library
+		st, err := h.Store.StoryByID(ctx, s.UserID, s.SourceID)
+		if err != nil {
+			return nil, ErrNoStory
+		}
+		var list []openapi_types.UUID
+		for _, p := range st.Picks {
+			if u, err := uuid.Parse(p.Asset); err == nil {
+				list = append(list, u)
+			}
+		}
+		return list, nil
+	}
 	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	var found []immich.AssetResponseDto
@@ -497,21 +518,34 @@ func (h *Hub) live(ctx context.Context, secret string) (store.CastSession, *immi
 	return s, api, nil
 }
 
-// CastFeed lists the TV's photos by opaque ids.
-func (h *Hub) CastFeed(ctx context.Context, secret string) ([]FrameItem, error) {
+// CastItem is a photo of a TV's feed: its opaque id and, for a story, the caption it is shown with.
+type CastItem struct{ ID, Caption string }
+
+// CastFeed lists the TV's photos by opaque ids. ordered says that they are to be shown in this order (a story), not shuffled.
+func (h *Hub) CastFeed(ctx context.Context, secret string) (items []CastItem, ordered bool, err error) {
 	s, api, err := h.live(ctx, secret)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	list, err := h.castList(ctx, api, s, true)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	out := make([]FrameItem, len(list))
+	var captions map[string]string
+	if s.Kind == store.CastStory {
+		ordered = true
+		if st, err := h.Store.StoryByID(ctx, s.UserID, s.SourceID); err == nil {
+			captions = map[string]string{}
+			for _, p := range st.Picks {
+				captions[p.Asset] = StoryCaption(st, p)
+			}
+		}
+	}
+	items = make([]CastItem, len(list))
 	for i, a := range list {
-		out[i] = FrameItem{ID: frameID(secret, a)}
+		items[i] = CastItem{ID: frameID(secret, a), Caption: captions[uuid.UUID(a).String()]}
 	}
-	return out, nil
+	return items, ordered, nil
 }
 
 // CastImage fetches the picture of one photo of the TV's source, by its opaque id, with the person's key.
@@ -611,7 +645,7 @@ func (h *Hub) ChangeCast(ctx context.Context, sess *immich.API, user immich.User
 	if err != nil {
 		return err
 	}
-	kind, source, name, day, err := h.castSourceOf(ctx, sess, src)
+	kind, source, name, day, err := h.castSourceOf(ctx, sess, me, src)
 	if err != nil {
 		return err
 	}

@@ -7,3 +7,4 @@ html.tvpage, body.tv { margin: 0; height: 100%; background: #000; color: #fff; o
 .tv-note { font-size: 2.6vh; color: #8fa0b2; margin: 0; }
 .tvl-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-position: center; background-repeat: no-repeat; background-size: contain; opacity: 0; -webkit-transition: opacity 1.2s; transition: opacity 1.2s; }
 .tvl-layer.in { opacity: 1; }
+#tv { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; overflow: hidden; }

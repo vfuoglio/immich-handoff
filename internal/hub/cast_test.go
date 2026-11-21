@@ -270,7 +270,7 @@ func TestATVIsPairedByACodeAndGetsOnlyThePhotosOfTheChosenAlbumByOpaqueIds(t *te
 	if _, err := h.ClaimCast(ctx, sess, castBob, code, hub.CastSource{Kind: store.CastNew}); !errors.Is(err, hub.ErrBadCastCode) {
 		t.Fatalf("a code works once: %v", err)
 	}
-	feed, err := h.CastFeed(ctx, secret)
+	feed, _, err := h.CastFeed(ctx, secret)
 	if err != nil || len(feed) != 2 {
 		t.Fatalf("the feed holds the album's two photos, not the video or the other: %v %v", feed, err)
 	}
@@ -285,7 +285,7 @@ func TestATVIsPairedByACodeAndGetsOnlyThePhotosOfTheChosenAlbumByOpaqueIds(t *te
 	if _, _, err := h.CastImage(ctx, secret, a); !errors.Is(err, hub.ErrDropGone) {
 		t.Fatalf("an Immich id is not a way in: %v", err)
 	}
-	if _, err := h.CastFeed(ctx, strings.Repeat("0", 64)); !errors.Is(err, hub.ErrDropGone) {
+	if _, _, err := h.CastFeed(ctx, strings.Repeat("0", 64)); !errors.Is(err, hub.ErrDropGone) {
 		t.Fatalf("an unknown TV: %v", err)
 	}
 	if perms := f.keyPerms(); len(perms) != 1 || strings.Join(perms[0], ",") != "asset.view,asset.read" {
@@ -358,12 +358,12 @@ func TestACastSourceMustBeThePersonsAndHaveAPhoto(t *testing.T) {
 	secret := ""
 	sessions, _ := h.CastsOf(ctx, bobID)
 	secret = sessions[0].ID
-	if feed, _ := h.CastFeed(ctx, secret); len(feed) != 2 {
+	if feed, _, _ := h.CastFeed(ctx, secret); len(feed) != 2 {
 		t.Fatalf("both photos of Nora: %v", feed)
 	}
 	if s, err := try(hub.CastSource{Kind: store.CastNew}); err != nil {
 		t.Fatal(err)
-	} else if feed, _ := h.CastFeed(ctx, s.ID); len(feed) != 1 {
+	} else if feed, _, _ := h.CastFeed(ctx, s.ID); len(feed) != 1 {
 		t.Fatalf("everything new holds only the last 30 days: %v", feed)
 	}
 }
@@ -384,7 +384,7 @@ func TestAMemoryNeedsMemoryReadOnTheKeyAndItIsGivenWithThePersonsSession(t *test
 	if perms := f.keyPerms(); len(perms) != 1 || !strings.Contains(strings.Join(perms[0], ","), "memory.read") {
 		t.Fatalf("memory.read was added: %v", perms)
 	}
-	if feed, _ := h.CastFeed(ctx, s.ID); len(feed) != 1 {
+	if feed, _, _ := h.CastFeed(ctx, s.ID); len(feed) != 1 {
 		t.Fatalf("the memory's photo: %v", feed)
 	}
 }
@@ -427,7 +427,7 @@ func TestAPersonControlsATVAndStoppingItEndsItAndDeletesTheKey(t *testing.T) {
 	if st := h.CastState(ctx, s.ID); st.Seq != 3 || st.Cmd != "source" || st.Seconds != 30 || st.FX != "rise" {
 		t.Fatalf("a new source: %+v", st)
 	}
-	if feed, _ := h.CastFeed(ctx, s.ID); len(feed) != 2 {
+	if feed, _, _ := h.CastFeed(ctx, s.ID); len(feed) != 2 {
 		t.Fatalf("the new album's photos: %v", feed)
 	}
 	if err := h.CastControl(ctx, sess, castBob, s.ID, hub.CastStop); err != nil {
@@ -436,7 +436,7 @@ func TestAPersonControlsATVAndStoppingItEndsItAndDeletesTheKey(t *testing.T) {
 	if st := h.CastState(ctx, s.ID); st.State != "ended" {
 		t.Fatalf("stopped: %+v", st)
 	}
-	if _, err := h.CastFeed(ctx, s.ID); !errors.Is(err, hub.ErrDropGone) {
+	if _, _, err := h.CastFeed(ctx, s.ID); !errors.Is(err, hub.ErrDropGone) {
 		t.Fatalf("an ended TV gets nothing: %v", err)
 	}
 	if _, ok, _ := h.Store.CastKey(ctx, bobID); ok || len(f.keyPerms()) != 0 {

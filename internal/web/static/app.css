@@ -924,7 +924,7 @@ body.wall #glow { display: none; }
 .wall-stage[data-fx="zoom"].single figure.single.alt img { animation-name: wall-zoom-alt; }
 @keyframes wall-zoom { from { transform: scale(1); } to { transform: scale(1.09) translate(-1.2%, -.9%); } }
 @keyframes wall-zoom-alt { from { transform: scale(1.09) translate(1.2%, .9%); } to { transform: scale(1); } }
-:is(#wall, #frame)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
+:is(#wall, #frame, #story, #tv)[data-lite] .wall-stage[data-fx="zoom"] figure.single img { animation: none; }
 /* a new arrival is given a moment: a ring of the scheme's light settles round the picture and fades */
 .wall-stage figure.single.fresh::after { content: ""; position: absolute; inset: 1.4vmin; border-radius: 2.4vmin; pointer-events: none; animation: wall-fresh 3.2s ease-out both;
   box-shadow: inset 0 0 0 .45vmin color-mix(in oklab, var(--accent) 80%, transparent), inset 0 0 7vmin color-mix(in oklab, var(--accent) 55%, transparent); }
@@ -996,3 +996,21 @@ body.wall #glow { display: none; }
 .tree-move { flex: 1 1 100%; }
 .tree-move > summary { cursor: pointer; font-size: .85rem; color: var(--accent-ink); }
 .move-preview { margin: .4rem 0; }
+
+/* a story: a full-screen recap with a title, cards for its chapters, the photos, and an end; the stage is the wall's */
+body.story { overscroll-behavior: none; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#story { position: fixed; inset: 0; background: #000; overflow: hidden; height: 100vh; height: 100dvh; cursor: pointer; }
+#story .wall-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #cfd8e3; z-index: 2; }
+#story .wall-stage figure.single img { position: relative; z-index: 1; }
+#story .wall-stage figure.single .st-back { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; opacity: .5; filter: blur(28px) saturate(1.2); transform: scale(1.15); }
+#story[data-lite] .wall-stage figure.single .st-back { display: none; }
+#story .wall-stage figcaption { padding-bottom: max(1.2rem, env(safe-area-inset-bottom)); z-index: 2; font-size: clamp(1rem, 2.6vw, 2rem); }
+#story .wall-stage figure.st-card { background: radial-gradient(60vmax 50vmax at 30% 20%, color-mix(in oklab, var(--accent) 38%, #000), #000 70%); }
+.st-cardbox { display: grid; gap: 2.4vmin; padding: 8vmin; text-align: center; max-width: 90vw; }
+.st-title { margin: 0; font-size: clamp(2.2rem, 9vmin, 6rem); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.st-chapter { margin: 0; font-size: clamp(1.8rem, 7vmin, 4.4rem); font-weight: 600; overflow-wrap: anywhere; }
+.st-sub { margin: 0; font-size: clamp(1rem, 3vmin, 2rem); color: #cfd8e3; }
+.st-progress { position: absolute; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); height: 3px; background: rgba(255, 255, 255, .25); border-radius: 2px; z-index: 3; overflow: hidden; pointer-events: none; }
+.st-bar { height: 100%; width: 100%; background: #fff; transform-origin: left; transform: scaleX(0); }
+.st-pause { position: absolute; z-index: 3; right: max(12px, env(safe-area-inset-right)); top: max(20px, calc(env(safe-area-inset-top) + 10px)); background: rgba(0, 0, 0, .5); color: #fff; border: 0; border-radius: 1rem; padding: .3rem .8rem; font-size: .9rem; }
+@media (prefers-reduced-motion: no-preference) { .st-bar { transition: transform .3s linear; } }

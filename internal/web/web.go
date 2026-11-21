@@ -266,6 +266,21 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /me/mail", w.myMail)
 	mux.HandleFunc("POST /me/library", w.myLibrary)
 	mux.HandleFunc("POST /me/memories", w.myMemories)
+	mux.HandleFunc("GET /story/{token}", w.storyPage)
+	mux.HandleFunc("GET /story/{token}/data", w.storyData)
+	mux.HandleFunc("GET /story/{token}/photo/{id}", w.storyPhoto)
+	mux.HandleFunc("GET /story/{token}/cover", w.storyCover)
+	mux.HandleFunc("GET /stories/{id}", w.storyEditPage)
+	mux.HandleFunc("GET /stories/{id}/thumb/{asset}", w.storyThumb)
+	mux.HandleFunc("GET /fragments/story-form", w.storyForm)
+	mux.HandleFunc("GET /fragments/story-item", w.storyItem)
+	mux.HandleFunc("POST /stories", w.makeStory)
+	mux.HandleFunc("POST /stories/edit", w.editStory)
+	mux.HandleFunc("POST /stories/rebuild", w.rebuildStory)
+	mux.HandleFunc("POST /stories/end", w.endStory)
+	mux.HandleFunc("POST /stories/photo/remove", w.removeStoryPhoto)
+	mux.HandleFunc("POST /stories/year", w.storyYear)
+	mux.HandleFunc("POST /stories/year/dismiss", w.storyYearDismiss)
 	mux.HandleFunc("GET /tv", w.tvPage(false))
 	mux.HandleFunc("GET /tv/legacy", w.tvPage(true))
 	mux.HandleFunc("POST /tv/new", w.tvNew)
@@ -747,6 +762,10 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Albums = w.albumViews(ctx, me)
 	d.Circles, d.CircleAsks = w.circleViews(ctx, me)
 	d.Cast = w.castViews(ctx, me)
+	d.Stories = w.storyViews(ctx, me)
+	if w.storyOn() {
+		d.StoryYear, _ = w.Hub.StoryYearOffer(ctx, me.sess, me.user)
+	}
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
@@ -825,6 +844,13 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 		lost = append(lost, NeedView{Tone: "bad", Chip: t(ctx, "Removed by its owner"), Title: title,
 			Text:    t(ctx, "Nothing is handed over any more. Clean up to delete the API key and workflow this app made in your Immich account."),
 			Actions: []NeedAction{{Label: t(ctx, "Clean up"), Path: "leave", Vals: vals("service", name), Primary: true}}})
+	}
+	if d.StoryYear > 0 { // the end-of-year suggestion
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: t(ctx, "Make your {year} story", "year", d.StoryYear),
+			Text: t(ctx, "You have many photos from {year}. The app can pick the best of them and make a short animated story, with a link you can share."),
+			Actions: []NeedAction{
+				{Label: t(ctx, "Make my story"), Path: "stories/year", Vals: vals("year", strconv.Itoa(d.StoryYear)), Primary: true},
+				{Label: t(ctx, "Not this year"), Path: "stories/year/dismiss", Vals: vals("year", strconv.Itoa(d.StoryYear))}}})
 	}
 	for _, ca := range d.CircleAsks { // albums to share with a circle
 		acts := []NeedAction{

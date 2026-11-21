@@ -74,7 +74,7 @@ func (w *Server) tvFeed(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	items, err := w.Hub.CastFeed(r.Context(), r.URL.Query().Get("s"))
+	items, ordered, err := w.Hub.CastFeed(r.Context(), r.URL.Query().Get("s"))
 	if err != nil {
 		tvNoStore(rw)
 		if errors.Is(err, hub.ErrDropGone) {
@@ -85,14 +85,16 @@ func (w *Server) tvFeed(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type item struct {
-		ID string `json:"id"`
+		ID      string `json:"id"`
+		Caption string `json:"caption,omitempty"`
 	}
 	out := struct {
 		Items   []item `json:"items"`
 		Refresh int    `json:"refresh"`
-	}{Items: []item{}, Refresh: int(w.Hub.FrameRefreshEvery().Seconds())}
+		Ordered bool   `json:"ordered,omitempty"`
+	}{Items: []item{}, Refresh: int(w.Hub.FrameRefreshEvery().Seconds()), Ordered: ordered}
 	for _, i := range items {
-		out.Items = append(out.Items, item{i.ID})
+		out.Items = append(out.Items, item{i.ID, i.Caption})
 	}
 	tvNoStore(rw)
 	rw.Header().Set("Content-Type", "application/json")
@@ -146,6 +148,8 @@ func castSourceWords(ctx context.Context, s store.CastSession) string {
 		return t(ctx, "Photos of {name}", "name", s.SourceName)
 	case store.CastMemory:
 		return t(ctx, "The memories of {day}", "day", s.Day)
+	case store.CastStory:
+		return t(ctx, "The story {name}", "name", s.SourceName)
 	}
 	return t(ctx, "Everything new in the last 30 days")
 }
@@ -175,6 +179,13 @@ func (w *Server) castForm(rw http.ResponseWriter, r *http.Request) {
 			v.Shared = append(v.Shared, AlbumOption{ID: a.ID.String(), Label: albumLabel(ctx, a.Name, a.Count)})
 		}
 	}
+	if stories, err := w.Hub.StoriesOf(ctx, me.user.ID); err == nil {
+		for _, s := range stories {
+			if s.State == store.StoryReady {
+				v.Stories = append(v.Stories, AlbumOption{ID: s.ID, Label: s.Title})
+			}
+		}
+	}
 	if people, err := me.sess.People(ctx); err == nil {
 		for _, p := range people {
 			v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
@@ -196,6 +207,8 @@ func castSourceOfForm(r *http.Request) hub.CastSource {
 		src.ID, _ = uuid.Parse(r.PostFormValue("shared"))
 	case "person":
 		src.ID, _ = uuid.Parse(r.PostFormValue("person"))
+	case "story":
+		src.ID, _ = uuid.Parse(r.PostFormValue("story"))
 	}
 	return src
 }
