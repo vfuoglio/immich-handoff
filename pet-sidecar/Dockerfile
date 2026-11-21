@@ -1,6 +1,6 @@
 # The optional pet sidecar of Immich Handoff (docs/guides/automate.md#a-rule-for-a-pet). Python with ONNX Runtime and no PyTorch; the
 # two models are fetched once, at build time, and checked against their checksums, so a running container never downloads anything.
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS models
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS models
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /models
 RUN curl -fsSL -o yolox_s.onnx https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx \
@@ -8,7 +8,7 @@ RUN curl -fsSL -o yolox_s.onnx https://github.com/Megvii-BaseDetection/YOLOX/rel
  && echo "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063  yolox_s.onnx" | sha256sum -c - \
  && echo "3afdc8bc63b50558d6e5770f5b799bb82455c2311183a2de43803f343a29d917  dinov2_small_int8.onnx" | sha256sum -c -
 
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && rm -rf /root/.cache
