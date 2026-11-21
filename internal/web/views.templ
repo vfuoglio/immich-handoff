@@ -826,21 +826,29 @@ templ Dashboard(d DashboardData) {
 				@templ.Raw(h(ctx, "Your <em>settings</em>"))
 			</h1>
 			<p class="lead">{ t(ctx, "Set these up once; only what is switched on for you appears here.") }</p>
-			<div class="settings">
-				if d.Mail.Available || d.Push.Available {
-					<div class="group" role="group" aria-labelledby="g-notify">
-						<p class="group-title" id="g-notify">{ t(ctx, "Notifications") }</p>
-						if d.Mail.Available {
-							@MailCard(d.Mail)
-						}
-						if d.Push.Available {
-							@PushCard(d.Push)
-						}
-					</div>
-				}
-				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Places.Available {
-					<div class="group" role="group" aria-labelledby="g-library">
-						<p class="group-title" id="g-library">{ t(ctx, "My library") }</p>
+			<div class="settings-shell">
+				<nav class="settings-nav" role="tablist" aria-label={ t(ctx, "Settings categories") }>
+					for i, c := range d.SettingsCats() {
+						<button type="button" role="tab" aria-controls={ "set-" + c.ID } data-cat={ c.ID } aria-selected={ checked(i == 0) } tabindex={ tabindex(i == 0) }>
+							<span class="cat-name">{ settingsCatTitle(ctx, c.ID) }</span>
+							if c.On > 0 {
+								<span class="n">{ fmt.Sprint(c.On) }</span>
+							}
+						</button>
+					}
+				</nav>
+				<div class="settings-panels">
+					if d.Mail.Available || d.Push.Available {
+						<div class="settings-panel" id="set-notifications" role="tabpanel" data-cat="notifications">
+							if d.Mail.Available {
+								@MailCard(d.Mail)
+							}
+							if d.Push.Available {
+								@PushCard(d.Push)
+							}
+						</div>
+					}
+					<div class="settings-panel" id="set-photos" role="tabpanel" data-cat="photos">
 						if d.Library.Available {
 							@LibraryCard(d.Library)
 						}
@@ -859,26 +867,27 @@ templ Dashboard(d DashboardData) {
 						if d.Albums.Available {
 							@AlbumsCard(d.Albums)
 						}
-						if d.Cast.Available {
-							@CastCard(d.Cast)
-						}
-						if d.Stories.Available {
-							@StoriesCard(d.Stories)
-						}
 						@AlbumTreeCard()
 					</div>
-				}
-				if d.Pairings.Available || d.Circles.Available {
-					<div class="group" role="group" aria-labelledby="g-sharing">
-						<p class="group-title" id="g-sharing">{ t(ctx, "Sharing with others") }</p>
-						if d.Circles.Available {
-							@CirclesCard(d.Circles)
-						}
-						if d.Pairings.Available {
-							@PairingsCard(d.Pairings)
-						}
-					</div>
-				}
+					if d.Circles.Available || d.Pairings.Available || d.Stories.Available {
+						<div class="settings-panel" id="set-sharing" role="tabpanel" data-cat="sharing">
+							if d.Circles.Available {
+								@CirclesCard(d.Circles)
+							}
+							if d.Pairings.Available {
+								@PairingsCard(d.Pairings)
+							}
+							if d.Stories.Available {
+								@StoriesCard(d.Stories)
+							}
+						</div>
+					}
+					if d.Cast.Available {
+						<div class="settings-panel" id="set-screens" role="tabpanel" data-cat="screens">
+							@CastCard(d.Cast)
+						</div>
+					}
+				</div>
 			</div>
 		</section>
 		}
@@ -926,9 +935,18 @@ templ Segments(d DashboardData) {
 	</div>
 }
 
+// Status is the short state of a Settings card, next to its title.
+templ Status(v StatusView) {
+	if v.On {
+		<span class="chip ok status">{ v.Words }</span>
+	} else {
+		<span class="chip status">{ v.Words }</span>
+	}
+}
+
 // MailCard lets a person ask for email about what happens to their services.
 templ MailCard(m MailView) {
-	<h2>{ t(ctx, "Email me") }</h2>
+	<h2>{ t(ctx, "Email me") } @Status(mailStatus(ctx, m))</h2>
 	<div class="card mailcard">
 		if m.On {
 			<p>{ t(ctx, "You get an email about what happens to your services, at {email}.", "email", m.Email) }</p>
@@ -957,7 +975,7 @@ templ MailCard(m MailView) {
 
 // MemoriesCard is where a person turns on a daily message about the memories Immich has for the day.
 templ MemoriesCard(m MemoriesView) {
-	<h2>{ t(ctx, "On this day") }</h2>
+	<h2>{ t(ctx, "On this day") } @Status(memoriesStatus(ctx, m))</h2>
 	<div class="card memoriescard">
 		if m.On && m.Broken {
 			<p class="bad-note">{ t(ctx, "The key the app made in your Immich is gone, so no message can be sent. Save to make a new one.") }</p>
@@ -997,7 +1015,7 @@ templ MemoriesCard(m MemoriesView) {
 
 // FoldersCard makes albums from the folders of the person's external library: the rules they have, and the form that makes one.
 templ FoldersCard(f FoldersView) {
-	<h2>{ t(ctx, "Albums from my folders") }</h2>
+	<h2>{ t(ctx, "Albums from my folders") } @Status(ruleStatus(ctx, len(f.Rules)))</h2>
 	<div class="card folderscard">
 		<p>{ t(ctx, "If part of your library is an external library (folders on the server), the app can offer an album for each folder, named after it, and put the photos in it. It only adds: nothing is ever removed, renamed or deleted.") }</p>
 		for _, r := range f.Rules {
@@ -1069,7 +1087,7 @@ templ FoldersCard(f FoldersView) {
 
 // AlbumsCard keeps albums of the person's up to date with a rule: the rules they have, and the form that makes one.
 templ AlbumsCard(a AlbumsView) {
-	<h2>{ t(ctx, "Smart albums") }</h2>
+	<h2>{ t(ctx, "Smart albums") } @Status(ruleStatus(ctx, len(a.Rules)))</h2>
 	<div class="card albumscard">
 		<p>{ t(ctx, "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.") }</p>
 		for _, r := range a.Rules {
@@ -1149,7 +1167,7 @@ templ AlbumForm(v RuleChoicesView) {
 
 // PlacesCard offers a place to the person's photos that have none, from a photo of the same camera taken minutes from them.
 templ PlacesCard(p PlacesView) {
-	<h2>{ t(ctx, "Places for photos that have none") }</h2>
+	<h2>{ t(ctx, "Places for photos that have none") } @Status(placesStatus(ctx, p))</h2>
 	<div class="card placescard">
 		<p>{ t(ctx, "A camera with no GPS leaves no place on its photos. When a photo with no place was taken minutes from one that has a place, by the same camera on the same day, the app offers it that place, and shows you both photos and why. It never writes a place before you say so.") }</p>
 		<p class="meta bad-note">{ t(ctx, "A place the app writes cannot be taken back by the app (Immich does not let it). If one is wrong, remove it in Immich.") }</p>
@@ -1199,7 +1217,7 @@ templ PlacesCard(p PlacesView) {
 
 // StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
 templ StacksCard(s StacksView) {
-	<h2>{ t(ctx, "Stack photos that belong together") }</h2>
+	<h2>{ t(ctx, "Stack photos that belong together") } @Status(ruleStatus(ctx, len(s.Rules)))</h2>
 	<div class="card stackscard">
 		<p>{ t(ctx, "The app can offer to stack a RAW with its JPEG, an edit with its original, and the shots of a burst, so your library shows one photo for each. It only makes stacks: it never changes or deletes a photo, and leaves photos that are already in a stack alone.") }</p>
 		for _, r := range s.Rules {
@@ -1349,7 +1367,7 @@ templ MemoriesPage(d MemoriesPageView) {
 
 // LibraryCard lets a person choose where "Add to my library" puts what they copy from what others share with them.
 templ LibraryCard(l LibraryView) {
-	<h2>{ t(ctx, "Add to my library") }</h2>
+	<h2>{ t(ctx, "Add to my library") } @Status(libraryStatus(ctx, l))</h2>
 	<div class="card librarycard">
 		<p>{ t(ctx, "In Immich, a photo someone shared with you can be copied into your own library with the Add to my library button. Choose where the copies go.") }</p>
 		<form class="limits" hx-post="me/library" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -1539,7 +1557,7 @@ templ FollowForm(albums []FollowOption) {
 // PushCard lets a person allow notifications on the phone or computer they are using, and shows the devices they allowed.
 // The script (ts/push.ts) shows the controls only where the browser can do it, and says why when it cannot.
 templ PushCard(p PushView) {
-	<h2>{ t(ctx, "Notifications on this device") }</h2>
+	<h2>{ t(ctx, "Notifications on this device") } @Status(pushStatus(ctx, p))</h2>
 	<div class="card pushcard" id="pushcard" data-key={ p.Key }>
 		<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
 		<p class="meta" data-push-note hidden></p>
@@ -5163,7 +5181,7 @@ type AlbumTreePageView struct {
 
 // StoriesCard makes short animated recaps of the person's photos, with a public link: the stories they have and the form that makes one.
 templ StoriesCard(s StoriesView) {
-	<h2>{ t(ctx, "Stories") }</h2>
+	<h2>{ t(ctx, "Stories") } @Status(storiesStatus(ctx, s))</h2>
 	<div class="card storiescard">
 		<p>{ t(ctx, "A story is a short animated recap of an album, of a person's photos, of a stretch of time or of a drop box: a title, a card for each chapter with its dates and places, about forty of the best photos, and an end. Anyone with its link can watch it on a phone or a TV, with no account, until the link ends.") }</p>
 		for _, it := range s.Items {
@@ -5409,7 +5427,7 @@ templ StoryPage(v StoryPageView) {
 
 // CastCard shows the person's albums, people and memories on a TV with a code: the TVs that are showing, with their remote, and the form.
 templ CastCard(c CastView) {
-	<h2>{ t(ctx, "Cast to a TV") }</h2>
+	<h2>{ t(ctx, "Cast to a TV") } @Status(castStatus(ctx, c))</h2>
 	<div class="card castcard">
 		<p>{ t(ctx, "Open the address below in the browser of a TV: it shows a short code. Type the code here and choose what to show, and the TV shows those photos. The TV does not sign in to anything: it gets the photos through this app, and you stop it from here whenever you like.") }</p>
 		<div class="field">
@@ -5699,7 +5717,7 @@ templ AlbumMovePreview(oldName, newName string) {
 
 // CirclesCard shares every new album of the person's with a group of people: the circles they have, and the form that makes one.
 templ CirclesCard(c CirclesView) {
-	<h2>{ t(ctx, "Circles") }</h2>
+	<h2>{ t(ctx, "Circles") } @Status(circlesStatus(ctx, c))</h2>
 	<div class="card circlescard">
 		<p>{ t(ctx, "A circle is a group of people on this Immich server. Every new album you make is offered to them, and with your yes it is shared with them, as viewers or editors. Immich may send each of them an email for every album. Taking a person out of a circle takes them off the albums the app shared with them, and only those.") }</p>
 		for _, it := range c.Items {
@@ -5834,7 +5852,7 @@ templ CircleAddForm(v CircleFormView) {
 
 // PairingsCard is the card for sharing the photos of chosen people with another person, both ways.
 templ PairingsCard(p PairingsView) {
-	<h2>{ t(ctx, "Share photos with someone") }</h2>
+	<h2>{ t(ctx, "Share photos with someone") } @Status(pairingsStatus(ctx, p))</h2>
 	<div class="card pairingscard">
 		<p>{ t(ctx, "Share the photos of the people you choose with another person on this Immich server, and get theirs back, without remembering to send anything. Each of you keeps your own copy, and either of you can pause or stop it whenever you like. Photos already copied stay where they are.") }</p>
 		for _, it := range p.Items {

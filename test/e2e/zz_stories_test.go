@@ -77,6 +77,9 @@ func TestStories(t *testing.T) {
 	run(t, ctx, chromeNavigate(base))
 	until(t, ctx, "the title card", `(() => !!document.querySelector('.st-title') && document.querySelector('.st-title').textContent.startsWith('Summer'))()`, 30*time.Second)
 	until(t, ctx, "a photo after a tap or two", `(() => { const r = document.getElementById('story'); r.dispatchEvent(new PointerEvent('pointerdown', {clientX: 300, clientY: 400, bubbles: true})); r.dispatchEvent(new PointerEvent('pointerup', {clientX: 300, clientY: 400, bubbles: true})); return !!document.querySelector('.wall-stage figure img:not(.st-back)'); })()`, 60*time.Second)
+	if d := js[string](t, ctx, `getComputedStyle(document.querySelector('.wall-wait')).display`); d != "none" {
+		t.Errorf("the waiting message and its circle are gone once the story plays: display %q", d)
+	}
 	if h := js[string](t, ctx, `document.querySelector('.st-bar').style.transform`); !strings.HasPrefix(h, "scaleX(") {
 		t.Errorf("a progress bar: %q", h)
 	}

@@ -63,6 +63,8 @@ func TestPairingPages(t *testing.T) {
 		ctx := browse(t, port, cookie, look{})
 		run(t, ctx, chromedp.Navigate(base+"#settings"), chromedp.WaitVisible("header.bar", chromedp.ByQuery))
 		until(t, ctx, "the Settings view", `document.querySelector('#v-settings') !== null`, 10*time.Second)
+		// Settings shows one category at a time, and the sharing card is in Sharing
+		run(t, ctx, chromedp.Click(`.settings-nav [data-cat="sharing"]`, chromedp.ByQuery))
 		return ctx
 	}
 

@@ -431,6 +431,7 @@
  "Notifications need this page to be opened over HTTPS.": "Les notifications demandent que cette page soit ouverte en HTTPS.",
  "Notifications on this device": "Notifications sur cet appareil",
  "Notifications work on this device.": "Les notifications fonctionnent sur cet appareil.",
+ "Off": "Désactivé",
  "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.": "Désactivé par défaut. Seules sont retirées les photos que l'app a mises elle-même dans l'album, jamais celles que vous avez ajoutées. Cela ne marche pas avec une phrase. La clé de l'app reçoit alors aussi le droit de retirer des photos des albums.",
  "Offer a service of your own": "Proposer votre propre service",
  "Offer my existing albums": "Proposer mes albums existants",
@@ -597,6 +598,7 @@
  "Save note": "Enregistrer la note",
  "Save rules": "Enregistrer les règles",
  "Save the end": "Enregistrer la fin",
+ "Screens": "Écrans",
  "Search": "Rechercher",
  "Secure with a password...": "Protéger par un mot de passe…",
  "See all the photos": "Voir toutes les photos",
@@ -633,6 +635,7 @@
  "Services": "Services",
  "Set these up once; only what is switched on for you appears here.": "À régler une fois ; seul ce qui est activé pour vous apparaît ici.",
  "Settings": "Réglages",
+ "Settings categories": "Catégories des réglages",
  "Share": "Partager",
  "Share photos to Handoff from your gallery": "Partager des photos vers Handoff depuis votre galerie",
  "Share them": "Les partager",
@@ -1246,6 +1249,14 @@
   "one": "{n} chapitre",
   "other": "{n} chapitres"
  },
+ "{n} circle": {
+  "one": "{n} cercle",
+  "other": "{n} cercles"
+ },
+ "{n} device": {
+  "one": "{n} appareil",
+  "other": "{n} appareils"
+ },
  "{n} dry-run": "{n} en simulation",
  "{n} errors": "{n} erreurs",
  "{n} existing album offered to the circle {circle}": {
@@ -1433,18 +1444,34 @@
  },
  "{n} refused": "{n} refusées",
  "{n} refused (the receiver has them in the trash)": "{n} refusées (le destinataire les a dans la corbeille)",
+ "{n} rule": {
+  "one": "{n} règle",
+  "other": "{n} règles"
+ },
  "{n} seconds": "{n} secondes",
  "{n} sender": {
   "one": "{n} expéditeur",
   "other": "{n} expéditeurs"
  },
+ "{n} sharing": {
+  "one": "{n} partage",
+  "other": "{n} partages"
+ },
  "{n} star or more": {
   "one": "{n} étoile ou plus",
   "other": "{n} étoiles ou plus"
  },
+ "{n} story": {
+  "one": "{n} histoire",
+  "other": "{n} histoires"
+ },
  "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.": "{n} reprises. {kept} sont restées chez le destinataire, qui les avait rangées dans un album.",
  "{n} things happened:": "{n} choses se sont passées :",
  "{n} things need you.": "{n} choses ont besoin de vous.",
+ "{n} TV showing": {
+  "one": "{n} télé affiche",
+  "other": "{n} télés affichent"
+ },
  "{n} waiting": "{n} en attente",
  "{ok} of {all} files arrived. The others are marked below.": "{ok} fichiers sur {all} sont arrivés. Les autres sont signalés ci-dessous.",
  "{old} will be renamed to {new}.": "{old} sera renommé en {new}.",

@@ -310,12 +310,23 @@ func TestBrowser(t *testing.T) {
 		if strings.Join(order, "|") != "Needs you|Live as it happens|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
-		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
-		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Cast to a TV|Stories|Album tree|Circles|Share photos with someone" {
+		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.childNodes[0].textContent.trim())`)
+		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Album tree|Circles|Share photos with someone|Stories|Cast to a TV" {
 			t.Errorf("cards of the Settings view, top to bottom: %v", settings)
 		}
-		if groups := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .group-title')].map(h => h.textContent.trim())`); strings.Join(groups, "|") != "My library|Sharing with others" {
-			t.Errorf("groups of the Settings view: %v", groups)
+		// the categories are on the left, one at a time; the first one's cards show and the others' do not
+		if cats := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-nav [role=tab] .cat-name')].map(h => h.textContent.trim())`); strings.Join(cats, "|") != "Photos|Sharing|Screens" {
+			t.Errorf("categories of the Settings view: %v", cats)
+		}
+		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "photos" {
+			t.Errorf("only the first category shows at first: %v", shown)
+		}
+		run(t, ctx, chromedp.Click(`#v-settings .settings-nav [data-cat="sharing"]`, chromedp.ByQuery))
+		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "sharing" {
+			t.Errorf("choosing Sharing shows Sharing alone: %v", shown)
+		}
+		if side := js[bool](t, ctx, `(() => { const n = document.querySelector('.settings-nav').getBoundingClientRect(), p = document.querySelector('.settings-panel:not([hidden])').getBoundingClientRect(); return n.right <= p.left + 1 && Math.abs(n.top - p.top) < 120; })()`); !side {
+			t.Error("the categories sit to the left of the cards on a wide screen")
 		}
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)
 		if scene["sceneTop"] >= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {

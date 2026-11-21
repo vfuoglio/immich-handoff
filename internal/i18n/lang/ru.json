@@ -424,6 +424,7 @@
  "Notifications need this page to be opened over HTTPS.": "Для уведомлений эту страницу нужно открывать по HTTPS.",
  "Notifications on this device": "Уведомления на этом устройстве",
  "Notifications work on this device.": "Уведомления работают на этом устройстве.",
+ "Off": "Выключено",
  "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.": "По умолчанию выключено. Убираются только фото, которые приложение само добавило в альбом, но не те, что добавили вы. С фразой не работает. Ключ приложения тогда получает ещё и право убирать фото из альбомов.",
  "Offer a service of your own": "Предложить свой сервис",
  "Offer my existing albums": "Предложить мои существующие альбомы",
@@ -593,6 +594,7 @@
  "Save note": "Сохранить заметку",
  "Save rules": "Сохранить правила",
  "Save the end": "Сохранить конец",
+ "Screens": "Экраны",
  "Search": "Поиск",
  "Secure with a password...": "Защитить паролем…",
  "See all the photos": "Смотреть все фото",
@@ -631,6 +633,7 @@
  "Services": "Сервисы",
  "Set these up once; only what is switched on for you appears here.": "Настройте один раз; здесь только то, что для вас включено.",
  "Settings": "Настройки",
+ "Settings categories": "Разделы настроек",
  "Share": "Поделиться",
  "Share photos to Handoff from your gallery": "Отправляйте фото в Handoff из галереи",
  "Share them": "Поделиться",
@@ -1272,6 +1275,18 @@
   "many": "{n} глав",
   "other": "{n} глав"
  },
+ "{n} circle": {
+  "one": "{n} круг",
+  "few": "{n} круга",
+  "many": "{n} кругов",
+  "other": "{n} круга"
+ },
+ "{n} device": {
+  "one": "{n} устройство",
+  "few": "{n} устройства",
+  "many": "{n} устройств",
+  "other": "{n} устройства"
+ },
  "{n} dry-run": "{n} пробных",
  "{n} errors": "{n} ошибок",
  "{n} existing album offered to the circle {circle}": {
@@ -1531,6 +1546,12 @@
  },
  "{n} refused": "{n} отклонено",
  "{n} refused (the receiver has them in the trash)": "{n} отклонено (у получателя они в корзине)",
+ "{n} rule": {
+  "one": "{n} правило",
+  "few": "{n} правила",
+  "many": "{n} правил",
+  "other": "{n} правила"
+ },
  "{n} seconds": "{n} секунд",
  "{n} sender": {
   "few": "{n} отправителя",
@@ -1538,15 +1559,33 @@
   "one": "{n} отправитель",
   "other": "{n} отправителей"
  },
+ "{n} sharing": {
+  "one": "{n} обмен",
+  "few": "{n} обмена",
+  "many": "{n} обменов",
+  "other": "{n} обмена"
+ },
  "{n} star or more": {
   "few": "{n} звезды или больше",
   "many": "{n} звёзд или больше",
   "one": "{n} звезда или больше",
   "other": "{n} звёзд или больше"
  },
+ "{n} story": {
+  "one": "{n} история",
+  "few": "{n} истории",
+  "many": "{n} историй",
+  "other": "{n} истории"
+ },
  "{n} taken back. {kept} stayed with the receiver, who had filed them in an album.": "Отозвано: {n}. У получателя остались {kept}: он положил их в альбом.",
  "{n} things happened:": "Произошло событий: {n}.",
  "{n} things need you.": "Вас ждут дела: {n}.",
+ "{n} TV showing": {
+  "one": "{n} телевизор показывает",
+  "few": "{n} телевизора показывают",
+  "many": "{n} телевизоров показывают",
+  "other": "{n} телевизора показывают"
+ },
  "{n} waiting": "{n} ждут",
  "{ok} of {all} files arrived. The others are marked below.": "Пришло файлов: {ok} из {all}. Остальные отмечены ниже.",
  "{old} will be renamed to {new}.": "{old} будет переименован в {new}.",

@@ -24,6 +24,7 @@ import { initRows } from "./rows";
 import { initSound } from "./sound";
 import { initTabs } from "./tabs";
 import { initSegments } from "./segments";
+import { initSettingsNav } from "./settingsnav.ts";
 
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
@@ -90,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLanguage();
   initTabs();
   initSegments();
+  initSettingsNav();
   initToday();
   initKeys();
   initRows();

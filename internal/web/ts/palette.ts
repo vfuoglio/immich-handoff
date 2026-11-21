@@ -5,6 +5,7 @@
 
 import { t } from "./i18n.ts";
 import { showSegment } from "./segments.ts";
+import { showSettingsCatOf } from "./settingsnav.ts";
 
 export interface Command {
   label: string;
@@ -70,7 +71,7 @@ function collect(): Command[] {
   const offer = document.querySelector<HTMLDetailsElement>("#v-services details.offer");
   if (offer) commands.push({ label: t("Offer a service of your own"), hint: t("service"), run: () => { goTo("services"); showSegment("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
   const cast = document.querySelector<HTMLDetailsElement>(".castcard details.offer");
-  if (cast) commands.push({ label: t("Cast to a TV"), hint: t("action"), run: () => { goTo("settings"); cast.open = true; cast.scrollIntoView({ block: "center" }); } });
+  if (cast) commands.push({ label: t("Cast to a TV"), hint: t("action"), run: () => { goTo("settings"); showSettingsCatOf(cast); cast.open = true; cast.scrollIntoView({ block: "center" }); } });
   commands.push({ label: t("Open the album tree"), hint: t("action"), run: () => { location.href = "albums"; } });
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
   if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });

@@ -263,7 +263,14 @@ func TestSettingsViewHoldsTheSetOnceCards(t *testing.T) {
 	var st *store.Store
 	app, _ := setup(t, withClub(t, &st))
 	body := get(t, app.URL, "sess=family")
-	has(t, body, `href="#settings" data-view="settings"`, `id="v-settings"`, "Your <em>settings</em>", `class="group-title"`)
+	has(t, body, `href="#settings" data-view="settings"`, `id="v-settings"`, "Your <em>settings</em>", `class="settings-nav"`, `data-cat="photos"`, `id="set-photos"`)
+	// one category at a time: each card sits in the panel of its category, and the categories are tabs
+	for card, panel := range map[string]string{"Add to my library": "set-photos", "Share photos with someone": "set-sharing"} {
+		i := strings.Index(body, `id="`+panel+`"`)
+		if i < 0 || !strings.Contains(body[i:], card) || strings.Index(body[i:], card) > strings.Index(body[i:], "</section>") {
+			t.Errorf("%q belongs in the %s panel", card, panel)
+		}
+	}
 	view := func(id string) string {
 		i := strings.Index(body, `id="`+id+`"`)
 		j := strings.Index(body[i+1:], `<section class="view"`)

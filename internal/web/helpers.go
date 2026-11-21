@@ -678,6 +678,14 @@ func languages() []i18n.Lang { return i18n.All }
 
 func langName(l i18n.Lang) string { return i18n.Names[l] }
 
+// tabindex is 0 for the tab that is in the tab order and -1 for the others.
+func tabindex(first bool) string {
+	if first {
+		return "0"
+	}
+	return "-1"
+}
+
 func checked(b bool) string {
 	if b {
 		return "true"
@@ -1050,4 +1058,108 @@ func placeConfirm(ctx context.Context, place bool) string {
 		return ""
 	}
 	return t(ctx, "The places are written into your photos. The app cannot take a place back (Immich does not let it), so if one is wrong you remove it in Immich. Go on?")
+}
+
+// StatusView is the short state a Settings card shows next to its title: what is on, at a glance.
+type StatusView struct {
+	On    bool
+	Words string
+}
+
+// onStatus is "On" or "Off".
+func onStatus(ctx context.Context, on bool) StatusView {
+	if on {
+		return StatusView{On: true, Words: t(ctx, "On")}
+	}
+	return StatusView{Words: t(ctx, "Off")}
+}
+
+// countStatus is how many of something there are ("2 rules"), or "Off" when there are none.
+func countStatus(ctx context.Context, count int, one, other string) StatusView {
+	if count == 0 {
+		return StatusView{Words: t(ctx, "Off")}
+	}
+	return StatusView{On: true, Words: n(ctx, one, other, count)}
+}
+
+func ruleStatus(ctx context.Context, rules int) StatusView {
+	return countStatus(ctx, rules, "{n} rule", "{n} rules")
+}
+
+func mailStatus(ctx context.Context, m MailView) StatusView { return onStatus(ctx, m.On) }
+
+func pushStatus(ctx context.Context, p PushView) StatusView {
+	return countStatus(ctx, len(p.Devices), "{n} device", "{n} devices")
+}
+
+func memoriesStatus(ctx context.Context, m MemoriesView) StatusView { return onStatus(ctx, m.On) }
+
+func libraryStatus(ctx context.Context, l LibraryView) StatusView {
+	if r := len(l.Followed) + len(l.Imports); r > 0 {
+		return ruleStatus(ctx, r)
+	}
+	return StatusView{Words: t(ctx, "Ready")}
+}
+
+func placesStatus(ctx context.Context, p PlacesView) StatusView { return onStatus(ctx, p.Rule != nil) }
+
+func circlesStatus(ctx context.Context, c CirclesView) StatusView {
+	return countStatus(ctx, len(c.Items), "{n} circle", "{n} circles")
+}
+
+func pairingsStatus(ctx context.Context, p PairingsView) StatusView {
+	return countStatus(ctx, len(p.Items), "{n} sharing", "{n} sharings")
+}
+
+func storiesStatus(ctx context.Context, s StoriesView) StatusView {
+	return countStatus(ctx, len(s.Items), "{n} story", "{n} stories")
+}
+
+func castStatus(ctx context.Context, c CastView) StatusView {
+	return countStatus(ctx, len(c.Sessions), "{n} TV showing", "{n} TVs showing")
+}
+
+// SettingsCat is a category of the Settings view with how many of its features are on.
+type SettingsCat struct {
+	ID string
+	On int
+}
+
+// SettingsCats lists the categories that have something to show, in order, each with the number of its features that are on. A
+// feature that is not available on this install is not in any category, and a category with none is not listed.
+func (d DashboardData) SettingsCats() []SettingsCat {
+	b := func(on bool) int {
+		if on {
+			return 1
+		}
+		return 0
+	}
+	var out []SettingsCat
+	if d.Mail.Available || d.Push.Available {
+		out = append(out, SettingsCat{"notifications", b(d.Mail.Available && d.Mail.On) + b(d.Push.Available && len(d.Push.Devices) > 0)})
+	}
+	on := b(d.Library.Available && len(d.Library.Followed)+len(d.Library.Imports) > 0) + b(d.Memories.Available && d.Memories.On) +
+		b(d.Folders.Available && len(d.Folders.Rules) > 0) + b(d.Stacks.Available && len(d.Stacks.Rules) > 0) + b(d.Places.Available && d.Places.Rule != nil) +
+		b(d.Albums.Available && len(d.Albums.Rules) > 0)
+	out = append(out, SettingsCat{"photos", on}) // the album tree is always there, so is this
+	if d.Circles.Available || d.Pairings.Available || d.Stories.Available {
+		out = append(out, SettingsCat{"sharing", b(d.Circles.Available && len(d.Circles.Items) > 0) + b(d.Pairings.Available && len(d.Pairings.Items) > 0) + b(d.Stories.Available && len(d.Stories.Items) > 0)})
+	}
+	if d.Cast.Available {
+		out = append(out, SettingsCat{"screens", b(len(d.Cast.Sessions) > 0)})
+	}
+	return out
+}
+
+// settingsCatTitle is the name of a category, in the person's language.
+func settingsCatTitle(ctx context.Context, id string) string {
+	switch id {
+	case "notifications":
+		return t(ctx, "Notifications")
+	case "photos":
+		return t(ctx, "Photos")
+	case "sharing":
+		return t(ctx, "Sharing")
+	}
+	return t(ctx, "Screens")
 }

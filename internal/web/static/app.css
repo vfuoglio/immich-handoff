@@ -323,13 +323,24 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 
 /* Overview: what needs the person, then the live scene, then the week, each as wide as the page */
 .ov-main > div > h2:first-child { margin-top: 1.4rem; }
-/* Settings: the set-once cards, grouped by what they are for */
-.settings { display: grid; gap: 0 1.6rem; }
-.settings .group { min-width: 0; }
-.group-title { margin: 2rem 0 -.4rem; font: 600 .74rem var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-@media (min-width: 1100px) {
+/* Settings: the set-once cards, one category at a time: the categories on the left, the chosen one's cards on the right (a row of
+   chips above on a narrow screen), so a new feature joins a category and never makes the page longer */
+.settings-shell { display: grid; gap: 1rem 2rem; margin-top: 1rem; }
+.settings-nav { display: flex; gap: .4rem; flex-wrap: wrap; }
+.settings-nav [role=tab] { display: flex; align-items: center; justify-content: space-between; gap: .8rem; font: 600 .92rem var(--font-body, inherit); padding: .55rem .95rem; border-radius: 99px; border: 1px solid var(--border); background: var(--glass); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.settings-nav [role=tab]:hover { color: var(--text); }
+.settings-nav [role=tab][aria-selected="true"] { background: var(--grad); color: var(--on-accent); border-color: transparent; }
+.settings-nav [role=tab]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-nav .n { font: 700 .72rem var(--font-mono); padding: .05rem .45rem; border-radius: 99px; background: color-mix(in oklab, currentColor 16%, transparent); }
+.settings-panels { min-width: 0; }
+.settings-panel > h2:first-child { margin-top: 0; }
+.settings-panel[hidden] { display: none; }
+.card h2 .status, h2 .status { margin-left: .6rem; vertical-align: middle; font-size: .68rem; }
+@media (min-width: 900px) {
   html[data-view="settings"] .wrap { max-width: 72rem; }
-  .settings { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .settings-shell { grid-template-columns: 14rem minmax(0, 1fr); align-items: start; }
+  .settings-nav { flex-direction: column; position: sticky; top: 5.5rem; }
+  .settings-nav [role=tab] { border-radius: 14px; }
 }
 /* Services: a switch between the services and the other things an owner makes, shown when script runs */
 .seg { display: none; gap: .3rem; flex-wrap: wrap; margin: 1.2rem 0 .4rem; padding: .3rem; border: 1px solid var(--border); border-radius: 99px; background: var(--glass); width: fit-content; max-width: 100%; }
@@ -354,18 +365,17 @@ details.offer[open] > summary { margin-bottom: .6rem; }
   nav.tabs[data-compact] a svg { display: block; }
   nav.tabs[data-compact] a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
-.card.need { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a" "m a" "u a" "l a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
+/* what is asked on top (the title, the words, the photos), the buttons that answer it underneath, whatever the width */
+.card.need { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "u" "l" "a"; gap: .3rem 1.2rem; align-items: center; padding: 1rem 1.2rem 1rem 1.4rem; overflow: hidden; }
 .card.need > b { grid-area: t; }
 .card.need > p.meta { grid-area: m; }
 .card.need > ul.thumbs { grid-area: u; }
 .card.need > p.meta ~ p.meta { grid-area: l; }
-.card.need > p.row { grid-area: a; flex-wrap: nowrap; justify-content: flex-end; }
-.card.need:not(:has(> p.row)) { grid-template-areas: "t" "m" "u" "l"; grid-template-columns: minmax(0, 1fr); }
+.card.need > p.row { grid-area: a; flex-wrap: wrap; justify-content: flex-start; margin-top: .5rem; }
 /* a button that a key presses wears the key */
 button[data-key]::after { content: attr(data-key); margin-left: .55rem; padding: 0 .4rem; border-radius: 6px; font: 700 .68rem var(--font-mono); background: color-mix(in oklab, currentColor 16%, transparent); border: 1px solid color-mix(in oklab, currentColor 28%, transparent); border-bottom-width: 2px; }
 @media (pointer: coarse) { button[data-key]::after { display: none; } }
 @media (max-width: 560px) {
-  .card.need { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "m" "u" "l" "a"; }
   .card.need > p.row { justify-content: stretch; margin-top: .4rem; }
   .card.need > p.row button { flex: 1; }
 }
@@ -1007,6 +1017,7 @@ body.wall #glow { display: none; }
 body.story { overscroll-behavior: none; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 #story { position: fixed; inset: 0; background: #000; overflow: hidden; height: 100vh; height: 100dvh; cursor: pointer; }
 #story .wall-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: #cfd8e3; z-index: 2; }
+#story .wall-wait[hidden] { display: none; }
 #story .wall-stage figure.single img { position: relative; z-index: 1; }
 #story .wall-stage figure.single .st-back { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; opacity: .5; filter: blur(28px) saturate(1.2); transform: scale(1.15); }
 #story[data-lite] .wall-stage figure.single .st-back { display: none; }
