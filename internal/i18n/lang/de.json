@@ -1165,6 +1165,7 @@
  "{name} made the circle {circle} ask first again": "{name} lässt den Kreis {circle} wieder zuerst fragen",
  "{name} made the circle {circle}: new albums are offered to {people}": "{name} hat den Kreis {circle} angelegt: Neue Alben werden {people} angeboten",
  "{name} made the places ask first again": "{name} lässt die Orte wieder zuerst fragen",
+ "{name} offers to share photos with you": "{name} bietet an, Fotos mit dir zu teilen",
  "{name} paused sending to {service}": "{name} hat das Senden an {service} pausiert",
  "{name} paused the service {service}": "{name} hat den Dienst {service} pausiert",
  "{name} put {person} in the circle {circle}": "{name} hat {person} in den Kreis {circle} aufgenommen",
@@ -1219,6 +1220,7 @@
  "{name} turned on the weekly digest of {service}": "{name} hat die wöchentliche Zusammenfassung von {service} eingeschaltet",
  "{name} wants to send to {service}": "{name} möchte an {service} senden",
  "{name} was removed from {service} by an administrator; their key in Immich stays until they clean up": "{name} wurde von einem Administrator aus {service} entfernt; der Schlüssel in Immich bleibt, bis aufgeräumt wird",
+ "{name} would share the photos of {people} with you, and you can share yours back. Nothing is shared until you say yes. The offer lapses {expires}.": "{name} würde die Fotos von {people} mit dir teilen, und du kannst deine zurückgeben. Nichts wird geteilt, bevor du zusagst. Das Angebot verfällt {expires}.",
  "{name}'s connection to {service} was cut: their API key was deleted": "Die Verbindung von {name} zu {service} wurde getrennt: Der API-Schlüssel wurde gelöscht",
  "{name}: {n} photo was not handed over to {service}: it does not match what the service accepts": {
   "one": "{name}: {n} Foto wurde nicht an {service} übergeben: es passt nicht zu dem, was der Dienst annimmt",

@@ -112,6 +112,17 @@ func TestSharingPhotosWithSomeoneIsOfferedFromTheOverviewAndSaidYesToOnItsOwnPag
 			t.Errorf("the invited person's card lacks %q", want)
 		}
 	}
+	// the offer is also in Needs you of the person it is offered to, and not of the one who made it
+	needs := func(page string) string {
+		i := strings.Index(page, `id="v-overview"`)
+		return page[i:]
+	}
+	if n := needs(theirs); !strings.Contains(n, "Family offers to share photos with you") || !strings.Contains(n, `href="pair/`+p.ID+`"`) {
+		t.Errorf("the offer is not in the invited person's Needs you")
+	}
+	if strings.Contains(needs(mine), "offers to share photos with you") {
+		t.Errorf("the starter is told of their own offer in Needs you")
+	}
 	svcs, _ := st.Services(ctx)
 	var token string
 	for _, s := range svcs {

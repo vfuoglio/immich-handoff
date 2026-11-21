@@ -854,6 +854,14 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Make my story"), Path: "stories/year", Vals: vals("year", strconv.Itoa(d.StoryYear)), Primary: true},
 				{Label: t(ctx, "Not this year"), Path: "stories/year/dismiss", Vals: vals("year", strconv.Itoa(d.StoryYear))}}})
 	}
+	for _, pv := range d.Pairings.Items { // an offer of photo sharing that waits for this person's yes
+		if !pv.Incoming {
+			continue
+		}
+		ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Request"), Title: t(ctx, "{name} offers to share photos with you", "name", pv.Other),
+			Text: t(ctx, "{name} would share the photos of {people} with you, and you can share yours back. Nothing is shared until you say yes. The offer lapses {expires}.", "name", pv.Other, "people", pv.Theirs, "expires", pv.Expires),
+			Link: "pair/" + pv.ID, LinkLabel: t(ctx, "Look at the offer")})
+	}
 	for _, ca := range d.CircleAsks { // albums to share with a circle
 		acts := []NeedAction{
 			{Label: t(ctx, "Share them"), Path: "circles/answer", Vals: vals2("circle", ca.ID, "do", "send"), Primary: true},
