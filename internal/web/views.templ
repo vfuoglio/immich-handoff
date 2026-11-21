@@ -5977,9 +5977,9 @@ templ PairingPage(v PairingPageView, user string) {
 			<h1>{ t(ctx, "{name} would like to share photos with you", "name", v.Starter) }</h1>
 			<p class="lead">
 				if v.Theirs != "" {
-					{ t(ctx, "{name} offers to copy photos of {people} into your library, and asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
+					{ t(ctx, "{name} offers to copy photos of {people} into your library, and, if you like, asks for photos of the people you choose in return.", "name", v.Starter, "people", v.Theirs) }
 				} else {
-					{ t(ctx, "{name} offers to copy photos into your library, and asks for photos of the people you choose in return.", "name", v.Starter) }
+					{ t(ctx, "{name} offers to copy photos into your library, and, if you like, asks for photos of the people you choose in return.", "name", v.Starter) }
 				}
 			</p>
 		</section>
@@ -5990,22 +5990,21 @@ templ PairingPage(v PairingPageView, user string) {
 				<input type="hidden" name="pairing" value={ v.ID }/>
 				if len(v.People) > 0 {
 					<fieldset class="targets">
-						<legend>{ t(ctx, "Photos of your people to send to {name}", "name", v.Starter) }</legend>
+						<legend>{ t(ctx, "Photos of your people to send to {name} (optional)", "name", v.Starter) }</legend>
 						for _, p := range v.People {
 							<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
 						}
 					</fieldset>
+					<p class="meta">{ t(ctx, "Choose nobody to only receive: you send nothing back.") }</p>
 					@WaitField(v.WaitMin)
-					<p id="flash" class="toast" role="status" aria-live="polite"></p>
-					<p class="row form-actions">
-						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
-						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
-					</p>
 				} else {
-					<p id="flash" class="toast" role="status" aria-live="polite"></p>
-					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to send back. Name people in Immich and come back to this page.") }</p>
-					<p class="row"><button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button></p>
+					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so you will only receive: you send nothing back.") }</p>
 				}
+				<p id="flash" class="toast" role="status" aria-live="polite"></p>
+				<p class="row form-actions">
+					<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
+					<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
+				</p>
 			</form>
 			<p class="meta">{ t(ctx, "This invitation lapses on {when}.", "when", v.Expires) }</p>
 		</div>

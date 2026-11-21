@@ -94,7 +94,7 @@ func TestOnlyTheInvitedPersonCanSayYesAndOnlyWithRealNamedPeople(t *testing.T) {
 	if err := e.h.AcceptPairing(ctx, e.sess, bob, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrNoPairing) {
 		t.Errorf("the starter cannot say the other person's yes: %v", err)
 	}
-	for name, people := range map[string][]uuid.UUID{"none": nil, "a stranger's person": {uuid.New()}, "twice": {leo, leo}} {
+	for name, people := range map[string][]uuid.UUID{"a stranger's person": {uuid.New()}, "twice": {leo, leo}} {
 		if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, people, 0); err == nil || !hub.IsUserError(err) {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -111,6 +111,26 @@ func TestOnlyTheInvitedPersonCanSayYesAndOnlyWithRealNamedPeople(t *testing.T) {
 	accepted(t, e, ctx, p)
 	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, []uuid.UUID{leo}, 0); !errors.Is(err, hub.ErrPairingState) {
 		t.Errorf("a yes is given once: %v", err)
+	}
+}
+
+// The person who says yes may choose to send nothing back: they join, receive, and have no rule of their own.
+func TestTheInvitedPersonMayOnlyReceive(t *testing.T) {
+	e, ctx := pairingEnv(t)
+	p, _ := offered(t, e, ctx)
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, nil, 0); err != nil {
+		t.Fatalf("a yes with nobody to send back: %v", err)
+	}
+	got, err := e.st.PairingByID(ctx, p.ID)
+	if err != nil || got.State != store.PairingActive {
+		t.Fatalf("the sharing is active: %+v %v", got, err)
+	}
+	mine, theirs, err := e.h.PairingPeople(ctx, ann.ID, p.ID)
+	if err != nil || len(mine) != 0 || len(theirs) == 0 {
+		t.Errorf("they send nothing and receive the starter's people: %v %v %v", mine, theirs, err)
+	}
+	if rules, _ := e.h.PairingRules(ctx, ann.ID, p.ID); len(rules) != 0 {
+		t.Errorf("no rule of their own: %+v", rules)
 	}
 }
 

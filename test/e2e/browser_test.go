@@ -321,6 +321,8 @@ func TestBrowser(t *testing.T) {
 		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "photos" {
 			t.Errorf("only the first category shows at first: %v", shown)
 		}
+		// the Settings view is shown for the next checks, then the Overview is back
+		run(t, ctx, chromedp.Click(`nav.tabs a[data-view="settings"]`, chromedp.ByQuery))
 		run(t, ctx, chromedp.Click(`#v-settings .settings-nav [data-cat="sharing"]`, chromedp.ByQuery))
 		if shown := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings .settings-panel')].filter(p => !p.hidden).map(p => p.dataset.cat)`); strings.Join(shown, "|") != "sharing" {
 			t.Errorf("choosing Sharing shows Sharing alone: %v", shown)
@@ -328,6 +330,7 @@ func TestBrowser(t *testing.T) {
 		if side := js[bool](t, ctx, `(() => { const n = document.querySelector('.settings-nav').getBoundingClientRect(), p = document.querySelector('.settings-panel:not([hidden])').getBoundingClientRect(); return n.right <= p.left + 1 && Math.abs(n.top - p.top) < 120; })()`); !side {
 			t.Error("the categories sit to the left of the cards on a wide screen")
 		}
+		run(t, ctx, chromedp.Click(`nav.tabs a[data-view="overview"]`, chromedp.ByQuery))
 		scene := js[map[string]float64](t, ctx, `(() => { const s = document.querySelector('#scene').getBoundingClientRect(), g = document.querySelector('#v-overview .guide').getBoundingClientRect(); return {sceneTop: s.top + scrollY, guideTop: g.top + scrollY, lanes: document.querySelectorAll('#scene [data-lane]').length, gates: document.querySelectorAll('#scene .gate').length}; })()`)
 		if scene["sceneTop"] >= scene["guideTop"] || scene["lanes"] != 1 || scene["gates"] != 1 {
 			t.Errorf("the live scene is at the top of the Overview, above the guide, with a lane for bob and a gate: %v", scene)

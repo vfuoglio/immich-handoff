@@ -74,7 +74,7 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 	if p.With.ID == uuid.Nil || p.With.ID == a.ID {
 		return none, "", ErrPairingSelf
 	}
-	if err := h.checkPairingPeople(ctx, sess, p.People); err != nil {
+	if err := h.checkPairingPeople(ctx, sess, p.People, 1); err != nil {
 		return none, "", err
 	}
 	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes { // before anything is made
@@ -144,7 +144,7 @@ func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User
 		h.markStopped(ctx, p, i18n.Pack("The invitation lapsed before {name} said yes", "name", p.BName))
 		return ErrPairingLapsed
 	}
-	if err := h.checkPairingPeople(ctx, sess, people); err != nil {
+	if err := h.checkPairingPeople(ctx, sess, people, 0); err != nil { // the person who says yes may send nothing back and only receive
 		return err
 	}
 	if settle < 0 || settle > maxSettleMinutes { // before they join anything
@@ -415,9 +415,10 @@ func (h *Hub) pairingRoom(ctx context.Context, user uuid.UUID) error {
 	return nil
 }
 
-// checkPairingPeople checks the chosen people against the person's own Immich: named, and each once.
-func (h *Hub) checkPairingPeople(ctx context.Context, sess *immich.API, ids []uuid.UUID) error {
-	if len(ids) < 1 || len(ids) > maxPairingPeople {
+// checkPairingPeople checks the chosen people against the person's own Immich: named, and each once, and at least min of them (the
+// person who offers sends something; the one who says yes may choose to send nothing back).
+func (h *Hub) checkPairingPeople(ctx context.Context, sess *immich.API, ids []uuid.UUID, min int) error {
+	if len(ids) < min || len(ids) > maxPairingPeople {
 		return ErrPairingPeople
 	}
 	known, err := sess.People(ctx)

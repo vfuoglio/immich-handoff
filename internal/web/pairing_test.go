@@ -159,8 +159,8 @@ func TestSharingPhotosWithSomeoneIsOfferedFromTheOverviewAndSaidYesToOnItsOwnPag
 	if code, _ := postForm(t, app.URL+"/pairings/accept", "sess=other", "pairing="+p.ID+"&person="+leoID); code != 409 {
 		t.Errorf("a stranger cannot say yes: %d", code)
 	}
-	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID); code != 409 || !strings.Contains(b, "between one and ten named people") {
-		t.Errorf("a yes needs someone to send back: %d %s", code, b)
+	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID+"&person="+leoID+"&person="+leoID); code != 409 || !strings.Contains(b, "between one and ten named people") {
+		t.Errorf("the same person twice is refused: %d %s", code, b)
 	}
 	if code, b := postForm(t, app.URL+"/pairings/accept", "sess=alice", "pairing="+p.ID+"&person="+leoID); code != 204 {
 		t.Fatalf("the yes: %d %s", code, b)
