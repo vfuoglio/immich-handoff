@@ -112,7 +112,12 @@ func TestSmartAlbums(t *testing.T) {
 		for _, i := range res.Assets.Items {
 			found[i.ID] = true
 		}
-		return found[older1] && found[older2]
+		if found[older1] && found[older2] {
+			return true
+		}
+		// Immich sometimes drops a tag put on a photo while it is still reading the file (the browser test sees it too): put it again
+		call(t, "PUT", "/tags/"+tag.ID+"/assets", keyAuth(bob), map[string]any{"ids": []string{older1, older2}}, nil)
+		return false
 	})
 	// the older photos come with a look back
 	form("/rules/lookback", url.Values{"rule": {rule}})
