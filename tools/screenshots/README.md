@@ -19,6 +19,10 @@ go run . shots lost ../../docs/images
 
 The phone upload page has its own set: `FIRST=2040 go run . send ../../docs/images $DEMO/photos` signs in as Alice on a 390 px phone and sends three sample photos through the page, slowly (it needs the app running with a data folder, as `seed.sh` does it, and three photos that are not yet in Alice's library: `FIRST` is the number of the first, `IMG_2040` by default).
 
+The Stories guide has a scene too: `go run . gen $DEMO/photos 80`, then `go run . stories ../../docs/images $DEMO/photos` makes twelve bright sample photos, an album, a story of it (through the app's own requests) and takes the form, the ready card and two pictures of the story on a computer. `go run . shots storyform <outdir>` retakes the form alone (it needs a stack with no story yet).
+
+The sharing guides have one: `SHARE=1 ./seed.sh reset` (bridges on, a folder destination called `nas`), `./seed.sh setup`, then `go run . share ../../docs/images $DEMO/photos` takes the event pool form, the Circles form, the card that follows an album shared with Bob, a service with a destination and the invitation for another server. `go run . shots followcard <outdir>` retakes the follow card alone.
+
 The client room has a set too: `FIRST=2060 go run . room ../../docs/images $DEMO/photos` (after `go run . gen $DEMO/photos 40`) uploads six sample photos as Alice, makes an album and a room of it, lets a client choose, write a note and send the choice, answers it, and takes the four pictures. `FIRST` is the number of the first of six photos not yet in Alice's library.
 
 The pictures of an album shared with someone who has no Handoff (the form that lists what the key can do, and the row of an album shared both ways) come from `SHARED=1 ./seed.sh reset` (which also switches sharing on in the demo app) and then `FIRST=2100 go run . shared ../../docs/images $DEMO/photos`: it uploads four sample photos as Alice, makes the key "Cousin Marco" (Family's account on the same demo Immich) would give, shares an album with it and takes the two pictures. `FIRST` is the number of the first of four photos not yet in Alice's library.

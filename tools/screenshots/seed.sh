@@ -2,7 +2,7 @@
 # Builds the demo used for the documentation images, against the test Immich from `docker compose -f test/docker-compose.yml up -d`
 # (Immich on :2284, users alice, bob, family @test.local, password Passw0rd!x) and a locally built app on :8080.
 #
-#   tools/screenshots/seed.sh reset      throw away and rebuild the Immich stack, users and API keys
+#   tools/screenshots/seed.sh reset      throw away and rebuild the Immich stack, users and API keys (SHARE=1: bridges and a folder destination on, for `go run . share`)
 #   tools/screenshots/seed.sh setup      start the app, create people and services, upload sample photos
 #   tools/screenshots/seed.sh waiting    tag photos so some are waiting (run the app in dry-run mode first: DRY=1 ... setup)
 #   tools/screenshots/seed.sh handover   restart the app for real so the waiting photos are handed over
@@ -97,6 +97,14 @@ ENV
 export SHARED_ALBUMS_ENABLE=true
 export BRIDGE_ALLOW_PRIVATE=true
 export PUBLIC_APP_URL=$APP
+ENV
+  fi
+  if [ "${SHARE:-}" = 1 ]; then # for the pictures of the sharing guides: bridges on, and a folder destination called nas
+    mkdir -p "$DEMO/nas"
+    printf 'destinations:\n  nas:\n    kind: folder\n    root: %s/nas\n' "$DEMO" > "$DEMO/destinations.yaml"
+    cat >> "$DEMO/env.sh" <<ENV
+export BRIDGE_ENABLE=true
+export DESTINATIONS_FILE=$DEMO/destinations.yaml
 ENV
   fi
   echo "stack $STACK ready: Immich http://localhost:$IMMICH_PORT, app will run on $APP"
