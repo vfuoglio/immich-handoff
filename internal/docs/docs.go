@@ -39,7 +39,25 @@ type Page struct {
 	// Tips are the tooltips of the page's buttons and switches by key ("send-by-itself": "Sends without asking, ..."), asked for by the
 	// templates with the feature and the key, so the words live with the guide that explains the feature.
 	Tips map[string]string `yaml:"tips"`
-	Body string            `yaml:"-"`
+	// Tour is the stops of the first-run tour (only docs/start/the-page.md has one): where it points, what it says, and the guide it can open.
+	Tour []TourStop `yaml:"tour"`
+	Body string     `yaml:"-"`
+}
+
+// TourStop is one stop of a tour: a coach-mark pointing at one thing on the page.
+type TourStop struct {
+	Target  string `yaml:"target" json:"target"` // a key of TourTargets: what it points at
+	Page    string `yaml:"page" json:"page"`     // "user" (the Overview, Services, Settings) or "admin" (the administrator's page)
+	Title   string `yaml:"title" json:"title"`
+	Text    string `yaml:"text" json:"text"`
+	Feature string `yaml:"feature" json:"feature,omitempty"` // a guide that explains more, if there is one
+}
+
+// TourTargets are the things a tour (and a step of the Get started card) can point at. The page decides where each one is; the
+// documentation only names it, so that a stop can never point at something that has no name.
+var TourTargets = []string{
+	"needs", "scene", "services-tab", "offer", "invite", "send", "settings-tab", "notifications", "palette", "help", "tour",
+	"admin-share", "admin-connections", "admin-services", "admin-backups", "admin-pet",
 }
 
 // Parse reads a page: an optional "---" front matter, then Markdown.
@@ -100,12 +118,32 @@ func Validate(pages []Page) []string {
 		if p.Tip == "" || len([]rune(p.Tip)) > 140 || strings.Contains(p.Tip, "\n") {
 			bad = append(bad, p.Path+": the tip is missing, longer than 140 characters or on more than one line")
 		}
+		for i, st := range p.Tour {
+			if !contains(TourTargets, st.Target) {
+				bad = append(bad, fmt.Sprintf("%s: tour stop %d points at %q, which is not a target", p.Path, i+1, st.Target))
+			}
+			if st.Page != "user" && st.Page != "admin" {
+				bad = append(bad, fmt.Sprintf("%s: tour stop %d is for the page %q, which is not user or admin", p.Path, i+1, st.Page))
+			}
+			if st.Title == "" || st.Text == "" || len([]rune(st.Text)) > 240 || strings.Contains(st.Text, "\n") {
+				bad = append(bad, fmt.Sprintf("%s: tour stop %d needs a title and a text of one line, 240 characters at most", p.Path, i+1))
+			}
+		}
 		for k, v := range p.Tips {
 			if !kebab.MatchString(k) {
 				bad = append(bad, fmt.Sprintf("%s: tip key %q is not a lower-case key with hyphens", p.Path, k))
 			}
 			if v == "" || len([]rune(v)) > 140 || strings.Contains(v, "\n") {
 				bad = append(bad, fmt.Sprintf("%s: the tip %q is empty, longer than 140 characters or on more than one line", p.Path, k))
+			}
+		}
+	}
+	for _, p := range pages {
+		for i, st := range p.Tour {
+			if st.Feature != "" {
+				if _, ok := seen[st.Feature]; !ok {
+					bad = append(bad, fmt.Sprintf("%s: tour stop %d names the guide %q, which does not exist", p.Path, i+1, st.Feature))
+				}
 			}
 		}
 	}

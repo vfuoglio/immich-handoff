@@ -100,6 +100,11 @@ func main() {
 		index = append(index, indexEntry{p.Path, p.Title, p.Feature, p.Audience, p.Goal, p.Order, p.Tip})
 		tips[p.Feature] = tipEntry{p.Title, p.Tip, p.Path, p.Tips}
 	}
+	var tour []docs.TourStop
+	for _, p := range pages {
+		tour = append(tour, p.Tour...)
+	}
+	write(filepath.Join(out, "tour.json"), tour)
 	slim(root, filepath.Join(out, "img"), pictures)
 	sort.SliceStable(index, func(i, j int) bool {
 		a, b := index[i], index[j]

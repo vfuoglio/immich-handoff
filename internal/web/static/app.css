@@ -517,6 +517,20 @@ dialog.help-drawer[open] { display: flex; flex-direction: column; animation: dra
 .help-list { list-style: none; padding: 0; display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); }
 .help-list li { display: flex; flex-direction: column; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: .9rem; background: var(--glass); }
 .help-list a { font-weight: 600; }
+/* the first-run tour, and the Get started card's "Show me" */
+.tour-ring { position: fixed; z-index: 90; pointer-events: none; border-radius: .9rem; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px color-mix(in oklab, #000 46%, transparent); transition: left .3s var(--ease), top .3s var(--ease), width .3s var(--ease), height .3s var(--ease); }
+.tour-card { position: fixed; z-index: 95; width: min(20rem, calc(100vw - 16px)); padding: 1rem 1.1rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); background: var(--surface); box-shadow: 0 30px 60px -20px #000; opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s var(--ease); outline: none; }
+.tour-card.on { opacity: 1; transform: none; }
+.tour-card h3 { margin: 0 0 .35rem; font-size: 1.1rem; }
+.tour-count { margin: 0 0 .3rem; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tour-text { margin: 0 0 .7rem; line-height: 1.5; }
+.tour-guide { display: inline-block; margin-bottom: .7rem; font-size: .9rem; }
+.tour-actions { display: flex; gap: .5rem; justify-content: flex-end; align-items: center; margin: 0; }
+.tour-skip { margin-right: auto; background: none; border: 0; color: var(--muted); padding-inline: 0; }
+@media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card { transition: none; } .tour-card { transform: none; } }
+.card.guide .steps li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.step-show { margin-left: .2rem; padding: .15rem .7rem; font-size: .8rem; }
+.help-tour { margin: .2rem 0 .8rem; }
 .doc-tab::before { content: attr(data-label); display: block; font-weight: 600; margin-block: .5rem; }
 .doc-tabs.ready .doc-tab::before { display: none; }
 .doc-tabbar { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin-top: 1rem; }

@@ -268,6 +268,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/numbers", w.numbersFragment)
 	mux.HandleFunc("GET /fragments/scene", w.sceneFragment)
 	mux.HandleFunc("POST /guide/dismiss", w.dismissGuide)
+	mux.HandleFunc("POST /tour/seen", w.tourSeen)
 	mux.HandleFunc("POST /me/mail", w.myMail)
 	mux.HandleFunc("POST /me/library", w.myLibrary)
 	mux.HandleFunc("POST /me/memories", w.myMemories)
@@ -802,6 +803,7 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 	d.Gist = needsGist(ctx, len(d.Needs))
 	d.Scene = sceneOf(ctx, d, w.visibleServices(ctx, me))
 	d.ShowNumber = len(d.Services) > 0
+	d.Tour = w.tourView(ctx, me, "user", d.TagsOff)
 	if d.TagsOff {
 		return // the page is switched off until Tags are on, and so is the guide
 	}
@@ -815,10 +817,21 @@ func (w *Server) overview(ctx context.Context, me *member, d *DashboardData) {
 		}
 	}
 	steps := []GuideStep{
-		{t(ctx, "Turn on Tags in Immich"), true}, // the page is switched off while they are off, so reaching here means they are on
-		{t(ctx, "Join a service, or offer one of your own"), len(d.Services) > 0 || len(d.Owned) > 0},
-		{t(ctx, "Hand over your first photo: add a service's tag to a photo in Immich"), handed > 0},
+		{Text: t(ctx, "Turn on Tags in Immich"), Done: true}, // the page is switched off while they are off, so reaching here means they are on
+		{Text: t(ctx, "Join a service, or offer one of your own"), Done: len(d.Services) > 0 || len(d.Owned) > 0, Show: "offer", Feature: "household"},
 	}
+	if len(d.Owned) > 0 { // an owner has one more thing to do: someone has to send to it
+		invited := false
+		for _, o := range d.Owned {
+			invited = invited || len(o.Members) > 0
+		}
+		steps = append(steps, GuideStep{Text: t(ctx, "Invite someone to send to your service: share its link or QR code"), Done: invited, Show: "invite", Feature: "household"})
+	}
+	steps = append(steps, GuideStep{Text: t(ctx, "Hand over your first photo: add a service's tag to a photo in Immich"), Done: handed > 0, Show: "send", Feature: "household"})
+	if d.Mail.Available || d.Push.Available {
+		steps = append(steps, GuideStep{Text: t(ctx, "Get told when photos arrive: switch on a notification"), Done: d.Mail.On || len(d.Push.Devices) > 0, Show: "notifications", Feature: "notifications"})
+	}
+	steps = append(steps, GuideStep{Text: t(ctx, "Take the one-minute tour of the page"), Done: w.Hub.TourSeen(ctx, me.user.ID, "user"), Show: "tour", Feature: "the-page"})
 	g := &GuideView{Steps: steps}
 	for _, s := range steps {
 		if s.Done {

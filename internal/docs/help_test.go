@@ -133,3 +133,26 @@ func TestOneOff(t *testing.T) {
 		}
 	}
 }
+
+func TestTheTourHasStopsForBothPagesAndEachOneIsSound(t *testing.T) {
+	for _, page := range []string{"user", "admin"} {
+		stops := Tour(page)
+		if len(stops) < 5 {
+			t.Errorf("the %s tour has %d stops", page, len(stops))
+		}
+		for _, s := range stops {
+			if s.Feature != "" {
+				if _, _, _, ok := Tip(s.Feature); !ok {
+					t.Errorf("the stop %q names the guide %q, which is not in the bundle", s.Title, s.Feature)
+				}
+			}
+		}
+	}
+	bad := Validate([]Page{{Path: "a.md", Title: "T", Feature: "x", Audience: "user", Goal: "show", Order: 1, Tip: "t", Tour: []TourStop{
+		{Target: "nowhere", Page: "user", Title: "t", Text: "x"}, {Target: "needs", Page: "moon", Title: "t", Text: "x"}, {Target: "needs", Page: "user", Title: "t", Text: "x", Feature: "ghost"}}}})
+	for _, want := range []string{`"nowhere", which is not a target`, `"moon"`, `"ghost"`} {
+		if !strings.Contains(strings.Join(bad, "\n"), want) {
+			t.Errorf("a bad tour is not reported (%s): %v", want, bad)
+		}
+	}
+}

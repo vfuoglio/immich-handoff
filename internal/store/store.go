@@ -900,6 +900,13 @@ var migrations = []string{
 	   key_enc    BLOB NOT NULL,
 	   created_at TEXT NOT NULL
 	 );`,
+	// the first-run tour: whether a person has seen the tour of the page and, for an administrator, the tour of the administrator's page
+	`CREATE TABLE tour_seen (
+	   user_id  TEXT NOT NULL,
+	   kind     TEXT NOT NULL,
+	   seen_at  TEXT NOT NULL,
+	   PRIMARY KEY (user_id, kind)
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
@@ -1509,6 +1516,22 @@ func (s *Store) GuideDone(ctx context.Context, user uuid.UUID) (bool, error) {
 // SetGuideDone remembers that the person finished or hid the first-run guide.
 func (s *Store) SetGuideDone(ctx context.Context, user uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO guide (user_id, done_at) VALUES (?, ?)`, user.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// TourSeen reports whether the person has been through the tour of one page ("user" or "admin").
+func (s *Store) TourSeen(ctx context.Context, user uuid.UUID, kind string) (bool, error) {
+	var at string
+	err := s.db.QueryRowContext(ctx, `SELECT seen_at FROM tour_seen WHERE user_id = ? AND kind = ?`, user.String(), kind).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// SetTourSeen remembers that the person has been through, or skipped, the tour of a page.
+func (s *Store) SetTourSeen(ctx context.Context, user uuid.UUID, kind string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tour_seen (user_id, kind, seen_at) VALUES (?, ?, ?)`, user.String(), kind, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 

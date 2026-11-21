@@ -22,6 +22,8 @@ tip: "One line, 140 characters at most, shown as the tooltip."
 
 A page may also carry `tips`, the tooltips of its buttons by key (`tips: {send: "Send photos from this device"}`, each on one line). A template asks for one with `tipOf(ctx, "the-page", "send")` and shows it as `data-tip`; the tooltip is translated through the app's catalogue by its English text, and a test fails when a template asks for a key that no page has. A card's "?" is `@HelpLink("feature")`, which opens that feature's guide in a drawer and shows nothing for a feature without a guide.
 
+`docs/start/the-page.md` also carries the stops of the first-run tour (`tour:`: `page` user or admin, `target`, `title`, `text`, optional `feature`). A `target` is one of `docs.TourTargets`; `internal/web/tour.go` says where each one is on the page (a selector, and the view, part or category of Settings to show first), and a test fails when the two lists differ. A stop whose element is not on the page (Settings with nothing on, the backups card without backups) is left out when the tour runs.
+
 Pages under `docs/contributing/` need only a `title`. Translations go in `docs/<language>/` with the same paths and a `source_rev` (the revision of the English page they were made from); a page that is not translated shows in English.
 
 Write plain Markdown. GitHub's alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) are the only addition, and so is one fence for tabs:

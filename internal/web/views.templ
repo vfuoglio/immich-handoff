@@ -262,8 +262,10 @@ type NumbersView struct {
 
 // GuideStep is one step of the first-run guide.
 type GuideStep struct {
-	Text string
-	Done bool
+	Text    string
+	Done    bool
+	Show    string // what "Show me" points at (a key of tourTargets), empty for none
+	Feature string // the guide that explains it
 }
 
 // GuideView is the first-run guide, shown until it is finished or hidden.
@@ -393,6 +395,7 @@ type DashboardData struct {
 	Scene      []SceneStage // one stage per service that has senders
 	ShowNumber bool       // there is something to count: the person takes part in a service
 	Guide      *GuideView // nil: finished, hidden, or nowhere to remember it
+	Tour       TourView   // the first-run tour of this page
 	Mail       MailView
 	Push       PushView
 	Memories   MemoriesView
@@ -739,6 +742,7 @@ templ TagsNotice() {
 templ Dashboard(d DashboardData) {
 	@Layout("Immich Handoff", d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		@templ.JSONScript("tour", d.Tour)
 		if d.TagsOff {
 			@TagsNotice()
 		}
@@ -2249,6 +2253,7 @@ templ OfferForm(deleteOK, destsOn bool) {
 // AdminData is everything the administrator's page shows.
 type AdminData struct {
 	User     string
+	Tour     TourView
 	Services []AdminServiceView
 	Leftover []AdminMemberView
 	Activity []AdminActivityView
@@ -2307,6 +2312,7 @@ type AdminActivityView struct{ When, Service, Text, Tone string }
 templ AdminPage(d AdminData) {
 	@Layout(t(ctx, "Immich Handoff: admin"), d.User) {
 		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		@templ.JSONScript("tour", d.Tour)
 		<h1>
 			@templ.Raw(h(ctx, "Everything on this <em>server</em>"))
 		</h1>
@@ -2317,7 +2323,7 @@ templ AdminPage(d AdminData) {
 			<article class="card kpi"><span class="kpi-label">{ t(ctx, "Need attention") }</span><span class="num">{ fmt.Sprint(d.Attention) }</span><span class="sub">{ t(ctx, "paused, limited or disconnected") }</span></article>
 		</div>
 		<p class="meta">{ t(ctx, "Removing something here makes the app forget it and stop handing photos over. It cannot delete anyone's API key: Immich lets only the owner of a key delete it, so the key stays in that person's account until they delete it, and they are told so on their page. Photos are never touched.") }</p>
-		<h2>{ t(ctx, "Share this page") } @HelpLink("admin-page")</h2>
+		<h2 id="adm-share">{ t(ctx, "Share this page") } @HelpLink("admin-page")</h2>
 		<section class="card">
 			<p class="meta">{ t(ctx, "This is the address people use to join. Send it, or put the button in Immich's own header (see the guide on finding this page).") }</p>
 			<div class="field">
@@ -2331,7 +2337,7 @@ templ AdminPage(d AdminData) {
 				<div class="qr" id="qr-share-page" hidden></div>
 			</div>
 		</section>
-		<h2>{ t(ctx, "Check the connections") } @HelpLink("admin-page")</h2>
+		<h2 id="adm-connections">{ t(ctx, "Check the connections") } @HelpLink("admin-page")</h2>
 		<section class="card">
 			<p class="row">
 				<button class="primary" hx-post="admin/check" hx-target="#checkresult" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="#checkresult">{ t(ctx, "Check now") }</button>
@@ -2353,7 +2359,7 @@ templ AdminPage(d AdminData) {
 				</form>
 			</section>
 		}
-		<h2>{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span> @HelpLink("admin-page")</h2>
+		<h2 id="adm-services">{ t(ctx, "Services") } <span class="count-badge">{ fmt.Sprint(len(d.Services)) }</span> @HelpLink("admin-page")</h2>
 		if len(d.Services) == 0 {
 			<div class="card empty">{ t(ctx, "There are no services yet.") }</div>
 		}
@@ -2464,7 +2470,7 @@ templ PetsCard(p PetsView) {
 
 // AdminPetHelper says whether the optional pet helper is running, and where to read how to switch it on.
 templ AdminPetHelper(state string) {
-	<h2>{ t(ctx, "Pet helper") } @HelpLink("pets")</h2>
+	<h2 id="adm-pet">{ t(ctx, "Pet helper") } @HelpLink("pets")</h2>
 	<section class="card" id="pethelper">
 		<p>
 			switch state {
@@ -2483,7 +2489,7 @@ templ AdminPetHelper(state string) {
 }
 
 templ AdminBackups(b AdminBackup) {
-	<h2>{ t(ctx, "Backups") } @HelpLink("operations")</h2>
+	<h2 id="adm-backups">{ t(ctx, "Backups") } @HelpLink("operations")</h2>
 	<section class="card" id="backups">
 		<p>
 			if b.Every != "" {
@@ -2706,7 +2712,16 @@ templ Guide(g GuideView) {
 			<h3>{ g.NextStep }</h3>
 			<ol class="steps">
 				for _, s := range g.Steps {
-					<li class={ doneIf(s.Done) }><span class="dot" aria-hidden="true">{ tickIf(s.Done) }</span> { s.Text }</li>
+					<li class={ doneIf(s.Done) }>
+						<span class="dot" aria-hidden="true">{ tickIf(s.Done) }</span>
+						<span class="step-text">{ s.Text }</span>
+						if s.Show != "" && !s.Done {
+							<button type="button" class="step-show" data-show={ s.Show }>{ t(ctx, "Show me") }</button>
+						}
+						if s.Feature != "" {
+							@HelpLink(s.Feature)
+						}
+					</li>
 				}
 			</ol>
 			<p class="row"><button hx-post="guide/dismiss" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Hide this guide") }</button></p>
@@ -6335,6 +6350,11 @@ templ HelpIndex(d HelpIndexView) {
 	@Layout(t(ctx, "Help"), d.User) {
 		<h1>{ t(ctx, "Help") }</h1>
 		<p class="lead">{ t(ctx, "How to do things with Immich Handoff.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		<p class="help-tour"><a href="./#tour">{ t(ctx, "Take the tour") }</a>
+			if isAdmin(ctx) {
+				· <a href="admin#tour">{ t(ctx, "Take the administrator's tour") }</a>
+			}
+		</p>
 		<form class="help-search" role="search" action="help" method="get" autocomplete="off">
 			<input id="help-q" type="search" name="q" placeholder={ t(ctx, "Search the guides") } aria-label={ t(ctx, "Search the guides") } autocomplete="off"/>
 			<ul id="help-hits" role="listbox" aria-label={ t(ctx, "Guides found") }></ul>

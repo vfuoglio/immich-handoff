@@ -128,3 +128,18 @@ func Paths() []string {
 	sort.Strings(out)
 	return out
 }
+
+// Tour returns the stops of the tour of a page ("user" or "admin"), in order.
+func Tour(page string) []TourStop {
+	var all []TourStop
+	if b, err := bundle.ReadFile("bundle/tour.json"); err == nil {
+		json.Unmarshal(b, &all)
+	}
+	var out []TourStop
+	for _, s := range all {
+		if s.Page == page {
+			out = append(out, s)
+		}
+	}
+	return out
+}

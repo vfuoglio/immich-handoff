@@ -76,6 +76,7 @@ function collect(): Command[] {
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
   if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });
   commands.push({ label: t("Open Help"), hint: t("help"), run: () => { location.href = "help"; } });
+  commands.push({ label: t("Take the tour"), hint: t("help"), run: () => document.dispatchEvent(new Event("tour:start")) });
   const admin = document.querySelector<HTMLAnchorElement>("a.adminlink");
   if (admin) commands.push({ label: t("Open the administrator's page"), hint: t("admin"), run: () => { location.href = admin.href; } });
   const theme = document.getElementById("theme");

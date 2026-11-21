@@ -55,6 +55,7 @@ func (w *Server) adminPage(rw http.ResponseWriter, r *http.Request) {
 	}
 	d := AdminData{User: me.user.Name, SelfOn: w.Hub.SelfService(), CircleMethod: w.Hub.CircleMethod(r.Context()), Backup: w.backupSummary(r.Context()), Notify: w.notifyViews(r.Context())}
 	d.PetHelper = w.petHelperState(r.Context())
+	d.Tour = w.tourView(r.Context(), me, "admin", false)
 	services, leftover, err := w.Hub.Overview(r.Context())
 	if err != nil {
 		w.Log.Error("admin overview", "err", err)

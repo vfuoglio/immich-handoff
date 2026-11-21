@@ -228,6 +228,24 @@ func (h *Hub) DismissGuide(ctx context.Context, user uuid.UUID) error {
 	return h.Store.SetGuideDone(ctx, user)
 }
 
+// TourSeen says whether the person has seen the tour of a page. Without a data folder there is nowhere to remember it, so it counts as seen
+// (the tour is not offered by itself) and can still be started by hand.
+func (h *Hub) TourSeen(ctx context.Context, user uuid.UUID, kind string) bool {
+	if !h.SelfService() {
+		return true
+	}
+	seen, err := h.Store.TourSeen(ctx, user, kind)
+	return err != nil || seen
+}
+
+// SetTourSeen remembers that the person has been through, or skipped, the tour of a page.
+func (h *Hub) SetTourSeen(ctx context.Context, user uuid.UUID, kind string) error {
+	if !h.SelfService() {
+		return nil
+	}
+	return h.Store.SetTourSeen(ctx, user, kind)
+}
+
 // ErrBadRules is quiet hours or accept rules that make no sense (the form keeps to sensible values, so this is rare).
 var ErrBadRules = errors.New("those rules do not make sense: the hours are times like 01:00, the rating is from 0 to 5 and the sizes are whole numbers of megabytes")
 

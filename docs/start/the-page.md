@@ -14,6 +14,21 @@ tips:
   theme: "Switch between the light and the dark theme"
   sound: "Arrival chime and vibration when a photo lands"
   version: "The version of Immich Handoff that is running"
+tour:
+  - {page: user, target: needs, title: "Needs you", text: "Anything that waits for your answer comes first: a request to approve, a suggestion to look at, something that went wrong. When nothing needs you, you can leave.", feature: the-page}
+  - {page: user, target: scene, title: "Live", text: "Photos travelling between accounts show here as they move, both ways, and the counter climbs as they arrive."}
+  - {page: user, target: services-tab, title: "Services", text: "A service is a named place photos are handed to. Join one, or offer your own, here.", feature: household}
+  - {page: user, target: offer, title: "Offer a service", text: "Give it a name and a tag, decide who may send, and share the invitation link or the QR code.", feature: household}
+  - {page: user, target: send, title: "Send from this device", text: "Choose photos on a phone or a computer and send them to a service without tagging them in Immich.", feature: phone}
+  - {page: user, target: settings-tab, title: "Settings", text: "Rules, notifications, stories, the TV, pets and more, by category. Each card has a ? that opens its guide.", feature: using}
+  - {page: user, target: palette, title: "Ctrl K", text: "Jump anywhere or do something from the keyboard: type a service, a view or a command."}
+  - {page: user, target: help, title: "Help", text: "The ? opens the guides, with a search box. You can take this tour again from there, or from the card on the Overview.", feature: using}
+  - {page: admin, target: admin-share, title: "Share this page", text: "The address people use to join, with a QR code. Copy it into a message.", feature: admin-page}
+  - {page: admin, target: admin-connections, title: "Check the connections", text: "Tests every service's keys and says what is wrong and how to fix it.", feature: troubleshooting}
+  - {page: admin, target: admin-services, title: "Services and members", text: "Every service as a row: who offers it, who sends, pauses and limits. Remove a member or a service that is stuck.", feature: admin-page}
+  - {page: admin, target: admin-backups, title: "Backups", text: "Download a backup of what the app keeps, and keep a copy of HANDOFF_STORE_KEY with it.", feature: operations}
+  - {page: admin, target: admin-pet, title: "Pet helper", text: "Shows whether the optional pet helper is on; the guide says how to switch it on.", feature: pets}
+  - {page: admin, target: help, title: "Make it easy to find", text: "A link and a hand-over button inside Immich itself: the guide shows how to add them.", feature: find-handoff}
 ---
 
 # Finding your way around the page
