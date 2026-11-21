@@ -31,7 +31,17 @@ document.addEventListener("htmx:beforeSwap", (e) => {
   if (e.detail.xhr.status >= 400 && e.detail.xhr.status < 600) {
     e.detail.shouldSwap = true;
     e.detail.isError = false;
+    // the message is red, and brought into view: a button far down a page must not seem to do nothing
+    const target = e.detail.target;
+    if (target instanceof HTMLElement) {
+      target.dataset["error"] = "1";
+      requestAnimationFrame(() => target.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    }
   }
+});
+document.addEventListener("htmx:beforeRequest", (e) => {
+  const target = e.detail.target;
+  if (target instanceof HTMLElement) delete target.dataset["error"];
 });
 
 // Questions (hx-confirm) are asked in the page's own dialog, in its own style and words, not the browser's. A button

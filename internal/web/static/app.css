@@ -277,6 +277,7 @@ input[type="checkbox"]:focus-visible { outline: 3px solid color-mix(in oklab, va
 .notice.bad { border-left-color: var(--bad); }
 .gated { opacity: .38; filter: grayscale(1); pointer-events: none; user-select: none; transition: opacity .2s, filter .2s; }
 .toast { color: var(--ok); font-weight: 600; font-size: .9rem; }
+.toast[data-error] { color: var(--bad); }
 .empty { text-align: center; padding: 2rem 1rem; color: var(--muted); }
 .live { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 22%, transparent); }
 .live.off { background: var(--muted); box-shadow: none; }

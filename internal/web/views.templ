@@ -5973,7 +5973,6 @@ templ PairForm(people []PersonOption, waitMin int) {
 // PairingPage is what the other person sees before they say yes, and what saying yes means.
 templ PairingPage(v PairingPageView, user string) {
 	@Layout("Immich Handoff", user) {
-		<p id="flash" class="toast" role="status" aria-live="polite"></p>
 		<section class="invite-hero">
 			<h1>{ t(ctx, "{name} would like to share photos with you", "name", v.Starter) }</h1>
 			<p class="lead">
@@ -5997,11 +5996,13 @@ templ PairingPage(v PairingPageView, user string) {
 						}
 					</fieldset>
 					@WaitField(v.WaitMin)
+					<p id="flash" class="toast" role="status" aria-live="polite"></p>
 					<p class="row form-actions">
 						<button class="primary" type="submit">{ t(ctx, "Yes, share with {name}", "name", v.Starter) }</button>
 						<button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button>
 					</p>
 				} else {
+					<p id="flash" class="toast" role="status" aria-live="polite"></p>
 					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to send back. Name people in Immich and come back to this page.") }</p>
 					<p class="row"><button type="button" hx-post="pairings/stop" hx-vals={ vals("pairing", v.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "No thanks") }</button></p>
 				}
