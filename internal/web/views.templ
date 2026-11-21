@@ -321,6 +321,21 @@ type StacksView struct {
 	Rules     []StackRuleView
 }
 
+// AlbumRuleView is a smart album rule, for the person's page.
+type AlbumRuleView struct {
+	ID, Album, Words, Mode string
+	Always                 int
+	Paused, CanAuto        bool
+	RemoveStale            bool
+	Last, Problem          string
+}
+
+// AlbumsView is the person's "Smart albums" card.
+type AlbumsView struct {
+	Available bool
+	Rules     []AlbumRuleView
+}
+
 type DashboardData struct {
 	User     string
 	Services []ServiceView
@@ -348,6 +363,7 @@ type DashboardData struct {
 	Memories   MemoriesView
 	Folders    FoldersView
 	Stacks     StacksView
+	Albums     AlbumsView
 	Pairings   PairingsView
 	Library    LibraryView
 	DropBoxes  []DropBoxView
@@ -782,7 +798,7 @@ templ Dashboard(d DashboardData) {
 						}
 					</div>
 				}
-				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available {
+				if d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available {
 					<div class="group" role="group" aria-labelledby="g-library">
 						<p class="group-title" id="g-library">{ t(ctx, "My library") }</p>
 						if d.Library.Available {
@@ -796,6 +812,9 @@ templ Dashboard(d DashboardData) {
 						}
 						if d.Stacks.Available {
 							@StacksCard(d.Stacks)
+						}
+						if d.Albums.Available {
+							@AlbumsCard(d.Albums)
 						}
 					</div>
 				}
@@ -991,6 +1010,86 @@ templ FoldersCard(f FoldersView) {
 			</form>
 		</details>
 	</div>
+}
+
+// AlbumsCard keeps albums of the person's up to date with a rule: the rules they have, and the form that makes one.
+templ AlbumsCard(a AlbumsView) {
+	<h2>{ t(ctx, "Smart albums") }</h2>
+	<div class="card albumscard">
+		<p>{ t(ctx, "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.") }</p>
+		for _, r := range a.Rules {
+			<div class="card rule">
+				<p><b>{ r.Album }</b>
+					if r.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else if r.Mode == "auto" {
+						<span class="chip ok">{ t(ctx, "Fills itself") }</span>
+					} else {
+						<span class="chip">{ t(ctx, "Asks you first") }</span>
+					}
+					if r.RemoveStale {
+						<span class="chip">{ t(ctx, "Takes out what no longer matches") }</span>
+					}
+				</p>
+				<p class="meta">{ r.Words }</p>
+				if r.Last != "" {
+					<p class="meta">{ t(ctx, "Last looked at {when}.", "when", r.Last) }</p>
+				}
+				if r.Problem != "" {
+					<p class="meta bad-note">{ t(ctx, "The last look found a problem: {reason}", "reason", r.Problem) }</p>
+				}
+				if r.Mode != "auto" && r.CanAuto {
+					<p class="meta">{ t(ctx, "You have answered Always {n} times. You can let it fill the album by itself from now on.", "n", r.Always) }</p>
+				}
+				<p class="row">
+					<button hx-post="rules/lookback" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Look for older photos") }</button>
+					if r.Mode == "auto" {
+						<button hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "0") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Ask me first again") }</button>
+					} else if r.CanAuto {
+						<button class="primary" hx-post="rules/auto" hx-vals={ vals2("rule", r.ID, "on", "1") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "From now on the photos that match are put in this album without asking you. Only photos that arrive from now on are handled this way.") }>{ t(ctx, "Let it fill the album by itself") }</button>
+					}
+					<button hx-post="rules/pause" hx-vals={ vals2("rule", r.ID, "paused", pausedValue(r.Paused)) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">
+						if r.Paused {
+							{ t(ctx, "Resume this rule") }
+						} else {
+							{ t(ctx, "Pause this rule") }
+						}
+					</button>
+					<button hx-post="rules/delete" hx-vals={ vals("rule", r.ID) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop keeping this album up to date? The album and its photos stay as they are.") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Make a smart album") }</summary>
+			<div hx-get="fragments/album-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// AlbumForm is the form that makes a smart album: the album, then the choices of any rule.
+templ AlbumForm(v RuleChoicesView) {
+	<form class="card offer-form" hx-post="rules/album" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<div class="field">
+			<label for="album-target">{ t(ctx, "The album") }</label>
+			<select id="album-target" name="target">
+				<option value="">{ t(ctx, "A new album, named below") }</option>
+				for _, a := range v.Albums {
+					<option value={ a.ID }>{ a.Label }</option>
+				}
+			</select>
+		</div>
+		<div class="field">
+			<label for="album-new">{ t(ctx, "Name of the new album") }</label>
+			<input id="album-new" name="newname" maxlength="100" autocomplete="off"/>
+		</div>
+		@RuleFields(v)
+		@WaitField(v.WaitMin)
+		<div class="field">
+			<label><input type="checkbox" name="stale" value="1"/> { t(ctx, "Take out photos that no longer match") }</label>
+			<small class="meta">{ t(ctx, "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.") }</small>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the smart album") }</button></p>
+	</form>
 }
 
 // StacksCard stacks the person's photos that belong together: the rules they have, and the form that makes one.
@@ -4649,10 +4748,8 @@ templ RulesBox(s ServiceView) {
 	</div>
 }
 
-// RuleForm is the form that makes a rule: only choices Immich itself offers, plus dates and a phrase.
-templ RuleForm(v RuleChoicesView) {
-	<form class="card offer-form" hx-post="rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
-		<input type="hidden" name="service" value={ v.Service }/>
+// RuleFields are the choices of a rule, shared by the form of a service and the form of a smart album.
+templ RuleFields(v RuleChoicesView) {
 		<p class="meta">{ t(ctx, "Choose what to look for. Everything you choose must hold for a photo to match.") }</p>
 		if len(v.People) > 0 {
 			<fieldset class="targets">
@@ -4706,11 +4803,40 @@ templ RuleForm(v RuleChoicesView) {
 				}
 			</fieldset>
 		}
+		if len(v.Makes) > 0 {
+			<div class="field">
+				<label>{ t(ctx, "Taken with") }</label>
+				<div class="row">
+					<select name="make" hx-get="fragments/rule-models" hx-target="next select" hx-swap="innerHTML" hx-trigger="change">
+						<option value="">{ t(ctx, "Any camera") }</option>
+						for _, c := range v.Makes {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+					<select name="model"><option value="">{ t(ctx, "Any model") }</option></select>
+				</div>
+			</div>
+		}
+		if len(v.Tags) > 0 {
+			<fieldset class="targets">
+				<legend>{ t(ctx, "With the tags") }</legend>
+				for _, tg := range v.Tags {
+					<label class="target"><input type="checkbox" name="tag" value={ tg.ID }/><span><b>{ tg.Name }</b></span></label>
+				}
+			</fieldset>
+		}
 		<div class="field">
 			<label for="rule-phrase">{ t(ctx, "That look like (optional)") }</label>
 			<input id="rule-phrase" name="phrase" maxlength="100" placeholder={ t(ctx, "a beach at sunset") } autocomplete="off"/>
 			<small class="meta">{ t(ctx, "Needs smart search on your Immich server. A rule with a phrase always asks you first, because a look-alike is never certain.") }</small>
 		</div>
+}
+
+// RuleForm is the form that makes a rule: only choices Immich itself offers, plus dates and a phrase.
+templ RuleForm(v RuleChoicesView) {
+	<form class="card offer-form" hx-post="rules" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="service" value={ v.Service }/>
+		@RuleFields(v)
 		@WaitField(v.WaitMin)
 		if len(v.Others) > 0 {
 			<fieldset class="targets">
@@ -4723,6 +4849,14 @@ templ RuleForm(v RuleChoicesView) {
 		}
 		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Make the rule") }</button></p>
 	</form>
+}
+
+// RuleModels is the model menu's options once a camera make is chosen.
+templ RuleModels(models []string) {
+	<option value="">{ t(ctx, "Any model") }</option>
+	for _, m := range models {
+		<option value={ m }>{ m }</option>
+	}
 }
 
 // RuleCities is the city menu's options once a country is chosen.
@@ -4741,6 +4875,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 		if d.Stack {
 			<h1>{ t(ctx, "Photos to stack") }</h1>
 			<p class="lead">{ t(ctx, "Each box is a group that would become one stack, the cover first.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		} else if d.Smart {
+			<h1>{ t(ctx, "For the album {album}", "album", d.Album) }</h1>
+			<p class="lead">{ t(ctx, "Found by your rule: {rule}.", "rule", d.Sentence) } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		} else if d.Folder {
 			<h1>{ t(ctx, "Albums from {folder}", "folder", d.Album) }</h1>
 			<p class="lead">{ t(ctx, "Each photo shows the album it would go in.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
@@ -4783,6 +4920,9 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				if d.Stack {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Stack the ticked groups") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Stack the ticked groups, and always") }</button>
+				} else if d.Smart {
+					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Put the ticked photos in the album") }</button>
+					<button type="submit" name="do" value="always">{ t(ctx, "Put them in, and always") }</button>
 				} else if d.Folder {
 					<button class="primary" type="submit" name="do" value="send">{ t(ctx, "Make the albums with the ticked photos") }</button>
 					<button type="submit" name="do" value="always">{ t(ctx, "Make the albums, and always") }</button>

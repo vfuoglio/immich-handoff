@@ -152,6 +152,7 @@ type SuggestionView struct {
 	Stack                     bool     // the rule stacks photos: Service is empty; Count is the number of groups
 	Signals                   string   // for such a rule: how many groups of each kind, in words
 	Folder                    bool     // the rule makes albums from folders: Service is empty
+	Smart                     bool     // the rule keeps an album of the person's up to date: Service is empty, Album is its name
 	Albums                    []string // the albums the waiting photos would go in, for such a rule
 	Library                   bool     // the rule follows an album shared with the person: Service is empty
 	Import                    bool     // the rule follows a destination: Owner is its name, Album the folder
@@ -189,6 +190,9 @@ func (w *Server) suggestionViews(ctx context.Context, me *member) []SuggestionVi
 			}
 			out = append(out, v)
 			continue
+		}
+		if s.Rule.Kind == store.RuleKindAlbum {
+			v.Smart, v.Album = true, s.Rule.DestAlbum
 		}
 		if s.Rule.Kind == "folder" {
 			v.Folder, v.Sentence, v.Album = true, s.Rule.Cond.Folder, s.Rule.Cond.Folder
@@ -258,7 +262,10 @@ type RuleChoicesView struct {
 	City    []string
 	Picked  string   // the chosen country, when the cities are listed
 	Others  []string // the person's other services, to make the same rule for
-	WaitMin int      // the app's usual wait before a rule offers a photo, in minutes, for the form to say
+	Makes   []string // camera makes the library holds photos from
+	Tags    []PersonOption
+
+	WaitMin int // the app's usual wait before a rule offers a photo, in minutes, for the form to say
 }
 
 // PersonOption is a named person in the form.
@@ -279,13 +286,7 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
 	}
-	v := RuleChoicesView{Service: r.URL.Query().Get("service"), Country: c.Countries, WaitMin: w.waitMinutes()}
-	for _, p := range c.People {
-		v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
-	}
-	for _, a := range c.Albums {
-		v.Albums = append(v.Albums, AlbumOption{ID: a.ID.String(), Label: albumLabel(r.Context(), a.Name, a.Count)})
-	}
+	v := w.choicesView(r.Context(), c, r.URL.Query().Get("service"))
 	if joined, err := w.Hub.Joined(r.Context(), me.user.ID); err == nil {
 		for name, ok := range joined {
 			if ok && name != v.Service {
@@ -296,6 +297,104 @@ func (w *Server) ruleForm(rw http.ResponseWriter, r *http.Request) {
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	RuleForm(v).Render(r.Context(), rw)
+}
+
+// choicesView turns what the person can choose from into what a form offers.
+func (w *Server) choicesView(ctx context.Context, c hub.RuleChoices, service string) RuleChoicesView {
+	v := RuleChoicesView{Service: service, Country: c.Countries, Makes: c.Makes, WaitMin: w.waitMinutes()}
+	for _, tg := range c.Tags {
+		v.Tags = append(v.Tags, PersonOption{ID: tg.ID.String(), Name: tg.Value})
+	}
+	for _, p := range c.People {
+		v.People = append(v.People, PersonOption{ID: p.ID.String(), Name: p.Name})
+	}
+	for _, a := range c.Albums {
+		v.Albums = append(v.Albums, AlbumOption{ID: a.ID.String(), Label: albumLabel(ctx, a.Name, a.Count)})
+	}
+	return v
+}
+
+// ruleModels lists the models of a camera make, for the form's second camera menu.
+func (w *Server) ruleModels(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	var models []string
+	if make := r.URL.Query().Get("make"); make != "" {
+		models, _ = me.sess.Cameras(r.Context(), make)
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	RuleModels(models).Render(r.Context(), rw)
+}
+
+// albumForm is the form that makes a smart album.
+func (w *Server) albumForm(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	c, err := w.Hub.RuleChoicesFor(r.Context(), me.sess, "")
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusBadGateway)
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	AlbumForm(w.choicesView(r.Context(), c, "")).Render(r.Context(), rw)
+}
+
+// makeSmartAlbum makes a smart album.
+func (w *Server) makeSmartAlbum(rw http.ResponseWriter, r *http.Request) {
+	w.membership(rw, r, "smart album made", func(ctx context.Context, me *member, _ string) error {
+		r.ParseForm()
+		n, err := settleOf(r)
+		if err != nil {
+			return err
+		}
+		p := hub.AlbumParams{RuleParams: hub.RuleParams{People: ids(r, "person"), NotPeople: ids(r, "notperson"), After: r.PostFormValue("after"), Before: r.PostFormValue("before"),
+			Country: r.PostFormValue("country"), City: r.PostFormValue("city"), NotAlbums: ids(r, "notalbum"), Phrase: r.PostFormValue("phrase"),
+			Make: r.PostFormValue("make"), Model: r.PostFormValue("model"), Tags: ids(r, "tag"), SettleMinutes: n}}
+		if id, err := uuid.Parse(r.PostFormValue("album")); err == nil {
+			p.Album = id
+		}
+		if id, err := uuid.Parse(r.PostFormValue("target")); err == nil {
+			p.Existing = id
+		}
+		p.New = r.PostFormValue("newname")
+		p.RemoveStale = r.PostFormValue("stale") == "1"
+		_, err = w.Hub.FollowAlbumRule(ctx, me.sess, me.user, p)
+		return err
+	})
+}
+
+// albumViews are the person's smart albums, for their page.
+func (w *Server) albumViews(ctx context.Context, me *member) AlbumsView {
+	if w.Hub == nil || !w.Hub.SelfService() {
+		return AlbumsView{}
+	}
+	v := AlbumsView{Available: true}
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return v
+	}
+	l := loc(ctx)
+	for _, r := range rules {
+		if r.Kind != store.RuleKindAlbum {
+			continue
+		}
+		av := AlbumRuleView{ID: r.ID, Album: r.DestAlbum, Words: hub.RuleSentence(r.Cond), Mode: r.Mode, Always: r.Always, Paused: r.Paused, CanAuto: hub.CanAuto(r), RemoveStale: r.Cond.RemoveStale, Problem: r.Problem}
+		if !r.LastLook.IsZero() {
+			av.Last = l.Stamp(r.LastLook.Local())
+		}
+		v.Rules = append(v.Rules, av)
+	}
+	return v
 }
 
 // ruleCities lists the cities of a country, for the form's second menu.
@@ -389,6 +488,7 @@ type SuggestionReview struct {
 	Import                          bool   // the rule follows a destination (Owner is its name)
 	Album, Owner                    string // for such a rule
 	Folder                          bool   // the rule makes albums from folders (Album is the folder)
+	Smart                           bool   // the rule keeps an album up to date (Album is its name)
 	Stack                           bool   // the rule stacks photos: the page shows Groups
 	Groups                          []StackReviewGroup
 }
@@ -422,6 +522,9 @@ func (w *Server) ruleReview(rw http.ResponseWriter, r *http.Request) {
 	}
 	if sg.Rule.Kind == store.RuleKindImport {
 		d.Import, d.Owner = true, sg.Rule.Cond.SourceName
+	}
+	if sg.Rule.Kind == store.RuleKindAlbum {
+		d.Smart, d.Album = true, sg.Rule.DestAlbum
 	}
 	if sg.Rule.Kind == "folder" {
 		d.Folder, d.Album = true, sg.Rule.Cond.Folder

@@ -10,7 +10,9 @@
  "A frame is a link that shows one of your albums full screen, on a photo frame, an old tablet or a TV, with no account on it. New photos in the album appear within a couple of minutes, and photos you take out disappear. The link is as private as its length: anyone who has it can see the album's photos, so end it when you no longer want that.": "Un cadre est un lien qui montre un de vos albums en plein écran, sur un cadre photo, une vieille tablette ou une télé, sans compte dessus. Les nouvelles photos de l'album apparaissent en quelques minutes, et celles que vous retirez disparaissent. Le lien est aussi privé que sa longueur : quiconque l'a voit les photos de l'album, mettez-y donc fin quand vous ne le voulez plus.",
  "A guest": "Un invité",
  "A large video on mobile data": "Une grosse vidéo en données mobiles",
+ "A new album, named below": "Un nouvel album, nommé ci-dessous",
  "A sender": "Un expéditeur",
+ "A smart album fills itself: say what belongs in it (people, dates, a place, a camera, a tag or a phrase) and the app offers the photos that match, or, once you let it, puts them in. It only adds, unless you ask it to take out what no longer matches, and then only photos it put there itself.": "Un album intelligent se remplit tout seul : dites ce qui doit y figurer (personnes, dates, un lieu, un appareil, une étiquette ou une phrase) et l'app vous propose les photos qui correspondent ou, quand vous l'y autorisez, les y met d'elle-même. Elle ne fait qu'ajouter, sauf si vous lui demandez de retirer ce qui ne correspond plus, et alors seulement les photos qu'elle y a mises.",
  "A test email is on its way to {email}.": "Un e-mail de test est en route vers {email}.",
  "A test was just sent. Try again in a few seconds.": "Un test vient d'être envoyé. Réessayez dans quelques secondes.",
  "Accept photos rated": "Accepter les photos notées",
@@ -31,6 +33,8 @@
  "An administrator ({admin}) removed the service {service} on {date}. Nothing is handed over any more and your photos were not touched.": "Un administrateur ({admin}) a supprimé le service {service} le {date}. Plus rien n’est transmis et vos photos n’ont pas été touchées.",
  "An administrator ({admin}) removed you from this service on {date}. The API key named \"{key}\" is still valid in your Immich account until you delete it; Clean up deletes it, and the workflow, for you.": "Un administrateur ({admin}) vous a retiré de ce service le {date}. La clé d’API nommée « {key} » reste valide dans votre compte Immich tant que vous ne la supprimez pas ; « Nettoyer » la supprime, ainsi que le workflow, à votre place.",
  "An album of yours with that name; it is made if you do not have one. The key the app uses then also gets permission to find, create and add to albums.": "Un de vos albums portant ce nom ; il est créé si vous n’en avez pas. La clé utilisée par l’application reçoit alors aussi l’autorisation de trouver, créer et compléter des albums.",
+ "Any camera": "N'importe quel appareil",
+ "Any model": "N'importe quel modèle",
  "Any orientation": "Toute orientation",
  "Any rating": "Toute note",
  "Anyone may send": "Tout le monde peut envoyer",
@@ -153,14 +157,18 @@
  "Files are sent as they are: nothing is made smaller, and the place where a photo was taken goes with it. Files up to {mb} MB can be sent.": "Les fichiers sont envoyés tels quels : rien n'est réduit, et le lieu de la prise de vue les accompagne. Les fichiers jusqu'à {mb} Mo peuvent être envoyés.",
  "Files over {mb} MB are handed over only between {from} and {to}.": "Les fichiers de plus de {mb} Mo ne sont transmis qu'entre {from} et {to}.",
  "Files wait until the device is off mobile data. This goes by what the browser says: some browsers do not tell, and then everything is sent.": "Les fichiers attendent que l'appareil quitte les données mobiles. Cela suit ce que dit le navigateur : certains ne le disent pas, et tout est alors envoyé.",
+ "Fills itself": "Se remplit seul",
  "Five things need you.": "Cinq choses ont besoin de vous.",
  "Flowing": "En cours",
  "For a trip or a party. A photo anyone tags goes to everyone else in the pool, tagged with who took it, and everyone's originals stay where they are. People who join are told so before they do.": "Pour un voyage ou une fête. Une photo que quelqu'un marque va à tous les autres du pool, marquée de celui qui l'a prise, et les originaux de chacun restent où ils sont. Ceux qui rejoignent en sont informés avant.",
  "For example: brighten this one, or crop here.": "Par exemple : éclaircir celle-ci ou recadrer ici.",
+ "For the album {album}": "Pour l'album {album}",
  "Forget my choice": "Oublier mon choix",
+ "Found by your rule: {rule}. Photos are only added, nothing is removed.": "Trouvées par votre règle : {rule}. Les photos sont seulement ajoutées, rien n'est retiré.",
  "Four things need you.": "Quatre choses ont besoin de vous.",
  "Frames": "Cadres",
  "From configuration": "Depuis la configuration",
+ "From now on the photos that match are put in this album without asking you. Only photos that arrive from now on are handled this way.": "Désormais, les photos qui correspondent sont mises dans cet album sans vous demander. Seules les photos qui arrivent à partir de maintenant sont traitées ainsi.",
  "From this device's gallery or files.": "Depuis la galerie ou les fichiers de cet appareil.",
  "Full screen": "Plein écran",
  "Get a notification on this phone or computer when something happens to your services, even when this page is closed.": "Recevez une notification sur ce téléphone ou cet ordinateur quand il se passe quelque chose pour vos services, même quand cette page est fermée.",
@@ -242,6 +250,7 @@
  "Leave {name}? Your Immich API key for it and its workflow will be deleted.": "Quitter {name} ? Votre clé d’API Immich pour ce service et son workflow seront supprimés.",
  "Leaving deletes the API key and the workflow this app made in your Immich account. Your photos are not touched.": "Quitter supprime la clé d’API et le workflow que cette application a créés dans votre compte Immich. Vos photos ne sont pas touchées.",
  "Let it end after (days from now, empty: never)": "Le laisser se terminer après (jours à partir de maintenant, vide : jamais)",
+ "Let it fill the album by itself": "La laisser remplir l'album seule",
  "Letting copies expire does not work across servers. Taking a hand-over back works only if you add the optional permission. What arrives is yours to keep or remove.": "Faire expirer des copies ne fonctionne pas d’un serveur à l’autre. Reprendre une remise ne fonctionne que si vous ajoutez la permission facultative. Ce qui arrive est à vous : gardez-le ou retirez-le.",
  "Limit": "Limite",
  "Limit per sender: {limit}.": "Limite par expéditeur : {limit}.",
@@ -257,6 +266,9 @@
  "Loading your albums...": "Chargement de vos albums...",
  "Locations go with your photos": "Les lieux accompagnent vos photos",
  "Look at the photo": "Regarder la photo",
+ "Look for older photos": "Chercher des photos plus anciennes",
+ "Make a smart album": "Créer un album intelligent",
+ "Make the smart album": "Créer l'album intelligent",
  "MB per sender per day": "Mo par expéditeur et par jour",
  "Make a frame": "Faire un cadre",
  "Make a new link?": "Créer un nouveau lien ?",
@@ -273,6 +285,7 @@
  "My library": "Ma bibliothèque",
  "My library only": "Seulement ma bibliothèque",
  "Name": "Nom",
+ "Name of the new album": "Nom du nouvel album",
  "Need attention": "Demande votre attention",
  "Needs approval": "Demande une approbation",
  "Needs you": "À traiter",
@@ -316,6 +329,7 @@
  "Notifications need this page to be opened over HTTPS.": "Les notifications demandent que cette page soit ouverte en HTTPS.",
  "Notifications on this device": "Notifications sur cet appareil",
  "Notifications work on this device.": "Les notifications fonctionnent sur cet appareil.",
+ "Off by default. It only takes out photos the app put in the album itself, never ones you added. It does not work with a phrase. The app's key then also gets the right to take photos out of albums.": "Désactivé par défaut. Seules sont retirées les photos que l'app a mises elle-même dans l'album, jamais celles que vous avez ajoutées. Cela ne marche pas avec une phrase. La clé de l'app reçoit alors aussi le droit de retirer des photos des albums.",
  "Offer a service of your own": "Proposer votre propre service",
  "Offered by {name}.": "Proposé par {name}.",
  "Older photos": "Photos plus anciennes",
@@ -403,6 +417,9 @@
  "Previous photo": "Photo précédente",
  "Print": "Imprimer",
  "Problem": "Problème",
+ "Put the ticked photos in the album": "Mettre les photos cochées dans l'album",
+ "Put them in the album": "Les mettre dans l'album",
+ "Put them in, and always": "Les y mettre, et toujours",
  "Put what arrives in this album (optional, instead of the inbox tag)": "Mettre ce qui arrive dans cet album (facultatif, à la place de l’étiquette de réception)",
  "QR code": "Code QR",
  "QR code of the frame's link": "Code QR du lien du cadre",
@@ -496,11 +513,13 @@
  "Sign in to Immich first": "Connectez-vous d’abord à Immich",
  "Single photo": "Une photo à la fois",
  "Slide": "Glissement",
+ "Smart albums": "Albums intelligents",
  "So the photographer knows who chose (optional).": "Pour que le photographe sache qui a choisi (facultatif).",
  "Some files could not be stored and are still waiting. Try again in a moment.": "Certains fichiers n'ont pas pu être enregistrés et attendent encore. Réessaie dans un instant.",
  "Some updates were missed; refreshing": "Certaines mises à jour ont été manquées ; actualisation",
  "Something went wrong on our side. Try again later.": "Un problème est survenu de notre côté. Réessayez plus tard.",
  "Stop handing over this album": "Ne plus transmettre cet album",
+ "Stop keeping this album up to date? The album and its photos stay as they are.": "Ne plus tenir cet album à jour ? L'album et ses photos restent tels quels.",
  "Stop recording": "Arrêter l'enregistrement",
  "Stop the emails": "Arrêter les e-mails",
  "Stop the emails?": "Arrêter les e-mails ?",
@@ -518,10 +537,13 @@
  "Take back": "Reprendre",
  "Take back the last hand-over": "Reprendre la dernière transmission",
  "Take back the last hand-over?": "Reprendre la dernière transmission ?",
+ "Take out photos that no longer match": "Retirer les photos qui ne correspondent plus",
  "Take photo {n} away from my choice": "Retirer la photo {n} de mon choix",
  "Take the heart back": "Retirer le cœur",
  "Taken back. It is in the owner's trash, not in their library.": "Repris. C'est dans la corbeille du propriétaire, pas dans sa bibliothèque.",
  "Taken off again": "Retiré à nouveau",
+ "Taken with": "Prises avec",
+ "Takes out what no longer matches": "Retire ce qui ne correspond plus",
  "Takes {limits}.": "Accepte {limits}.",
  "Tell me when it is done": "Prévenez-moi quand c'est fini",
  "Tell us your name to start choosing. Only you will be able to choose in this room.": "Dites-nous votre nom pour commencer à choisir. Vous serez la seule personne à pouvoir choisir dans cet espace.",
@@ -529,6 +551,7 @@
  "Thank you!": "Merci !",
  "That could not be taken back right now. Please try again.": "Impossible de la reprendre pour le moment. Veuillez réessayer.",
  "That did not work:": "Cela n’a pas fonctionné :",
+ "The album": "L'album",
  "The PIN is not right. Try again.": "Le PIN n'est pas correct. Réessayez.",
  "The QR code could not be made.": "Le code QR n'a pas pu être créé.",
  "The address stops working. Photos already received are kept.": "L'adresse cesse de fonctionner. Les photos déjà reçues sont conservées.",
@@ -675,6 +698,7 @@
  "Where should they go?": "Où doivent-elles aller ?",
  "Who can find it": "Qui peut le trouver",
  "Who may send": "Qui peut envoyer",
+ "With the tags": "Avec les étiquettes",
  "Wrong password": "Mot de passe incorrect",
  "You approve senders": "Vous approuvez les expéditeurs",
  "You are helping to look after this box. Approve the photos that may stay, reject the others.": "Tu aides à t'occuper de cette boîte. Approuve les photos qui peuvent rester et rejette les autres.",
@@ -689,6 +713,7 @@
  "You do not take part in any service yet.": "Vous ne participez encore à aucun service.",
  "You get an email about what happens to your services, at {email}.": "Vous recevez un e-mail sur ce qui arrive à vos services, à {email}.",
  "You get this email because you turned it on in Immich Handoff.": "Vous recevez cet e-mail parce que vous l'avez activé dans Immich Handoff.",
+ "You have answered Always {n} times. You can let it fill the album by itself from now on.": "Vous avez répondu Toujours {n} fois. Vous pouvez désormais la laisser remplir l'album seule.",
  "You have chosen {n} of {limit}. Send your choice anyway?": "Vous avez choisi {n} sur {limit}. Envoyer quand même votre choix ?",
  "You have no albums of your own yet. Make one in Immich, then come back.": "Vous n’avez pas encore d’album à vous. Créez-en un dans Immich, puis revenez.",
  "You offer": "Vous proposez",
@@ -900,6 +925,8 @@
  "{name} gave the box a mail address": "{name} a donné une adresse e-mail à la boîte",
  "{name} invites you to share albums": "{name} vous invite à partager des albums",
  "{name} is choosing for this room. You can look at the photos.": "{name} choisit pour cet espace. Vous pouvez regarder les photos.",
+ "{name} keeps the album {album} up to date: {rule}": "{name} tient l'album {album} à jour : {rule}",
+ "{name} let the album {album} fill itself": "{name} laisse l'album {album} se remplir seul",
  "{name} linked the album {album} to {service}: everything in it is handed over": "{name} a lié l’album {album} à {service} : tout son contenu est transmis",
  "{name} made a new invitation link for {service}": "{name} a créé un nouveau lien d’invitation pour {service}",
  "{name} paused sending to {service}": "{name} a suspendu l’envoi à {service}",
@@ -934,6 +961,7 @@
  "{name} started sending to {service} (originals are kept)": "{name} envoie désormais à {service} (les originaux sont conservés)",
  "{name} started sending to {service} (originals are moved to their trash)": "{name} envoie désormais à {service} (les originaux sont déplacés dans leur corbeille)",
  "{name} stopped handing over the album {album} to {service}": "{name} ne transmet plus l’album {album} à {service}",
+ "{name} stopped keeping the album {album} up to date": "{name} ne tient plus l'album {album} à jour",
  "{name} stopped sending to {service}": "{name} n’envoie plus à {service}",
  "{name} switched the guests' gallery off": "{name} a désactivé la galerie des invités",
  "{name} took back {n} photo handed over to {service}": {
@@ -1003,7 +1031,19 @@
   "one": "{n} écartée",
   "other": "{n} écartées"
  },
+ "{n} new photo can go in the album {album}. Look at it on the Overview.": {
+  "one": "{n} nouvelle photo peut aller dans l'album {album}. Voyez-la dans l'aperçu.",
+  "other": "{n} nouvelles photos peuvent aller dans l'album {album}. Voyez-les dans l'aperçu."
+ },
+ "{n} new photo for the album {album}": {
+  "one": "{n} nouvelle photo pour l'album {album}",
+  "other": "{n} nouvelles photos pour l'album {album}"
+ },
  "{n} of {limit} chosen": "{n} sur {limit} choisies",
+ "{n} older photo found for the album {album} by a rule": {
+  "one": "{n} photo plus ancienne trouvée pour l'album {album} par une règle",
+  "other": "{n} photos plus anciennes trouvées pour l'album {album} par une règle"
+ },
  "{n} person": {
   "one": "{n} personne",
   "other": "{n} personnes"
@@ -1056,9 +1096,25 @@
   "one": "{n} photo attend que vous vous reconnectiez à Immich",
   "other": "{n} photos attendent que vous vous reconnectiez à Immich"
  },
+ "{n} photo left out of the album {album}": {
+  "one": "{n} photo laissée de côté pour l'album {album}",
+  "other": "{n} photos laissées de côté pour l'album {album}"
+ },
  "{n} photo of the week from {people} in the album {album}": {
   "one": "{n} photo de la semaine de {people} dans l'album {album}",
   "other": "{n} photos de la semaine de {people} dans l'album {album}"
+ },
+ "{n} photo put in the album {album}": {
+  "one": "{n} photo mise dans l'album {album}",
+  "other": "{n} photos mises dans l'album {album}"
+ },
+ "{n} photo put in the album {album} by a rule on its own": {
+  "one": "{n} photo mise d'elle-même dans l'album {album} par une règle",
+  "other": "{n} photos mises d'elles-mêmes dans l'album {album} par une règle"
+ },
+ "{n} photo taken out of the album {album} because it no longer matches": {
+  "one": "{n} photo retirée de l'album {album} car elle ne correspond plus",
+  "other": "{n} photos retirées de l'album {album} car elles ne correspondent plus"
  },
  "{n} photo waits": {
   "one": "{n} photo attend",

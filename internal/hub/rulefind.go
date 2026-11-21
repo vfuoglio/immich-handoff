@@ -69,10 +69,15 @@ type match struct {
 	Why   string
 }
 
-// FindForRule finds what a rule matches now and has not handled yet. It changes nothing.
-func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r store.Rule, back bool) ([]match, error) {
+// ruleFilter is what Immich is asked for a rule. back leaves out the window of the last week and the rule's start: it is every photo
+// that matches, which a look back and the taking out of what no longer matches both need.
+func (h *Hub) ruleFilter(r store.Rule, back bool) immich.RuleFilter {
 	c := r.Cond
-	f := immich.RuleFilter{Country: c.Country, City: c.City, Phrase: c.Phrase, TakenAfter: dayStart(c.After)}
+	f := immich.RuleFilter{Country: c.Country, City: c.City, Phrase: c.Phrase, TakenAfter: dayStart(c.After), Make: c.Make, Model: c.Model}
+	for _, t := range c.Tags {
+		id, _ := uuid.Parse(t.ID)
+		f.TagIDs = append(f.TagIDs, id)
+	}
 	if c.Before != "" {
 		f.TakenBefore = dayStart(c.Before).Add(24*time.Hour - time.Second)
 	}
@@ -89,6 +94,13 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 			f.CreatedAfter = week
 		}
 	}
+	return f
+}
+
+// FindForRule finds what a rule matches now and has not handled yet. It changes nothing.
+func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r store.Rule, back bool) ([]match, error) {
+	c := r.Cond
+	f := h.ruleFilter(r, back)
 	var found []immich.AssetResponseDto
 	var whys map[uuid.UUID]string
 	var err error
@@ -104,9 +116,11 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 	if err != nil {
 		return nil, err
 	}
-	sentByAny, err := h.Store.RuleSentAssets(ctx, r.OwnerID, r.Service) // another rule for this service handed it over already
-	if err != nil {
-		return nil, err
+	sentByAny := map[string]bool{}
+	if r.Kind != store.RuleKindAlbum { // a smart album has no service: what other rules did is nothing to it
+		if sentByAny, err = h.Store.RuleSentAssets(ctx, r.OwnerID, r.Service); err != nil { // another rule for this service handed it over already
+			return nil, err
+		}
 	}
 	// the photos of the albums to leave out
 	out := map[uuid.UUID]bool{}
@@ -115,6 +129,22 @@ func (h *Hub) FindForRule(ctx context.Context, api *immich.API, me uuid.UUID, r 
 		items, err := api.AlbumAssets(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("could not read the album %s: %w", al.Name, err)
+		}
+		for _, it := range items {
+			out[it.Id] = true
+		}
+	}
+	if r.Kind == store.RuleKindAlbum { // what is in the album already is not offered
+		album, perr := uuid.Parse(r.Dest)
+		if perr != nil {
+			return nil, ErrAlbumGone
+		}
+		items, err := api.AlbumAssets(ctx, album)
+		if err != nil {
+			if immich.IsNotFound(err) {
+				return nil, ErrAlbumGone
+			}
+			return nil, fmt.Errorf("could not read the album %s: %w", r.DestAlbum, err)
 		}
 		for _, it := range items {
 			out[it.Id] = true
@@ -179,6 +209,9 @@ func whyMatched(c store.RuleCond, a immich.AssetResponseDto) string {
 	case c.Country != "":
 		why = append(why, "in "+c.Country)
 	}
+	if c.Make != "" {
+		why = append(why, "taken with "+strings.TrimSpace(c.Make+" "+c.Model))
+	}
 	if c.Album != nil {
 		why = append(why, "in the album "+c.Album.Name)
 	}
@@ -201,6 +234,9 @@ func (h *Hub) LookRule(ctx context.Context, r store.Rule) (int, error) {
 	}
 	if r.Kind == store.RuleKindStack {
 		return h.lookStack(ctx, r)
+	}
+	if r.Kind == store.RuleKindAlbum {
+		return h.lookAlbum(ctx, r)
 	}
 	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
 	if err != nil {
@@ -326,11 +362,15 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 	if waiting, _ := h.Store.RulePhotos(ctx, r.ID, store.RuleSuggested); len(waiting) > 0 {
 		return 0, ErrLookBackBusy
 	}
-	link, err := h.senderLink(ctx, r.OwnerID, r.Service)
-	if err != nil {
-		return 0, err
+	var api *immich.API
+	if r.Kind == store.RuleKindAlbum {
+		api, err = h.albumAPI(ctx, r.OwnerID)
+	} else {
+		var link *store.Link
+		if link, err = h.senderLink(ctx, r.OwnerID, r.Service); err == nil {
+			api, err = h.Connect(link.Key)
+		}
 	}
-	api, err := h.Connect(link.Key)
 	if err != nil {
 		return 0, err
 	}
@@ -346,13 +386,21 @@ func (h *Hub) LookBack(ctx context.Context, user immich.User, id string) (int, e
 		return 0, ErrNothingOlder
 	}
 	sort.Slice(matches, func(i, j int) bool { return matches[i].Asset.FileCreatedAt.After(matches[j].Asset.FileCreatedAt) })
-	if len(matches) > lookBackMost {
-		matches = matches[:lookBackMost]
+	most := lookBackMost
+	if r.Kind == store.RuleKindAlbum {
+		most = albumBackfillMost
+	}
+	if len(matches) > most {
+		matches = matches[:most]
 	}
 	for _, m := range matches {
 		if err := h.Store.PutRulePhoto(ctx, r.ID, m.Asset.Id.String(), store.RuleSuggested, m.Why); err != nil {
 			return 0, err
 		}
+	}
+	if r.Kind == store.RuleKindAlbum {
+		h.event(ctx, "", user.ID, "rule", i18n.PackN("{n} older photo found for the album {album} by a rule", "{n} older photos found for the album {album} by a rule", len(matches), "album", r.DestAlbum))
+		return len(matches), nil
 	}
 	h.event(ctx, r.Service, user.ID, "rule", i18n.PackN("{n} older photo found for {service} by a rule: {rule}", "{n} older photos found for {service} by a rule: {rule}", len(matches), "service", r.Service, "rule", RuleSentence(r.Cond)))
 	return len(matches), nil

@@ -83,6 +83,26 @@ func (a *API) Places(ctx context.Context, country string) ([]string, error) {
 	return out, nil
 }
 
+// Cameras lists the camera makes the library holds photos from or, given a make, its models: the only values a camera search
+// matches, because matching is exact. It needs asset.read.
+func (a *API) Cameras(ctx context.Context, make string) ([]string, error) {
+	p := &GetSearchSuggestionsParams{Type: CameraMake}
+	if make != "" {
+		p.Type = CameraModel
+		p.Make = &make
+	}
+	r, err := a.c.GetSearchSuggestionsWithResponse(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	if r.JSON200 == nil {
+		return nil, statusErr("getSearchSuggestions", r.StatusCode(), r.Body)
+	}
+	out := append([]string(nil), *r.JSON200...)
+	sort.Strings(out)
+	return out, nil
+}
+
 // RuleFilter is what a rule asks Immich to find: every set field must hold.
 type RuleFilter struct {
 	PersonIDs     []openapi_types.UUID
@@ -92,6 +112,8 @@ type RuleFilter struct {
 	AlbumID       openapi_types.UUID // the zero value: any album
 	CreatedAfter  time.Time
 	Phrase        string
+	Make, Model   string
+	TagIDs        []openapi_types.UUID // every one of them must be on the photo
 }
 
 // RuleSearch finds the photos a rule matches in Immich's own terms: one search with everything Immich can filter. With a phrase it
@@ -123,6 +145,15 @@ func (a *API) RuleSearch(ctx context.Context, f RuleFilter) ([]AssetResponseDto,
 		if !f.CreatedAfter.IsZero() {
 			dto.CreatedAfter = &f.CreatedAfter
 		}
+		if f.Make != "" {
+			dto.Make = &f.Make
+		}
+		if f.Model != "" {
+			dto.Model = &f.Model
+		}
+		if len(f.TagIDs) > 0 {
+			dto.TagIds = &f.TagIDs
+		}
 		return a.Search(ctx, dto)
 	}
 	size := 100
@@ -147,6 +178,15 @@ func (a *API) RuleSearch(ctx context.Context, f RuleFilter) ([]AssetResponseDto,
 	}
 	if !f.CreatedAfter.IsZero() {
 		dto.CreatedAfter = &f.CreatedAfter
+	}
+	if f.Make != "" {
+		dto.Make = &f.Make
+	}
+	if f.Model != "" {
+		dto.Model = &f.Model
+	}
+	if len(f.TagIDs) > 0 {
+		dto.TagIds = &f.TagIDs
 	}
 	r, err := a.c.SearchSmartWithResponse(ctx, dto)
 	if err != nil {

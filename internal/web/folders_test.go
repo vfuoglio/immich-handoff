@@ -92,3 +92,46 @@ func TestTheFoldersCardIsNotOfferedWithoutSelfService(t *testing.T) {
 		t.Error("no card without a store")
 	}
 }
+
+func TestASmartAlbumShowsOnTheSettingsCardAsASuggestionAndOnTheReviewPage(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	ctx := context.Background()
+	if _, page := do(t, "GET", app.URL+"/", "sess=other", nil); !strings.Contains(page, "Smart albums") || !strings.Contains(page, "Make a smart album") {
+		t.Fatal("the card is offered")
+	}
+	if code, _ := postForm(t, app.URL+"/rules/album", "", "newname=x"); code != 401 {
+		t.Errorf("signed out: %d", code)
+	}
+	if code, _ := do(t, "GET", app.URL+"/fragments/album-form", "", nil); code != 401 {
+		t.Errorf("form signed out: %d", code)
+	}
+	if code, _ := postForm(t, app.URL+"/rules/album", "sess=other", "make=Leica&newname=Leicas"); code != 409 && code != 502 {
+		t.Errorf("a camera nobody has, or no way to ask: %d", code)
+	}
+	r, err := st.AddRule(ctx, store.Rule{OwnerID: mustUUID(otherID), Kind: store.RuleKindAlbum, Dest: "55555555-0000-4000-8000-0000000000b1", DestAlbum: "Canon pictures",
+		Cond: store.RuleCond{Make: "Canon", RemoveStale: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, page := do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"Canon pictures", "taken with Canon", "Asks you first", "Takes out what no longer matches", "Look for older photos"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the rule on the page lacks %q", want)
+		}
+	}
+	st.PutRulePhoto(ctx, r.ID, "55555555-0000-4000-8000-0000000000a1", store.RuleSuggested, "taken with Canon")
+	st.PutRulePhoto(ctx, r.ID, "55555555-0000-4000-8000-0000000000a2", store.RuleSuggested, "taken with Canon")
+	_, page = do(t, "GET", app.URL+"/", "sess=other", nil)
+	for _, want := range []string{"2 new photos for the album Canon pictures", "Put them in the album", "Not these", "Always"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the suggestion card lacks %q", want)
+		}
+	}
+	if _, review := do(t, "GET", app.URL+"/rules/review/"+r.ID, "sess=other", nil); !strings.Contains(review, "For the album Canon pictures") || !strings.Contains(review, "Put the ticked photos in the album") {
+		t.Error("the review page speaks of the album")
+	}
+	if code, _ := postForm(t, app.URL+"/rules/delete", "sess=other", "rule="+r.ID); code != 204 {
+		t.Fatalf("stop: %d", code)
+	}
+}

@@ -33,6 +33,9 @@ const (
 	// RuleKindImport follows a destination (a folder, a bucket, a server): the files that appear in it are offered, and added to the
 	// person's library, with the sender's own key. Cond.Source names the destination, Cond.Prefix the folder under it.
 	RuleKindImport = "import"
+	// RuleKindAlbum keeps one of the person's albums up to date with what a rule finds (Dest is the album's id and DestAlbum its name; the
+	// conditions are the ordinary ones). See docs/design/albums-design.md.
+	RuleKindAlbum = "album"
 )
 
 // RuleRef is a person or an album a rule names, with the name it had when the rule was made.
@@ -52,6 +55,12 @@ type RuleCond struct {
 	Album     *RuleRef  `json:"album,omitempty"`
 	NotAlbums []RuleRef `json:"notAlbums,omitempty"`
 	Phrase    string    `json:"phrase,omitempty"`
+	// Make and Model are a camera (as Immich names it), and Tags the tags a photo must all have.
+	Make  string    `json:"make,omitempty"`
+	Model string    `json:"model,omitempty"`
+	Tags  []RuleRef `json:"tags,omitempty"`
+	// RemoveStale, for a rule of kind album, lets it take out of the album the photos it put there that no longer match.
+	RemoveStale bool `json:"removeStale,omitempty"`
 	// Examples are the photos of the person's own library that a pet rule looks for look-alikes of ("photos like these"), and Rank is how
 	// far down Immich's list of look-alikes of an example a photo may be and still be offered, learned from the answers.
 	Examples []string `json:"examples,omitempty"`

@@ -519,9 +519,9 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 }
 
 // RowCount is how many service rows the page shows; with exactly one it starts open.
-// HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, pairing) is on for this person.
+// HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, smart albums, pairing) is on for this person.
 func (d DashboardData) HasSettings() bool {
-	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available
 }
 
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
@@ -987,6 +987,9 @@ func libraryTrigger(l LibraryView) string {
 
 // reviewTitle is the title of the page that shows what a rule found.
 func reviewTitle(ctx context.Context, d SuggestionReview) string {
+	if d.Smart {
+		return t(ctx, "For the album {album}", "album", d.Album)
+	}
 	if d.Folder {
 		return t(ctx, "Albums from {folder}", "folder", d.Album)
 	}

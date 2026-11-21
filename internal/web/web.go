@@ -284,6 +284,9 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("GET /fragments/albums", w.albumChoice)
 	mux.HandleFunc("GET /fragments/rule-form", w.ruleForm)
 	mux.HandleFunc("GET /fragments/rule-cities", w.ruleCities)
+	mux.HandleFunc("GET /fragments/rule-models", w.ruleModels)
+	mux.HandleFunc("GET /fragments/album-form", w.albumForm)
+	mux.HandleFunc("POST /rules/album", w.makeSmartAlbum)
 	mux.HandleFunc("GET /rules/person/{id}", w.rulePerson)
 	mux.HandleFunc("GET /rules/photo/{rule}/{asset}", w.rulePhoto)
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
@@ -712,6 +715,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Memories = w.memoriesView(ctx, me)
 	d.Folders = w.folderViews(ctx, me)
 	d.Stacks = w.stackViews(ctx, me)
+	d.Albums = w.albumViews(ctx, me)
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
@@ -818,6 +822,17 @@ func needsOf(ctx context.Context, d *DashboardData) []NeedView {
 				{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")}}
 			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} group of photos to stack", "{n} groups of photos to stack", sg.Count),
 				Text: t(ctx, "{found}. One photo of each group is shown. Photos are only stacked, never changed or deleted.", "found", sg.Signals), Thumbs: sg.Thumbs, More: sg.Count - len(sg.Thumbs), Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at the groups one by one")})
+			continue
+		}
+		if sg.Smart { // photos that match a smart album
+			acts := []NeedAction{
+				{Label: t(ctx, "Put them in the album"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "send"), Primary: true},
+				{Label: t(ctx, "Not these"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "decline")}}
+			if !sg.Phrase {
+				acts = append(acts, NeedAction{Label: t(ctx, "Always"), Path: "rules/answer", Vals: vals2("rule", sg.RuleID, "do", "always")})
+			}
+			ask = append(ask, NeedView{Tone: "warn", Chip: t(ctx, "Suggestion"), Title: n(ctx, "{n} new photo for the album {album}", "{n} new photos for the album {album}", sg.Count, "album", sg.Album),
+				Text: t(ctx, "Found by your rule: {rule}. Photos are only added, nothing is removed.", "rule", sg.Sentence), Thumbs: sg.Thumbs, More: more, Actions: acts, Link: "rules/review/" + sg.RuleID, LinkLabel: t(ctx, "Look at them one by one")})
 			continue
 		}
 		if sg.Folder { // albums to make from the folders of an external library

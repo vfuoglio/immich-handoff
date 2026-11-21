@@ -58,6 +58,7 @@ var sealedColumns = []struct {
 	{"memory_prefs", "key_enc", "user_id", prefix("memories:")},
 	{"folder_keys", "key_enc", "user_id", prefix("folders:")},
 	{"stack_keys", "key_enc", "user_id", prefix("stacks:")},
+	{"album_keys", "key_enc", "user_id", prefix("albums:")},
 	{"destinations", "secret_enc", "id", prefix("destination:")},
 	{"meta", "v", "k", metaContext},
 }
