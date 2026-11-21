@@ -98,12 +98,32 @@ func TestSmartAlbums(t *testing.T) {
 		}
 		return true
 	})
+	// and Immich's search by tag has to find them (a tag put on a photo reaches the search a moment later on a slower machine)
+	eventually(t, "a search by the tag finds the older photos", 120*time.Second, func() bool {
+		var res struct {
+			Assets struct {
+				Items []struct {
+					ID string `json:"id"`
+				}
+			}
+		}
+		call(t, "POST", "/search/metadata", keyAuth(bob), map[string]any{"tagIds": []string{tag.ID}}, &res)
+		found := map[string]bool{}
+		for _, i := range res.Assets.Items {
+			found[i.ID] = true
+		}
+		return found[older1] && found[older2]
+	})
 	// the older photos come with a look back
 	form("/rules/lookback", url.Values{"rule": {rule}})
+	eventually(t, "both older photos are offered", 30*time.Second, func() bool {
+		return strings.Contains(page(t, port, cookie), "2 new photos for the album Smart e2e")
+	})
 	form("/rules/answer", url.Values{"rule": {rule}, "do": {"send"}})
-	if n, _ := albumCount("Smart e2e"); n != 3 {
-		t.Fatalf("after the look back the album holds all three: %d", n)
-	}
+	eventually(t, "the album holds all three", 30*time.Second, func() bool {
+		n, _ := albumCount("Smart e2e")
+		return n == 3
+	})
 
 	// a photo that stops matching is taken out by the rule's next look
 	mustOK(t, call(t, "DELETE", "/tags/"+tag.ID+"/assets", keyAuth(bob), map[string]any{"ids": []string{c}}, nil), "untag the new photo")
