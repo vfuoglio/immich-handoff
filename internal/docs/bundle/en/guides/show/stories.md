@@ -2,7 +2,7 @@
 
 Turn an album into a short animated story and send the link. Whoever gets it watches on a phone or a TV, with no account and nothing to install.
 
-<p align="center"><img src="../../images/story-title.png" alt="A story on a phone: the title card, A week in Lisbon" width="200"> <img src="../../images/story-chapter.png" alt="The card that opens a chapter, with its dates" width="200"> <img src="../../images/story-photo.png" alt="A photo, with its date and place under it" width="200"></p>
+<p align="center"><img src="../../images/story-title.png" alt="A story: the title card, A week in Lisbon, with its dates" width="380"> <img src="../../images/story-photo.png" alt="A photo of the story, full screen, with its date under it" width="380"></p>
 
 Immich has memories for you. A story is the one you can send: a title, a card for each chapter (a month, or a place on a short trip), about forty of the best photos with their date and place, and an end.
 

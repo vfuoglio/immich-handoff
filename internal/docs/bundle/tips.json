@@ -46,7 +46,7 @@
  },
  "faq": {
   "title": "Questions people ask first",
-  "tip": "Questions people ask first.",
+  "tip": "Short answers to what people ask before they start.",
   "path": "reference/faq.md"
  },
  "find-handoff": {

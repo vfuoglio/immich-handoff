@@ -213,6 +213,7 @@ type shot struct {
 	wait   string // JS condition that must become true
 	js     string // JS to run once the page has settled (for example to open a section)
 	pause  time.Duration
+	after  time.Duration // how long to wait after js, for what it opens to load (400 ms when empty)
 }
 
 // loginCookies signs in to Immich like a browser would and returns the cookies it sets.
@@ -281,7 +282,7 @@ func take(s shot, outdir string) {
 		chromedp.Sleep(max(s.pause, 600*time.Millisecond)),
 	)
 	if s.js != "" {
-		tasks = append(tasks, chromedp.Evaluate(s.js, nil), chromedp.Sleep(400*time.Millisecond))
+		tasks = append(tasks, chromedp.Evaluate(s.js, nil), chromedp.Sleep(max(s.after, 400*time.Millisecond)))
 	}
 	if s.xpath != "" {
 		tasks = append(tasks, screenshotElement(s.xpath, s.pad, &buf))
@@ -364,6 +365,9 @@ func shots(set, outdir string) {
 			take(shot{name: "audit-activity-" + v.name, who: "bob@test.local", url: appURL + "#activity", width: v.width, height: 900, dark: v.dark, mobile: v.mobile, pause: live, js: scheme(v.palette)}, outdir)
 			take(shot{name: "audit-admin-" + v.name, who: "admin@test.local", url: appURL + "admin", width: v.width, height: 900, dark: v.dark, mobile: v.mobile, pause: live, js: scheme(v.palette) + ";" + openAll}, outdir)
 		}
+	case "storyform": // the Stories card with the form open (there must be no story yet, or it crowds the card)
+		take(shot{name: "story-form", who: "alice@test.local", url: appURL, width: desktop, height: 900, js: storyOpenForm, pause: 3 * time.Second, after: 3 * time.Second,
+			xpath: `//div[contains(@class,'storiescard')]`, pad: 16}, outdir)
 	case "lost":
 		take(shot{name: "connection-lost", who: "carol@test.local", url: appURL, width: desktop, height: 900,
 			xpath: `//div[contains(@class,'needs')]/article[contains(@class,'need')][1]`, pad: 16}, outdir)

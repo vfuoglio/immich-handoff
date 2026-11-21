@@ -1,10 +1,69 @@
 # Finding your way around the page
 
-**Who it is for:** Everyone who uses Handoff.
+The page has four views and a search bar that does what you ask. This is the five-minute tour: where things are, what the words mean and what the live scene is showing you.
 
-**What you get:** The page's three views (Overview, Services, Activity), what the words mean, what the live scene shows, and the few things worth knowing before anything else.
+![The Overview: what needs you, the live scene and the week's numbers](../images/dashboard-owner.png)
 
-**What you see:** You know where to look for what needs you, what was handed over and how to change your look and language.
+## Before anything else: Tags
+
+Handoff works through Immich **tags**, and Tags are **off by default**, separately for each person. If yours is off, the page shows a notice with a **Turn on Tags** button (you can also do it in Immich under Account Settings, Features, **Tags**). Senders need Tags to tag photos, and receivers need them to see the inbox tag and filter by it. Switching them on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
+
+## The four views
+
+The bar at the top has four views, in a pill in its middle (on a phone they are a bar at the bottom, with an icon each). The address remembers the view (`#services`), so you can bookmark it, and the page comes back to it after an action.
+
+- **Overview.** The date and a greeting, the search bar, then **Needs you**, the **live scene** and **This week**, one under the other. The **Get started** card sits at the end until you are done with it.
+- **Services.** Every service you send to, receive from, offer or can join. If you can make more than services, a switch at the top moves between your services, drop boxes, client rooms, frames and shared albums.
+- **Activity.** What happened, the last run, and **Sync now**.
+- **Settings.** The things you set up once and then forget, in categories (Notifications, Photos, Sharing, Screens). The view is there only when something in it is on for you.
+
+### Needs you
+
+Everything that waits on a person comes first, most urgent first, each with its button. When nothing waits, it says so.
+
+- **Connection lost** and **Removed by its owner**: **Clean up**, which deletes what the app made in your Immich account (then you can join again).
+- **Disconnected** (a service you offer): **Reconnect**.
+- **Request**: someone wants to send to a service you offer. **Approve** or **Decline**; a request is answered here and nowhere else.
+- **Paused**: a service you paused, or your own sending (**Resume**), or a service its owner paused (nothing for you to press).
+- **Limit**: a sender is at the daily limit, or you are (see [Daily limits](../guides/automate/controls.md#daily-limits-for-senders)).
+
+### This week
+
+A small chart with one point a day (UTC days, today on the right) of how many photos were handed over in the last seven days: the photos **you sent** and the ones that **arrived in services you offer**. It counts what the app recorded for people who joined from the page, so senders set up in `.env` or a routes file do not appear. Next to it, **Waiting to go** (photos you tagged that are still to go) and **In your inbox** (what arrived and is not yet filed) refresh by themselves whenever a hand-over finishes.
+
+### Get started
+
+The card turns on Tags, helps you join or offer a service and hand over a first photo, and suggests more steps that fit what you do (inviting someone, a notification). Each step has **Show me** and a **?** to its guide, and a ring shows how far you are. It goes away when you are done or when you press **Hide this guide**.
+
+## The live scene
+
+![The live scene: a lane for each sender and a gate into the library](../images/live-scene.png)
+
+Right under the search bar, **Live** shows what is happening as it happens. Each service you take part in has a stage: one **lane** for each sender and a gate into the receiving library. A glowing coloured square travels along the sender's lane into the gate and a ring spreads where it lands; when you are the one sending, an outlined square with an arrow leaves your gate instead. The **arrived while you watch** counter goes up for each one. The squares are only squares: the scene never shows a photo or a file name, and only real hand-overs, never made-up ones.
+
+A lane also says in words what state it is in, so colour is never the only sign: **Flowing**, **Paused by the owner** or **Paused by the sender** (a dashed lane), **Daily limit reached** with how many wait and until when (amber), **Connection lost** (red, with a cross). A short log under the stages lists the last few things in a sentence each, and a screen reader is told the same sentence.
+
+It stays calm: nothing moves while nothing happens, only a few squares fly at once, and with reduced motion or a hidden tab the squares are skipped and only the labels, the counter and the log change. If the connection to the app drops, the scene dims and says so, then catches up by itself.
+
+![The Services tab: a service you send to, opened in place, and one you can join](../images/services-sender.png)
+
+Each service is one line: its initial, name, what it is, any state such as Paused or Limit, and the number that matters (photos waiting, or in your inbox). Press it to open it in place and see its settings: the tag, the album, who sends and how much they have used, the limits, the invitation link and the pause button. What cannot be undone sits apart at the bottom of an open service, in a dashed box that says what it does: **Leave** (for a service you send to) and **Delete service** (for one you offer). Every question is asked in a dialog in the page itself, with one clear sentence and a button named for what it does (red when it cannot be undone); Escape or Cancel changes nothing.
+
+![The Activity tab: a timeline of what happened, the last run and Sync now](../images/activity.png)
+
+## Make it yours
+
+- **Ctrl K** (or **Cmd K** on a Mac, or the magnifier in the bar, or the search bar on the Overview) opens the **command palette**: type a few letters to jump to a view or a service, or to do what you can do (approve a request, pause or resume, sync, open Help, take the tour). It lists only what you are allowed to do, and it presses the same button the page has, so questions are still asked.
+
+  ![The command palette listing views, a request to approve and the services](../images/palette.png)
+
+- **Colours.** The palette icon chooses the **colour scheme** (**Twilight**, the colours of the app's icon, or **Immich**, calm blues on near-neutral greys), the half-moon icon switches light and dark, and the speaker icon turns the soft chime and short phone buzz off and on when a photo lands (the first click or key press wakes the sound, a browser rule). What you choose is kept in this browser and wins over what the administrator set (`THEME` and `THEME_MODE`, see [Settings](../reference/settings.md)).
+- **Language.** The code next to the globe (en, de, fr, es, it, pt, ru) is the language menu: the pages follow your browser's language and this picks another for good. Only the pages are translated, not the log.
+- **Keys.** **A** and **D** answer the request that is waiting (the buttons wear their key), and **G** then **O**, **S**, **A** or **T** goes to Overview, Services, Activity or Settings. They stay quiet while you type or a dialog is open.
+- **On a phone** you can add the page to the home screen so it opens like an app: see [Operations](../admin/operations.md#installing-the-page-on-a-phone).
+- **Motion.** The light behind the page drifts and flares when a photo lands, cards tilt toward a mouse and numbers roll like a departures board. It is all skipped on a touch screen or with reduced motion, and nothing moves while the page is idle.
+- **Albums as folders** (a name like `Trips / 2024 / Rome`) have a page of their own: [Album tree](../guides/show/album-tree.md).
+- The footer says which **version** is running, to people signed in to Immich.
 
 ## Words used here
 
@@ -22,55 +81,6 @@
 | **Shared album** | An album two people on different servers keep in step. |
 | **Key** | The restricted API key the app makes in your own Immich account when you join, so it can tag and hand over for you. Nobody sees it, and deleting it in Immich stops everything safely. |
 
-> **Before you start: Tags must be on in Immich.** It is off by default and each person has it for their own account. If it is off, this page shows a notice with a **Turn on Tags** button; you can also do it in Immich under Account Settings, then Features, **Tags**. Senders need it to tag photos; receivers need it to see the inbox tag and filter by it. Switching it on is not enough: **refresh the Immich tab or window afterwards**, or the tag options do not show up (on the phone app, close and reopen it).
-
-## Finding your way
-
-The bar at the top has four views, in a pill in its middle (on a phone they are a bar at the bottom of the screen, with an icon each): **Overview** (what needs you, the live scene, the week's numbers), **Services** (all your services, what you can join, offering your own; if you can make more, a switch at the top moves between your services, drop boxes, client rooms, frames and shared albums), **Activity** (what happened, the last run, Sync now) and **Settings** (the things you set up once and then forget: email and notifications on this device, Add to my library, On this day, albums from your folders, stacking, and sharing a person's photos, grouped by what they are for; the view is there only when one of them is on for you). The address remembers the tab (`#services`), so you can bookmark it and the page comes back to it after an action. The search bar under each headline, and the magnifier in the bar (also **Ctrl K**, or **Cmd K** on a Mac), open a command palette: type a few letters to jump to a tab or a service, or to do what you can do (approve a request, pause or resume, sync); it lists only what you are allowed to do, and it presses the same button the page has, so questions are still asked. On a phone you can add the page to the home screen so it opens like an app (see [Operations](../admin/operations.md#installing-the-page-on-a-phone)). The palette icon chooses the **colour scheme** (**Twilight**, the colours of the app's icon, or **Immich**, calm blues on near-neutral greys), the half-moon icon switches the light and the dark variant of either, and the speaker icon turns the soft chime (and a short phone buzz) off and on when a photo lands (the first click or key press wakes the sound, a browser rule). ![The command palette listing views, a request to approve and the services](../images/palette.png)
-
-The albums as folders (a name like `Trips / 2024 / Rome`) are on their own page, **Album tree**: **Settings**, **My library**, or the palette; see [Album tree](../guides/show/album-tree.md).
-
-A few keys, for those who like them: **A** and **D** answer the request that is waiting (the buttons wear their key), and **G** then **O**, **S**, **A** or **T** goes to Overview, Services, Activity or Settings. They stay quiet while you type or a dialog is open. The Overview opens with the date, the greeting and the search bar, then what needs you, the live stream and the week, one under the other, each as wide as the page.
-
-What you choose is kept in this browser and wins over what the administrator set for everyone to start with (`THEME` and `THEME_MODE`, see [Settings](../reference/settings.md)). The code next to them (en, de, fr, es, it, pt, ru) is the language menu: the pages follow your browser's language and this picks another for good; only the pages are translated, not the log or the documentation.
-
-A few small touches make it feel alive and can be ignored: the light behind the page drifts slowly, leans toward your pointer and flares when a photo lands, cards tilt a little toward a mouse, and numbers roll like a departures board. They are skipped with a touch screen or when your browser asks for reduced motion, and nothing moves while the page is idle.
-
-
-The footer of every page says which **version** of Immich Handoff is running, after the line about tagging. It is read from the running program (a release says `1.2.0`, a build from a checkout says `dev`), so it is what you are running, not what the page was written for. It is shown only to people signed in to Immich, never on the sign-in page or to a drop box's guests.
-
-## The Overview
-
-The page opens with what matters, in this order (the live scene, described below, is the second):
-
-1. **Needs you.** Everything that waits on a person, most urgent first, each with its button:
-   - **Connection lost** and **Removed by its owner**: **Clean up**, which deletes what the app made in your Immich account (then you can join again).
-   - **Disconnected** (a service you offer): **Reconnect**.
-   - **Request**: someone wants to send to a service you offer; **Approve** or **Decline**.
-   - **Paused**: a service you paused, or your own sending (**Resume**), or a service its owner paused (nothing for you to press).
-   - **Limit**: a sender is at the daily limit, or you are (see [Daily limits](../guides/automate/controls.md#daily-limits-for-senders)).
-   When nothing waits, it says so. A request is answered here and nowhere else.
-2. **This week.** How many photos were handed over in the last seven days, as a small chart with one point per day (UTC days, today on the right). It counts what the app recorded for people who joined from the page: the photos **you sent**, and the ones that **arrived in services you offer**. Senders set up in `.env` or a routes file are not recorded, so they do not appear in it. Next to it, **Waiting to go** (photos you tagged that are still to be handed over, if you send) and **In your inbox** (what arrived and is not yet filed, if you receive). They refresh by themselves whenever a hand-over finishes.
-3. **Get started**, until you are done: turn on Tags, join or offer a service, hand over your first photo. A ring shows how far you are. It goes away by itself after the first hand-over, or when you press **Hide this guide**, and does not come back.
-
-Below that are your services, in sections by what you do with them: **You send to**, **You receive**, **You offer** (services you created) and **You can join**. Each service is one line (its initial, name, what it is, any state such as Paused or Limit, and the number that matters: photos waiting, or in your inbox). Press it to open it in place and see its settings: the tag, the album, who sends and how much they have used, the limits, the invitation link and the pause button. With only one service it starts open.
-
-What cannot be undone sits apart at the bottom of an open service, in a dashed box that says what it does: **Leave** (for a service you send to) and **Delete service** (for one you offer). Every question, such as joining, pausing, leaving or deleting, is asked in a dialog in the page itself, with a title, one clear sentence and a button named for what it does (red when it cannot be undone); Escape or Cancel changes nothing.
-
-### The live scene
-
-![The live scene: a lane for each sender and a gate into the library](../images/live-scene.png)
-
-Right under the search bar, **Live** shows what is happening as it happens. Each service you take part in has a stage: one **lane** for each sender (you send to a service: your own lane; you offer or receive from it: the senders), and a gate into the receiving library. Photos fly in both directions: **toward you**, a glowing coloured square with a trail travels along the sender's lane into the gate on the right and a ring spreads where it lands; **from you**, when you send to a service, an outlined square with an arrow leaves your gate on the right and flies to the left, away from you. The dashes of a lane crawl the way the photos go. The **arrived while you watch** counter goes up for each one. The squares are only squares: the scene never shows a photo or a file name, and it shows only real hand-overs, never made-up ones.
-
-A lane also says in words what state it is in, so the colour is never the only sign: **Flowing**, **Paused by the owner** or **Paused by the sender** (dashed lane), **Daily limit reached** with how many wait and until when (amber), **Connection lost** (red, with a cross). A short log under the stages lists the last few things in a sentence each, and a screen reader is told the same sentence.
-
-It stays calm: nothing moves while nothing happens, only a few squares fly at once (a big upload counts the rest without more squares), and if your browser asks for reduced motion, or the tab is hidden, the squares are skipped and only the labels, the counter and the log change. If the connection to the app drops, the scene dims and says so, then catches up by itself when it is back.
-
-![The Services tab: a service you send to, opened in place, and one you can join](../images/services-sender.png)
-
-![The Activity tab: a timeline of what happened, the last run and Sync now](../images/activity.png)
-
 ## Good to know
 
 - **Nothing is removed without a copy.** A photo only goes to the trash after every receiver holds a verified copy, and never while a connection is broken.
@@ -85,6 +95,12 @@ Something not working? See [Troubleshooting](../reference/troubleshooting.md).
 - **Filed in an album:** the tag is removed within about 15 minutes, not instantly.
 - **Not in any album:** the tag is removed once the photo has been in the receiver's library for the service's expiry (30 days by default). The clock starts when the photo was uploaded to Immich by the hand-over, not when it was taken, and editing or re-tagging the photo does not restart it.
 
-**Why a delay, and not an instant removal?** The app learns about new photos because Immich tells it: a workflow fires when a tag is added and calls the app. Immich 3.2.0 offers no such event for albums. The only workflow triggers are an asset being created, its metadata being extracted and a tag being added, so the app cannot be told "this photo was just put in an album". The only way to notice is to look. So the app checks on a timer, and the check is deliberately small: one search for photos carrying the inbox tag per receiver, and nothing more when that is empty.
+**Why a delay?** The app learns about new photos because Immich tells it: a workflow fires when a tag is added and calls the app. Immich 3.2.0 offers no such event for albums (the only triggers are an asset being created, its metadata being extracted and a tag being added), so the only way to notice is to look. The app checks on a timer, and the check is deliberately small: one search for photos carrying the inbox tag per receiver, and nothing more when that is empty.
 
-**If you want it faster or slower,** change `CLEANUP_INTERVAL_MINUTES` ([Settings](../reference/settings.md)). Shorter means more (small) requests to Immich and a shorter wait; `0` turns the timer off and leaves it to the daily check. If Immich adds an album event in a future version, this can become instant.
+**Faster or slower?** Change `CLEANUP_INTERVAL_MINUTES` ([Settings](../reference/settings.md)). Shorter means more (small) requests to Immich and a shorter wait; `0` turns the timer off and leaves it to the daily check. If Immich adds an album event in a future version, this can become instant.
+
+## What next
+
+- Hand over your first photo: [Quick start](quickstart.md)
+- Pick a goal: [Using it](../using.md)
+- Look something up: [Questions people ask first](../reference/faq.md)

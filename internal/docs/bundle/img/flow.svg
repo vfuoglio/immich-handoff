@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 250" role="img" aria-labelledby="t d">
+  <title id="t">How immich-handoff works</title>
+  <desc id="d">Tag a photo in Immich, Immich tells immich-handoff, and the photo arrives in the receiver's library tagged inbox.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f6ff"/><stop offset="1" stop-color="#e6ebff"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9a62"/><stop offset="1" stop-color="#ffe0a3"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4250af"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #cfd6f2; stroke-width: 1.5 }
+      .h { font: 700 19px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #1b1d2a }
+      .p { font: 400 15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #4b5068 }
+      .n { font: 700 15px system-ui, sans-serif; fill: #ffffff }
+      .tag { font: 600 13px ui-monospace, Menlo, Consolas, monospace; fill: #3b47a8 }
+    </style>
+  </defs>
+  <rect width="960" height="250" rx="22" fill="url(#bg)"/>
+
+  <!-- step 1 -->
+  <rect class="card" x="28" y="30" width="270" height="190" rx="16"/>
+  <circle cx="58" cy="62" r="14" fill="#4250af"/><text class="n" x="58" y="67" text-anchor="middle">1</text>
+  <text class="h" x="82" y="68">Tag a photo</text>
+  <rect x="48" y="90" width="92" height="62" rx="8" fill="url(#sky)"/>
+  <path d="M48 140 Q72 118 96 134 T140 130 L140 152 L48 152 Z" fill="#8d4f73"/>
+  <circle cx="118" cy="108" r="9" fill="#fff6d6"/>
+  <rect x="152" y="104" width="116" height="26" rx="13" fill="#eef0fb" stroke="#cfd6f2"/>
+  <text class="tag" x="210" y="122" text-anchor="middle">tag: share</text>
+  <text class="p" x="48" y="188">In the Immich app, as</text>
+  <text class="p" x="48" y="208">you would tag any photo.</text>
+
+  <!-- arrow 1 -->
+  <path d="M302 125 H338" stroke="#4250af" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- step 2 -->
+  <rect class="card" x="345" y="30" width="270" height="190" rx="16"/>
+  <circle cx="375" cy="62" r="14" fill="#4250af"/><text class="n" x="375" y="67" text-anchor="middle">2</text>
+  <text class="h" x="399" y="68">Immich tells it</text>
+  <rect x="368" y="92" width="224" height="58" rx="12" fill="#eef0fb" stroke="#cfd6f2"/>
+  <path d="M390 121 h34 m-10 -9 l10 9 l-10 9" stroke="#4250af" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="h" x="440" y="127" style="font-size:16px">immich-handoff</text>
+  <text class="p" x="365" y="188">A workflow in Immich sends a</text>
+  <text class="p" x="365" y="208">notice within a second.</text>
+
+  <!-- arrow 2 -->
+  <path d="M619 125 H655" stroke="#4250af" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- step 3 -->
+  <rect class="card" x="662" y="30" width="270" height="190" rx="16"/>
+  <circle cx="692" cy="62" r="14" fill="#4250af"/><text class="n" x="692" y="67" text-anchor="middle">3</text>
+  <text class="h" x="716" y="68">It arrives</text>
+  <rect x="682" y="90" width="64" height="44" rx="7" fill="url(#sky)"/>
+  <rect x="752" y="90" width="64" height="44" rx="7" fill="#27336b"/><circle cx="790" cy="106" r="6" fill="#eceaff"/>
+  <rect x="822" y="90" width="64" height="44" rx="7" fill="#58a0dc"/><path d="M822 124 Q840 108 856 120 T886 116 V134 H822 Z" fill="#3e8f6e"/>
+  <rect x="682" y="142" width="112" height="24" rx="12" fill="#eef0fb" stroke="#cfd6f2"/>
+  <text class="tag" x="738" y="159" text-anchor="middle">tag: inbox</text>
+  <text class="p" x="682" y="188">In the receiver's own library,</text>
+  <text class="p" x="682" y="208">checked and ready to file.</text>
+</svg>

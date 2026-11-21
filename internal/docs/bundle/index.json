@@ -33,7 +33,7 @@
   "audience": "user",
   "goal": "start",
   "order": 370,
-  "tip": "Questions people ask first."
+  "tip": "Short answers to what people ask before they start."
  },
  {
   "path": "guides/share/household.md",
