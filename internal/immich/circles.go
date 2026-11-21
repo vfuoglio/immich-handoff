@@ -57,3 +57,36 @@ func (a *API) UnshareAlbum(ctx context.Context, album, user openapi_types.UUID) 
 	}
 	return nil
 }
+
+// SearchUpTo is Search that stops after about max photos, newest first: for a source that could hold a whole library (a person,
+// everything new), where a screen only needs the latest few hundred.
+func (a *API) SearchUpTo(ctx context.Context, f MetadataSearchDto, max int) ([]AssetResponseDto, error) {
+	var out []AssetResponseDto
+	size := 250
+	order := AssetOrderDesc
+	f.Size, f.Order = &size, &order
+	for page := 1; len(out) < max; page++ {
+		p := page
+		f.Page = &p
+		r, err := a.c.SearchAssetsWithResponse(ctx, nil, f)
+		if err != nil {
+			return nil, err
+		}
+		if r.JSON200 == nil {
+			return nil, statusErr("searchAssets", r.StatusCode(), r.Body)
+		}
+		out = append(out, r.JSON200.Assets.Items...)
+		if next := r.JSON200.Assets.NextPage; next == nil || *next == "" {
+			break
+		}
+	}
+	if len(out) > max {
+		out = out[:max]
+	}
+	return out, nil
+}
+
+// CastPermissions is what the key for casting to a TV needs: to list a source's photos and fetch their pictures. It sees the whole
+// library, as a frame's key does, because Immich cannot limit a key to one album. A memory also needs memory.read, given only
+// when the person casts one.
+var CastPermissions = perms("asset.view", "asset.read")

@@ -399,6 +399,7 @@ type DashboardData struct {
 	Stacks     StacksView
 	Albums     AlbumsView
 	Circles    CirclesView
+	Cast       CastView
 	CircleAsks []CircleAskView
 	Pairings   PairingsView
 	Library    LibraryView
@@ -851,6 +852,9 @@ templ Dashboard(d DashboardData) {
 						}
 						if d.Albums.Available {
 							@AlbumsCard(d.Albums)
+						}
+						if d.Cast.Available {
+							@CastCard(d.Cast)
 						}
 						@AlbumTreeCard()
 					</div>
@@ -4998,6 +5002,27 @@ templ SuggestionReviewPage(d SuggestionReview) {
 	}
 }
 
+// CastSessionView is one paired TV, for the person's card.
+type CastSessionView struct {
+	ID, Source, Since string
+	Paused            bool
+}
+
+// CastView is the person's "Cast to a TV" card.
+type CastView struct {
+	Available bool
+	Sessions  []CastSessionView
+}
+
+// CastFormView is what the cast form offers: the person's albums, shared albums and people; the code field only for a new TV.
+type CastFormView struct {
+	Session string // a TV already paired: the form changes what it shows (empty: a new TV)
+	Albums  []AlbumOption
+	Shared  []AlbumOption
+	People  []PersonOption
+	Today   string
+}
+
 // AlbumTreePageView is the album tree page: the person's own albums, the ones shared with them, and the folders an album can move to.
 type AlbumTreePageView struct {
 	User      string
@@ -5005,6 +5030,173 @@ type AlbumTreePageView struct {
 	Shared    *albumtree.Node
 	Folders   []string
 	ImmichURL string // where albums open in Immich (empty: no link)
+}
+
+// CastCard shows the person's albums, people and memories on a TV with a code: the TVs that are showing, with their remote, and the form.
+templ CastCard(c CastView) {
+	<h2>{ t(ctx, "Cast to a TV") }</h2>
+	<div class="card castcard">
+		<p>{ t(ctx, "Open the address below in the browser of a TV: it shows a short code. Type the code here and choose what to show, and the TV shows those photos. The TV does not sign in to anything: it gets the photos through this app, and you stop it from here whenever you like.") }</p>
+		<div class="field">
+			<label for="cast-link">{ t(ctx, "Address to open on the TV") }</label>
+			<div class="row"><input id="cast-link" class="invite" readonly data-link="tv"/><button type="button" class="copy">{ t(ctx, "Copy") }</button></div>
+			<small class="meta">{ t(ctx, "An old TV whose browser shows nothing there can use this one instead:") } <input id="cast-link-legacy" class="invite" readonly data-link="tv/legacy"/> <button type="button" class="copy">{ t(ctx, "Copy") }</button></small>
+		</div>
+		for _, s := range c.Sessions {
+			<div class="card rule cast" id={ "cast-" + s.ID[:8] }>
+				<p><b>{ s.Source }</b>
+					if s.Paused {
+						<span class="chip warn">{ t(ctx, "Paused") }</span>
+					} else {
+						<span class="chip ok">{ t(ctx, "Showing") }</span>
+					}
+				</p>
+				<p class="meta">{ t(ctx, "Started {when}.", "when", s.Since) }</p>
+				<p class="row">
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "prev") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Previous") }</button>
+					if s.Paused {
+						<button class="primary" hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "resume") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Play") }</button>
+					} else {
+						<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "pause") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Pause") }</button>
+					}
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "next") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this">{ t(ctx, "Next") }</button>
+					<button hx-post="cast/control" hx-vals={ vals2("tv", s.ID, "do", "stop") } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="this" hx-confirm={ t(ctx, "Stop showing photos on this TV?") } data-confirm-title={ t(ctx, "Stop?") } data-confirm-label={ t(ctx, "Stop") } data-danger="true">{ t(ctx, "Stop") }</button>
+				</p>
+				<details class="offer">
+					<summary>{ t(ctx, "Show something else") }</summary>
+					<div hx-get={ "fragments/cast-form?tv=" + s.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+				</details>
+			</div>
+		}
+		<details class="offer">
+			<summary>{ t(ctx, "Show photos on a TV") }</summary>
+			<div hx-get="fragments/cast-form" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+		</details>
+	</div>
+}
+
+// CastForm is the form that pairs a TV by its code, or changes what a paired TV shows.
+templ CastForm(v CastFormView) {
+	<form class="card offer-form" hx-post={ castPath(v.Session) } hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		if v.Session != "" {
+			<input type="hidden" name="tv" value={ v.Session }/>
+		} else {
+			<div class="field">
+				<label for="cast-code">{ t(ctx, "The code on the TV") }</label>
+				<input id="cast-code" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" required/>
+			</div>
+		}
+		<div class="field">
+			<label for={ "cast-kind-" + v.Session }>{ t(ctx, "What to show") }</label>
+			<select id={ "cast-kind-" + v.Session } name="kind">
+				<option value="new">{ t(ctx, "Everything new in the last 30 days") }</option>
+				if len(v.Albums) > 0 {
+					<option value="album">{ t(ctx, "An album of mine") }</option>
+				}
+				if len(v.Shared) > 0 {
+					<option value="shared">{ t(ctx, "An album shared with me") }</option>
+				}
+				if len(v.People) > 0 {
+					<option value="person">{ t(ctx, "Photos of a person") }</option>
+				}
+				<option value="memory">{ t(ctx, "The memories of a day") }</option>
+			</select>
+		</div>
+		if len(v.Albums) > 0 {
+			<div class="field">
+				<label for={ "cast-album-" + v.Session }>{ t(ctx, "The album (for An album of mine)") }</label>
+				<select id={ "cast-album-" + v.Session } name="album">
+					for _, a := range v.Albums {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.Shared) > 0 {
+			<div class="field">
+				<label for={ "cast-shared-" + v.Session }>{ t(ctx, "The shared album (for An album shared with me)") }</label>
+				<select id={ "cast-shared-" + v.Session } name="shared">
+					for _, a := range v.Shared {
+						<option value={ a.ID }>{ a.Label }</option>
+					}
+				</select>
+			</div>
+		}
+		if len(v.People) > 0 {
+			<div class="field">
+				<label for={ "cast-person-" + v.Session }>{ t(ctx, "The person (for Photos of a person)") }</label>
+				<select id={ "cast-person-" + v.Session } name="person">
+					for _, p := range v.People {
+						<option value={ p.ID }>{ p.Name }</option>
+					}
+				</select>
+			</div>
+		}
+		<div class="field">
+			<label for={ "cast-day-" + v.Session }>{ t(ctx, "The day (for The memories of a day)") }</label>
+			<input id={ "cast-day-" + v.Session } type="date" name="day" value={ v.Today }/>
+		</div>
+		<div class="field">
+			<label for={ "cast-seconds-" + v.Session }>{ t(ctx, "How long each photo stays") }</label>
+			<select id={ "cast-seconds-" + v.Session } name="seconds">
+				<option value="8">{ t(ctx, "8 seconds") }</option>
+				<option value="15" selected>{ t(ctx, "15 seconds") }</option>
+				<option value="30">{ t(ctx, "30 seconds") }</option>
+				<option value="60">{ t(ctx, "60 seconds") }</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for={ "cast-fx-" + v.Session }>{ t(ctx, "Transition") }</label>
+			<select id={ "cast-fx-" + v.Session } name="fx">
+				<option value="fade">{ t(ctx, "Fade") }</option>
+				<option value="zoom">{ t(ctx, "Zoom") }</option>
+				<option value="slide">{ t(ctx, "Slide") }</option>
+				<option value="rise">{ t(ctx, "Rise") }</option>
+			</select>
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">
+			if v.Session != "" {
+				{ t(ctx, "Show it") }
+			} else {
+				{ t(ctx, "Show it on the TV") }
+			}
+		</button></p>
+	</form>
+}
+
+// TVPage is the page a TV opens: a code to type on the person's phone, then the photos. legacy is the page for old browsers.
+templ TVPage(legacy bool) {
+	<!DOCTYPE html>
+	<html class="tvpage" lang={ loc(ctx).Code() } data-legacy={ legacyFlag(legacy) }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="robots" content="noindex"/>
+			if b := baseHref(ctx); b != "" {
+				<base href={ b }/>
+			}
+			<title>{ t(ctx, "Photos on this TV") }</title>
+			<link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+			if !legacy {
+				<link rel="stylesheet" href="static/app.css"/>
+			}
+			<link rel="stylesheet" href="static/tv.css"/>
+			<script src="static/tv-boot.js"></script>
+		</head>
+		<body class={ tvBody(legacy) }>
+			<main id="tv">
+				<div class="wall-stage single" aria-live="off"></div>
+				<div class="tvl-layer"></div>
+				<div class="tvl-layer"></div>
+				<div class="tv-pair">
+					<h1>{ t(ctx, "Show photos on this TV") }</h1>
+					<p class="tv-code" aria-live="polite">&nbsp;</p>
+					<p class="tv-hint" data-hint={ t(ctx, "On your phone, open {address}, go to Settings, choose Cast to a TV and type this code.") }></p>
+					<p class="tv-note">{ t(ctx, "The code is good for 10 minutes; a new one appears when it runs out.") }</p>
+				</div>
+			</main>
+		</body>
+	</html>
 }
 
 // AlbumTreeCard is the entry to the album tree page, in Settings.

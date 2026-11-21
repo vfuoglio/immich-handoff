@@ -314,6 +314,7 @@ func (h *Hub) RulesMaintenance(ctx context.Context) {
 	}
 	h.ExpirePairings(ctx)
 	h.CirclesMaintenance(ctx)
+	h.CastMaintenance(ctx)
 	list, err := h.Store.AllRules(ctx)
 	if err != nil {
 		return

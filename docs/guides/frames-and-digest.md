@@ -8,6 +8,8 @@
 
 ## Frames: an album on a screen
 
+To show photos on a TV with a short code instead of a long link, and to control it from your phone, see [Cast to a TV](cast-to-tv.md).
+
 A **frame** shows one of your albums full screen on a photo frame, an old tablet or phone, or a TV, with no account on it. Under **Frames** on the Services tab, **Make a frame**: give it a name, choose one of your own albums, how long each photo stays (8, 15, 30 or 60 seconds) and whether the link works until you end it or for 30 days, 90 days or a year. You get a link (and a QR code) to open on the screen; double-click the page for full screen (it is a web page, so on a TV open it in the TV's browser, or cast a tab).
 
 The page shows each photo once in a random order before any comes round again, never the same one twice in a row, and starts with what was added most recently. A frame has the same buttons for the transition (**Fade**, **Zoom**, **Slide**, **Rise**) and the backdrop (**Glow**, **Black**) as the wall, which appear when you touch or move the pointer and fade again, and the same address options (`?fx=zoom&bg=black`); a new photo is given a moment, as on the wall. It looks at the album again every couple of minutes (`FRAME_REFRESH`): **photos you add appear** and **photos you take out of the album disappear** within about that time, and nothing but the album's photos (not videos, not archived or trashed ones) is ever shown. If the network drops it keeps showing what it has and asks again, less often the longer it fails. **End frame** stops the link at once and deletes its key. A frame whose end date has come stops by itself and stays in your list, marked *Ended*, until you remove it (that deletes its key; only you can, from your account).

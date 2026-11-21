@@ -19,6 +19,7 @@ Start with what you want to do.
 | Be told by mail, phone or message | [Be told](guides/notifications.md) |
 | Get a daily message about the memories Immich has for today | [On this day](guides/memories.md) |
 | Stack RAW and JPEG pairs, edits and bursts | [Stacking](guides/automate.md#stacking-photos-that-belong-together) |
+| Show photos on a TV with a short code, and control it from my phone | [Cast to a TV](guides/cast-to-tv.md) |
 | See my albums as folders, and move them into folders | [Album tree](guides/album-tree.md) |
 | Share every new album with a family or a club | [Circles](guides/circles.md) |
 | Make an album for each folder of an external library | [Albums from folders](guides/automate.md#albums-from-the-folders-of-an-external-library) |
@@ -40,6 +41,6 @@ Start with what you want to do.
 
 ## For contributors
 
-[How it works inside](architecture.md), [Releasing](releasing.md), the [changelog](../CHANGELOG.md), and the design notes in [design/](design/): [bridges](design/bridges-design.md), [albums shared across servers](design/shared-albums-design.md), [rules](design/rules-design.md), [Add to my library and following an album](design/library-design.md), [the daily On this day message](design/memories-design.md), [albums from folders](design/folders-design.md), [smart albums](design/albums-design.md), [circles](design/circles-design.md), [album tree](design/album-tree-design.md), [stacking](design/stacks-design.md), [sharing a person's photos with another person, and pets](design/pairing-design.md), [handing over to a folder, WebDAV, S3 and SFTP](design/destinations-design.md), [the button in Immich's pages](design/immich-button-design.md) and [notes on the Immich behaviour this project relies on](design/immich-api-notes.md).
+[How it works inside](architecture.md), [Releasing](releasing.md), the [changelog](../CHANGELOG.md), and the design notes in [design/](design/): [bridges](design/bridges-design.md), [albums shared across servers](design/shared-albums-design.md), [rules](design/rules-design.md), [Add to my library and following an album](design/library-design.md), [the daily On this day message](design/memories-design.md), [albums from folders](design/folders-design.md), [smart albums](design/albums-design.md), [circles](design/circles-design.md), [album tree](design/album-tree-design.md), [cast to a TV](design/cast-design.md), [stacking](design/stacks-design.md), [sharing a person's photos with another person, and pets](design/pairing-design.md), [handing over to a folder, WebDAV, S3 and SFTP](design/destinations-design.md), [the button in Immich's pages](design/immich-button-design.md) and [notes on the Immich behaviour this project relies on](design/immich-api-notes.md).
 
 New to the idea? The [project page](../README.md) shows what it does in a minute.

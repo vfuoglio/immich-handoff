@@ -266,6 +266,16 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /me/mail", w.myMail)
 	mux.HandleFunc("POST /me/library", w.myLibrary)
 	mux.HandleFunc("POST /me/memories", w.myMemories)
+	mux.HandleFunc("GET /tv", w.tvPage(false))
+	mux.HandleFunc("GET /tv/legacy", w.tvPage(true))
+	mux.HandleFunc("POST /tv/new", w.tvNew)
+	mux.HandleFunc("GET /tv/state", w.tvState)
+	mux.HandleFunc("GET /tv/feed", w.tvFeed)
+	mux.HandleFunc("GET /tv/photo", w.tvPhoto)
+	mux.HandleFunc("GET /fragments/cast-form", w.castForm)
+	mux.HandleFunc("POST /cast/claim", w.claimCast)
+	mux.HandleFunc("POST /cast/change", w.changeCast)
+	mux.HandleFunc("POST /cast/control", w.controlCast)
 	mux.HandleFunc("GET /albums", w.albumTreePage)
 	mux.HandleFunc("GET /albums/{album}/cover", w.albumCover)
 	mux.HandleFunc("GET /fragments/album-move", w.albumMoveForm)
@@ -373,6 +383,9 @@ func (w *Server) secure(next http.Handler) http.Handler {
 		// Pages use relative links so they work under a path prefix; the invitation page is one level
 		// deeper than the others, so it points them back at the root.
 		if strings.HasPrefix(r.URL.Path, "/invite/") || strings.HasPrefix(r.URL.Path, "/pair/") {
+			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
+		}
+		if r.URL.Path == "/tv/legacy" {
 			r = r.WithContext(context.WithValue(r.Context(), baseKey{}, "../"))
 		}
 		if dropRoute(r.URL.Path) { // /drop/<token> is as deep as an invitation; each part after it is one level deeper
@@ -733,6 +746,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Stacks = w.stackViews(ctx, me)
 	d.Albums = w.albumViews(ctx, me)
 	d.Circles, d.CircleAsks = w.circleViews(ctx, me)
+	d.Cast = w.castViews(ctx, me)
 	d.Pairings = w.pairingViews(ctx, me)
 	if w.Hub != nil && !w.ButtonOff {
 		def := w.Hub.LibraryDefault(ctx, me.user.ID)
@@ -1045,6 +1059,7 @@ func (w *Server) dashboard(rw http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 			w.Hub.EnsureKeyPermissions(ctx, me.sess, me.user)
+			w.Hub.CastHousekeeping(ctx, me.sess, me.user.ID)
 		}()
 	}
 	ctx := context.WithValue(context.WithValue(r.Context(), adminKey{}, me.user.IsAdmin), tabsKey{}, true)

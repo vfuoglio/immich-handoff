@@ -521,7 +521,7 @@ func (d DashboardData) byRole(role string, notOwned bool) []ServiceView {
 // RowCount is how many service rows the page shows; with exactly one it starts open.
 // HasSettings is whether any of the set-once cards (mail, devices, library, memories, folders, stacks, smart albums, pairing) is on for this person.
 func (d DashboardData) HasSettings() bool {
-	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available
+	return d.Mail.Available || d.Push.Available || d.Pairings.Available || d.Library.Available || d.Memories.Available || d.Folders.Available || d.Stacks.Available || d.Albums.Available || d.Circles.Available || d.Cast.Available
 }
 
 func (d DashboardData) RowCount() int { return len(d.Sending()) + len(d.Receiving()) + len(d.Owned) }
@@ -695,7 +695,7 @@ var clientMessages = []string{
 	"A large video on mobile data", "Cancel", "Locations go with your photos", "Send now", "Wait for Wi-Fi", "Waiting for Wi-Fi: this device is on mobile data", "This browser cannot keep files waiting while the page is closed; keep this page open until they are sent.", "{n} file could not be kept for sending: this browser has no room left. Send what is waiting first, or free some space on the device.", "{n} large video is about to go over mobile data. Send it now, or wait until this device is on Wi-Fi?", "Photos are sent as they are, so the place where each was taken goes with it, and so do the details Immich shows, for you and for whoever you send them to. Nothing is removed.",
 	"Waiting", "Sending, {pct}%", "Waiting for the network", "Sign in to Immich again to go on", "Already in your library", "Sent", "Could not be sent: {reason}", "Try again", "Send again", "Remove", "Send", "{n} file left to send", "{n} file sent", "Send {n} file", "{n} file was left out: it is not a photo or video, or it is too large", "Send photos from this device",
 	"A sender", "Activity", "Settings", "Continue", "Copied", "Connection lost", "Daily limit reached: {waits}", "Daily limit reached: {waits} until {when}",
-	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open the album tree", "Open {name}", "Overview",
+	"Flowing", "Go to {view}", "Nothing matches", "Offer a service of your own", "Open the administrator's page", "Open the album tree", "Cast to a TV", "Open {name}", "Overview",
 	"Paused by the owner", "Paused by the sender", "Photos wait", "Please confirm", "Sending {n}", "Services", "Some updates were missed; refreshing",
 	"Switch between the light and the dark theme", "Sync now", "The QR code could not be made.", "The backup could not be downloaded.", "The backup was downloaded.", "Turn the arrival chime on or off", "a service", "action", "admin", "needs you", "service", "sound", "theme", "view",
 	"{n} photo", "{n} photo waits", "{service} lost its connection", "{service} was paused by its owner", "{service} was reconnected", "{service} was resumed",
@@ -1019,4 +1019,27 @@ func stackSignalWords(ctx context.Context, signal string) string {
 		return t(ctx, "An edit with its original")
 	}
 	return t(ctx, "A burst")
+}
+
+// castPath is where the cast form posts: a new TV is paired by its code, a paired one is changed.
+func castPath(session string) string {
+	if session != "" {
+		return "cast/change"
+	}
+	return "cast/claim"
+}
+
+func legacyFlag(legacy bool) string {
+	if legacy {
+		return "1"
+	}
+	return "0"
+}
+
+// tvBody is the class of a TV page's body: the modern page takes the wall's styles, the legacy one only its own.
+func tvBody(legacy bool) string {
+	if legacy {
+		return "tv legacy"
+	}
+	return "tv wall"
 }

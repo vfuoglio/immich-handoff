@@ -18,6 +18,9 @@ No. Senders use Immich as they do now: add a tag, or press the **Hand over...** 
 **Can I share the photos of a person with my partner, both ways, without doing anything each time?**
 Yes: in **Settings**, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
 
+**Can I show photos on my TV with a code, and control it from my phone?**
+Yes: open the address `/tv` of this app in the TV's browser, then type the code it shows into **Settings**, **Cast to a TV**, and choose an album, a person, everything new or a day of memories. Pause, skip and stop from your phone. Most TVs from about 2022 work; older TVs from about 2016 can use `/tv/legacy`. See [Cast to a TV](guides/cast-to-tv.md).
+
 **Can I see my albums as folders, like Trips / 2024 / Rome?**
 Yes, as a tree on a page of its own, though not inside Immich, which has no folders for albums. Name albums with slashes and open **Album tree** in **Settings** (or the palette): the names become folders with covers, and **Move** renames an album into a folder after showing the new name. See [Album tree](guides/album-tree.md).
 

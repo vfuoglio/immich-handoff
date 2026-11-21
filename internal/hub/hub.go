@@ -129,6 +129,7 @@ type Hub struct {
 	frames       frameCache      // the albums frames last read
 	rooms        roomCache       // the albums client rooms last read
 	pins         pinGuard
+	casts        castHub                 // the TVs waiting for a code, and who has been guessing codes
 	syncing      sync.Map                // the shared albums being looked at now
 	peerVerify   peer.Verifier           // the signed requests other apps have sent                // wrong PINs given to client rooms
 	remotes      map[string]*remoteEntry // receivers on other servers, by service, kept between reloads

@@ -835,6 +835,29 @@ var migrations = []string{
 	   PRIMARY KEY (circle_id, album_id, user_id)
 	 );
 	 CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);`,
+	// casting to a TV: the person's key for it, and the TVs that are paired (the code a TV shows is not kept)
+	`CREATE TABLE cast_keys (
+	   user_id    TEXT PRIMARY KEY,
+	   key_id     TEXT NOT NULL,
+	   key_enc    BLOB NOT NULL,
+	   created_at TEXT NOT NULL
+	 );
+	 CREATE TABLE cast_sessions (
+	   id          TEXT PRIMARY KEY,
+	   user_id     TEXT NOT NULL,
+	   kind        TEXT NOT NULL,
+	   source_id   TEXT NOT NULL DEFAULT '',
+	   source_name TEXT NOT NULL DEFAULT '',
+	   day         TEXT NOT NULL DEFAULT '',
+	   seconds     INTEGER NOT NULL DEFAULT 15,
+	   fx          TEXT NOT NULL DEFAULT 'fade',
+	   paused      INTEGER NOT NULL DEFAULT 0,
+	   seq         INTEGER NOT NULL DEFAULT 0,
+	   cmd         TEXT NOT NULL DEFAULT '',
+	   paired_at   TEXT NOT NULL,
+	   last_seen   TEXT NOT NULL,
+	   ended       INTEGER NOT NULL DEFAULT 0
+	 );`,
 }
 
 // Open opens (creating if needed) the database at path and checks that v is the key it was made with.
