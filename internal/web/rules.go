@@ -745,6 +745,33 @@ func (w *Server) petForm(rw http.ResponseWriter, r *http.Request) {
 	PetForm(r.URL.Query().Get("service"), photos, w.Hub.Pets != nil).Render(r.Context(), rw)
 }
 
+// petPick is the photos to choose a pet's examples from, for the forms that offer a sharing and say yes to one (their own
+// checkboxes are named "pet").
+func (w *Server) petPick(rw http.ResponseWriter, r *http.Request) {
+	me, code, msg := w.authenticate(r)
+	if me == nil {
+		http.Error(rw, msg, code)
+		return
+	}
+	if w.Hub == nil || !w.Hub.SelfService() {
+		http.NotFound(rw, r)
+		return
+	}
+	items, err := me.sess.Recent(r.Context(), 60)
+	if err != nil {
+		http.Error(rw, "could not list your photos", http.StatusBadGateway)
+		return
+	}
+	var photos []PetPhoto
+	for _, a := range items {
+		if a.OwnerId == me.user.ID && !a.IsTrashed && !a.IsArchived {
+			photos = append(photos, PetPhoto{ID: a.Id.String()})
+		}
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	PetPick(photos, w.Hub.Pets != nil).Render(r.Context(), rw)
+}
+
 // petPhoto shows one of the person's own photos while they pick the examples of a pet. Only their own are shown.
 func (w *Server) petPhoto(rw http.ResponseWriter, r *http.Request) {
 	me, code, msg := w.authenticate(r)
@@ -900,4 +927,28 @@ func (w *Server) followPlaces(rw http.ResponseWriter, r *http.Request) {
 		_, err := w.Hub.FollowPlaces(ctx, me.sess, me.user)
 		return err
 	})
+}
+
+// petViews is the person's "Pets" card: whether the pet helper is on, and the pet rules they have.
+func (w *Server) petViews(ctx context.Context, me *member) PetsView {
+	v := PetsView{Available: w.Hub != nil && w.Hub.SelfService()}
+	if !v.Available {
+		return v
+	}
+	v.Helper = w.Hub.Pets != nil
+	rules, err := w.Hub.RulesFor(ctx, me.user.ID, "")
+	if err != nil {
+		return v
+	}
+	for _, r := range rules {
+		if len(r.Cond.Examples) == 0 {
+			continue
+		}
+		where := r.Service
+		if hub.IsPairingName(where) {
+			where = t(ctx, "a photo sharing")
+		}
+		v.Rules = append(v.Rules, PetRuleView{Where: where})
+	}
+	return v
 }

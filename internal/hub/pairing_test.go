@@ -541,3 +541,44 @@ func TestEachPersonSwitchesTheirOwnSideOfASharingToSendByItselfAndBackAndOnlyOnc
 		t.Errorf("and off again: %+v", r)
 	}
 }
+
+// A pet can be shared too: the person who offers may offer only a pet (3 to 8 of their own photos), that is a rule of the sharing like
+// any other, and it always asks first even when the sharing sends by itself.
+func TestAPetCanBeSharedAlongWithPeopleOrAlone(t *testing.T) {
+	e, ctx := pairingEnv(t)
+	ex := examples(e, 3)
+	start := func(people []uuid.UUID, pet []uuid.UUID) error {
+		_, _, err := e.h.StartPairing(ctx, e.sess, bob, hub.PairingParams{With: ann, People: people, PetExamples: pet})
+		return err
+	}
+	if err := start(nil, ex[:2]); !errors.Is(err, hub.ErrBadExamples) {
+		t.Errorf("two photos are too few: %v", err)
+	}
+	if err := start(nil, nil); !errors.Is(err, hub.ErrPairingPeople) {
+		t.Errorf("sharing nothing is refused: %v", err)
+	}
+	if svcs, _ := e.st.Services(ctx); len(svcs) != 0 {
+		t.Errorf("a refused offer makes nothing: %+v", svcs)
+	}
+	p, _, err := e.h.StartPairing(ctx, e.sess, bob, hub.PairingParams{With: ann, PetExamples: ex})
+	if err != nil {
+		t.Fatalf("a pet alone: %v", err)
+	}
+	if mine, theirs, err := e.h.PairingPets(ctx, bob.ID, p.ID); err != nil || !mine || theirs {
+		t.Errorf("bob sends a pet and ann does not yet: %v %v %v", mine, theirs, err)
+	}
+	rules, _ := e.h.PairingRules(ctx, bob.ID, p.ID)
+	if len(rules) != 1 || len(rules[0].Cond.Examples) != 3 || len(rules[0].Cond.People) != 0 {
+		t.Fatalf("one pet rule and no people rule: %+v", rules)
+	}
+	if err := e.h.AcceptPairing(ctx, e.ann, ann, p.ID, nil, 0); err != nil {
+		t.Fatalf("ann only receives: %v", err)
+	}
+	if err := e.h.SetPairingAuto(ctx, bob, p.ID, true); err != nil {
+		t.Fatalf("switching a sharing to send by itself leaves the pet rule alone: %v", err)
+	}
+	rules, _ = e.h.PairingRules(ctx, bob.ID, p.ID)
+	if len(rules) != 1 || rules[0].Mode == store.RuleAuto {
+		t.Errorf("a pet rule always asks first: %+v", rules)
+	}
+}

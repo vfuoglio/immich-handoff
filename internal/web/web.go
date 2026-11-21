@@ -333,6 +333,7 @@ func (w *Server) routes() http.Handler {
 	mux.HandleFunc("POST /rules/answer", w.answerRule)
 	mux.HandleFunc("POST /rules/auto", w.autoRule)
 	mux.HandleFunc("GET /fragments/pet-form", w.petForm)
+	mux.HandleFunc("GET /fragments/pet-pick", w.petPick)
 	mux.HandleFunc("GET /rules/pet-photo/{asset}", w.petPhoto)
 	mux.HandleFunc("POST /rules/pet", w.addPet)
 	mux.HandleFunc("POST /rules/lookback", w.lookBackRule)
@@ -767,6 +768,7 @@ func (w *Server) dashboardData(ctx context.Context, me *member) DashboardData {
 	d.Cast = w.castViews(ctx, me)
 	d.Stories = w.storyViews(ctx, me)
 	d.Places = w.placeViews(ctx, me)
+	d.Pets = w.petViews(ctx, me)
 	if w.storyOn() {
 		d.StoryYear, _ = w.Hub.StoryYearOffer(ctx, me.sess, me.user)
 	}

@@ -60,6 +60,8 @@ func (h *Hub) lockedService(ctx context.Context, service string) error {
 type PairingParams struct {
 	With   immich.User // the other person (id, name and email, as the server lists them)
 	People []uuid.UUID // the people in the starter's own library whose photos go to the other person
+	// PetExamples are 3 to 8 of the starter's own photos of a pet to send as well: a pet rule with them is made, which always asks first.
+	PetExamples []uuid.UUID
 	// SettleMinutes is how long a photo waits before the starter's rules offer it: 0 is the usual wait, otherwise 1 to 60.
 	SettleMinutes int
 }
@@ -74,7 +76,14 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 	if p.With.ID == uuid.Nil || p.With.ID == a.ID {
 		return none, "", ErrPairingSelf
 	}
-	if err := h.checkPairingPeople(ctx, sess, p.People, 1); err != nil {
+	min := 1 // the person who offers sends something: a person, a pet, or both
+	if len(p.PetExamples) > 0 {
+		min = 0
+	}
+	if err := h.checkPairingPeople(ctx, sess, p.People, min); err != nil {
+		return none, "", err
+	}
+	if err := checkPairingPet(p.PetExamples); err != nil {
 		return none, "", err
 	}
 	if p.SettleMinutes < 0 || p.SettleMinutes > maxSettleMinutes { // before anything is made
@@ -111,7 +120,7 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 		undo()
 		return none, "", err
 	}
-	if err := h.addPairingRules(ctx, sess, a, pr, p.People, p.SettleMinutes); err != nil {
+	if err := h.addPairingRules(ctx, sess, a, pr, p.People, p.PetExamples, p.SettleMinutes); err != nil {
 		undo()
 		return none, "", err
 	}
@@ -127,6 +136,19 @@ func (h *Hub) StartPairing(ctx context.Context, sess *immich.API, a immich.User,
 // AcceptPairing is the other person's yes: they join the pool with their own key, choose which of their own people go back, and
 // both sides' rules start looking from this moment on. Only the person the pairing was offered to can accept it.
 func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User, id string, people []uuid.UUID, settle int) error {
+	return h.AcceptPairingWith(ctx, sess, b, id, PairingChoice{People: people, SettleMinutes: settle})
+}
+
+// PairingChoice is what the person who says yes sends back: people, a pet (3 to 8 example photos), both or nothing.
+type PairingChoice struct {
+	People        []uuid.UUID
+	PetExamples   []uuid.UUID
+	SettleMinutes int
+}
+
+// AcceptPairingWith is AcceptPairing with a pet to send back as well.
+func (h *Hub) AcceptPairingWith(ctx context.Context, sess *immich.API, b immich.User, id string, c PairingChoice) error {
+	people, settle := c.People, c.SettleMinutes
 	if !h.SelfService() {
 		return ErrNotJoinable
 	}
@@ -147,6 +169,9 @@ func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User
 	if err := h.checkPairingPeople(ctx, sess, people, 0); err != nil { // the person who says yes may send nothing back and only receive
 		return err
 	}
+	if err := checkPairingPet(c.PetExamples); err != nil {
+		return err
+	}
 	if settle < 0 || settle > maxSettleMinutes { // before they join anything
 		return ErrBadSettle
 	}
@@ -161,7 +186,7 @@ func (h *Hub) AcceptPairing(ctx context.Context, sess *immich.API, b immich.User
 	if err := h.JoinWith(ctx, sess, b, p.Service, svc.Invite, syncer.ModeCopy, true); err != nil {
 		return err
 	}
-	if err := h.addPairingRules(ctx, sess, b, p, people, settle); err != nil {
+	if err := h.addPairingRules(ctx, sess, b, p, people, c.PetExamples, settle); err != nil {
 		if lerr := h.Leave(ctx, sess, b, p.Service); lerr != nil { // takes the key and the link back, and the rules made so far
 			h.Log.Warn("pairing: could not undo the join", "pairing", p.ID, "err", lerr)
 		}
@@ -227,6 +252,9 @@ func (h *Hub) SetPairingAuto(ctx context.Context, user immich.User, id string, o
 	}
 	changed := false
 	for _, r := range rules {
+		if len(r.Cond.Examples) > 0 {
+			continue // a pet rule always asks first
+		}
 		if (r.Mode == store.RuleAuto) == on {
 			continue
 		}
@@ -444,8 +472,49 @@ func (h *Hub) checkPairingPeople(ctx context.Context, sess *immich.API, ids []uu
 	return nil
 }
 
-// addPairingRules makes one rule per chosen person for the person's own side, marks each as the pairing's, and sends nothing yet.
-func (h *Hub) addPairingRules(ctx context.Context, sess *immich.API, user immich.User, p store.Pairing, people []uuid.UUID, settle int) error {
+// checkPairingPet checks the examples of a pet to send: none, or 3 to 8.
+func checkPairingPet(examples []uuid.UUID) error {
+	if len(examples) > 0 && (len(examples) < petMinExamples || len(examples) > petMaxExamples) {
+		return ErrBadExamples
+	}
+	return nil
+}
+
+// PairingPets says whether each side of the sharing has a pet rule: the person's own, and the other person's.
+func (h *Hub) PairingPets(ctx context.Context, user uuid.UUID, id string) (mine, theirs bool, err error) {
+	p, err := h.pairingOf(ctx, user, id)
+	if err != nil {
+		return false, false, err
+	}
+	rules, err := h.Store.RulesOfPairing(ctx, p.ID)
+	if err != nil {
+		return false, false, err
+	}
+	for _, r := range rules {
+		if len(r.Cond.Examples) == 0 {
+			continue
+		}
+		if r.OwnerID == user {
+			mine = true
+		} else {
+			theirs = true
+		}
+	}
+	return mine, theirs, nil
+}
+
+// addPairingRules makes one rule per chosen person, and one for a pet if there are examples of it, for the person's own side, marks
+// each as the pairing's, and sends nothing yet.
+func (h *Hub) addPairingRules(ctx context.Context, sess *immich.API, user immich.User, p store.Pairing, people, pet []uuid.UUID, settle int) error {
+	if len(pet) > 0 {
+		r, err := h.addRule(ctx, sess, user, RuleParams{Service: p.Service, Examples: pet, SettleMinutes: settle})
+		if err != nil {
+			return err
+		}
+		if err := h.Store.SetRulePairing(ctx, r.ID, p.ID); err != nil {
+			return err
+		}
+	}
 	for _, id := range people {
 		r, err := h.addRule(ctx, sess, user, RuleParams{Service: p.Service, People: []uuid.UUID{id}, SettleMinutes: settle})
 		if err != nil {

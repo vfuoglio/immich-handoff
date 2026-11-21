@@ -48,6 +48,17 @@ type PairingPageView struct {
 
 func peopleWords(names []string) string { return strings.Join(names, ", ") }
 
+// peopleAndPet is the people's names and, when there is a pet rule, "a pet" (or "and a pet" after names).
+func peopleAndPet(ctx context.Context, names []string, pet bool) string {
+	if !pet {
+		return peopleWords(names)
+	}
+	if len(names) == 0 {
+		return t(ctx, "a pet")
+	}
+	return t(ctx, "{people} and a pet", "people", peopleWords(names))
+}
+
 // pairingPools is the names of the pools that belong to the person's pairings: they are shown on the pairing's card, nowhere else.
 func (w *Server) pairingPools(ctx context.Context, user uuid.UUID) map[string]bool {
 	if w.Hub == nil || w.Hub.Store == nil {
@@ -92,7 +103,8 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 			it.Other = p.BName
 		}
 		mine, theirs, _ := w.Hub.PairingPeople(ctx, me.user.ID, p.ID)
-		it.Mine, it.Theirs = peopleWords(mine), peopleWords(theirs)
+		minePet, theirsPet, _ := w.Hub.PairingPets(ctx, me.user.ID, p.ID)
+		it.Mine, it.Theirs = peopleAndPet(ctx, mine, minePet), peopleAndPet(ctx, theirs, theirsPet)
 		if p.State == store.PairingInvited {
 			it.Expires = loc(ctx).Stamp(p.ExpiresAt.Local())
 			if starter {
@@ -104,8 +116,10 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 		if p.State != store.PairingStopped {
 			if rules, err := w.Hub.PairingRules(ctx, me.user.ID, p.ID); err == nil {
 				for _, r := range rules {
-					it.WaitMin = r.SettleMinutes // each person makes their rules with one wait
-					it.Auto = r.Mode == store.RuleAuto
+					it.WaitMin = r.SettleMinutes   // each person makes their rules with one wait
+					if len(r.Cond.Examples) == 0 { // a pet rule always asks first, so it does not say whether the sharing sends by itself
+						it.Auto = r.Mode == store.RuleAuto
+					}
 					if p.State == store.PairingInvited {
 						continue // nothing to look back at before the yes
 					}
@@ -113,7 +127,7 @@ func (w *Server) pairingViews(ctx context.Context, me *member) PairingsView {
 					for _, x := range r.Cond.People {
 						names = append(names, x.Name)
 					}
-					it.Rules = append(it.Rules, PairRuleView{ID: r.ID, Name: peopleWords(names)})
+					it.Rules = append(it.Rules, PairRuleView{ID: r.ID, Name: peopleAndPet(ctx, names, len(r.Cond.Examples) > 0)})
 				}
 			}
 		}
@@ -162,7 +176,7 @@ func (w *Server) startPairing(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		_, _, err = w.Hub.StartPairing(ctx, me.sess, me.user, hub.PairingParams{With: other, People: ids(r, "person"), SettleMinutes: settle})
+		_, _, err = w.Hub.StartPairing(ctx, me.sess, me.user, hub.PairingParams{With: other, People: ids(r, "person"), PetExamples: ids(r, "pet"), SettleMinutes: settle})
 		return err
 	})
 }
@@ -176,7 +190,7 @@ func (w *Server) acceptPairing(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return w.Hub.AcceptPairing(ctx, me.sess, me.user, r.PostFormValue("pairing"), ids(r, "person"), settle)
+		return w.Hub.AcceptPairingWith(ctx, me.sess, me.user, r.PostFormValue("pairing"), hub.PairingChoice{People: ids(r, "person"), PetExamples: ids(r, "pet"), SettleMinutes: settle})
 	})
 }
 
@@ -239,7 +253,8 @@ func (w *Server) pairingPage(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, theirs, _ := w.Hub.PairingPeople(ctx, me.user.ID, p.ID)
-	v := PairingPageView{ID: p.ID, Starter: p.AName, Theirs: peopleWords(theirs), Expires: loc(ctx).Stamp(p.ExpiresAt.Local()), WaitMin: w.waitMinutes()}
+	_, theirsPet, _ := w.Hub.PairingPets(ctx, me.user.ID, p.ID)
+	v := PairingPageView{ID: p.ID, Starter: p.AName, Theirs: peopleAndPet(ctx, theirs, theirsPet), Expires: loc(ctx).Stamp(p.ExpiresAt.Local()), WaitMin: w.waitMinutes()}
 	if people, err := me.sess.People(ctx); err == nil {
 		for _, x := range people {
 			v.People = append(v.People, PersonOption{ID: uuid.UUID(x.ID).String(), Name: x.Name})
