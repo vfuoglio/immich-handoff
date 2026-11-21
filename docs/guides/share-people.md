@@ -23,10 +23,10 @@
 - **The pieces are locked.** The private pool and the two rules of a sharing do not show in Services or Rules and cannot be changed there; the card is the only place, so a sharing is never left half broken.
 - **An offer lapses** after 7 days if nobody says yes.
 - **At most five sharings** at once for a person, and at most ten people in one.
-- **Pets** are not included yet; Immich's own face grouping cannot recognise them.
+- **Pets are not part of a sharing**, which works from the people Immich has named; Immich's own face grouping cannot recognise animals. A pet has its own kind of rule, [a rule for a pet](automate.md#rules-photos-by-who-where-and-when) (3 to 8 example photos, and the optional pet helper for much better results), which suggests photos to send to a service of yours. It cannot be put into a sharing, because a sharing's pieces are locked.
 
 ## Compared with Google Photos
 
-Google Photos has partner sharing (one partner only, all photos or those of chosen people, one-way until the partner sets theirs up, and dependent on face grouping that Google says is not available in every country) and live albums that add photos of chosen people and pets by themselves (reported limits of 10,000 or 20,000 photos). This does not copy that: it works for any two people (and a pool for more), both ways in one step, with no regional limit and no photo cap, and the photos stay on your own server. It is **slower**: photos are offered after a wait of minutes (30 to 60 minutes before one goes by itself with the usual wait, less with a shorter wait), not at once, and it does not recognise pets.
+Google Photos has partner sharing (one partner only, all photos or those of chosen people, one-way until the partner sets theirs up, and dependent on face grouping that Google says is not available in every country) and live albums that add photos of chosen people and pets by themselves (reported limits of 10,000 or 20,000 photos). This does not copy that: it works for any two people (and a pool for more), both ways in one step, with no regional limit and no photo cap, and the photos stay on your own server. It is **slower**: photos are offered after a wait of minutes (30 to 60 minutes before one goes by itself with the usual wait, less with a shorter wait), not at once, and a sharing does not recognise pets (a separate pet rule does, with suggestions you answer).
 
 Details: [Security](../security.md#sharing-photos-with-another-person), [Rules](automate.md), and the [design note](../design/pairing-design.md).
