@@ -14,7 +14,7 @@ import (
 // Finding the place of photos that have none (#273): a camera with no GPS leaves no place, but a photo taken minutes before or after one
 // that has a place, by the same camera on the same day, was almost certainly taken there. This file is the pure part: from photos with
 // their EXIF to the places to offer, and why. It is careful on purpose: a wrong place is a change in the person's library. See
-// docs/design/places-design.md.
+// docs/contributing/design/places-design.md.
 
 const (
 	placeTwoSided   = 15 * time.Minute // a located photo this near on both sides

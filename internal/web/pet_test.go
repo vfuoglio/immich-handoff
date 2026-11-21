@@ -101,7 +101,7 @@ func TestThePetFormAndTheAdminPageSayWhenTheHelperIsOff(t *testing.T) {
 	var st *store.Store
 	app, _ := setup(t, withPairings(t, &st))
 	_, form := do(t, "GET", app.URL+"/fragments/pet-form?service=club", "sess=other", nil)
-	if !strings.Contains(form, "This works with Immich") || !strings.Contains(form, "guides/automate.md#the-optional-pet-helper") || strings.Contains(form, "This server has the pet helper on") {
+	if !strings.Contains(form, "This works with Immich") || !strings.Contains(form, "guides/automate/pets.md#the-optional-pet-helper") || strings.Contains(form, "This server has the pet helper on") {
 		t.Errorf("the form without the helper: %.600s", form)
 	}
 	_, admin := do(t, "GET", app.URL+"/admin", "sess=admin", nil)

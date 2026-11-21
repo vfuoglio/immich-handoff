@@ -24,7 +24,7 @@ func stackLibrary(t *testing.T, bob user) string {
 	return externalLibraryAt(t, bob, []string{"/external/stacks"}, 11)
 }
 
-// TestStackingSpike: what Immich gives the grouping, as docs/design/stacks-design.md says. The groups the read-only run finds
+// TestStackingSpike: what Immich gives the grouping, as docs/contributing/design/stacks-design.md says. The groups the read-only run finds
 // among the sample photos, how a search treats a photo that is in a stack, and what a key of the planned permissions can do.
 func TestStackingSpike(t *testing.T) {
 	_, bob, _, _ := bootstrap(t)

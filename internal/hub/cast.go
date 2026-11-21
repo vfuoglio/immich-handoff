@@ -21,7 +21,7 @@ import (
 // Casting to a TV (#269): a TV opens a short address, shows a code, and the signed-in person types the code on their page and chooses
 // what to show. The TV holds a long secret (its session) that only it and the app know; the code is the short-lived way for the person
 // to say "that TV". Photos reach the TV through the app, with a key of the person's own, by opaque ids, as for a frame. See
-// docs/design/cast-design.md.
+// docs/contributing/design/cast-design.md.
 
 const (
 	castCodeLife    = 10 * time.Minute // how long a code can be used

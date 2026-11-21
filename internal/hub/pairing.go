@@ -16,7 +16,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
-// A pairing is two people sharing the photos of chosen people with each other, both ways, in one step (docs/design/pairing-design.md,
+// A pairing is two people sharing the photos of chosen people with each other, both ways, in one step (docs/contributing/design/pairing-design.md,
 // #229). It is made of a private two-member event pool and a rule "photos of this person" for each person chosen on either side;
 // a small record (store.Pairing) ties them together, and the pool and the rules carry its id so that they start, pause and stop
 // together and cannot be changed one by one. The transfer is the one that always was: the sender's key tags, the receiver's pass

@@ -19,7 +19,7 @@ import (
 // Immich says nothing when an album is made (its triggers are about photos), so a look in the rules' round finds new albums. The
 // owner is asked first, then can let the circle share by itself. What the app shared is recorded album by album and person by person
 // (store.CircleShare), so that taking a person out undoes only that and nobody who left an album is added again. See
-// docs/design/circles-design.md.
+// docs/contributing/design/circles-design.md.
 
 const (
 	circleKeyName    = "handoff: circles"

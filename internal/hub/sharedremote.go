@@ -18,7 +18,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// The one-app way of sharing an album (docs/design/shared-albums-design.md): the other person has an Immich and no Handoff. This app
+// The one-app way of sharing an album (docs/contributing/design/shared-albums-design.md): the other person has an Immich and no Handoff. This app
 // works on both sides, with a key it made on its own person's Immich and a key the other person made on theirs. The key is
 // judged by exactly what is needed (bridge.CheckShared): a small key only receives (the photos are put into an album on their
 // server); a bigger one also reads that album, so photos they add come here. Taking a photo out of the album does not travel,

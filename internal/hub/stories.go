@@ -22,7 +22,7 @@ import (
 
 // Stories (#272): a short animated recap with a public link. The owner chooses a source; the photos are chosen once, in the
 // background, with the owner's session (storybuild.go); the public page only shows what was chosen, by opaque ids, with a key of the
-// story's own that can look at pictures. See docs/design/stories-design.md.
+// story's own that can look at pictures. See docs/contributing/design/stories-design.md.
 
 const (
 	maxStories  = 10

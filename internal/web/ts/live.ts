@@ -1,5 +1,5 @@
 // What the server tells an open page as it happens (server-sent events, `event: live`). The shapes mirror
-// internal/live/live.go; docs/architecture.md describes each. An event names no photo and no file.
+// internal/live/live.go; docs/contributing/architecture.md describes each. An event names no photo and no file.
 
 export type LiveKind =
   | "started" // a photo is being handed over

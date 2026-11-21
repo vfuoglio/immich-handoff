@@ -36,7 +36,7 @@ const (
 	// RuleKindPlace gives the person's photos that have no place the place of a located photo of the same camera taken minutes from it.
 	RuleKindPlace = "place"
 	// RuleKindAlbum keeps one of the person's albums up to date with what a rule finds (Dest is the album's id and DestAlbum its name; the
-	// conditions are the ordinary ones). See docs/design/albums-design.md.
+	// conditions are the ordinary ones). See docs/contributing/design/albums-design.md.
 	RuleKindAlbum = "album"
 )
 

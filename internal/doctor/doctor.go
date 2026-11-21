@@ -111,7 +111,7 @@ func summary(r *Report) (int, int) {
 	fmt.Fprintln(r.W)
 	switch {
 	case r.Fails > 0:
-		fmt.Fprintf(r.W, "%d problem(s) to fix, %d warning(s). See docs/troubleshooting.md for more.\n", r.Fails, r.Warns)
+		fmt.Fprintf(r.W, "%d problem(s) to fix, %d warning(s). See docs/reference/troubleshooting.md for more.\n", r.Fails, r.Warns)
 	case r.Warns > 0:
 		fmt.Fprintf(r.W, "Nothing is broken; %d warning(s) above are worth a look.\n", r.Warns)
 	default:
@@ -225,7 +225,7 @@ func mailIn(ctx context.Context, r *Report, in Input) {
 	}
 	r.section("Photos by email")
 	if err != nil {
-		r.add(Fail, "the mailbox settings are not valid, and the app will not start with them: "+err.Error(), "Fix the MAIL_IN_* settings (see docs/settings.md).")
+		r.add(Fail, "the mailbox settings are not valid, and the app will not start with them: "+err.Error(), "Fix the MAIL_IN_* settings (see docs/reference/settings.md).")
 		return
 	}
 	if firstOf(in.Env, "HANDOFF_STORE_KEY", "HANDOFF_STORE_KEY_FILE") == "" {
@@ -269,7 +269,7 @@ func backups(r *Report, in Input) {
 	every, keep, err := backup.ParseSchedule(in.Env)
 	switch {
 	case err != nil:
-		r.add(Fail, err.Error(), "See the Settings page in docs/settings.md.")
+		r.add(Fail, err.Error(), "See the Settings page in docs/reference/settings.md.")
 	case every == 0:
 		r.add(Warn, "automatic backups are off (BACKUP_EVERY=off), so a backup exists only when you run `immich-handoff backup`",
 			"Remove BACKUP_EVERY to make one every day, or keep making them yourself.")
@@ -430,7 +430,7 @@ func deletePermission(ctx context.Context, r *Report, a *syncer.Account, enabled
 	switch {
 	case enabled && !held:
 		r.add(Warn, who+": the key may not move photos to the trash (asset.delete), so copies cannot expire and a hand-over cannot be taken back",
-			"A person's key made by the page gets the permission when its owner next opens the page. For a key in .env or the routes file, add asset.delete (docs/fixed-accounts.md), or set RECEIVER_DELETE=off to stop asking for it.")
+			"A person's key made by the page gets the permission when its owner next opens the page. For a key in .env or the routes file, add asset.delete (docs/admin/fixed-accounts.md), or set RECEIVER_DELETE=off to stop asking for it.")
 	case !enabled && held && !contains(have, "all"):
 		r.add(Warn, who+": the key may move photos to the trash (asset.delete) although RECEIVER_DELETE=off",
 			"The app does not use it. A key made by the page loses the permission when its owner next opens the page; for a key in .env or the routes file, remove asset.delete from it in Immich.")
@@ -485,12 +485,12 @@ func account(ctx context.Context, r *Report, a *syncer.Account, role string, wan
 	}
 	if len(missing) > 0 {
 		r.add(Fail, who+": the key lacks "+strings.Join(missing, ", "),
-			"Create a new key with the full list in docs/fixed-accounts.md. A person who joined from the page can press Clean up and join again.")
+			"Create a new key with the full list in docs/admin/fixed-accounts.md. A person who joined from the page can press Clean up and join again.")
 		return false
 	}
 	if len(optional) > 0 {
 		r.add(Warn, who+": the key works but lacks "+strings.Join(optional, "; "),
-			"A person who joined from the page, or who owns the service, gets it by opening the page once. For a key made by hand, add it (docs/fixed-accounts.md).")
+			"A person who joined from the page, or who owns the service, gets it by opening the page once. For a key made by hand, add it (docs/admin/fixed-accounts.md).")
 		return true
 	}
 	r.add(OK, who+": key works and has every permission it needs", "")

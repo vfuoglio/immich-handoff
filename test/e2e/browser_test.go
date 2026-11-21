@@ -674,7 +674,7 @@ func TestBrowser(t *testing.T) {
 	})
 
 	t.Run("the link a proxy adds to Immich's own header sits between the bell and the avatar", func(t *testing.T) {
-		// what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
+		// what docs/admin/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
 		// and this app under /handoff/ on the same address. This is also the check that Immich's header still has
 		// the shape the script looks for.
 		address := w.inFrontOfImmich(t)

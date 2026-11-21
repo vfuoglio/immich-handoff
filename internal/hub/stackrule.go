@@ -18,7 +18,7 @@ import (
 
 // A rule of kind stack (#197) stacks the person's photos that belong together: a RAW and its JPEG, an edit and its original, a burst.
 // It looks with a key of their own, offers each group, and only ever makes stacks: it never changes or deletes a photo, and never
-// touches a photo that is already in a stack. See docs/design/stacks-design.md.
+// touches a photo that is already in a stack. See docs/contributing/design/stacks-design.md.
 
 // stackKeyName is what the key is called in the person's Immich, where they can see it and delete it.
 const stackKeyName = "handoff: stacks"

@@ -19,7 +19,7 @@ import (
 
 // A pet rule ("photos like these"): Immich cannot name pets, so the person picks a few photos of the animal and the rule offers the
 // photos Immich's own smart search ranks closest to them. Immich gives no score, only the order, so how far down the list a photo may
-// be is learned from the person's answers. It only ever suggests (docs/design/pairing-design.md, #227).
+// be is learned from the person's answers. It only ever suggests (docs/contributing/design/pairing-design.md, #227).
 const (
 	petMinExamples  = 3
 	petMaxExamples  = 8  // what a person picks to begin with

@@ -1,13 +1,13 @@
 // A link to this app in Immich's own header, between the notification bell and the person's avatar.
 //
 // This script does not run in this app's pages. A reverse proxy in front of Immich adds one <script> tag to Immich's
-// pages (see docs/find-handoff.md) and it runs there. It finds its own address from that tag, so the link and the
+// pages (see docs/admin/find-handoff.md) and it runs there. It finds its own address from that tag, so the link and the
 // icon need no setting: the app's page is where the script came from, and the icon is the app's own.
 //
 // Immich offers no place for a link, so this looks for the avatar by what is true in every language (its title holds
 // the person's email) and puts the link in front of it. If the header cannot be found, because Immich changed, a round
 // button floats at the bottom right instead, so the link is never lost. Nothing else of Immich's page is touched
-// by this part; the hand-over button (handover.ts) adds its own, where docs/design/immich-button-design.md says.
+// by this part; the hand-over button (handover.ts) adds its own, where docs/contributing/design/immich-button-design.md says.
 
 import { startHandover } from "./handover.ts";
 import { addStyles } from "./immich-ui.ts";
@@ -73,7 +73,7 @@ if (source) {
   schedule();
   setTimeout(schedule, 5100);
 
-  // the hand-over button (docs/design/immich-button-design.md); the link above works without it
+  // the hand-over button (docs/contributing/design/immich-button-design.md); the link above works without it
   startHandover(page, icon);
 }
 

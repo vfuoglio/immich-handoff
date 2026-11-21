@@ -12,4 +12,4 @@ The latest release (the `latest` image) gets the fixes. Older minor versions get
 
 ## What counts
 
-Anything that lets someone read or change photos, keys or addresses they should not reach; get around a sign-in, a link's limits or the cross-site header; make the app connect somewhere it should not; or learn a secret from a log or a page. How the app is meant to be trusted, and what it deliberately does not defend against, is in [Security and trust](docs/security.md).
+Anything that lets someone read or change photos, keys or addresses they should not reach; get around a sign-in, a link's limits or the cross-site header; make the app connect somewhere it should not; or learn a secret from a log or a page. How the app is meant to be trusted, and what it deliberately does not defend against, is in [Security and trust](docs/reference/security.md).

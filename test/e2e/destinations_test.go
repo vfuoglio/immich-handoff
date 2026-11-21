@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// TestDestinations: photos handed over to a folder (docs/design/destinations-design.md), against a real Immich and the real app. A service
+// TestDestinations: photos handed over to a folder (docs/contributing/design/destinations-design.md), against a real Immich and the real app. A service
 // with only a destination moves a tagged photo into the folder with its record and moves the original; a second photo with the same name
 // is suffixed; a destination that does not answer holds the original (still tagged) while the other destination has the photo, and
 // removing it lets the move go on; taking the hand-over back deletes the files and restores the original; and a service with an Immich

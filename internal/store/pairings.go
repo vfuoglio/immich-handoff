@@ -10,7 +10,7 @@ import (
 )
 
 // A pairing is two people sharing the photos of chosen people with each other, both ways, through a private pool of their own
-// (docs/design/pairing-design.md). The pool's service and each side's rules carry the pairing's id.
+// (docs/contributing/design/pairing-design.md). The pool's service and each side's rules carry the pairing's id.
 const (
 	PairingInvited = "invited" // the starter made it; the other person has not said yes yet
 	PairingActive  = "active"

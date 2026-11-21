@@ -99,6 +99,21 @@ jobs:
           for i in $(seq 1 30); do curl -fs http://localhost:8090/ping >/dev/null && break; sleep 2; done
           python3 -m pip install --quiet pillow
           python3 check.py http://localhost:8090 || { docker logs pets; exit 1; }
+  site:
+    # The public documentation site (site/, Starlight) reads the Markdown in docs/. Node is used here and by whoever previews the site;
+    # the app and its build need none of it. A page that breaks the site, or a link that points nowhere, fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: The site builds from the documentation and every internal link of it exists
+        working-directory: site
+        run: npm ci --ignore-scripts && npm run build && npm run check
   types:
     # The page's scripts are TypeScript (internal/web/ts). Building and running the program needs no Node: esbuild
     # is a Go tool and the bundle is committed. Node is used here only, to check the types and run the page's few script tests.

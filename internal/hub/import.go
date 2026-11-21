@@ -22,7 +22,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Following a destination (#243, docs/design/destinations-design.md): the files that appear in a folder, a bucket or a server are offered
+// Following a destination (#243, docs/contributing/design/destinations-design.md): the files that appear in a folder, a bucket or a server are offered
 // to the person with pictures, and the ones they say yes to are added to their own Immich with their own key (the same key as for following
 // an album, which also has the permission to upload). Duplicates are Immich's to refuse, by checksum. Nothing at the destination is
 // ever changed or deleted: it is only listed and read.

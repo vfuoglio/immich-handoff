@@ -1,6 +1,6 @@
 # Try it first
 
-A throwaway copy of everything on your machine, in one command, with three people and sample photos already in place. Nothing leaves your computer, and one command removes it. It is for looking around, not for real use (see [Install](../docs/install.md) for that). Its passwords and keys are in this repository and it lets the app reach private addresses, so it listens on your own machine only (`127.0.0.1`): never expose it to a network.
+A throwaway copy of everything on your machine, in one command, with three people and sample photos already in place. Nothing leaves your computer, and one command removes it. It is for looking around, not for real use (see [Install](../docs/admin/install.md) for that). Its passwords and keys are in this repository and it lets the app reach private addresses, so it listens on your own machine only (`127.0.0.1`): never expose it to a network.
 
 You need Docker and about 4 GB of free memory. The first start builds the app and downloads Immich, so allow several minutes.
 

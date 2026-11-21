@@ -19,7 +19,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Peers: the other Handoff apps this one shares albums with (docs/design/shared-albums-design.md). A peer is made by an invitation.
+// Peers: the other Handoff apps this one shares albums with (docs/contributing/design/shared-albums-design.md). A peer is made by an invitation.
 // The person who invites makes a link on their app; the other person pastes it into their own app and accepts, which gives the
 // two apps a secret (made by the joiner, sent over HTTPS with the one-time token), and the inviter's app proves the joiner's app
 // can be reached by calling it with a signed request before it agrees. From then on every request between them is signed.

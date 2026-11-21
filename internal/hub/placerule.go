@@ -21,7 +21,7 @@ import (
 // minutes from them (placefind.go). It looks with a key of the person's own, offers each guess with the photo it was taken from, and
 // writes a place only when the person says so, or, when they have let it, for a photo with a located photo on both sides. Immich
 // cannot be told to clear a place (a null is refused on 3.4.1), so a written place is not taken back by the app: the person removes it
-// in Immich if one is wrong, which is why the first answer is always asked for. See docs/design/places-design.md.
+// in Immich if one is wrong, which is why the first answer is always asked for. See docs/contributing/design/places-design.md.
 
 const (
 	placeKeyName    = "handoff: places"

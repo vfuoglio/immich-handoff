@@ -3,10 +3,10 @@
 // to, and a short message with Undo once they have chosen one.
 //
 // It runs where immich-button.ts does: a reverse proxy adds the script to Immich's pages, and the app is on the same
-// address under /handoff/ (docs/find-handoff.md). So a request to the app carries the person's Immich cookie and needs
+// address under /handoff/ (docs/admin/find-handoff.md). So a request to the app carries the person's Immich cookie and needs
 // no key. The script never tags anything itself: it asks the app, which checks the person and the photos.
 //
-// Immich offers no place for any of this. What is looked for, and why, is in docs/design/immich-button-design.md, and
+// Immich offers no place for any of this. What is looked for, and why, is in docs/contributing/design/immich-button-design.md, and
 // TestImmichMarkup holds Immich to it. When something is not found the button is simply not shown.
 
 import { addForm, assetOfPath, choose, countIn, formOf, inOrder, ownedQuery, Selection, splitOwned, wordsOf, type Info, type Owner } from "./handover-core.ts";

@@ -1,6 +1,6 @@
 //go:build e2e
 
-// The two screens of sharing photos with another person, both ways (docs/design/pairing-design.md), in a real browser against a real
+// The two screens of sharing photos with another person, both ways (docs/contributing/design/pairing-design.md), in a real browser against a real
 // Immich: the starter offers it from the Overview and gets a link and a QR code; the other person opens the page, sees what saying
 // yes means, chooses who goes back and says yes; either can pause and resume it; the starter stops it through the real confirm
 // dialog and the other person is left able to clean up. This Immich runs without machine learning, so the named people are made by

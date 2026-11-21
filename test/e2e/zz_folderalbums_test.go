@@ -85,7 +85,7 @@ func searchPaths(t *testing.T, u user, body map[string]any) []string {
 	return out
 }
 
-// TestFolderAlbumsSpike: what Immich stores for an external library, as the notes in docs/design/immich-api-notes.md say.
+// TestFolderAlbumsSpike: what Immich stores for an external library, as the notes in docs/contributing/design/immich-api-notes.md say.
 // It checks, on the real stack, the facts the folder albums are built on.
 func TestFolderAlbumsSpike(t *testing.T) {
 	_, bob, _, _ := bootstrap(t)

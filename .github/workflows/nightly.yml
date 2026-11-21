@@ -9,7 +9,7 @@ name: nightly
 #   - run by hand from the Actions tab to try it: untick "publish" to build and smoke-test only (works from any
 #     branch), or tick "force" to build although `main` has not changed
 # Scheduled runs happen only for the workflow file on the default branch, and GitHub switches them off after 60 days
-# without repository activity (re-enable it on the Actions tab). See docs/releasing.md.
+# without repository activity (re-enable it on the Actions tab). See docs/contributing/releasing.md.
 on:
   schedule:
     # Not on the hour, and twice: GitHub starts scheduled runs late when it is busy (the first nightly started almost

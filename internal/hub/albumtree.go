@@ -12,7 +12,7 @@ import (
 )
 
 // The album tree (#274) shows albums named "Trips / 2024 / Rome" as a tree. It reads the person's albums with their own session and
-// needs no store: anyone who is signed in to Immich can use it. See docs/design/album-tree-design.md.
+// needs no store: anyone who is signed in to Immich can use it. See docs/contributing/design/album-tree-design.md.
 
 var ErrBadAlbumPath = errors.New("write the folders and the album's own name, up to 100 characters in all")
 

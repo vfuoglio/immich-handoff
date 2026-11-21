@@ -17,7 +17,7 @@ import (
 
 // A rule of kind folder (#198) makes albums from the folders of the person's external library: it looks at their photos under a
 // folder with a key of their own, offers the albums (or, once they have let it, makes them), and only ever adds. See
-// docs/design/folders-design.md.
+// docs/contributing/design/folders-design.md.
 
 // folderKeyName is what the key is called in the person's Immich, where they can see it and delete it.
 const folderKeyName = "handoff: folders"

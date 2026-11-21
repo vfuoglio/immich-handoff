@@ -25,10 +25,10 @@ func t(ctx context.Context, msg string, kv ...any) string { return i18n.From(ctx
 
 // h is a message with a little markup of its own (<code>, <strong>, <em>); its values are escaped.
 // petHelperDocsURL is where the page sends someone to read about switching the pet helper on.
-const petHelperDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/guides/automate.md#the-optional-pet-helper"
+const petHelperDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/guides/automate/pets.md#the-optional-pet-helper"
 
 // backupDocsURL is where the page sends an administrator to read about switching the backup download on.
-const backupDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/operations.md#download-a-backup-from-the-administrators-page"
+const backupDocsURL = "https://github.com/vfuoglio/immich-handoff/blob/main/docs/admin/operations.md#download-a-backup-from-the-administrators-page"
 
 func h(ctx context.Context, msg string, kv ...any) string { return i18n.From(ctx).H(msg, kv...) }
 

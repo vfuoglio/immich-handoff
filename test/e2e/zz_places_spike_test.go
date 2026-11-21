@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// TestPlacesSpike writes down, on the real Immich, what writing and clearing a photo's place does (the facts docs/design/places-design.md
+// TestPlacesSpike writes down, on the real Immich, what writing and clearing a photo's place does (the facts docs/contributing/design/places-design.md
 // stands on): that a place can be written, that Immich finds the city and country itself, and whether a place can be cleared again with a
 // null. It fails only on what the feature cannot work without: writing a place.
 func TestPlacesSpike(t *testing.T) {

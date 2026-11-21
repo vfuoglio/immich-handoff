@@ -14,7 +14,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Groups through the creator (docs/design/shared-albums-design.md). More than two servers share one album by every member pairing with
+// Groups through the creator (docs/contributing/design/shared-albums-design.md). More than two servers share one album by every member pairing with
 // the person who made it: the creator's app has the album shared with each member, one connection each, and what arrives from one
 // member lands in the creator's album, where the pass of every other member's connection finds it as new and sends it on. The
 // ledger of each connection is what prevents a loop: a photo that arrived over a connection is never sent back over it, and one a

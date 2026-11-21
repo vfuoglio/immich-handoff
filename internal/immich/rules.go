@@ -12,7 +12,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// What rules by people, places and dates ask of Immich (docs/design/rules-design.md).
+// What rules by people, places and dates ask of Immich (docs/contributing/design/rules-design.md).
 
 // ErrNoSmartSearch is returned when the server cannot do a smart search (it runs without machine learning).
 var ErrNoSmartSearch = errors.New("this Immich server cannot do a smart search: it runs without machine learning")
