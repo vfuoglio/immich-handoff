@@ -318,7 +318,7 @@ details.offer[open] > summary { margin-bottom: .6rem; }
 
 /* Overview: the "Needs you" strip, the numbers and the first-run guide */
 .count-badge { font: 600 .74rem var(--font-mono); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: .02rem .5rem; margin-left: .4rem; letter-spacing: 0; }
-.needs { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.needs { display: grid; gap: .7rem; grid-template-columns: minmax(0, 1fr); } /* one above the other, never side by side */
 .needs .card, .card.need { margin: 0; }
 
 /* Overview: what needs the person, then the live scene, then the week, each as wide as the page */
