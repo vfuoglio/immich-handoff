@@ -83,7 +83,7 @@ func (w *Server) Handler() http.Handler {
 func (w *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(http.FileServerFS(static), time.Hour)))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", revalidate(http.FileServerFS(static))))
 	mux.HandleFunc("GET /healthz", func(rw http.ResponseWriter, _ *http.Request) { rw.Write([]byte("ok")) })
 	mux.HandleFunc("POST /webhook/immich", w.webhook)
 	mux.HandleFunc("GET /metrics", w.metrics)
@@ -503,9 +503,11 @@ func (w *Server) metrics(rw http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(rw, "# TYPE handoff_build_info gauge\nhandoff_build_info{version=%q} 1\n", w.Version)
 }
 
-func cacheFor(h http.Handler, d time.Duration) http.Handler {
+// revalidate has the browser ask again for a script or style before it uses its copy. The files carry no version in their address, so
+// a copy kept for an hour would show the old page, or the old page with the new markup, for an hour after an upgrade.
+func revalidate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(d.Seconds())))
+		rw.Header().Set("Cache-Control", "no-cache")
 		h.ServeHTTP(rw, r)
 	})
 }
