@@ -109,3 +109,22 @@ func TestThePetFormAndTheAdminPageSayWhenTheHelperIsOff(t *testing.T) {
 		t.Errorf("the administrator's page says the helper is off")
 	}
 }
+
+// The Pets card is in Settings, the sharing forms offer a pet, and the photo picker for it is its own fragment.
+func TestThePetsCardAndTheSharingFormsOfferAPet(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withPairings(t, &st))
+	body := get(t, app.URL, "sess=other")
+	for _, want := range []string{`class="card petscard"`, "Two places to start one:", "pet helper"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	_, form := do(t, "GET", app.URL+"/fragments/pair-form", "sess=other", nil)
+	if !strings.Contains(form, "Also share photos of a pet") || !strings.Contains(form, `hx-get="fragments/pet-pick"`) {
+		t.Errorf("the offer form can add a pet: %.400s", form)
+	}
+	if code, pick := do(t, "GET", app.URL+"/fragments/pet-pick", "sess=other", nil); code != 200 || !strings.Contains(pick, "Pick 3 to 8 photos of the animal") {
+		t.Errorf("the picker: %d %.200s", code, pick)
+	}
+}

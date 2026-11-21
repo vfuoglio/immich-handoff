@@ -1085,6 +1085,16 @@ func countStatus(ctx context.Context, count int, one, other string) StatusView {
 	return StatusView{On: true, Words: n(ctx, one, other, count)}
 }
 
+func petsStatus(ctx context.Context, p PetsView) StatusView {
+	if len(p.Rules) > 0 {
+		return countStatus(ctx, len(p.Rules), "{n} pet rule", "{n} pet rules")
+	}
+	if p.Helper {
+		return StatusView{Words: t(ctx, "Helper on")}
+	}
+	return StatusView{Words: t(ctx, "Ready")}
+}
+
 func ruleStatus(ctx context.Context, rules int) StatusView {
 	return countStatus(ctx, rules, "{n} rule", "{n} rules")
 }
@@ -1143,7 +1153,7 @@ func (d DashboardData) SettingsCats() []SettingsCat {
 	}
 	on := b(d.Library.Available && len(d.Library.Followed)+len(d.Library.Imports) > 0) + b(d.Memories.Available && d.Memories.On) +
 		b(d.Folders.Available && len(d.Folders.Rules) > 0) + b(d.Stacks.Available && len(d.Stacks.Rules) > 0) + b(d.Places.Available && d.Places.Rule != nil) +
-		b(d.Albums.Available && len(d.Albums.Rules) > 0)
+		b(d.Albums.Available && len(d.Albums.Rules) > 0) + b(d.Pets.Available && len(d.Pets.Rules) > 0)
 	out = append(out, SettingsCat{"photos", on}) // the album tree is always there, so is this
 	if d.Circles.Available || d.Pairings.Available || d.Stories.Available {
 		out = append(out, SettingsCat{"sharing", b(d.Circles.Available && len(d.Circles.Items) > 0) + b(d.Pairings.Available && len(d.Pairings.Items) > 0) + b(d.Stories.Available && len(d.Stories.Items) > 0)})

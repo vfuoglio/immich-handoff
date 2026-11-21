@@ -311,7 +311,7 @@ func TestBrowser(t *testing.T) {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
 		settings := js[[]string](t, ctx, `[...document.querySelectorAll('#v-settings h2')].map(h => h.childNodes[0].textContent.trim())`)
-		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Album tree|Circles|Share photos with someone|Stories|Cast to a TV" {
+		if strings.Join(settings, "|") != "Add to my library|Albums from my folders|Stack photos that belong together|Places for photos that have none|Smart albums|Pets|Album tree|Circles|Share photos with someone|Stories|Cast to a TV" {
 			t.Errorf("cards of the Settings view, top to bottom: %v", settings)
 		}
 		// the categories are on the left, one at a time; the first one's cards show and the others' do not

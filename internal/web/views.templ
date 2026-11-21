@@ -402,6 +402,7 @@ type DashboardData struct {
 	Cast       CastView
 	Stories    StoriesView
 	Places     PlacesView
+	Pets       PetsView
 	StoryYear  int // the year the end-of-year suggestion is for (0: none)
 	CircleAsks []CircleAskView
 	Pairings   PairingsView
@@ -866,6 +867,9 @@ templ Dashboard(d DashboardData) {
 						}
 						if d.Albums.Available {
 							@AlbumsCard(d.Albums)
+						}
+						if d.Pets.Available {
+							@PetsCard(d.Pets)
 						}
 						@AlbumTreeCard()
 					</div>
@@ -2416,6 +2420,34 @@ templ NotifyResults(results []NotifyResultView) {
 }
 
 // AdminBackups is the Backups section: the schedule, the newest backup and, only when it is switched on, the download.
+// PetsCard explains the rule for a pet, says whether the pet helper is on, and shows the person's pet rules, with where to make one.
+templ PetsCard(p PetsView) {
+	<h2>{ t(ctx, "Pets") } @Status(petsStatus(ctx, p))</h2>
+	<div class="card petscard">
+		<p>{ t(ctx, "Immich cannot recognise a pet by name, so a pet rule learns from photos you pick: 3 to 8 photos of the animal, and the rule suggests the photos most like them, with pictures, and always asks first. Every photo you send teaches it more.") }</p>
+		if p.Helper {
+			<p class="meta">{ t(ctx, "The pet helper is on, so the rule compares the animal in each photo with the animal in your examples.") }</p>
+		} else {
+			<p class="meta">
+				@templ.Raw(h(ctx, "This works with Immich's own search. For much better results the person who runs this app can switch on the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">pet helper</a>.", "url", petHelperDocsURL))
+			</p>
+		}
+		if len(p.Rules) > 0 {
+			<ul class="plain">
+				for _, r := range p.Rules {
+					<li>{ t(ctx, "A pet rule for {where}", "where", r.Where) }</li>
+				}
+			</ul>
+		}
+		<p><b>{ t(ctx, "Two places to start one:") }</b></p>
+		<ul>
+			<li>{ t(ctx, "Under Sharing, Share photos with someone: Also share photos of a pet.") }</li>
+			<li>{ t(ctx, "In Services, open a service you send photos to, and choose Make a rule for a pet.") }</li>
+		</ul>
+		<p class="row"><a class="button" href="#services" data-view="services">{ t(ctx, "Open Services") }</a></p>
+	</div>
+}
+
 // AdminPetHelper says whether the optional pet helper is running, and where to read how to switch it on.
 templ AdminPetHelper(state string) {
 	<h2>{ t(ctx, "Pet helper") }</h2>
@@ -5127,6 +5159,16 @@ type PlacesView struct {
 	Rule      *PlaceRuleView
 }
 
+// PetsView is the person's "Pets" card: what a pet rule is, whether the pet helper is on, and the person's pet rules.
+type PetsView struct {
+	Available bool
+	Helper    bool
+	Rules     []PetRuleView
+}
+
+// PetRuleView is one of the person's pet rules: where its suggestions go.
+type PetRuleView struct{ Where string }
+
 // StoryItemView is one story, for the person's card.
 type StoryItemView struct {
 	ID, Token, Title, State, Problem, Source, Ends string
@@ -5983,12 +6025,18 @@ templ PairForm(people []PersonOption, waitMin int) {
 					<label class="target"><input type="checkbox" name="person" value={ p.ID }/><img class="face" src={ "rules/person/" + p.ID } alt="" width="32" height="32" loading="lazy"/><span><b>{ p.Name }</b></span></label>
 				}
 			</fieldset>
-			<p class="meta">{ t(ctx, "These photos go to them. They choose which of their own people come back to you. Nothing is sent until they say yes, and only photos that arrive after that.") }</p>
-			@WaitField(waitMin)
-			<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer to share these photos") }</button></p>
 		} else {
-			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so there is nothing to share. Name people in Immich and come back.") }</p>
+			<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet. You can still share photos of a pet.") }</p>
 		}
+		<details class="offer pet-offer">
+			<summary>{ t(ctx, "Also share photos of a pet") }</summary>
+			<div hx-get="fragments/pet-pick" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+				<p class="meta">{ t(ctx, "Loading your photos...") }</p>
+			</div>
+		</details>
+		<p class="meta">{ t(ctx, "These photos go to them. They choose what comes back to you. Nothing is sent until they say yes, and only photos that arrive after that.") }</p>
+		@WaitField(waitMin)
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Offer to share these photos") }</button></p>
 	</form>
 }
 
@@ -6018,9 +6066,21 @@ templ PairingPage(v PairingPageView, user string) {
 						}
 					</fieldset>
 					<p class="meta">{ t(ctx, "Choose nobody to only receive: you send nothing back.") }</p>
+					<details class="offer pet-offer">
+						<summary>{ t(ctx, "Also send photos of a pet") }</summary>
+						<div hx-get="fragments/pet-pick" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+							<p class="meta">{ t(ctx, "Loading your photos...") }</p>
+						</div>
+					</details>
 					@WaitField(v.WaitMin)
 				} else {
-					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so you will only receive: you send nothing back.") }</p>
+					<p class="meta">{ t(ctx, "Immich has not named anyone in your library yet, so you will only receive unless you also send a pet.") }</p>
+					<details class="offer pet-offer">
+						<summary>{ t(ctx, "Also send photos of a pet") }</summary>
+						<div hx-get="fragments/pet-pick" hx-target="this" hx-trigger="toggle from:closest details once" hx-swap="innerHTML">
+							<p class="meta">{ t(ctx, "Loading your photos...") }</p>
+						</div>
+					</details>
 				}
 				<p id="flash" class="toast" role="status" aria-live="polite"></p>
 				<p class="row form-actions">
@@ -6074,6 +6134,26 @@ templ PetForm(service string, photos []PetPhoto, helper bool) {
 			<p class="row"><button class="primary" type="submit">{ t(ctx, "Make the pet rule") }</button></p>
 		}
 	</form>
+}
+
+// PetPick is the photos to choose the examples of a pet from, inside a form that offers a sharing or says yes to one. The checkboxes
+// are named "pet"; the choice is 3 to 8 photos, or none.
+templ PetPick(photos []PetPhoto, helper bool) {
+	<p class="meta">{ t(ctx, "Pick 3 to 8 photos of the animal. A pet rule suggests the photos most like them and always asks first; a pet cannot be told from a look-alike, so wrong photos can come at first.") }</p>
+	if !helper {
+		<p class="meta">
+			@templ.Raw(h(ctx, "This works with Immich's own search. For much better results the person who runs this app can switch on the <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">pet helper</a>.", "url", petHelperDocsURL))
+		</p>
+	}
+	if len(photos) == 0 {
+		<p class="meta">{ t(ctx, "There are no recent photos of yours to pick from.") }</p>
+	} else {
+		<div class="petgrid">
+			for _, p := range photos {
+				<label class="petpick"><input type="checkbox" name="pet" value={ p.ID }/><img src={ "rules/pet-photo/" + p.ID } alt="" width="96" height="96" loading="lazy"/></label>
+			}
+		</div>
+	}
 }
 
 // DestView is one destination of a service, for its owner's card.

@@ -91,7 +91,8 @@ func TestPairingPages(t *testing.T) {
 	if !strings.HasPrefix(link, base+"pair/") {
 		t.Fatalf("the link to give: %q", link)
 	}
-	run(t, a, chromedp.Click(".pairing .show-qr", chromedp.ByQuery))
+	// by script: the cards are still sliding in after the page loads, and a click aimed at where a button was misses it
+	run(t, a, chromedp.Evaluate(`document.querySelector('.pairing .show-qr').click()`, nil))
 	until(t, a, "the QR code", `document.querySelector('.pairing .qr img, .pairing .qr svg') !== null && !document.querySelector('.pairing .qr').hidden`, 10*time.Second)
 	if poolName := regexp.MustCompile(`pair-[0-9a-f]{8}`).FindString(text(a, "body")); poolName != "" {
 		t.Errorf("the pool's generated name is shown to the starter: %s", poolName)
