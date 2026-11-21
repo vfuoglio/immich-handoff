@@ -9,7 +9,7 @@ Everything is set in `.env` (copy `.env.example`). Only the first three are requ
 | `IMMICH_NETWORK` | `immich_default` | Docker network Immich runs on (used by `docker-compose.yml`). |
 | `IMMICH_BASE_URL` | `http://immich-server:2283` | Address of Immich as seen from this container. |
 | `PUBLIC_WEBHOOK_URL` | `http://immich-handoff:8080/webhook/immich` | Address the Immich **server** uses to reach this app (not your browser). |
-| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos, and the link into a memory in an [On this day](guides/memories.md) message. |
+| `PUBLIC_IMMICH_URL` | | Address of Immich as your browser sees it; switches on thumbnails of waiting photos, the link into a memory in an [On this day](guides/memories.md) message, and the links from the [album tree](guides/album-tree.md) into Immich. |
 | `DATA_DIR` | `/data` | Where the saved memberships live (the `handoff-data` volume). |
 | `BACKUP_EVERY` | `24h` | How often the app makes a backup of its data on its own: a time such as `12h` (one hour at the least), or `off`. See [Automatic backups](operations.md#automatic-backups). |
 | `BACKUP_KEEP` | `7` | How many automatic backups to keep; older ones are removed. Backups you asked for are never removed. |

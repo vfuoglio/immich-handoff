@@ -259,6 +259,7 @@ type AlbumInfo struct {
 	Count     int
 	CreatedAt time.Time
 	Members   []openapi_types.UUID // the people it is shared with (not its owner)
+	Cover     *openapi_types.UUID  // the photo Immich shows for it (none for an empty album)
 }
 
 // InAnAlbum reports whether the photo is in at least one album of the account (a person who filed it somewhere has
@@ -286,7 +287,7 @@ func (a *API) OwnedAlbums(ctx context.Context) ([]AlbumInfo, error) {
 	}
 	out := make([]AlbumInfo, 0, len(*r.JSON200))
 	for _, al := range *r.JSON200 {
-		info := AlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, CreatedAt: al.CreatedAt}
+		info := AlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, CreatedAt: al.CreatedAt, Cover: al.AlbumThumbnailAssetId}
 		for i, u := range al.AlbumUsers {
 			if i > 0 || u.Role != AlbumUserRole("owner") { // the first entry is the owner
 				info.Members = append(info.Members, u.User.Id)
@@ -303,6 +304,7 @@ type SharedAlbumInfo struct {
 	Name  string
 	Count int
 	Owner string // the name of the person who owns it
+	Cover *openapi_types.UUID
 }
 
 // AlbumsSharedWithMe lists the albums that other people shared with this account (not the account's own).
@@ -321,9 +323,21 @@ func (a *API) AlbumsSharedWithMe(ctx context.Context) ([]SharedAlbumInfo, error)
 		if len(al.AlbumUsers) > 0 { // the first entry is always the album's owner
 			owner = al.AlbumUsers[0].User.Name
 		}
-		out = append(out, SharedAlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, Owner: owner})
+		out = append(out, SharedAlbumInfo{ID: al.Id, Name: al.AlbumName, Count: al.AssetCount, Owner: owner, Cover: al.AlbumThumbnailAssetId})
 	}
 	return out, nil
+}
+
+// RenameAlbum gives an album of this account a new name. Only the owner may; Immich refuses anyone else.
+func (a *API) RenameAlbum(ctx context.Context, album openapi_types.UUID, name string) error {
+	r, err := a.c.UpdateAlbumInfoWithResponse(ctx, album, UpdateAlbumInfoJSONRequestBody{AlbumName: &name})
+	if err != nil {
+		return err
+	}
+	if r.JSON200 == nil {
+		return statusErr("updateAlbumInfo", r.StatusCode(), r.Body)
+	}
+	return nil
 }
 
 // AlbumAssets lists the photos in an album (trashed ones are not included), all pages.

@@ -7,7 +7,7 @@
 #   unit.sh shard PKG K N    the K-th of N shards of PKG (one of SHARDED), with the race detector
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-PLAIN="test/gen-stack-samples internal/safeimg internal/config internal/doctor internal/i18n internal/mailin internal/mark internal/pets internal/push internal/store internal/vault"
+PLAIN="test/gen-stack-samples internal/albumtree internal/safeimg internal/config internal/doctor internal/i18n internal/mailin internal/mark internal/pets internal/push internal/store internal/vault"
 RACE="cmd/immich-handoff internal/backup internal/bridge internal/dest internal/immich internal/live internal/mailin/mailtest internal/notify internal/peer internal/syncer"
 SHARDED="internal/hub internal/web"
 if [ "${1:-}" = lists ]; then echo "$PLAIN $RACE $SHARDED"; exit 0; fi

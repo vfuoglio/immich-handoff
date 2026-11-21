@@ -35,6 +35,7 @@ output-options:
     - addUsersToAlbum
     - removeUserFromAlbum
     - getAlbumInfo
+    - updateAlbumInfo
     - createAlbum
     - addAssetsToAlbum
     - getApiKey

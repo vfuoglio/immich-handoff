@@ -28,11 +28,15 @@ const (
 	familyID = "aaaaaaaa-0000-0000-0000-000000000002"
 	otherID  = "aaaaaaaa-0000-0000-0000-000000000009"
 	adminID  = "aaaaaaaa-0000-0000-0000-00000000000a"
+	treeID   = "aaaaaaaa-0000-0000-0000-00000000000c"
 	ts       = "2025-01-02T03:04:05.000Z"
 )
 
 // albumsDenied makes the fake Immich refuse to list albums, as it does for a key without album.read.
 var albumsDenied atomic.Bool
+
+// renamed is the last album rename the fake Immich was asked for, as "id=name".
+var renamed atomic.Value
 
 // buttonTagged is what the fake Immich was asked to tag ("on") or untag ("off"), by asset id.
 var buttonTagged sync.Map
@@ -65,7 +69,7 @@ func fakeImmich() http.Handler {
 	})
 	mux.HandleFunc("GET /api/users/me", func(w http.ResponseWriter, r *http.Request) {
 		who := map[string][2]string{
-			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"},
+			"sess=alice": {aliceID, "Alice"}, "sess=family": {familyID, "Family"}, "sess=other": {otherID, "Other"}, "sess=admin": {adminID, "Admin"}, "sess=tree": {treeID, "Tree"},
 			"k-alice": {aliceID, "Alice"}, "k-family": {familyID, "Family"},
 		}
 		key := r.Header.Get("x-api-key")
@@ -124,6 +128,18 @@ func fakeImmich() http.Handler {
 	mux.HandleFunc("GET /api/albums", func(w http.ResponseWriter, r *http.Request) {
 		if albumsDenied.Load() {
 			http.Error(w, "Missing required permission: album.read", http.StatusForbidden)
+			return
+		}
+		if strings.Contains(r.Header.Get("Cookie"), "sess=tree") { // the album tree: three albums named into folders, one with a cover, and one shared with this person
+			if r.URL.Query().Get("isOwned") == "false" {
+				j(w, []any{map[string]any{"id": "99999999-9999-4999-8999-999999999960", "albumName": "Family / Beach", "assetCount": 9, "albumThumbnailAssetId": "44444444-0000-4000-8000-000000000001",
+					"albumUsers": []any{map[string]any{"role": "owner", "user": map[string]any{"id": aliceID, "name": "Alice", "email": "alice@x.test", "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""}}}}})
+				return
+			}
+			j(w, []any{
+				map[string]any{"id": "99999999-9999-4999-8999-999999999951", "albumName": "Trips / 2024 / Rome", "assetCount": 5, "albumThumbnailAssetId": "44444444-0000-4000-8000-000000000002"},
+				map[string]any{"id": "99999999-9999-4999-8999-999999999952", "albumName": "Trips/2024/Oslo", "assetCount": 3},
+				map[string]any{"id": "99999999-9999-4999-8999-999999999953", "albumName": "Birthday", "assetCount": 7}})
 			return
 		}
 		if r.URL.Query().Get("isOwned") == "false" && strings.Contains(r.Header.Get("Cookie"), "sess=other") { // albums shared with "other" (by alice)
@@ -186,6 +202,14 @@ func fakeImmich() http.Handler {
 			out = append(out, map[string]any{"id": u[0], "name": u[1], "email": u[2], "avatarColor": "primary", "profileChangedAt": ts, "profileImagePath": ""})
 		}
 		j(w, out)
+	})
+	mux.HandleFunc("PATCH /api/albums/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AlbumName string `json:"albumName"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		renamed.Store(r.PathValue("id") + "=" + body.AlbumName)
+		j(w, map[string]any{"id": r.PathValue("id"), "albumName": body.AlbumName})
 	})
 	mux.HandleFunc("GET /api/workflows", func(w http.ResponseWriter, r *http.Request) { j(w, []any{}) })
 	mux.HandleFunc("GET /api/search/suggestions", func(w http.ResponseWriter, r *http.Request) { j(w, []string{"Portugal"}) })

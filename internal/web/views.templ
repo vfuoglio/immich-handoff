@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vfuoglio/immich-handoff/internal/albumtree"
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
@@ -851,6 +852,7 @@ templ Dashboard(d DashboardData) {
 						if d.Albums.Available {
 							@AlbumsCard(d.Albums)
 						}
+						@AlbumTreeCard()
 					</div>
 				}
 				if d.Pairings.Available || d.Circles.Available {
@@ -4993,6 +4995,125 @@ templ SuggestionReviewPage(d SuggestionReview) {
 				<button type="submit" name="do" value="decline">{ t(ctx, "Not these") }</button>
 			</p>
 		</form>
+	}
+}
+
+// AlbumTreePageView is the album tree page: the person's own albums, the ones shared with them, and the folders an album can move to.
+type AlbumTreePageView struct {
+	User      string
+	Mine      *albumtree.Node
+	Shared    *albumtree.Node
+	Folders   []string
+	ImmichURL string // where albums open in Immich (empty: no link)
+}
+
+// AlbumTreeCard is the entry to the album tree page, in Settings.
+templ AlbumTreeCard() {
+	<h2>{ t(ctx, "Album tree") }</h2>
+	<div class="card albumtreecard">
+		<p>{ t(ctx, "Immich has no folders for albums. If you name albums like Trips / 2024 / Rome, this shows them as a tree, with the cover of each, and helps you move an album into a folder by renaming it.") }</p>
+		<p class="row"><a class="button primary" href="albums">{ t(ctx, "Open the album tree") }</a></p>
+	</div>
+}
+
+// AlbumTreePage shows the albums as a tree: folders that open, an album with its cover, and, for the person's own albums, a way to move it.
+templ AlbumTreePage(d AlbumTreePageView) {
+	@Layout(t(ctx, "Album tree"), d.User) {
+		<p id="flash" class="toast" role="status" aria-live="polite"></p>
+		<h1>{ t(ctx, "Album tree") }</h1>
+		<p class="lead">{ t(ctx, "Your albums, shown as folders by the slashes in their names. Nothing is renamed unless you ask.") } <a href="./">{ t(ctx, "Back to your own page") }</a></p>
+		if d.Mine.AlbumCount == 0 && d.Shared.AlbumCount == 0 {
+			<div class="card empty">{ t(ctx, "You have no albums yet.") }</div>
+		}
+		if d.Mine.AlbumCount > 0 {
+			<h2>{ t(ctx, "My albums") } <span class="count-badge">{ fmt.Sprint(d.Mine.AlbumCount) }</span></h2>
+			<div class="card albumtree">
+				@AlbumTreeNode(d.Mine, d, true)
+			</div>
+		}
+		if d.Shared.AlbumCount > 0 {
+			<h2>{ t(ctx, "Shared with me") } <span class="count-badge">{ fmt.Sprint(d.Shared.AlbumCount) }</span></h2>
+			<div class="card albumtree">
+				@AlbumTreeNode(d.Shared, d, false)
+			</div>
+		}
+		if d.ImmichURL == "" {
+			<p class="meta">{ t(ctx, "To open an album in Immich from here, the person who runs this app sets PUBLIC_IMMICH_URL.") }</p>
+		}
+	}
+}
+
+// AlbumTreeNode is one folder: its albums, then its folders, each folder opening in place.
+templ AlbumTreeNode(node *albumtree.Node, d AlbumTreePageView, mine bool) {
+	<ul class="tree">
+		for _, a := range node.Albums {
+			<li class="tree-album">
+				if a.Cover != "" {
+					<img class="tree-cover" src={ "albums/" + a.ID + "/cover" } alt="" width="48" height="48" loading="lazy"/>
+				} else {
+					<span class="tree-cover empty" aria-hidden="true"></span>
+				}
+				<span class="tree-name">
+					if d.ImmichURL != "" {
+						<a href={ templ.SafeURL(strings.TrimRight(d.ImmichURL, "/") + "/albums/" + a.ID) } target="_blank" rel="noopener">{ a.Title }</a>
+					} else {
+						<b>{ a.Title }</b>
+					}
+					<span class="meta">{ n(ctx, "{n} photo", "{n} photos", a.Count) }
+						if a.Owner != "" {
+							· { t(ctx, "shared by {name}", "name", a.Owner) }
+						}
+					</span>
+				</span>
+				if mine {
+					<details class="tree-move">
+						<summary>{ t(ctx, "Move") }</summary>
+						<div hx-get={ "fragments/album-move?album=" + a.ID } hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+					</details>
+				}
+			</li>
+		}
+		for _, c := range node.Children {
+			<li class="tree-folder">
+				<details open?={ len(c.Path) < 40 && c.AlbumCount <= 12 }>
+					<summary><b>{ c.Name }</b> <span class="meta">{ n(ctx, "{n} album", "{n} albums", c.AlbumCount) }, { n(ctx, "{n} photo", "{n} photos", c.PhotoCount) }</span></summary>
+					@AlbumTreeNode(c, d, mine)
+				</details>
+			</li>
+		}
+	</ul>
+}
+
+// AlbumMoveForm previews the new name of an album and asks for the move: the folder is typed or chosen, the title stays.
+templ AlbumMoveForm(album, oldName, newName string, folder string, folders []string) {
+	<form class="card offer-form" hx-post="albums/move" hx-target="#flash" hx-swap="innerHTML" hx-disabled-elt="find button">
+		<input type="hidden" name="album" value={ album }/>
+		<div class="field">
+			<label for={ "move-" + album }>{ t(ctx, "Move into the folder") }</label>
+			<input id={ "move-" + album } name="folder" value={ folder } list={ "folders-" + album } autocomplete="off" maxlength="100"
+				hx-get="fragments/album-move-preview" hx-vals={ vals("album", album) } hx-trigger="keyup changed delay:400ms" hx-target="next .move-preview" hx-swap="innerHTML" hx-include="this"/>
+			<datalist id={ "folders-" + album }>
+				for _, f := range folders {
+					<option value={ f }></option>
+				}
+			</datalist>
+			<small class="meta">{ t(ctx, "Write the folders with slashes, such as Trips / 2024. Leave it empty to take the album out of any folder.") }</small>
+		</div>
+		<div class="move-preview meta" aria-live="polite">
+			@AlbumMovePreview(oldName, newName)
+		</div>
+		<p class="row form-actions"><button class="primary" type="submit">{ t(ctx, "Rename the album") }</button></p>
+	</form>
+}
+
+// AlbumMovePreview says what the album would be called.
+templ AlbumMovePreview(oldName, newName string) {
+	if newName == "" {
+		{ t(ctx, "That name cannot be used.") }
+	} else if newName == oldName {
+		{ t(ctx, "The album already has that name.") }
+	} else {
+		{ t(ctx, "{old} will be renamed to {new}.", "old", oldName, "new", newName) }
 	}
 }
 

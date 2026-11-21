@@ -69,6 +69,7 @@ function collect(): Command[] {
   });
   const offer = document.querySelector<HTMLDetailsElement>("#v-services details.offer");
   if (offer) commands.push({ label: t("Offer a service of your own"), hint: t("service"), run: () => { goTo("services"); showSegment("services"); offer.open = true; offer.scrollIntoView({ block: "center" }); } });
+  commands.push({ label: t("Open the album tree"), hint: t("action"), run: () => { location.href = "albums"; } });
   const sync = document.querySelector<HTMLButtonElement>('button[hx-post="sync"]');
   if (sync) commands.push({ label: t("Sync now"), hint: t("action"), run: () => sync.click() });
   const admin = document.querySelector<HTMLAnchorElement>("a.adminlink");

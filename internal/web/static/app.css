@@ -980,3 +980,19 @@ body.wall #glow { display: none; }
 .petpick:has(input:checked) img{border-color:var(--accent,#5b5fc7)}
 .petex{display:block}.petex img{aspect-ratio:auto;height:auto;border:0;border-radius:6px}
 .petex i{position:absolute;border:2px solid var(--accent,#5b5fc7);border-radius:4px;pointer-events:none;box-shadow:0 0 0 1px #fff8}
+
+/* the album tree page */
+.albumtree { padding: .8rem 1rem; }
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree .tree { margin-left: 1.1rem; padding-left: .8rem; border-left: 1px solid var(--border); }
+.tree-album { display: flex; align-items: center; gap: .7rem; padding: .35rem 0; flex-wrap: wrap; }
+.tree-cover { width: 48px; height: 48px; border-radius: .4rem; object-fit: cover; background: var(--border); flex: none; }
+.tree-cover.empty { display: inline-block; }
+.tree-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 12rem; overflow-wrap: anywhere; }
+.tree-folder > details > summary { cursor: pointer; padding: .45rem 0; list-style: none; }
+.tree-folder > details > summary::-webkit-details-marker { display: none; }
+.tree-folder > details > summary::before { content: "+"; display: inline-block; width: 1.1rem; font-weight: 700; }
+.tree-folder > details[open] > summary::before { content: "\2212"; }
+.tree-move { flex: 1 1 100%; }
+.tree-move > summary { cursor: pointer; font-size: .85rem; color: var(--accent-ink); }
+.move-preview { margin: .4rem 0; }

@@ -2491,6 +2491,24 @@ type TrashResponseDto struct {
 	Count int `json:"count"`
 }
 
+// UpdateAlbumDto defines model for UpdateAlbumDto.
+type UpdateAlbumDto struct {
+	// AlbumName Album name
+	AlbumName *string `json:"albumName,omitempty"`
+
+	// AlbumThumbnailAssetId Album thumbnail asset ID
+	AlbumThumbnailAssetId *openapi_types.UUID `json:"albumThumbnailAssetId,omitempty"`
+
+	// Description Album description
+	Description *string `json:"description,omitempty"`
+
+	// IsActivityEnabled Enable activity feed
+	IsActivityEnabled *bool `json:"isActivityEnabled,omitempty"`
+
+	// Order Asset sort order
+	Order *AssetOrder `json:"order,omitempty"`
+}
+
 // UserAdminResponseDto defines model for UserAdminResponseDto.
 type UserAdminResponseDto struct {
 	// AvatarColor User avatar color
@@ -2915,6 +2933,9 @@ type GetWorkflowLogsParams struct {
 // CreateAlbumJSONRequestBody defines body for CreateAlbum for application/json ContentType.
 type CreateAlbumJSONRequestBody = CreateAlbumDto
 
+// UpdateAlbumInfoJSONRequestBody defines body for UpdateAlbumInfo for application/json ContentType.
+type UpdateAlbumInfoJSONRequestBody = UpdateAlbumDto
+
 // RemoveAssetFromAlbumJSONRequestBody defines body for RemoveAssetFromAlbum for application/json ContentType.
 type RemoveAssetFromAlbumJSONRequestBody = BulkIdsDto
 
@@ -3083,6 +3104,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
 	GetAlbumInfo(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlbumInfoWithBody Update an album
+	//
+	// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+	UpdateAlbumInfoWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlbumInfo Update an album
+	//
+	// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+	UpdateAlbumInfo(ctx context.Context, id openapi_types.UUID, body UpdateAlbumInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RemoveAssetFromAlbumWithBody Remove assets from an album
 	//
@@ -3674,6 +3713,44 @@ func (c *Client) CreateAlbum(ctx context.Context, body CreateAlbumJSONRequestBod
 // Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
 func (c *Client) GetAlbumInfo(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAlbumInfoRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAlbumInfoWithBody Update an album
+//
+// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+func (c *Client) UpdateAlbumInfoWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlbumInfoRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAlbumInfo Update an album
+//
+// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+func (c *Client) UpdateAlbumInfo(ctx context.Context, id openapi_types.UUID, body UpdateAlbumInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlbumInfoRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5046,6 +5123,53 @@ func NewGetAlbumInfoRequest(server string, id openapi_types.UUID, params *GetAlb
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewUpdateAlbumInfoRequest calls the generic UpdateAlbumInfo builder with application/json body
+func NewUpdateAlbumInfoRequest(server string, id openapi_types.UUID, body UpdateAlbumInfoJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAlbumInfoRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateAlbumInfoRequestWithBody constructs an http.Request for the UpdateAlbumInfo method, with any body, and a specified content type
+func NewUpdateAlbumInfoRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/albums/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -7412,6 +7536,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /albums/{id} (the `GetAlbumInfo` operationId).
 	GetAlbumInfoWithResponse(ctx context.Context, id openapi_types.UUID, params *GetAlbumInfoParams, reqEditors ...RequestEditorFn) (*GetAlbumInfoResponse, error)
 
+	// UpdateAlbumInfoWithBodyWithResponse Update an album
+	//
+	// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+	UpdateAlbumInfoWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlbumInfoResponse, error)
+
+	// UpdateAlbumInfoWithResponse Update an album
+	//
+	// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+	UpdateAlbumInfoWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlbumInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlbumInfoResponse, error)
+
 	// RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
 	//
 	// Remove multiple assets from a specific album by its ID.
@@ -8109,6 +8251,47 @@ func (r GetAlbumInfoResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetAlbumInfoResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateAlbumInfoResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlbumResponseDto
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateAlbumInfoResponse) GetJSON200() *AlbumResponseDto {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateAlbumInfoResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAlbumInfoResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAlbumInfoResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateAlbumInfoResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9957,6 +10140,36 @@ func (c *ClientWithResponses) GetAlbumInfoWithResponse(ctx context.Context, id o
 	return ParseGetAlbumInfoResponse(rsp)
 }
 
+// UpdateAlbumInfoWithBodyWithResponse Update an album
+//
+// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+func (c *ClientWithResponses) UpdateAlbumInfoWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlbumInfoResponse, error) {
+	rsp, err := c.UpdateAlbumInfoWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlbumInfoResponse(rsp)
+}
+
+// UpdateAlbumInfoWithResponse Update an album
+//
+// Update the information of a specific album by its ID. This endpoint can be used to update the album name, description, sort order, etc. However, it is not used to add or remove assets or users from the album.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /albums/{id} (the `UpdateAlbumInfo` operationId).
+func (c *ClientWithResponses) UpdateAlbumInfoWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlbumInfoJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlbumInfoResponse, error) {
+	rsp, err := c.UpdateAlbumInfo(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlbumInfoResponse(rsp)
+}
+
 // RemoveAssetFromAlbumWithBodyWithResponse Remove assets from an album
 //
 // Remove multiple assets from a specific album by its ID.
@@ -10972,6 +11185,32 @@ func ParseGetAlbumInfoResponse(rsp *http.Response) (*GetAlbumInfoResponse, error
 	}
 
 	response := &GetAlbumInfoResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlbumResponseDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAlbumInfoResponse parses an HTTP response from a UpdateAlbumInfoWithResponse call
+func ParseUpdateAlbumInfoResponse(rsp *http.Response) (*UpdateAlbumInfoResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAlbumInfoResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

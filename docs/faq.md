@@ -18,6 +18,9 @@ No. Senders use Immich as they do now: add a tag, or press the **Hand over...** 
 **Can I share the photos of a person with my partner, both ways, without doing anything each time?**
 Yes: in **Settings**, **Offer to share photos** makes a private sharing between two people on the server. Each of you chooses the people whose photos go to the other, the other person says yes on a page of their own, and from then on those photos are offered with pictures (or sent by themselves, if you switch that on). It is not instant (a wait of minutes by default), each library keeps its own copy, and it cannot recognise pets yet. See [Share a person's photos](guides/share-people.md).
 
+**Can I see my albums as folders, like Trips / 2024 / Rome?**
+Yes, as a tree on a page of its own, though not inside Immich, which has no folders for albums. Name albums with slashes and open **Album tree** in **Settings** (or the palette): the names become folders with covers, and **Move** renames an album into a folder after showing the new name. See [Album tree](guides/album-tree.md).
+
 **Can photos go to a NAS, a Nextcloud, an S3 bucket or an SFTP server instead of, or as well as, another Immich account?**
 Yes: the administrator names the places (a folder, WebDAV, S3, SFTP) in a file, and the owner of a service adds one to it. The photo is written as a file with a sidecar and a record, checked, and only then is the original moved or marked; if a place is down, the original stays tagged until it holds the photo. Clouds without their own kind (Google Drive, OneDrive, Dropbox) are reached through a folder mounted with rclone. Taking a hand-over back deletes the files there. See [Destinations](guides/destinations.md).
 
