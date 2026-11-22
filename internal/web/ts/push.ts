@@ -75,9 +75,7 @@ export async function register(): Promise<ServiceWorkerRegistration> {
   return whenActive(await navigator.serviceWorker.register("static/sw.js", { scope: "static/" }));
 }
 
-async function turnOn(card: HTMLElement): Promise<void> {
-  const key = card.dataset["key"] ?? "";
-  const mode = card.querySelector<HTMLInputElement>("input[name=pushmode]:checked")?.value ?? "all";
+async function turnOn(key: string, mode: string): Promise<void> {
   if ((await Notification.requestPermission()) !== "granted") { // asked first thing, while the click still counts
     say(t("Notifications are blocked for this site. Allow them in your browser's settings for this page, then try again."));
     return;
@@ -106,6 +104,27 @@ async function thisDevice(): Promise<{ id: string; sub: PushSubscription } | nul
   const reg = await navigator.serviceWorker.getRegistration("static/");
   const sub = await reg?.pushManager.getSubscription();
   return sub ? { id: await deviceId(sub.endpoint), sub } : null;
+}
+
+/** On the installed app (Android shows no prompt by itself, and a browser only asks after a tap) the Overview offers a one-tap
+ *  banner until notifications are on here or the person says not now. */
+export function initPushNudge(): void {
+  const nudge = document.getElementById("pushnudge");
+  if (!nudge) return;
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
+  const ok = support({ secure: window.isSecureContext, serviceWorker: "serviceWorker" in navigator, pushManager: "PushManager" in window, notification: "Notification" in window, ios: /iPhone|iPad|iPod/.test(navigator.userAgent), standalone }) === "ok";
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("pushNudge") === "no"; } catch { /* no storage: ask again next time */ }
+  if (!standalone || !ok || dismissed || Notification.permission !== "default") return;
+  void thisDevice().then((here) => {
+    if (here) return;
+    nudge.hidden = false;
+    nudge.querySelector("[data-nudge-on]")?.addEventListener("click", () => void turnOn(nudge.dataset["key"] ?? "", "all"));
+    nudge.querySelector("[data-nudge-no]")?.addEventListener("click", () => {
+      try { localStorage.setItem("pushNudge", "no"); } catch { /* fine */ }
+      nudge.hidden = true;
+    });
+  });
 }
 
 /** Wires the card on the Overview, if there is one. */
@@ -151,7 +170,7 @@ export function initPush(): void {
     const row = button.closest<HTMLElement>("[data-device]");
     const id = row?.dataset["device"] ?? "";
     if (button.hasAttribute("data-push-on")) {
-      void turnOn(card);
+      void turnOn(card.dataset["key"] ?? "", card.querySelector<HTMLInputElement>("input[name=pushmode]:checked")?.value ?? "all");
     } else if (button.hasAttribute("data-push-test")) {
       button.disabled = true;
       void post("me/push/test", { id }).then((ok) => { button.disabled = false; if (ok) say(t("Notifications work on this device.")); });

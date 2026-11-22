@@ -10,7 +10,7 @@ import { initWall } from "./wall.ts";
 import { initSend } from "./send.ts";
 import { initRoom } from "./room.ts";
 import { initBackup } from "./backup";
-import { initPush } from "./push";
+import { initPush, initPushNudge } from "./push";
 import { loadCatalog, t } from "./i18n";
 import { parseLive } from "./live";
 import { initScene } from "./scene";
@@ -109,6 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRows();
   initBackup();
   initPush();
+  initPushNudge();
   initEffects();
   initDrop();
   initGallery();

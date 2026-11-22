@@ -20,7 +20,7 @@ Tagging in the Immich app is one way to send. The other is the **Send** tab of t
 3. **With the screen off.** Chrome has Background Sync, so what is left goes on in the app's worker when the screen goes off or the page is closed (when **Only on Wi-Fi** holds it back, it waits for you to open the page).
 4. **Tell me when it is done** chooses what you hear: one notice on the device when the queue has emptied, for everything that ended since the last one (a batch of fifty is one message: "38 photos arrived in your Immich", "2 photos could not be sent"), or only trouble, or never. Notices need the browser's permission, asked when you choose anything but **Never**, and you are not told while you are looking at the page.
 
-Chrome offers the Share entry only to an **installed** app (without it the page tells you to choose the photos on the Send page instead), and the shared files pass through the phone's memory once, so share a few at a time and choose very large videos on the Send page.
+Chrome offers the Share entry only to an **installed** app (without it the page tells you to choose the photos on the Send page instead). That means **Install app** over HTTPS: **Add to Home screen** on a page opened over plain `http://` makes a shortcut, which has no Share entry. Android also reads the list of things an app can receive when the app is installed and refreshes it only about once a day, so an app installed before an update may not be in the menu yet: uninstall it and install it again. The entry shows when you share photos or videos, not text or a link. And the shared files pass through the phone's memory once, so share a few at a time and choose very large videos on the Send page.
 
 ## On an iPhone
 
