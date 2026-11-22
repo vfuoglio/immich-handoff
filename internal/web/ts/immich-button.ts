@@ -45,7 +45,8 @@ if (source) {
   const spot = (): { row: Element; avatar: Element } | null => {
     const avatar = document.querySelector("[title*='@']")?.closest("section > *");
     const row = avatar?.parentElement;
-    return avatar && row ? { row, avatar } : null;
+    // on a phone Immich's header can hold the avatar in a part that is not drawn: that is no place for the link
+    return avatar && row && row.getClientRects().length > 0 && avatar.getClientRects().length > 0 ? { row, avatar } : null;
   };
 
   const place = (): void => {
@@ -70,6 +71,7 @@ if (source) {
     });
   };
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+  addEventListener("resize", schedule); // turning the phone, or Desktop mode, changes which header Immich draws
   schedule();
   setTimeout(schedule, 5100);
 

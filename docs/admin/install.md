@@ -21,10 +21,10 @@ Want to look first? [The demo](../../demo/README.md) runs a throwaway copy of ev
 
 ## 1. Get the files and make your secrets
 
-Use a release, not `main`. `main` is where the next version is being built; it can be unstable and can be ahead of the published image. The latest release is **v1.3.1**; newer ones, with what changed in each, are on the [releases page](https://github.com/vfuoglio/immich-handoff/releases). Without git, download that release's "Source code" archive from the same page instead of cloning.
+Use a release, not `main`. `main` is where the next version is being built; it can be unstable and can be ahead of the published image. The latest release is **v1.4.0**; newer ones, with what changed in each, are on the [releases page](https://github.com/vfuoglio/immich-handoff/releases). Without git, download that release's "Source code" archive from the same page instead of cloning.
 
 ```
-git clone --branch v1.3.1 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
+git clone --branch v1.4.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 ```

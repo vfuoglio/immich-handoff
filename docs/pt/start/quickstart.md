@@ -21,7 +21,7 @@ Uma foto que você marca com uma etiqueta na aplicação Immich que já usa apar
 No Linux (num Mac, use `sed -i ''`):
 
 ```
-git clone --branch v1.3.1 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
+git clone --branch v1.4.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 docker compose up -d

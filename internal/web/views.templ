@@ -746,6 +746,12 @@ templ Dashboard(d DashboardData) {
 		if d.TagsOff {
 			@TagsNotice()
 		}
+		if d.Push.Available && len(d.Push.Devices) == 0 {
+			<div class="card notice" id="pushnudge" data-key={ d.Push.Key } hidden>
+				<p>{ t(ctx, "Get a notification on this phone or computer when something happens to your services, even when this page is closed.") }</p>
+				<p class="row"><button class="primary" type="button" data-nudge-on>{ t(ctx, "Turn on notifications here") }</button> <button type="button" data-nudge-no>{ t(ctx, "Not now") }</button></p>
+			</div>
+		}
 		<div id="gated" { gate(d.TagsOff)... }>
 		<section class="view" id="v-overview" aria-label={ t(ctx, "Overview") }>
 			<p class="eyebrow" data-today aria-hidden="true"></p>

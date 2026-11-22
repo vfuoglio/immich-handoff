@@ -14,7 +14,7 @@ Una foto que etiquetas en la aplicación de Immich que ya usas aparece en la bib
 En Linux (en un Mac usa `sed -i ''`):
 
 ```
-git clone --branch v1.3.1 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
+git clone --branch v1.4.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 docker compose up -d
