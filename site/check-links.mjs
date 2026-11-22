@@ -13,7 +13,7 @@ const exists = (url) => {
   return fs.existsSync(p) && (fs.statSync(p).isFile() || fs.existsSync(path.join(p, 'index.html')));
 };
 for (const f of walk(dist).filter((f) => f.endsWith('.html'))) {
-  const html = fs.readFileSync(f, 'utf8').replace(/<pre[\s\S]*?<\/pre>/g, '').replace(/<code[\s\S]*?<\/code>/g, '');
+  const html = fs.readFileSync(f, 'utf8').replace(/<pre[\s\S]*?<\/pre>/g, '').replace(/<code[\s\S]*?<\/code>/g, '').replace(/data-code="[^"]*"/g, '');
   if (/\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/.test(html)) bad.push(`${path.relative(dist, f)}: an alert (> [!NOTE]) was left as text`);
   for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     const u = m[1];
