@@ -155,6 +155,10 @@
   "what-is-carried-over": {
    "title": "Was mitübertragen wird",
    "tip": "Was mit einem Foto reist und was nicht."
+  },
+  "why-handoff": {
+   "title": "Warum Handoff, und was es kann",
+   "tip": "Was Handoff kann, was geteilte Alben und Links nicht können, und warum du ihm vertrauen kannst."
   }
  },
  "pages": {

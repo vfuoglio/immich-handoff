@@ -31,94 +31,18 @@ Immich keeps every photo in the account that uploaded it. Shared albums and link
 
 ## What do you want to do?
 
-| I want to... | You get | Start here |
-|---|---|---|
-| **Share photos with my household or friends** on one server | Anyone hands photos to anyone's library. Each sender chooses to keep or move their originals. | [Joining a service](docs/guides/share/household.md) |
-| **Collect photos from guests** at a wedding, party or club, even without Immich | A link or QR code that only *receives*: moderation, a wall on a screen, a gallery and a best-of for the guests | [Drop boxes and events](docs/guides/collect/events.md) |
-| **Deliver a shoot to a client** | A room the client opens on a phone: favourites, notes, rounds, and you release the originals when you decide | [Client rooms](docs/guides/collect/client-rooms.md) |
-| **Share an album with a friend on another server** | Photos both ways between two Immich servers, signed, with no echo; works even if your friend does not run Handoff | [Albums shared with other servers](docs/guides/share/shared-albums.md) |
-| **Share a person's photos, both ways** | One offer and one yes: the photos of the people each of you chooses go to the other's library, offered with pictures first and sent by themselves if you switch that on | [Share a person's photos](docs/guides/share/share-people.md) |
-| **Hand photos over to a NAS, Nextcloud, S3 or SFTP** | A folder, WebDAV, S3-compatible storage or an SFTP server as one more place a photo goes (or the only one), written with its details beside it and checked before the original moves | [Destinations](docs/guides/share/destinations.md) |
-| **Stop tagging by hand** | A **Hand over...** button inside Immich, and rules that suggest photos of named people, places and dates | [Rules](docs/guides/automate/rules.md) and [the button](docs/admin/find-handoff.md#hand-over-from-inside-immich) |
-| **Stack RAW and JPEG, edits and bursts** | The app offers to stack photos that belong together, with the cover you choose, and takes its own stacks apart again for 15 minutes if you ask | [Stacking](docs/guides/automate/stacking.md#stacking-photos-that-belong-together) |
-| **Find my pet's photos** | Pick 3 to 8 photos of your cat or dog and a rule offers the photos most like them. An optional small second container, the pet helper, finds the animal in each photo and makes it much more accurate | [Rules for a pet](docs/guides/automate/rules.md#rules-photos-by-who-where-and-when) and [the pet helper](docs/guides/automate/pets.md#the-optional-pet-helper) |
-| **Get albums from my folders** | An album for each folder of an external library, named after it, offered to you with the names before anything is made | [Albums from folders](docs/guides/automate/folder-albums.md#albums-from-the-folders-of-an-external-library) |
-| **Hear about today's memories** | A daily message, by notification or email, when Immich has memories for you that you have not watched, with pictures and a link to send them on | [On this day](docs/guides/show/memories.md) |
-| **Keep a photo someone shared with me** | An **Add to my library** button inside Immich copies a photo from a shared album or a partner into your own library, with its details, and Undo for 15 minutes; or follow an album and have what is added offered to you | [Add to my library](docs/admin/find-handoff.md#add-to-my-library-from-inside-immich) and [following an album](docs/guides/share/follow-album.md#following-an-album-shared-with-you) |
+| I want to... | Start here |
+|---|---|
+| **Share photos with my household or friends** on one server | [Share with your household](https://vfuoglio.github.io/immich-handoff/guides/share/household/) |
+| **Collect photos from guests** at a wedding or party, even without Immich | [Drop boxes and events](https://vfuoglio.github.io/immich-handoff/guides/collect/events/) |
+| **Deliver a shoot to a client** | [Client rooms](https://vfuoglio.github.io/immich-handoff/guides/collect/client-rooms/) |
+| **Share an album with a friend on another server** | [Albums shared between servers](https://vfuoglio.github.io/immich-handoff/guides/share/shared-albums/) |
+| **Stop tagging by hand** | [Rules](https://vfuoglio.github.io/immich-handoff/guides/automate/rules/) and [the button inside Immich](https://vfuoglio.github.io/immich-handoff/admin/find-handoff/) |
+| **Make a story, or show photos on a TV** | [Stories](https://vfuoglio.github.io/immich-handoff/guides/show/stories/) and [Cast to a TV](https://vfuoglio.github.io/immich-handoff/guides/show/cast-to-tv/) |
 
-A *service* is simply a named place photos are handed to ("Holiday 2026"); its owner decides who may send.
+More, with pictures: **[the documentation site](https://vfuoglio.github.io/immich-handoff/)** ([why not shared albums or links?](https://vfuoglio.github.io/immich-handoff/start/why-handoff/)). The same pages are in [`docs/`](docs/README.md), and inside the app under the **?** button. The core pages are also in German, French, Spanish, Italian, Portuguese and Russian.
 
 ![Tag a photo, Immich tells immich-handoff, the photo arrives in the receiver's library](docs/images/flow.svg)
-
-## Everything it does, and why you can trust it
-
-- **Nothing new to learn.** Send by adding a tag in the Immich app you already use, or with the button inside Immich, on a phone or the web.
-- **You decide about your own originals.** When you take part you choose: **keep** your photo and send a copy, or **move** it to your trash once the other side has it. The choice is yours, not the receiver's.
-- **Anyone can offer a service.** Create one, decide who may send (people you approve, or anyone), and share an invitation link if you want it private.
-- **Keys nobody can see, and a way out.** The app makes a named, restricted key in your account with your own login. Delete it in Immich, or press **Leave**, and everything stops safely without touching a photo.
-- **Careful by design.** A photo is only removed after the other side holds a verified copy. Duplicates are recognised. If anything fails, your original stays put.
-- **Beyond people with accounts.** A **drop box** is a link (or a QR code, or an email address) that anyone can send photos to, with no account, and it doubles as an **event**: a gallery for guests (hearts, downloads, a ZIP), a moderator link for a helper, a wall, an album of what guests loved and your own title, logo and colours; an **event pool** gives everybody everybody's photos for a trip or a party; a **frame** shows an album on a screen; a **weekly digest** picks the best of the week.
-- **From your phone, too.** Besides tagging, the **Send** tab sends photos and videos from the phone in pieces that survive a lost connection, tagged for the service you pick; on Android it is in the Share menu of the gallery and finishes with the screen off. See the [phone guide](docs/guides/collect/phone.md#send-photos-from-a-phone).
-- **Rules instead of tags.** A sender can let a **rule** look in Immich for photos of named people, taken between two dates, in a place, in an album or looking like a phrase, and **suggest** them on the Overview with pictures: *Send*, *Not these* or *Always*, and the rule can send by itself once you switch that on (it says plainly what that means). See [Rules](docs/guides/automate/rules.md).
-- **Hand over from inside Immich.** A **Hand over...** button in Immich's own photo viewer, selection bar and three-dot menus lists the services you send to and hands the photos over, with **Undo**, no tags needed. See [Hand over from inside Immich](docs/admin/find-handoff.md#hand-over-from-inside-immich).
-- **For photographers.** A **client room** shows an album to a client through pictures marked with your name, on a phone, behind a PIN if you like: the client chooses favourites (up to a limit, in rounds if you want), leaves notes, and you release the originals when you decide. See [Client rooms](docs/guides/collect/client-rooms.md).
-- **Told your way.** Notifications to ntfy, Home Assistant or any webhook, to your mailbox, and, if people ask for it, to their own phone or email, with buttons to approve a request from the message itself.
-- **Small.** One container, no database server, nothing stored unless you let people join from the page.
-
-## In action
-
-Everything below is recorded from the real page, in the dark or the light variant of its two colour schemes.
-
-<table>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/arrival-dark.gif" alt="The Overview in the dark theme: six photos are tagged, and each flies out of the You gate as an outlined square with an arrow while the counter climbs to six"><br><sub><b>Tag, and watch it go.</b> Photos fly along their lane, both ways, and the counters climb.</sub></td>
-    <td width="50%" valign="top" align="center"><img src="docs/images/phone-dark.gif" alt="The same on a phone, in the dark theme: the numbers roll and the live lane shows each photo travelling" width="260"><br><sub><b>On a phone,</b> the same page, and it installs like an app.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/palette-dark.gif" alt="The command palette in the dark theme: Ctrl K, typing ser, moving down, and a service opening in place"><br><sub><b>Everything from the keyboard.</b> Ctrl K, type, Enter.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/theme-switch.gif" alt="The bar's two buttons: the Overview switches to dark and back to light, then the colour scheme menu changes it to the Immich blues, in light and in dark"><br><sub><b>Two colour schemes, light or dark,</b> as you like them; they also follow your phone or browser.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/services-light.gif" alt="The Services tab in the light theme: a service opens in place while the cards tilt toward the pointer, then the Activity timeline"><br><sub><b>Services open in place,</b> and the activity is a timeline.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/invite-qr.gif" alt="An invitation: the link, a QR code that opens, and the button that copies a ready-written message"><br><sub><b>Invite someone</b> with a link, a ready-written message or a QR code.</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2" valign="top" align="center"><img src="docs/images/wall.gif" alt="A wall on a screen: a new photo arrives with a soft ring round it, then the style changes between fade, zoom, slide and rise, and the layout between a grid and a collage" width="520"><br><sub><b>A wall for the party.</b> Photos guests send arrive on a big screen, in the style you choose.</sub></td>
-  </tr>
-</table>
-
-## A closer look
-
-<table>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/immich-button-viewer-list.jpg" alt="Immich's photo viewer with a Hand over button in the toolbar and the list of services under it"><br><sub><b>A button inside Immich,</b> so nobody has to know about tags.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/rules-suggestion.png" alt="A rule's suggestion on the Overview: three photos with Send, Not these and Always"><br><sub><b>Rules suggest,</b> you decide with one tap.</sub></td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/join-choice.png" alt="Joining a service: keep my originals or move them to my trash"><br><sub><b>You choose</b> what happens to your originals when you join.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/owner-service.png" alt="A service you offer, with a request waiting for approval"><br><sub><b>Owners approve</b> senders and can share an invitation link.</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><img src="docs/images/connection-lost.png" alt="A card saying the connection was lost, with a Clean up button"><br><sub><b>Safe when keys disappear.</b> Nothing is handed over and no photo is touched.</sub></td>
-    <td width="50%" valign="top"><img src="docs/images/immich-family.png" alt="The receiver's Immich timeline with the handed-over photos"><br><sub><b>What arrives</b> in the receiver's own Immich.</sub></td>
-  </tr>
-</table>
-
-## Why not shared albums or share links?
-
-Immich's own sharing is the right tool for *showing* photos. Handoff is for *moving, collecting and delivering* them.
-
-| | Shared album / link | Partner sharing | immich-handoff |
-|---|---|---|---|
-| The photo ends up in the other person's library | No | No (read-only) | **Yes**, a real copy they own |
-| You choose to keep or move your original | n/a | n/a | **Yes**, a move waits for a verified copy |
-| People without Immich can send you photos | Upload links, but no review, no wall, no gallery for the guests | No | **Yes**, write-only drop box with moderation, wall and gallery |
-| Between two servers | Public link only | No | **Yes**, signed, both ways |
-| Photos picked automatically | No | Everything | **Rules** by person, place, date or phrase |
-| Revoke it | Delete the link | Stop sharing | Delete the key in Immich; nothing else is touched |
 
 ## Try it first
 
@@ -137,28 +61,11 @@ docker compose up -d
 
 Then open `http://<your-host>:8080/` on the same hostname you use for Immich, sign in with your Immich account, choose **Offer a service of your own**, and tag a photo. That is all: nobody makes an API key by hand.
 
-**Keep a copy of `HANDOFF_STORE_KEY`** (it is in `.env`): it encrypts the keys the app holds for people who join. If your Immich network is not called `immich_default`, set `IMMICH_NETWORK` in `.env`. The [install guide](docs/admin/install.md) explains each step and what to do if one fails.
+**Keep a copy of `HANDOFF_STORE_KEY`** (it is in `.env`): it encrypts the keys the app holds for people who join. If your Immich network is not called `immich_default`, set `IMMICH_NETWORK` in `.env`. The [install guide](https://vfuoglio.github.io/immich-handoff/admin/install/) explains each step and what to do if one fails.
 
 > **Everyone who takes part needs Tags switched on in Immich.** It is off by default, per person. The page notices and offers a **Turn on Tags** button (or do it in Immich: Account Settings, Features, **Tags**). Senders need Tags to add tags to photos, and receivers need them to see the inbox tag on what arrives. Switching them on is not enough: **reload the Immich page (refresh the browser tab) afterwards**, or the tags still do not appear. Without Tags, the app can set tags but people cannot see or use them in Immich.
 
 **Start from a release, not from `main`.** `main` is where the next version is being built and can be ahead of the published image. The latest release is [v1.3.1](https://github.com/vfuoglio/immich-handoff/releases/latest); the [releases page](https://github.com/vfuoglio/immich-handoff/releases) lists newer ones and what changed in each.
-
-## Documentation
-
-| Page | What it covers |
-|---|---|
-| [Questions people ask first](docs/reference/faq.md) | Is it the right tool, and what does it do to my photos |
-| [Install](docs/admin/install.md) | Ten minutes from clone to first photo |
-| [Guides by use case](docs/using.md) | Household, event guests, client rooms, other servers, rules, phone |
-| [What is carried over](docs/reference/what-is-carried-over.md) | What travels with a photo, and what does not |
-| [The administrator's page](docs/admin/admin-page.md) | See every service and member, check the connections, remove what is stuck |
-| [Fixed accounts](docs/admin/fixed-accounts.md) | Set the accounts up yourself, or run several fixed services |
-| [Operations](docs/admin/operations.md) | Reverse proxy, backups, upgrades, monitoring |
-| [Make Handoff easy to find](docs/admin/find-handoff.md) | A button in Immich's own header, so nobody types the address |
-| [Settings](docs/reference/settings.md) | Every option |
-| [Security and trust](docs/reference/security.md) | What it can do, what is stored, who sees what |
-| [Troubleshooting](docs/reference/troubleshooting.md) | When something does not work |
-| [How it works inside](docs/contributing/architecture.md) | Design and testing |
 
 ## Tested with
 

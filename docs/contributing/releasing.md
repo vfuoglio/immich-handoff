@@ -41,7 +41,7 @@ One path, in this order. Everything that names the release is done on `develop` 
 
 1. **Changelog.** In `CHANGELOG.md` rename `## Unreleased` content to `## X.Y.Z` (and leave an empty `## Unreleased` above it). The release fails without a section for the version being released.
 2. **Compose file.** If the minor version changed, update the image tag in `docker-compose.yml` (`:X.Y`).
-3. **Documentation pointer.** Change the version in the clone command in `README.md` and `docs/install.md` (`git clone --branch vX.Y.Z`, and the "latest release is" wording) to the version you are about to tag. Tags are made right after the merge, so the pointer is true within minutes. People are told to start from a release and never from `main`.
+3. **Documentation pointer.** Change the version in the clone command in `README.md` and `docs/admin/install.md`, `docs/start/quickstart.md` and the same page in each language folder (`docs/<lang>/start/quickstart.md`) (`git clone --branch vX.Y.Z`, and the "latest release is" wording) to the version you are about to tag. Tags are made right after the merge, so the pointer is true within minutes. People are told to start from a release and never from `main`.
 4. **Test.** Locally: `go test ./...` and `test/run.sh`. The release workflow runs both again before it builds anything.
 5. **Try the workflow first when it changed.** In GitHub: Actions, **release**, **Run workflow**, version `0.0.0-test`. It runs the same checks and publishes only the image tag `0.0.0-test`: no `latest`, no GitHub Release. Pull it and look at it, then delete that version from the package page.
 6. **One pull request, `develop` into `main`.** Wait for CI to be green, merge it.

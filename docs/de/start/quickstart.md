@@ -1,7 +1,7 @@
 ---
 title: "Schnellstart: deine erste Übergabe in zehn Minuten"
 tip: "Von null zur ersten Übergabe in zehn Minuten."
-source_rev: 77f7bc24
+source_rev: 0d9741e9
 review: needed
 ---
 

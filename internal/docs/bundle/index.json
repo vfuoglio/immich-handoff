@@ -9,6 +9,15 @@
   "tip": "From nothing to your first hand-over in ten minutes."
  },
  {
+  "path": "start/why-handoff.md",
+  "title": "Why Handoff, and what it does",
+  "feature": "why-handoff",
+  "audience": "user",
+  "goal": "start",
+  "order": 2,
+  "tip": "What Handoff does that shared albums and links do not, and why you can trust it."
+ },
+ {
   "path": "using.md",
   "title": "Pick what you want to do",
   "feature": "using",

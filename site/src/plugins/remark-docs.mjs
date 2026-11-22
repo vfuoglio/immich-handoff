@@ -38,7 +38,7 @@ export default function remarkDocs({ base, docsRoot, repo }) {
 
     // a picture written as HTML (to give it a width on GitHub) is not found by Astro; docs/images is copied to public/images
     visit(tree, 'html', (node) => {
-      node.value = node.value.replace(/src="(?:\.\.\/)+images\/([^"]+)"/g, `src="${base}/images/$1"`);
+      node.value = node.value.replace(/src="(?:\.\.\/)*images\/([^"]+)"/g, `src="${base}/images/$1"`);
     });
 
     const asides = { NOTE: ['note', 'Note'], TIP: ['tip', 'Tip'], IMPORTANT: ['note', 'Important'], WARNING: ['caution', 'Warning'], CAUTION: ['danger', 'Caution'] };

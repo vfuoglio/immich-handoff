@@ -206,5 +206,10 @@
   "title": "What is carried over",
   "tip": "What travels with a photo and what does not.",
   "path": "reference/what-is-carried-over.md"
+ },
+ "why-handoff": {
+  "title": "Why Handoff, and what it does",
+  "tip": "What Handoff does that shared albums and links do not, and why you can trust it.",
+  "path": "start/why-handoff.md"
  }
 }

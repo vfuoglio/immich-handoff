@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { moved } from './moved.mjs';
 import { groups } from './labels.mjs';
 
 // docs/<language>/strings.yml: the title of every page in that language, for the sidebar where the page itself is not translated
@@ -22,6 +23,7 @@ function pages(root) {
       if (e.isDirectory()) { if (e.name !== 'images') walk(p); continue; }
       if (!/\.mdx?$/.test(e.name)) continue;
       const rel = path.relative(root, p).split(path.sep).join('/');
+      if (rel.replace(/\.mdx?$/, '') in moved()) continue; // a pointer to a page that moved
       if (rel === 'README.md' || /^(de|fr|es|it|pt|ru)\//.test(rel)) continue; // the translations are the same pages in another language
       const m = fs.readFileSync(p, 'utf8').match(/^---\n([\s\S]*?)\n---\n/);
       out.push({ rel, slug: rel.replace(/\.mdx?$/, ''), ...(m ? YAML.parse(m[1]) : {}) });

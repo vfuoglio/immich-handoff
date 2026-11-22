@@ -1,7 +1,7 @@
 ---
 title: "Démarrage rapide : votre première transmission en dix minutes"
 tip: "De zéro à la première transmission en dix minutes."
-source_rev: 77f7bc24
+source_rev: 0d9741e9
 review: needed
 ---
 

@@ -46,6 +46,7 @@ func main() {
 	var pages []docs.Page
 	translated := map[string][]docs.Page{} // by language: the pages of docs/<language>/, with the path inside it
 	strs := map[string]docs.Strings{}
+	gone := movedPages(root)
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
 			return err
@@ -53,6 +54,9 @@ func main() {
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
 		if strings.HasPrefix(rel, "images/") || rel == "index.md" { // index.md is the site's landing page (Starlight front matter), not a page of Help
+			return nil
+		}
+		if gone[rel] { // a one-line pointer to a page that moved (docs/redirects.txt)
 			return nil
 		}
 		src, err := os.ReadFile(p)
@@ -336,4 +340,19 @@ func slim(from, to string, names map[string]bool) {
 		}
 		o.Close()
 	}
+}
+
+// movedPages reads docs/redirects.txt: the old paths of pages that moved, each left as a one-line pointer for readers of old links.
+func movedPages(root string) map[string]bool {
+	out := map[string]bool{}
+	b, err := os.ReadFile(filepath.Join(root, "redirects.txt"))
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && !strings.HasPrefix(line, "#") {
+			out[f[0]] = true
+		}
+	}
+	return out
 }

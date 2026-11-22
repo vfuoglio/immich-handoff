@@ -30,12 +30,15 @@ var Reviews = []string{"needed", "done"}
 
 // BodyRev is the short hash of an English page's text that a translation records as source_rev, so that a change of the English can be
 // told from a change of nothing (a space at the end of a line, or a different line ending, is not a change).
+var releasePin = regexp.MustCompile(`--branch v\d+\.\d+\.\d+`)
+
 func BodyRev(body string) string {
 	var lines []string
 	for _, l := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		lines = append(lines, strings.TrimRight(l, " \t"))
 	}
 	text := strings.TrimSpace(strings.Join(lines, "\n"))
+	text = releasePin.ReplaceAllString(text, "--branch vX.Y.Z") // the version in the clone command changes with every release and is no reason to retranslate
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(text)))[:8]
 }
 

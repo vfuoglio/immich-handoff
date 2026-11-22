@@ -65,3 +65,8 @@ Pictures are taken from the real app with `tools/screenshots` (see its README) a
 - In the app, signed-in people read the same pages at `/help` (an administrator's pages only for administrators): `internal/docs` renders them, rewrites their links (to Help, to the public site, or to the repository) and serves slimmed copies of their pictures, and `ts/help.ts` opens the drawer. The bundle is made by `go generate`, and keeps the pictures the pages show (JPEG, 900 px at most; a GIF is its first frame).
 - `.github/scripts/doc_links_test.sh` checks that every link, image and `#anchor` points at something that exists.
 - `cd site && npm ci && npm run build && npm run check` builds the site and checks its internal links. The site reads `../docs`; it has no content of its own.
+
+## How the site is published
+
+The workflow `.github/workflows/pages.yml` builds `site/` and publishes it to GitHub Pages when a release tag (`v*`) is pushed, so the site describes the latest release. It can also be run by hand. A page that moves keeps a one-line pointer at its old path and gets a line in `docs/redirects.txt` (`old new`, relative to `docs/`): the site redirects the old address, and the pointer is skipped by the site and by the in-app Help.
+

@@ -4,6 +4,7 @@ import { unified } from '@astrojs/markdown-remark';
 import remarkDocs from './src/plugins/remark-docs.mjs';
 import { sidebar } from './src/plugins/sidebar.mjs';
 import { locales } from './src/plugins/labels.mjs';
+import { moved } from './src/plugins/moved.mjs';
 
 const base = '/immich-handoff';
 const repo = 'https://github.com/vfuoglio/immich-handoff';
@@ -11,6 +12,7 @@ const repo = 'https://github.com/vfuoglio/immich-handoff';
 export default defineConfig({
   site: 'https://vfuoglio.github.io',
   base,
+  redirects: Object.fromEntries(Object.entries(moved()).map(([from, to]) => [`/${from}`, `${base}/${to}/`])),
   markdown: { processor: unified({ remarkPlugins: [[remarkDocs, { base, docsRoot: '../docs', repo }]] }) },
   integrations: [
     starlight({
