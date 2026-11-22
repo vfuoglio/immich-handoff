@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.4.0
+
 ### What is new
 - **Installed Android app: notifications and the Immich button.** The installed app now offers a one-tap **Turn on notifications here** banner on the Overview (Android never asks by itself, and a browser only asks after a tap), with **Not now** to hide it. The Handoff link in Immich's header is shown as the floating button when Immich's phone layout does not draw the avatar's part of the header, so it no longer needs Desktop mode. The phone guide says what the Share menu entry needs.
 - **A tour of the page, and a Get started card that knows who you are (#327).** The first time you open the page (and the first time an administrator opens the administrator's page) a welcome with the app's picture says a tour is about to start, and lets you skip it only after you tick a box, so it cannot be skipped by mistake; then a short tour points at the real things, one at a time: what needs you, the live scene, Services and offering one, Send, Settings, Ctrl K and Help; Next, Back and Skip, with the keyboard too. You can take it again from **Help**, from Ctrl K (**Take the tour**) and from the Get started card, and it is remembered per person, not per browser. The Get started card now has steps that fit you (an owner is also asked to invite someone, and a notification step appears when notifications are set up), each with a **Show me** that scrolls to and rings the thing and a **?** to its guide, and it counts the tour as a step. The words of the tour are in the guides (`docs/start/the-page.md`), in English until the documentation is translated.

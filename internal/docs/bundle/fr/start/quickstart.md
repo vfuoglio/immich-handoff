@@ -14,7 +14,7 @@ Une photo que vous étiquetez dans l’application Immich que vous utilisez déj
 Sous Linux (sur un Mac, utilisez `sed -i ''`) :
 
 ```
-git clone --branch v1.3.1 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
+git clone --branch v1.4.0 https://github.com/vfuoglio/immich-handoff.git && cd immich-handoff
 cp .env.example .env
 sed -i -e "s/^WEBHOOK_SECRET=.*/WEBHOOK_SECRET=$(openssl rand -hex 24)/" -e "s/^HANDOFF_STORE_KEY=.*/HANDOFF_STORE_KEY=$(openssl rand -hex 24)/" .env
 docker compose up -d
