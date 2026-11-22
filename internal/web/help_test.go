@@ -165,3 +165,33 @@ func TestEveryHelpLinkAndTipInTheTemplatesNamesARealGuide(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpSpeaksTheLanguageOfThePersonWhereItHasBeenTranslated(t *testing.T) {
+	var st *store.Store
+	app, _ := setup(t, withClub(t, &st))
+	const de = "sess=admin; handoff-lang=de"
+	// the lists have German titles and tips for every page, translated or not
+	_, body := do(t, "GET", app.URL+"/help", de, nil)
+	has(t, body, "Schnellstart: deine erste Übergabe in zehn Minuten", "Geschichten: ein teilbarer animierter Rückblick", "Fotos mit Haushalt oder Freunden teilen")
+	// a translated page: its text, its picture note and the app's own words
+	_, body = do(t, "GET", app.URL+"/help/quickstart", de, nil)
+	has(t, body, "<h1>Schnellstart: deine erste Übergabe in zehn Minuten</h1>", "Einen eigenen Dienst anbieten", "maschinell übersetzt", `href="help/the-page"`)
+	if strings.Contains(body, "Quick start") {
+		t.Error("English left on a translated page")
+	}
+	// a page that is not translated is read in English, with a note
+	_, body = do(t, "GET", app.URL+"/help/stories", de, nil)
+	has(t, body, "<h1>Geschichten: ein teilbarer animierter Rückblick</h1>", "Diese Anleitung gibt es nur auf Englisch.", "Turn an album into a short animated story")
+	// the drawer and the tooltip of a card, and the tour, are in German too
+	_, body = do(t, "GET", app.URL+"/fragments/help/stories", de, nil)
+	has(t, body, "Diese Anleitung gibt es nur auf Englisch.")
+	_, body = do(t, "GET", app.URL+"/", de, nil)
+	has(t, body, `title="Aus einem Album, einer Person oder einem Zeitraum einen animierten Rückblick machen, den du senden kannst."`)
+	has(t, tourJSON(t, body), `"title":"Aktion nötig"`, `"title":"Dienste"`)
+	// English stays English
+	_, body = do(t, "GET", app.URL+"/help/quickstart", "sess=admin", nil)
+	has(t, body, "<h1>Quick start: your first hand-over in ten minutes</h1>")
+	if strings.Contains(body, "maschinell") {
+		t.Error("a German note on the English page")
+	}
+}

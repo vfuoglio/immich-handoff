@@ -82,6 +82,11 @@ func ValidateTranslation(lang string, tr, en Page) []string {
 			say("tour stop %d needs a title and a text", i+1)
 		}
 	}
+	for _, m := range linkRef.FindAllStringSubmatch(fenced.ReplaceAllString(tr.Body, ""), -1) {
+		if p, _, has := strings.Cut(m[2], "#"); m[1] == "" && has && p != "" && !external.MatchString(m[2]) {
+			say("the link %q points at a heading of another page; headings are translated, so link to the page without the #anchor", m[2])
+		}
+	}
 	a, b := ShapeOf(en.Path, "", en.Body), ShapeOf(tr.Path, lang, tr.Body)
 	for _, d := range a.Differences(b) {
 		say("%s", d)

@@ -9,7 +9,7 @@ tip: "Pick what you want to do, and find the guide for it."
 
 # Using it: pick what you want to do
 
-Start with the [quick start](start/quickstart.md) if you have not handed a photo over yet. Each guide opens with who it is for, what you get and what you see.
+Start with the [quick start](start/quickstart.md) if you have not handed a photo over yet. Each guide opens with what you get, in a sentence and a picture.
 
 ## Share
 

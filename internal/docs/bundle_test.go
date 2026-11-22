@@ -55,11 +55,11 @@ func TestEveryBundledPageRendersWithoutAnythingFromAnotherSite(t *testing.T) {
 }
 
 func TestAPageInAnotherLanguageFallsBackToEnglish(t *testing.T) {
-	en, err := Source("en", "start/quickstart.md")
+	en, err := Source("en", "guides/show/stories.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if de, err := Source("de", "start/quickstart.md"); err != nil || de != en {
+	if de, err := Source("de", "guides/show/stories.md"); err != nil || de != en {
 		t.Errorf("no fallback: %v", err)
 	}
 	if _, err := Source("en", "../../go.mod"); err == nil {
