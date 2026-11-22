@@ -1,10 +1,8 @@
 # Be told: email, your phone, or a message you can answer
 
-**Who it is for:** Anyone taking part.
+Get the lines of your Activity list as an email or a notification on your phone or computer, and answer a request with one tap from the message itself.
 
-**What you get:** The lines of your Activity list as an email, a notification on your phone or computer, and buttons to approve a request from the message itself.
-
-**What you see:** A notification or mail within moments, and one tap to answer when it needs you.
+![The notification cards in Settings: Email me and Notifications on this device](../../images/notify-cards.png)
 
 ## Email about what happens to you
 
@@ -36,3 +34,14 @@ A mail or notification about something you can answer carries buttons, so you do
 - when you **pause a service of yours**, you get **Resume service**; when you **pause your own sending**, **Resume sending**.
 
 Opening a link only shows what it will do ("Approve Bob to send photos to Holiday?") and a button; nothing happens until you press it, and you do not need to be signed in to Immich. A link works **once** and stops working after **24 hours**; the two answers to one request cancel each other, so pressing Approve ends the Decline link, and a request you already decided on the page cannot be changed by an old link. If it no longer works, do it from your page. On a phone, the notification shows the buttons where the system allows (Android, Chrome, Edge); on an iPhone, tapping it opens the page. Links are only in mail and notifications to the person who can do the action, never in the administrator's messages. They need the page's address to be set (`PUBLIC_APP_URL`).
+
+## If something is off
+
+- **I get no email.** The person who runs the app has to have set up mail for people; the card is there only when it is. Check the address Immich shows for your account, and press **Send a test email**.
+- **I get no notification.** Your browser must have allowed notifications for the site; on an iPhone add the page to the Home Screen first. **Send a test notification** shows whether it works.
+- **A button in a message says it no longer works.** A link works once and for 24 hours; do it from your page.
+
+## What next
+
+- A daily message about memories: [On this day](memories.md)
+- Set up mail and notifications as the administrator: [Operations](../../admin/operations.md#notifications)

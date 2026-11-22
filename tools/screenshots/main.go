@@ -85,6 +85,11 @@ func main() {
 			log.Fatal("stories needs an output directory and the folder of sample photos")
 		}
 		storiesShots(os.Args[2], os.Args[3])
+	case "cards":
+		if len(os.Args) < 4 {
+			log.Fatal("cards needs an output directory and the folder of sample photos")
+		}
+		cardsShots(os.Args[2], os.Args[3])
 	case "collect":
 		if len(os.Args) < 4 {
 			log.Fatal("collect needs an output directory and the folder of sample photos")
@@ -384,6 +389,8 @@ func shots(set, outdir string) {
 		roomRest(outdir)
 	case "collectfix": // the wall (grid) and the approval queue of the boxes `go run . collect` made
 		collectFix(outdir)
+	case "cardsfix": // the rules form and the album tree again (see cardsFix)
+		cardsFix(outdir)
 	case "storyform": // the Stories card with the form open (there must be no story yet, or it crowds the card)
 		take(shot{name: "story-form", who: "alice@test.local", url: appURL, width: desktop, height: 900, js: storyOpenForm, pause: 3 * time.Second, after: 3 * time.Second,
 			xpath: `//div[contains(@class,'storiescard')]`, pad: 16}, outdir)

@@ -13,6 +13,8 @@ Anyone who administers the Immich server can open **Admin** (a link in the heade
 
 The page also has a **Pet helper** card: *On* when the optional [pet helper](../guides/automate/pets.md#the-optional-pet-helper) answers, *Not answering* when `PET_SIDECAR_URL` is set but it does not, and *Off* with a link to how to switch it on.
 
+![The administrator's page: the services, the senders, the connections check and the log of recent events](../images/admin-page.png)
+
 ## Who is an administrator
 
 The app keeps no list of its own. When someone opens the page it asks Immich, with that person's own sign-in, whether they are an administrator, which is the same setting as **Administrator** on their account in Immich. Make someone an administrator or take it away in Immich, and the next page they open follows.
@@ -49,3 +51,9 @@ What removal does:
 An API key lives in the account of the person it belongs to. Immich lets **only that person** list or delete their keys: it has no call for an administrator to do it for them, and the app holds no sign-in of anyone else, only the restricted key each person gave it, which has no permission to delete itself. So whoever removes a person from the app can stop the app from using their key, but cannot revoke it.
 
 The key stays valid in Immich until its owner deletes it. It is a restricted key (it can read and tag photos, and for a sender it can download and optionally delete the ones they handed over; it cannot change the account), and the app no longer has it, so it is harmless unless someone else holds a copy. The person is told its name (`handoff: <service>`) and where to delete it (Account Settings, API Keys), or they press **Clean up**, which does it for them. An administrator who wants the key gone for certain can ask the person, or disable or delete their Immich account.
+
+## What next
+
+- Make Handoff easy to find inside Immich: [Make Handoff easy to find](find-handoff.md)
+- Backups, upgrades and monitoring: [Operations](operations.md)
+- Something not working: [Troubleshooting](../reference/troubleshooting.md)

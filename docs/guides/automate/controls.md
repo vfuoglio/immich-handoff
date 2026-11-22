@@ -9,11 +9,9 @@ tip: "Limit, pause or take back what is handed over."
 
 # Control what is handed over
 
-**Who it is for:** Senders and owners who want limits.
+Pause a service, cap what each sender hands over in a day, set quiet hours, hand a photo over on a chosen day, let copies expire, and take back the last hand-over. The page says in words why photos wait and when they will go.
 
-**What you get:** Pause, a daily limit, quiet hours, a date on a photo, copies that expire, and taking back the last hand-over.
-
-**What you see:** The page says in words why photos wait, and when they will go.
+![A service's settings: daily limits, quiet hours, what it accepts and the lifetime of copies](../../images/controls-limits.png)
 
 ## Pausing
 
@@ -75,3 +73,16 @@ A sender who joined from the page sees **Take back the last hand-over** on a ser
 - A copy the receiver has **already filed in an album** is theirs now: it stays, and so does your original's state. The page says how many stayed.
 - A stack and a live photo (with its motion clip) are taken back whole.
 - It takes back the most recent hand-over not yet taken back, so pressing it again takes back the one before. Only people who joined from the page have it (accounts set up in `.env` or the routes file are not recorded). It needs `RECEIVER_DELETE` (on by default); if the owner's key cannot move photos to the trash yet, the page asks the sender to tell the owner to open the page once.
+
+## If something is off
+
+- **Photos wait and I do not know why.** The sender's card says: paused, the daily limit is reached, or the quiet hours are not open, and from when they go.
+- **A photo was "not handed over".** It did not match what the service accepts; its service tag came off and the refused tag went on. Change the rules or tag it again.
+- **I handed something over by mistake.** **Take back the last hand-over** works for 24 hours.
+- **A dated photo went too early.** A date that has already come hands the photo over at once; check the tag.
+
+## What next
+
+- Make rules instead of tags: [Rules](rules.md)
+- Share with your household: [Share photos with your household or friends](../share/household.md)
+- The settings the administrator can set: [Settings](../../reference/settings.md)

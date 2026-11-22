@@ -2,7 +2,7 @@
 # Builds the demo used for the documentation images, against the test Immich from `docker compose -f test/docker-compose.yml up -d`
 # (Immich on :2284, users alice, bob, family @test.local, password Passw0rd!x) and a locally built app on :8080.
 #
-#   tools/screenshots/seed.sh reset      throw away and rebuild the Immich stack, users and API keys (SHARE=1: bridges and a folder destination on, for `go run . share`)
+#   tools/screenshots/seed.sh reset      throw away and rebuild the Immich stack, users and API keys (SHARE=1: bridges, a folder destination and notifications on, for `go run . share` and `go run . cards`)
 #   tools/screenshots/seed.sh setup      start the app, create people and services, upload sample photos
 #   tools/screenshots/seed.sh waiting    tag photos so some are waiting (run the app in dry-run mode first: DRY=1 ... setup)
 #   tools/screenshots/seed.sh handover   restart the app for real so the waiting photos are handed over
@@ -105,6 +105,7 @@ ENV
     cat >> "$DEMO/env.sh" <<ENV
 export BRIDGE_ENABLE=true
 export DESTINATIONS_FILE=$DEMO/destinations.yaml
+export PUSH_CONTACT=mailto:admin@example.org
 ENV
   fi
   echo "stack $STACK ready: Immich http://localhost:$IMMICH_PORT, app will run on $APP"
