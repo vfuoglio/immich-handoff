@@ -1,0 +1,40 @@
+# Título e resumo de cada página em português (ver docs/contributing/translating.md). Traduzido automaticamente, ainda não revisto por uma pessoa.
+admin-page: {title: "A página do administrador", tip: "Acompanhar toda a instalação a partir de uma só página."}
+find-handoff: {title: "Tornar o Handoff fácil de encontrar", tip: "Pôr uma ligação e um botão Entregar dentro do próprio Immich."}
+fixed-accounts: {title: "Contas fixas", tip: "Configurar contas e chaves à mão em vez de pela página."}
+install: {title: "Instalar", tip: "Instalar o immich-handoff ao lado do Immich."}
+operations: {title: "Operação", tip: "Proxy inverso, cópias de segurança, atualizações e monitorização."}
+controls: {title: "Controlar o que é entregue", tip: "Limitar, pausar ou desfazer o que é entregue."}
+folder-albums: {title: "Álbuns a partir das pastas de uma biblioteca externa", tip: "Um álbum para cada pasta de uma biblioteca externa."}
+immich-button: {title: "Entregar a partir de dentro do Immich", tip: "Entregar fotos com um botão dentro do Immich, sem etiqueta."}
+pets: {title: "Regras para um animal e o assistente de animais", tip: "Escolha 3 a 8 fotos do seu animal e uma regra propõe as fotos mais parecidas."}
+places: {title: "Locais para fotos que não têm", tip: "Dar a uma foto sem local o local de uma foto tirada mesmo ao lado."}
+rules: {title: "Regras: fotos por quem, onde e quando", tip: "Uma regra encontra fotos de pessoas, locais e datas e pergunta antes de enviar."}
+smart-albums: {title: "Álbuns inteligentes que se enchem sozinhos", tip: "Um álbum que se enche a partir de uma regra."}
+stacking: {title: "Empilhar as fotos que andam juntas", tip: "Empilhar pares RAW e JPEG, edições e rajadas."}
+client-rooms: {title: "Entregar uma sessão a um cliente", tip: "Mostrar um álbum a um cliente no telemóvel, deixá-lo escolher e libertar os originais quando você decidir."}
+events-extras: {title: "Galeria, mural, o melhor e o que vem depois do evento", tip: "Uma galeria para convidados, uma ligação de moderação, um mural e uma seleção do melhor para o seu evento."}
+events: {title: "Recolher fotos de convidados que não têm Immich", tip: "Uma ligação ou código QR para onde qualquer pessoa pode enviar fotos, sem conta."}
+phone: {title: "Enviar fotos a partir do telemóvel", tip: "Enviar fotos e vídeos por partes que sobrevivem a uma ligação perdida."}
+circles: {title: "Círculos: partilhar cada álbum novo com um grupo", tip: "Partilhar automaticamente cada álbum novo com uma família ou um clube."}
+destinations: {title: "Entregar fotos a uma pasta, uma nuvem ou um servidor", tip: "Entregar também fotos a uma pasta, WebDAV, S3 ou um servidor SFTP."}
+follow-album: {title: "Seguir um álbum partilhado consigo", tip: "Ver-lhe proposto o que é adicionado a um álbum partilhado consigo, para copiar para a sua biblioteca."}
+household: {title: "Partilhar fotos com a sua casa ou os seus amigos", tip: "Entregar fotos entre as pessoas da sua casa com uma etiqueta, mantendo ou movendo o original."}
+other-server: {title: "Receber noutro servidor Immich", tip: "Receber um álbum de outro servidor no seu próprio Immich."}
+share-people: {title: "Partilhar as fotos de uma pessoa com o seu parceiro, nos dois sentidos", tip: "Propor as fotos das pessoas que escolher a outra pessoa e receber as dela."}
+shared-albums: {title: "Partilhar álbuns entre servidores", tip: "Partilhar um álbum com um amigo cujo Immich está noutro servidor."}
+trip-pool: {title: "Juntar uma viagem: todos recebem as fotos de todos", tip: "Um pool onde todos numa viagem ou festa recebem as fotos de todos."}
+album-tree: {title: "Árvore de álbuns: álbuns como pastas", tip: "Ver os seus álbuns como pastas e movê-los."}
+cast-to-tv: {title: "Mostrar numa TV com um código", tip: "Mostrar fotos numa TV com um código curto, controlado a partir do telemóvel."}
+frames-and-digest: {title: "Molduras e o resumo semanal", tip: "Mostrar um álbum num ecrã e receber uma seleção semanal do melhor."}
+memories: {title: "Uma mensagem diária «Neste dia»", tip: "Uma mensagem diária sobre as memórias que o Immich tem para hoje."}
+notifications: {title: "Ser avisado: e-mail, o seu telemóvel ou uma mensagem a que pode responder", tip: "Ser avisado por ntfy, Home Assistant, um webhook, e-mail ou push."}
+stories: {title: "Histórias: um resumo animado para partilhar", tip: "Transformar um álbum, uma pessoa ou um período num resumo animado que pode enviar."}
+faq: {title: "As perguntas que se fazem primeiro", tip: "Respostas curtas ao que se pergunta antes de começar."}
+security: {title: "Segurança e confiança", tip: "Em que confia e o que é guardado."}
+settings: {title: "Definições", tip: "Cada definição e o seu valor predefinido."}
+troubleshooting: {title: "Resolução de problemas", tip: "Resolver o que não funciona."}
+what-is-carried-over: {title: "O que é transferido", tip: "O que viaja com uma foto e o que não."}
+quickstart: {title: "Início rápido: a sua primeira entrega em dez minutos", tip: "De zero à primeira entrega em dez minutos."}
+the-page: {title: "Orientar-se na página", tip: "Orientar-se na página e procurar uma palavra."}
+using: {title: "Escolha o que quer fazer", tip: "Escolha o que quer fazer e encontre o guia certo."}
