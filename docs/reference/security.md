@@ -65,7 +65,7 @@ A [bridge](../guides/share/other-server.md#connect-them) makes the app hold a ke
 
 ## Drop boxes
 
-A [drop box](../guides/collect/events.md#drop-boxes-photos-from-people-who-do-not-have-immich) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.
+A [drop box](../guides/collect/events.md#make-a-drop-box) is the one part of the app that is open to people who are not signed in to anything, so it is built to do as little as it can.
 
 - **What a link allows.** Whoever has it can send photos and videos to its owner's library, up to the limits the owner set, until it expires, is paused or is revoked. That is all. It cannot list, read, download, change or delete anything, and a guest never sees what was stored, not even their own files.
 - **The key.** A drop box has a key of its own in the owner's account, named `handoff: <name> (drop box)`, made with the owner's own login and holding five permissions: `user.read`, `tag.read`, `tag.create`, `tag.asset` and `asset.upload`. A box that files into an album also has `album.read`, `album.create` and `albumAsset.create`, and a box that lets guests take back what they sent also has `asset.read` and `asset.delete`: that is the one kind of box whose key can read a photo's tags and move a photo to the trash (the app only does it for a photo the same guest sent that still carries the box's inbox tag, and only to the trash). It cannot read a photo back, delete one, or change, share or delete an album. Revoking the box deletes it.

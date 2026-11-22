@@ -4,6 +4,7 @@
 //	go run . shots <set> <outdir>  take screenshots of a running demo with headless Chrome
 //	go run . hero  <outdir>        compose the README hero image from earlier shots
 //	go run . stories <outdir> <photos>  the Stories guide: the form, the card of a ready story, the story on a phone
+//	go run . collect <outdir> <photos>  the drop box guides: the form, the guest page and gallery, approval, the moderator page, the wall, the card
 //	go run . share <outdir> <photos>    the sharing guides: an event pool, a circle, following an album, a destination, a bridge (needs SHARE=1 for seed.sh reset)
 //	go run . room  <outdir> <photos>  a client room: the row, the client's page on a phone, a photo with its note, the review
 //	go run . send  <outdir> <photos>  the Send page on a phone: the card to install, photos chosen, the queue half way
@@ -84,6 +85,11 @@ func main() {
 			log.Fatal("stories needs an output directory and the folder of sample photos")
 		}
 		storiesShots(os.Args[2], os.Args[3])
+	case "collect":
+		if len(os.Args) < 4 {
+			log.Fatal("collect needs an output directory and the folder of sample photos")
+		}
+		collectShots(os.Args[2], os.Args[3])
 	case "share":
 		if len(os.Args) < 4 {
 			log.Fatal("share needs an output directory and the folder of sample photos")
@@ -374,6 +380,10 @@ func shots(set, outdir string) {
 	case "followcard": // the Add to my library card, with the form that follows an album open (an album must be shared with Bob: `go run . share` does that)
 		take(shot{name: "follow-album-card", who: "bob@test.local", url: appURL, width: desktop, height: 900, pause: 3 * time.Second, after: 3 * time.Second,
 			js: followCardJS, xpath: `//*[@id='shot']`, pad: 16}, outdir)
+	case "roomrest": // the photographer's row and the review page of a room that exists (see roomRest)
+		roomRest(outdir)
+	case "collectfix": // the wall (grid) and the approval queue of the boxes `go run . collect` made
+		collectFix(outdir)
 	case "storyform": // the Stories card with the form open (there must be no story yet, or it crowds the card)
 		take(shot{name: "story-form", who: "alice@test.local", url: appURL, width: desktop, height: 900, js: storyOpenForm, pause: 3 * time.Second, after: 3 * time.Second,
 			xpath: `//div[contains(@class,'storiescard')]`, pad: 16}, outdir)

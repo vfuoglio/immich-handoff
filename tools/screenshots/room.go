@@ -174,8 +174,8 @@ func roomShots(outdir, photos string) {
 	// the photographer's row and the review page
 	ctx, done = session(1280, 900, false, cookies, false)
 	must("row", ctx, chromedp.Navigate(appURL+"#services"), chromedp.WaitVisible(`#v-services`, chromedp.ByQuery), chromedp.Sleep(1500*time.Millisecond),
-		chromedp.Evaluate(`(function(){ const d = [...document.querySelectorAll('#v-services details.svc')].find(x => x.textContent.includes('room of')); if (d) d.open = true })()`, nil), chromedp.Sleep(400*time.Millisecond),
-		screenshotElement(`//details[contains(@class,'svc')][contains(.,'room of')]`, 16, &buf))
+		chromedp.Evaluate(storyHideBar+`(function(){ const s = document.querySelector('.seg [data-seg="rooms"]'); if (s) s.click(); const d = [...document.querySelectorAll('#v-services details.svc')].find(x => x.textContent.includes('Rossi wedding')); if (d) d.open = true })()`, nil), chromedp.Sleep(800*time.Millisecond),
+		screenshotElement(`//details[contains(@class,'svc')][contains(.,'Rossi wedding')]`, 16, &buf))
 	save("room-row")
 	must("review", ctx, chromedp.Navigate(appURL+"rooms/"+roomID[1]+"/review"), chromedp.WaitVisible(`.room-grid`, chromedp.ByQuery), chromedp.Sleep(6*time.Second), chromedp.CaptureScreenshot(&buf))
 	save("room-review")
@@ -282,4 +282,24 @@ func getText(cookie, u string) string {
 	defer res.Body.Close()
 	b, _ := io.ReadAll(res.Body)
 	return string(b)
+}
+
+// roomRest retakes the photographer's two pictures (the room's row and the review page) of a room that already exists, the first on Alice's
+// page (for when only the layout of the page changed): `go run . shots roomrest <outdir>`.
+func roomRest(outdir string) {
+	owner := ""
+	cookies := loginCookies("alice@test.local")
+	for _, c := range cookies {
+		owner += c.Name + "=" + c.Value + "; "
+	}
+	owner = strings.TrimSuffix(owner, "; ")
+	home := getText(owner, strings.TrimSuffix(appURL, "/")+"/")
+	roomID := regexp.MustCompile(`(?:&#34;|")room(?:&#34;|"):(?:&#34;|")([0-9a-f-]{36})`).FindStringSubmatch(home)
+	if roomID == nil {
+		log.Fatal("Alice has no room")
+	}
+	take(shot{name: "room-row", who: "alice@test.local", url: appURL + "#services", width: 1280, height: 900, wait: `document.readyState==='complete'`, pause: 3 * time.Second, after: time.Second,
+		js:    storyHideBar + `document.querySelector('nav.tabs a[data-view="services"]').click(); const s = document.querySelector('.seg [data-seg="rooms"]'); if (s) s.click(); const d = [...document.querySelectorAll('#v-services details.svc')].find(x => x.textContent.includes('Rossi wedding')); if (d) d.open = true`,
+		xpath: `//details[contains(@class,'svc')][contains(.,'Rossi wedding')]`, pad: 16}, outdir)
+	take(shot{name: "room-review", who: "alice@test.local", url: appURL + "rooms/" + roomID[1] + "/review", width: 1280, height: 900, wait: `!!document.querySelector('.room-grid')`, pause: 6 * time.Second, fold: true}, outdir)
 }
