@@ -8,7 +8,7 @@ Kurze Antworten und wo du mehr liest.
 ## Die Grundlagen
 
 **Ist das dasselbe wie Immichs geteilte Alben oder Freigabelinks?**
-Nein. Die lassen Leute deine Fotos *ansehen*. Handoff legt ein Foto **in eine andere Bibliothek**, sammelt Fotos von Leuten ohne Konto und verbindet zwei Server. Siehe den [Vergleich](../../../README.md).
+Nein. Die lassen Leute deine Fotos *ansehen*. Handoff legt ein Foto **in eine andere Bibliothek**, sammelt Fotos von Leuten ohne Konto und verbindet zwei Server. Siehe den [Vergleich](../../start/why-handoff.md).
 
 **Wandert das Foto wirklich in die Bibliothek der anderen Person?**
 Ja. Eine Kopie kommt in deren Immich als ihr eigenes Foto an, mit Namen, Daten, Favoritenmarkierung, Beschreibung, Bewertung und Ort. [Was mitübertragen wird](../../reference/what-is-carried-over.md) listet auf, was mitreist und was nicht.

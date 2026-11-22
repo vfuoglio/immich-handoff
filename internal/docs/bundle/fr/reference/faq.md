@@ -8,7 +8,7 @@ Des réponses courtes, et où en lire davantage.
 ## L’essentiel
 
 **Est-ce la même chose que les albums partagés ou les liens de partage d’Immich ?**
-Non. Ceux-là laissent des gens *regarder* vos photos. Handoff met une photo **dans une autre bibliothèque**, collecte des photos auprès de gens sans compte et relie deux serveurs. Voir la [comparaison](../../../README.md).
+Non. Ceux-là laissent des gens *regarder* vos photos. Handoff met une photo **dans une autre bibliothèque**, collecte des photos auprès de gens sans compte et relie deux serveurs. Voir la [comparaison](../../start/why-handoff.md).
 
 **La photo passe-t-elle vraiment dans la bibliothèque de l’autre personne ?**
 Oui. Une copie arrive dans son Immich comme sa propre photo, avec son nom, ses dates, sa marque de favori, sa description, sa note et son lieu. [Ce qui est transféré](../../reference/what-is-carried-over.md) liste ce qui voyage et ce qui reste.

@@ -14,7 +14,7 @@ Short answers, and where to read more.
 ## The basics
 
 **Is this the same as Immich's shared albums or share links?**
-No. Those let people *look at* your photos. Handoff puts a photo **in another library**, collects photos from people who have no account, and connects two servers. See the [comparison](../../README.md#why-not-shared-albums-or-share-links).
+No. Those let people *look at* your photos. Handoff puts a photo **in another library**, collects photos from people who have no account, and connects two servers. See the [comparison](../start/why-handoff.md#why-not-shared-albums-or-share-links).
 
 **Does the photo really move to the other person's library?**
 Yes. A copy arrives in their Immich as their own photo, with its name, dates, favourite mark, description, rating and location. [What is carried over](what-is-carried-over.md) lists what travels and what does not.

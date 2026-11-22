@@ -1,7 +1,7 @@
 ---
 title: "Preguntas que se hacen primero"
 tip: "Respuestas cortas a lo que se pregunta antes de empezar."
-source_rev: 2005f60a
+source_rev: 9486e154
 review: needed
 ---
 
@@ -15,7 +15,7 @@ Respuestas cortas, y dónde leer más.
 ## Lo básico
 
 **¿Es lo mismo que los álbumes compartidos o los enlaces para compartir de Immich?**
-No. Esos dejan que la gente *mire* tus fotos. Handoff pone una foto **en otra biblioteca**, recoge fotos de gente sin cuenta y conecta dos servidores. Consulta la [comparación](../../../README.md).
+No. Esos dejan que la gente *mire* tus fotos. Handoff pone una foto **en otra biblioteca**, recoge fotos de gente sin cuenta y conecta dos servidores. Consulta la [comparación](../../start/why-handoff.md).
 
 **¿La foto se mueve de verdad a la biblioteca de la otra persona?**
 Sí. Llega una copia a su Immich como foto suya, con su nombre, fechas, marca de favorita, descripción, valoración y ubicación. [Qué se traslada](../../reference/what-is-carried-over.md) lista lo que viaja y lo que no.
