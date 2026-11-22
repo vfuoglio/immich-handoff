@@ -1,7 +1,7 @@
 ---
 title: "Orientar-se na página"
 tip: "Orientar-se na página e procurar uma palavra."
-source_rev: dc8fce2a
+source_rev: "dc8fce2a"
 review: needed
 tips:
   send: "Enviar fotos a partir deste dispositivo"

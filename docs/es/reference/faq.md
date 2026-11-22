@@ -1,7 +1,7 @@
 ---
 title: "Preguntas que se hacen primero"
 tip: "Respuestas cortas a lo que se pregunta antes de empezar."
-source_rev: 9486e154
+source_rev: "9486e154"
 review: needed
 ---
 

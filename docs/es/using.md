@@ -1,7 +1,7 @@
 ---
 title: "Elige lo que quieres hacer"
 tip: "Elige lo que quieres hacer y encuentra la guía para ello."
-source_rev: ae1336d6
+source_rev: "ae1336d6"
 review: needed
 ---
 

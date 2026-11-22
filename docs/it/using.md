@@ -1,7 +1,7 @@
 ---
 title: "Scegli cosa vuoi fare"
 tip: "Scegli cosa vuoi fare e trova la guida giusta."
-source_rev: ae1336d6
+source_rev: "ae1336d6"
 review: needed
 ---
 

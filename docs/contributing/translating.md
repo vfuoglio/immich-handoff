@@ -19,7 +19,7 @@ The app's own screens are translated into six languages (de, fr, es, it, pt, ru)
 ---
 title: "Schnellstart"                 # the same as the title in strings.yml
 tip: "In zehn Minuten zum ersten Foto."
-source_rev: 3fa9c1d2                  # the revision of the English page this was made from (see below)
+source_rev: "3fa9c1d2"                # the revision of the English page this was made from (see below)
 review: needed                        # needed until a native speaker has checked it, then done
 ---
 

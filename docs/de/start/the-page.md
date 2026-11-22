@@ -1,7 +1,7 @@
 ---
 title: "Sich auf der Seite zurechtfinden"
 tip: "Sich auf der Seite zurechtfinden und ein Wort nachschlagen."
-source_rev: dc8fce2a
+source_rev: "dc8fce2a"
 review: needed
 tips:
   send: "Fotos von diesem Gerät senden"

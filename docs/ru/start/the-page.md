@@ -1,7 +1,7 @@
 ---
 title: "Как ориентироваться на странице"
 tip: "Освоиться на странице и найти нужное слово."
-source_rev: dc8fce2a
+source_rev: "dc8fce2a"
 review: needed
 tips:
   send: "Отправить фото с этого устройства"

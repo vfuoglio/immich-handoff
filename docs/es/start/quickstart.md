@@ -1,7 +1,7 @@
 ---
 title: "Inicio rápido: tu primera entrega en diez minutos"
 tip: "De cero a la primera entrega en diez minutos."
-source_rev: 0d9741e9
+source_rev: "0d9741e9"
 review: needed
 ---
 

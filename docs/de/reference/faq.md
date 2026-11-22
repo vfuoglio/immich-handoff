@@ -1,7 +1,7 @@
 ---
 title: "Fragen, die Leute zuerst stellen"
 tip: "Kurze Antworten auf das, was Leute vor dem Start fragen."
-source_rev: 9486e154
+source_rev: "9486e154"
 review: needed
 ---
 
