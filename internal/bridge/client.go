@@ -1,5 +1,5 @@
 // Package bridge connects the app to an Immich server it does not run, for a receiver who lives on another server
-// (see docs/design/bridges-design.md). Everything here treats the address as hostile: it was typed by someone else.
+// (see docs/contributing/design/bridges-design.md). Everything here treats the address as hostile: it was typed by someone else.
 package bridge
 
 import (

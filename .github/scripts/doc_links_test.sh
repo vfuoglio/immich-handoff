@@ -25,7 +25,7 @@ cache, bad = {}, []
 for f in files:
     text = open(f, encoding="utf8").read()
     text = re.sub(r"```.*?```", "", text, flags=re.S)
-    for m in re.finditer(r"\]\(([^)\s]+)\)", text):
+    for m in list(re.finditer(r"\]\(([^)\s]+)\)", text)) + list(re.finditer(r'src="([^"\s]+)"', text)):
         url = m.group(1)
         if re.match(r"^[a-z]+:", url):
             continue

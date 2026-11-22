@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// TestPairing: two people share photos of named people both ways (docs/design/pairing-design.md). Alice offers Nora, Bob says yes
+// TestPairing: two people share photos of named people both ways (docs/contributing/design/pairing-design.md). Alice offers Nora, Bob says yes
 // and sends Leo back. A photo of Nora in Alice's library reaches Bob's, a photo of Leo in Bob's reaches Alice's, a photo of
 // someone else moves nowhere, the pieces cannot be changed by hand, Bob's automatic switch sends only what arrives after it, and
 // stopping leaves every copy where it is. Faces are made by hand (the test Immich has no machine learning).

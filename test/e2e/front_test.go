@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-// inFrontOfImmich is what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before
+// inFrontOfImmich is what docs/admin/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before
 // </body>, and this app under /handoff/ on the same address. It returns that address, written with "localhost" because
 // the browser's sign-in cookies are set for that name, not for the one the test server prints.
 func (w world) inFrontOfImmich(t *testing.T) string { return w.front(t, false) }

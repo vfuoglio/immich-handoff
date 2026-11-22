@@ -1,0 +1,276 @@
+{
+ "strings": {
+  "admin-page": {
+   "title": "La pagina dell’amministratore",
+   "tip": "Tenere d’occhio tutta l’installazione da una sola pagina."
+  },
+  "album-tree": {
+   "title": "Albero degli album: gli album come cartelle",
+   "tip": "Vedere i tuoi album come cartelle e spostarli."
+  },
+  "cast-to-tv": {
+   "title": "Trasmettere su una TV con un codice",
+   "tip": "Mostrare foto su una TV con un codice breve, controllato dal telefono."
+  },
+  "circles": {
+   "title": "Cerchie: condividere ogni nuovo album con un gruppo",
+   "tip": "Condividere automaticamente ogni nuovo album con una famiglia o un club."
+  },
+  "client-rooms": {
+   "title": "Consegnare un servizio a un cliente",
+   "tip": "Mostrare un album a un cliente sul telefono, lasciarlo scegliere e rilasciare gli originali quando decidi tu."
+  },
+  "controls": {
+   "title": "Controllare cosa viene consegnato",
+   "tip": "Limitare, mettere in pausa o annullare ciò che viene consegnato."
+  },
+  "destinations": {
+   "title": "Consegnare foto a una cartella, un cloud o un server",
+   "tip": "Consegnare le foto anche a una cartella, WebDAV, S3 o un server SFTP."
+  },
+  "events": {
+   "title": "Raccogliere foto da ospiti che non hanno Immich",
+   "tip": "Un link o un codice QR a cui chiunque può inviare foto, senza account."
+  },
+  "events-extras": {
+   "title": "Galleria, muro, il meglio e cosa viene dopo l’evento",
+   "tip": "Una galleria per gli ospiti, un link di moderazione, un muro e una selezione del meglio per il tuo evento."
+  },
+  "faq": {
+   "title": "Le domande che si fanno per prime",
+   "tip": "Risposte brevi a ciò che si chiede prima di iniziare."
+  },
+  "find-handoff": {
+   "title": "Rendere Handoff facile da trovare",
+   "tip": "Mettere un link e un pulsante Consegna dentro Immich stesso."
+  },
+  "fixed-accounts": {
+   "title": "Account fissi",
+   "tip": "Configurare account e chiavi a mano invece che dalla pagina."
+  },
+  "folder-albums": {
+   "title": "Album dalle cartelle di una libreria esterna",
+   "tip": "Un album per ogni cartella di una libreria esterna."
+  },
+  "follow-album": {
+   "title": "Seguire un album condiviso con te",
+   "tip": "Vederti proporre ciò che viene aggiunto a un album condiviso con te, da copiare nella tua libreria."
+  },
+  "frames-and-digest": {
+   "title": "Cornici e il riepilogo settimanale",
+   "tip": "Mostrare un album su uno schermo e ricevere ogni settimana una selezione del meglio."
+  },
+  "household": {
+   "title": "Condividere foto con la famiglia o gli amici",
+   "tip": "Consegnare foto tra le persone di casa con un tag, tenendo o spostando l’originale."
+  },
+  "immich-button": {
+   "title": "Consegnare da dentro Immich",
+   "tip": "Consegnare foto con un pulsante dentro Immich, senza tag."
+  },
+  "install": {
+   "title": "Installare",
+   "tip": "Installare immich-handoff accanto a Immich."
+  },
+  "memories": {
+   "title": "Un messaggio quotidiano «In questo giorno»",
+   "tip": "Un messaggio quotidiano sui ricordi che Immich ha per oggi."
+  },
+  "notifications": {
+   "title": "Essere avvisati: e-mail, telefono o un messaggio a cui rispondere",
+   "tip": "Essere avvisati con ntfy, Home Assistant, un webhook, e-mail o push."
+  },
+  "operations": {
+   "title": "Gestione",
+   "tip": "Reverse proxy, backup, aggiornamenti e monitoraggio."
+  },
+  "other-server": {
+   "title": "Ricevere su un altro server Immich",
+   "tip": "Ricevere un album da un altro server nel tuo Immich."
+  },
+  "pets": {
+   "title": "Regole per un animale e l’assistente animali",
+   "tip": "Scegli da 3 a 8 foto del tuo animale e una regola propone le foto più simili."
+  },
+  "phone": {
+   "title": "Inviare foto dal telefono",
+   "tip": "Inviare foto e video a pezzi che sopravvivono a una connessione persa."
+  },
+  "places": {
+   "title": "Luoghi per le foto che non ne hanno",
+   "tip": "Dare a una foto senza luogo quello di una foto scattata subito accanto."
+  },
+  "quickstart": {
+   "title": "Avvio rapido: la tua prima consegna in dieci minuti",
+   "tip": "Da zero alla prima consegna in dieci minuti."
+  },
+  "rules": {
+   "title": "Regole: foto per chi, dove e quando",
+   "tip": "Una regola trova foto di persone, luoghi e date e chiede prima di inviare."
+  },
+  "security": {
+   "title": "Sicurezza e fiducia",
+   "tip": "Di cosa ti fidi e cosa viene conservato."
+  },
+  "settings": {
+   "title": "Impostazioni",
+   "tip": "Ogni impostazione e il suo valore predefinito."
+  },
+  "share-people": {
+   "title": "Condividere le foto di una persona con il partner, in entrambe le direzioni",
+   "tip": "Proporre le foto delle persone che scegli a un’altra persona e ricevere le sue."
+  },
+  "shared-albums": {
+   "title": "Condividere album tra server",
+   "tip": "Condividere un album con un amico il cui Immich è su un altro server."
+  },
+  "smart-albums": {
+   "title": "Album intelligenti che si riempiono da soli",
+   "tip": "Un album che si riempie a partire da una regola."
+  },
+  "stacking": {
+   "title": "Impilare le foto che vanno insieme",
+   "tip": "Impilare coppie RAW e JPEG, modifiche e raffiche."
+  },
+  "stories": {
+   "title": "Storie: un riepilogo animato da condividere",
+   "tip": "Trasformare un album, una persona o un periodo in un riepilogo animato da inviare."
+  },
+  "the-page": {
+   "title": "Orientarsi nella pagina",
+   "tip": "Orientarsi nella pagina e cercare una parola."
+  },
+  "trip-pool": {
+   "title": "Mettere in comune un viaggio: tutti ricevono le foto di tutti",
+   "tip": "Un pool in cui tutti, in un viaggio o a una festa, ricevono le foto di tutti."
+  },
+  "troubleshooting": {
+   "title": "Risoluzione dei problemi",
+   "tip": "Risolvere ciò che non funziona."
+  },
+  "using": {
+   "title": "Scegli cosa vuoi fare",
+   "tip": "Scegli cosa vuoi fare e trova la guida giusta."
+  },
+  "what-is-carried-over": {
+   "title": "Cosa viene trasferito",
+   "tip": "Cosa viaggia con una foto e cosa no."
+  },
+  "why-handoff": {
+   "title": "Perché Handoff e cosa fa",
+   "tip": "Cosa fa Handoff che gli album condivisi e i link non fanno, e perché fidarsi."
+  }
+ },
+ "pages": {
+  "reference/faq.md": {
+   "review": "needed"
+  },
+  "start/quickstart.md": {
+   "review": "needed"
+  },
+  "start/the-page.md": {
+   "review": "needed"
+  },
+  "using.md": {
+   "review": "needed"
+  }
+ },
+ "tips": {
+  "the-page": {
+   "language": "Lingua",
+   "live": "Aggiornamenti in diretta",
+   "palette": "Andare ovunque o agire da tastiera (Ctrl K)",
+   "scheme": "Scegliere lo schema di colori",
+   "send": "Inviare foto da questo dispositivo",
+   "sound": "Suono di arrivo e vibrazione quando atterra una foto",
+   "theme": "Passare dal tema chiaro a quello scuro",
+   "version": "La versione di Immich Handoff in esecuzione"
+  }
+ },
+ "tour": [
+  {
+   "target": "needs",
+   "page": "user",
+   "title": "Hai da fare",
+   "text": "Tutto ciò che aspetta una tua risposta viene per primo: una richiesta da approvare, un suggerimento da guardare, qualcosa che è andato storto. Quando niente ti aspetta, puoi andare."
+  },
+  {
+   "target": "scene",
+   "page": "user",
+   "title": "In diretta",
+   "text": "Le foto che viaggiano tra account compaiono qui in movimento, in entrambe le direzioni, e il contatore sale man mano che arrivano."
+  },
+  {
+   "target": "services-tab",
+   "page": "user",
+   "title": "Servizi",
+   "text": "Un servizio è un luogo con un nome a cui vengono consegnate le foto. Unisciti a uno, o offri il tuo, da qui."
+  },
+  {
+   "target": "offer",
+   "page": "user",
+   "title": "Offrire un servizio",
+   "text": "Dagli un nome e un tag, decidi chi può inviare e condividi il link d’invito o il codice QR."
+  },
+  {
+   "target": "send",
+   "page": "user",
+   "title": "Inviare da questo dispositivo",
+   "text": "Scegli foto su un telefono o un computer e inviale a un servizio senza contrassegnarle in Immich."
+  },
+  {
+   "target": "settings-tab",
+   "page": "user",
+   "title": "Impostazioni",
+   "text": "Regole, notifiche, storie, la TV, animali e altro, per categorie. Ogni scheda ha un ? che apre la sua guida."
+  },
+  {
+   "target": "palette",
+   "page": "user",
+   "title": "Ctrl K",
+   "text": "Andare ovunque o agire da tastiera: scrivi un servizio, una vista o un comando."
+  },
+  {
+   "target": "help",
+   "page": "user",
+   "title": "Aiuto",
+   "text": "Il ? apre le guide, con una casella di ricerca. Puoi rifare questo giro da lì, o dalla scheda della Panoramica."
+  },
+  {
+   "target": "admin-share",
+   "page": "admin",
+   "title": "Condividere questa pagina",
+   "text": "L’indirizzo con cui le persone si uniscono, con codice QR. Copialo in un messaggio."
+  },
+  {
+   "target": "admin-connections",
+   "page": "admin",
+   "title": "Controllare le connessioni",
+   "text": "Prova le chiavi di ogni servizio e dice cosa non va e come correggerlo."
+  },
+  {
+   "target": "admin-services",
+   "page": "admin",
+   "title": "Servizi e membri",
+   "text": "Ogni servizio in una riga: chi lo offre, chi invia, pause e limiti. Rimuovi un membro o un servizio bloccato."
+  },
+  {
+   "target": "admin-backups",
+   "page": "admin",
+   "title": "Backup",
+   "text": "Scarica un backup di ciò che l’app conserva e tieni con esso una copia di HANDOFF_STORE_KEY."
+  },
+  {
+   "target": "admin-pet",
+   "page": "admin",
+   "title": "Assistente animali",
+   "text": "Mostra se l’assistente animali facoltativo è attivo; la guida dice come attivarlo."
+  },
+  {
+   "target": "help",
+   "page": "admin",
+   "title": "Renderlo facile da trovare",
+   "text": "Un link e un pulsante Consegna dentro Immich stesso: la guida mostra come aggiungerli."
+  }
+ ]
+}

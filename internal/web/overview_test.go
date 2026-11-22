@@ -141,9 +141,14 @@ func TestTheNumbersFragmentCountsWaitingInboxAndTheWeek(t *testing.T) {
 func TestTheFirstRunGuideFollowsTheStepsAndGoesAwayWhenDone(t *testing.T) {
 	var st *store.Store
 	app, _ := setup(t, withClub(t, &st))
-	// the "family" user (Tags on in the fake Immich) owns a service but nothing has been handed over: 2 of 3 steps
+	// the "family" user (Tags on in the fake Immich) owns a service but nothing has been handed over, and has not taken the tour: Tags, offering a
+	// service (and someone sending to it) are done, handing over and the tour are not, and each step that has a place or a guide says where
 	g := get(t, app.URL, "sess=family")
-	has(t, g, "Get started", "Hand over your first photo", "Hide this guide", `class="ring r2"`, "2/3")
+	has(t, g, "Get started", "Hand over your first photo", "Take the one-minute tour of the page", "Hide this guide", `data-show="send"`, `data-show="tour"`, `class="step-show"`, `data-help="household"`)
+	if m := regexp.MustCompile(`class="ring r(\d)"`).FindStringSubmatch(g); m == nil || m[1] == "0" || m[1] >= "5" {
+		t.Errorf("the ring should show some steps done and some not: %v", m)
+	}
+	lacks(t, g, `data-show="offer"`) // a step that is done has nothing to show
 	// hiding it is remembered
 	if code, _ := postForm(t, app.URL+"/guide/dismiss", "sess=family", ""); code != 204 {
 		t.Fatalf("dismiss: %d", code)
@@ -158,6 +163,8 @@ func TestTheFirstRunGuideFollowsTheStepsAndGoesAwayWhenDone(t *testing.T) {
 	app2, _ := setup(t, withClub(t, &st2))
 	links, _ := st2.Links(context.Background())
 	st2.AddHandover(context.Background(), links[0].ID, 1)
+	has(t, get(t, app2.URL, "sess=family"), "Get started", "Take the one-minute tour of the page") // the tour is a step too
+	st2.SetTourSeen(context.Background(), uuid.MustParse(familyID), "user")
 	lacks(t, get(t, app2.URL, "sess=family"), "Get started")
 	if done, _ := st2.GuideDone(context.Background(), uuid.MustParse(familyID)); !done {
 		t.Error("a finished guide must be remembered, so it never comes back after a quiet week")

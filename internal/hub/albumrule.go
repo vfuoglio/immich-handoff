@@ -19,7 +19,7 @@ import (
 // A rule of kind album (#271) keeps one of the person's albums up to date with what a rule finds: the photos that match become
 // suggestions (or, once the person has let it, go in by themselves) and are put in the album with a key of the person's own. It only
 // adds, unless the person asked for it to take out what no longer matches, and then only photos it put there itself. See
-// docs/design/albums-design.md.
+// docs/contributing/design/albums-design.md.
 
 // albumKeyName is what the key is called in the person's Immich, where they can see it and delete it.
 const albumKeyName = "handoff: smart albums"

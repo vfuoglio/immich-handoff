@@ -21,7 +21,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
-// Destinations (docs/design/destinations-design.md): places a service hands photos to that are not an Immich account. The administrator
+// Destinations (docs/contributing/design/destinations-design.md): places a service hands photos to that are not an Immich account. The administrator
 // names some (DESTINATIONS_FILE); with DESTINATIONS_USER_ADD a person may enter network destinations of their own on a service card.
 // A service binds destinations with where each puts files, its own daily limit and its own pause.
 

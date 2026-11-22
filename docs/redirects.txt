@@ -1,0 +1,32 @@
+# Pages that moved. Each line is "old path  new path", relative to docs/. The old file stays as a one-line pointer so a link
+# in an old release note, issue or bookmark still lands somewhere; the site and the in-app Help skip it and the site redirects it.
+admin.md admin/admin-page.md
+find-handoff.md admin/find-handoff.md
+fixed-accounts.md admin/fixed-accounts.md
+install.md admin/install.md
+operations.md admin/operations.md
+architecture.md contributing/architecture.md
+releasing.md contributing/releasing.md
+design/bridges-design.md contributing/design/bridges-design.md
+design/immich-api-notes.md contributing/design/immich-api-notes.md
+design/immich-button-design.md contributing/design/immich-button-design.md
+design/rules-design.md contributing/design/rules-design.md
+design/shared-albums-design.md contributing/design/shared-albums-design.md
+faq.md reference/faq.md
+security.md reference/security.md
+settings.md reference/settings.md
+troubleshooting.md reference/troubleshooting.md
+what-is-carried-over.md reference/what-is-carried-over.md
+guides/automate.md guides/automate/rules.md
+guides/controls.md guides/automate/controls.md
+guides/client-rooms.md guides/collect/client-rooms.md
+guides/events.md guides/collect/events.md
+guides/events-extras.md guides/collect/events-extras.md
+guides/phone.md guides/collect/phone.md
+guides/household.md guides/share/household.md
+guides/other-server.md guides/share/other-server.md
+guides/shared-albums.md guides/share/shared-albums.md
+guides/trip-pool.md guides/share/trip-pool.md
+guides/frames-and-digest.md guides/show/frames-and-digest.md
+guides/notifications.md guides/show/notifications.md
+guides/the-page.md start/the-page.md

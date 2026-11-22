@@ -25,6 +25,8 @@ import { initSound } from "./sound";
 import { initTabs } from "./tabs";
 import { initSegments } from "./segments";
 import { initSettingsNav } from "./settingsnav.ts";
+import { initHelp } from "./help.ts";
+import { initTour } from "./tour.ts";
 
 // htmx drops 4xx/5xx bodies by default; our handlers send a short human message, so show it.
 document.addEventListener("htmx:beforeSwap", (e) => {
@@ -120,6 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initFrame();
   initStory();
   initPalette();
+  initHelp();
+  initTour();
   initSound();
   enhance(document); // numbers that are already on the page roll up to their value
   const scene = document.getElementById("scene");

@@ -13,7 +13,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/syncer"
 )
 
-// Sharing photos with another person, both ways (docs/design/pairing-design.md): the card on the Overview, the form that offers it,
+// Sharing photos with another person, both ways (docs/contributing/design/pairing-design.md): the card on the Overview, the form that offers it,
 // and the page the other person opens to say yes. The pool and the rules of a pairing are not shown anywhere else.
 
 // PairingsView is the card on the Overview.

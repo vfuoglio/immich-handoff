@@ -17,7 +17,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// The web side of sharing albums with people on other servers (docs/design/shared-albums-design.md): the photographer's, or anyone's,
+// The web side of sharing albums with people on other servers (docs/contributing/design/shared-albums-design.md): the photographer's, or anyone's,
 // page for inviting and joining, and the endpoints the other app calls. The other app's calls need no Immich sign-in: the
 // invitation steps are guarded by a one-time token, everything after by the signature.
 

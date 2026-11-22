@@ -306,7 +306,7 @@ func TestBrowser(t *testing.T) {
 			t.Errorf("cards are rounded glass: %v", card)
 		}
 		// the order down the page: what needs the person first, then the live stream, this week, get started; the set-once cards are in the Settings view, by purpose
-		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s+\d*$/, '').trim())`)
+		order := js[[]string](t, ctx, `[...document.querySelectorAll('#v-overview h2')].map(h => h.textContent.replace(/\s*\?$/, '').replace(/\s+\d*$/, '').trim())`)
 		if strings.Join(order, "|") != "Needs you|Live as it happens|This week|Get started" {
 			t.Errorf("sections of the Overview, top to bottom: %v", order)
 		}
@@ -674,7 +674,7 @@ func TestBrowser(t *testing.T) {
 	})
 
 	t.Run("the link a proxy adds to Immich's own header sits between the bell and the avatar", func(t *testing.T) {
-		// what docs/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
+		// what docs/admin/find-handoff.md asks of a reverse proxy: for signed-in people, one script tag before </body>,
 		// and this app under /handoff/ on the same address. This is also the check that Immich's header still has
 		// the shape the script looks for.
 		address := w.inFrontOfImmich(t)

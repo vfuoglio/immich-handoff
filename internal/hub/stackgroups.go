@@ -13,7 +13,7 @@ import (
 )
 
 // Stacking by rule (#197): which of a person's photos belong in one stack. This file is the grouping alone: it reads names and
-// EXIF fields it is given and asks nothing of Immich (docs/design/stacks-design.md).
+// EXIF fields it is given and asks nothing of Immich (docs/contributing/design/stacks-design.md).
 
 // The signals a group is found by.
 const (

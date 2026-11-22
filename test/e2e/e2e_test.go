@@ -241,7 +241,7 @@ func tagAsset(t *testing.T, u user, tag string, ids ...string) {
 // keepTagged makes sure a tag that was just applied stuck, and applies it again when it did not.
 //
 // Immich itself occasionally drops a tag applied right after an upload (about 1 in 50, seen with no
-// handoff app running at all; see docs/design/immich-api-notes.md). A person would notice and tag again, so the
+// handoff app running at all; see docs/contributing/design/immich-api-notes.md). A person would notice and tag again, so the
 // test helpers do the same, and the tests then measure this app and not that behaviour of Immich.
 //
 // "Lost" means the photo has no tags at all and is not in the trash: a photo the app has already handled

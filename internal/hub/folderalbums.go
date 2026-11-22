@@ -16,7 +16,7 @@ import (
 
 // Albums made from the folders of an external library (#198). Immich keeps the real path of the files of an external
 // library, so the folder a photo is in can be read from its path. This file turns paths into the albums a person's folders
-// would make; it asks nothing of Immich beyond one search and changes nothing (docs/design/folders-design.md).
+// would make; it asks nothing of Immich beyond one search and changes nothing (docs/contributing/design/folders-design.md).
 
 var (
 	ErrBadFolder  = errors.New("write the folder as a path, such as /external/photos")

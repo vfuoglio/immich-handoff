@@ -26,7 +26,7 @@ func toggleTile(t *testing.T, ctx context.Context, i int) {
 }
 
 // TestHandOverButton presses the button the script adds to Immich's own pages, in a real Chrome against a real Immich
-// behind the proxy docs/find-handoff.md describes: the photo viewer, the list of services, the message with Undo.
+// behind the proxy docs/admin/find-handoff.md describes: the photo viewer, the list of services, the message with Undo.
 func TestHandOverButton(t *testing.T) {
 	w := theWorld(t)
 	address := w.inFrontOfImmich(t)

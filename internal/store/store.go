@@ -566,7 +566,7 @@ var migrations = []string{
 	// choices are kept under its number, so earlier rounds stay as history.
 	`ALTER TABLE rooms ADD COLUMN multi_round INTEGER NOT NULL DEFAULT 0;
 	 ALTER TABLE rooms ADD COLUMN round INTEGER NOT NULL DEFAULT 1;`,
-	// Peers: the other apps this one shares albums with (docs/design/shared-albums-design.md). A peer is made by an invitation; its
+	// Peers: the other apps this one shares albums with (docs/contributing/design/shared-albums-design.md). A peer is made by an invitation; its
 	// secret (the one both apps sign with) is sealed like every key. their_id is the id the other app knows this app by.
 	`CREATE TABLE peers (
 	   id         TEXT PRIMARY KEY,
@@ -641,7 +641,7 @@ var migrations = []string{
 	`ALTER TABLE shared_albums ADD COLUMN group_names TEXT NOT NULL DEFAULT '';
 	 ALTER TABLE shared_albums ADD COLUMN group_sent TEXT NOT NULL DEFAULT '';`,
 	// Rules: a sender's rule that finds photos by people, places and dates and suggests them for a service they joined
-	// (docs/design/rules-design.md). cond holds the conditions as JSON. rule_photos is what a rule has done with each photo it matched: it
+	// (docs/contributing/design/rules-design.md). cond holds the conditions as JSON. rule_photos is what a rule has done with each photo it matched: it
 	// suggested it (state "suggested", in the batch that is open), the person sent it or declined it, or it was sent by auto.
 	`CREATE TABLE rules (
 	   id        TEXT PRIMARY KEY,
@@ -899,6 +899,13 @@ var migrations = []string{
 	   key_id     TEXT NOT NULL,
 	   key_enc    BLOB NOT NULL,
 	   created_at TEXT NOT NULL
+	 );`,
+	// the first-run tour: whether a person has seen the tour of the page and, for an administrator, the tour of the administrator's page
+	`CREATE TABLE tour_seen (
+	   user_id  TEXT NOT NULL,
+	   kind     TEXT NOT NULL,
+	   seen_at  TEXT NOT NULL,
+	   PRIMARY KEY (user_id, kind)
 	 );`,
 }
 
@@ -1509,6 +1516,22 @@ func (s *Store) GuideDone(ctx context.Context, user uuid.UUID) (bool, error) {
 // SetGuideDone remembers that the person finished or hid the first-run guide.
 func (s *Store) SetGuideDone(ctx context.Context, user uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO guide (user_id, done_at) VALUES (?, ?)`, user.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+// TourSeen reports whether the person has been through the tour of one page ("user" or "admin").
+func (s *Store) TourSeen(ctx context.Context, user uuid.UUID, kind string) (bool, error) {
+	var at string
+	err := s.db.QueryRowContext(ctx, `SELECT seen_at FROM tour_seen WHERE user_id = ? AND kind = ?`, user.String(), kind).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// SetTourSeen remembers that the person has been through, or skipped, the tour of a page.
+func (s *Store) SetTourSeen(ctx context.Context, user uuid.UUID, kind string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tour_seen (user_id, kind, seen_at) VALUES (?, ?, ?)`, user.String(), kind, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 

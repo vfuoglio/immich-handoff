@@ -1,0 +1,362 @@
+[
+ {
+  "path": "start/quickstart.md",
+  "title": "Quick start: your first hand-over in ten minutes",
+  "feature": "quickstart",
+  "audience": "admin",
+  "goal": "start",
+  "order": 1,
+  "tip": "From nothing to your first hand-over in ten minutes."
+ },
+ {
+  "path": "start/why-handoff.md",
+  "title": "Why Handoff, and what it does",
+  "feature": "why-handoff",
+  "audience": "user",
+  "goal": "start",
+  "order": 2,
+  "tip": "What Handoff does that shared albums and links do not, and why you can trust it."
+ },
+ {
+  "path": "using.md",
+  "title": "Pick what you want to do",
+  "feature": "using",
+  "audience": "user",
+  "goal": "start",
+  "order": 2,
+  "tip": "Pick what you want to do, and find the guide for it."
+ },
+ {
+  "path": "start/the-page.md",
+  "title": "Finding your way around the page",
+  "feature": "the-page",
+  "audience": "user",
+  "goal": "start",
+  "order": 270,
+  "tip": "Find your way around the page and look up a word."
+ },
+ {
+  "path": "reference/faq.md",
+  "title": "Questions people ask first",
+  "feature": "faq",
+  "audience": "user",
+  "goal": "start",
+  "order": 370,
+  "tip": "Short answers to what people ask before they start."
+ },
+ {
+  "path": "guides/share/household.md",
+  "title": "Share photos with your household or friends",
+  "feature": "household",
+  "audience": "user",
+  "goal": "share",
+  "order": 10,
+  "tip": "Hand photos between the people in your home with a tag, keeping or moving the original."
+ },
+ {
+  "path": "guides/share/trip-pool.md",
+  "title": "Pool a trip: everybody gets everybody's photos",
+  "feature": "trip-pool",
+  "audience": "user",
+  "goal": "share",
+  "order": 20,
+  "tip": "A pool where everybody on a trip or at a party gets everybody’s photos."
+ },
+ {
+  "path": "guides/share/share-people.md",
+  "title": "Share a person's photos with your partner, both ways",
+  "feature": "share-people",
+  "audience": "user",
+  "goal": "share",
+  "order": 30,
+  "tip": "Offer the photos of people you choose to one other person, and get theirs back."
+ },
+ {
+  "path": "guides/share/shared-albums.md",
+  "title": "Share albums across servers",
+  "feature": "shared-albums",
+  "audience": "user",
+  "goal": "share",
+  "order": 40,
+  "tip": "Share an album with a friend whose Immich is on another server."
+ },
+ {
+  "path": "guides/share/other-server.md",
+  "title": "Receive on another Immich server",
+  "feature": "other-server",
+  "audience": "user",
+  "goal": "share",
+  "order": 50,
+  "tip": "Receive an album from another server into your own Immich."
+ },
+ {
+  "path": "guides/share/circles.md",
+  "title": "Circles: share every new album with a group",
+  "feature": "circles",
+  "audience": "user",
+  "goal": "share",
+  "order": 60,
+  "tip": "Share every new album with a family or a club automatically."
+ },
+ {
+  "path": "guides/share/destinations.md",
+  "title": "Hand photos over to a folder, a cloud drive or a server",
+  "feature": "destinations",
+  "audience": "admin",
+  "goal": "share",
+  "order": 70,
+  "tip": "Also hand photos to a folder, WebDAV, S3 or an SFTP server."
+ },
+ {
+  "path": "guides/share/follow-album.md",
+  "title": "Following an album shared with you",
+  "feature": "follow-album",
+  "audience": "user",
+  "goal": "share",
+  "order": 80,
+  "tip": "Have what is added to an album shared with you offered to copy into your library."
+ },
+ {
+  "path": "guides/collect/events.md",
+  "title": "Collect photos from guests who have no Immich",
+  "feature": "events",
+  "audience": "user",
+  "goal": "collect",
+  "order": 90,
+  "tip": "A link or QR code anyone can send photos to, with no account."
+ },
+ {
+  "path": "guides/collect/events-extras.md",
+  "title": "Gallery, wall, best-of and what comes after the event",
+  "feature": "events-extras",
+  "audience": "user",
+  "goal": "collect",
+  "order": 100,
+  "tip": "A guest gallery, a moderator link, a wall and a best-of for your event."
+ },
+ {
+  "path": "guides/collect/client-rooms.md",
+  "title": "Deliver a shoot to a client",
+  "feature": "client-rooms",
+  "audience": "user",
+  "goal": "collect",
+  "order": 110,
+  "tip": "Show a client an album on a phone, let them choose, release the originals when you decide."
+ },
+ {
+  "path": "guides/collect/phone.md",
+  "title": "Send photos from a phone",
+  "feature": "phone",
+  "audience": "user",
+  "goal": "collect",
+  "order": 120,
+  "tip": "Send photos and videos from the phone in pieces that survive a lost connection."
+ },
+ {
+  "path": "guides/automate/rules.md",
+  "title": "Rules: photos by who, where and when",
+  "feature": "rules",
+  "audience": "user",
+  "goal": "automate",
+  "order": 130,
+  "tip": "Let a rule find photos of people, places and dates and ask before sending."
+ },
+ {
+  "path": "guides/automate/pets.md",
+  "title": "Rules for a pet, and the pet helper",
+  "feature": "pets",
+  "audience": "user",
+  "goal": "automate",
+  "order": 140,
+  "tip": "Pick 3 to 8 photos of your pet and a rule offers the photos most like them."
+ },
+ {
+  "path": "guides/automate/smart-albums.md",
+  "title": "Smart albums that fill themselves",
+  "feature": "smart-albums",
+  "audience": "user",
+  "goal": "automate",
+  "order": 150,
+  "tip": "An album that fills itself from a rule."
+ },
+ {
+  "path": "guides/automate/folder-albums.md",
+  "title": "Albums from the folders of an external library",
+  "feature": "folder-albums",
+  "audience": "user",
+  "goal": "automate",
+  "order": 160,
+  "tip": "An album for each folder of an external library."
+ },
+ {
+  "path": "guides/automate/stacking.md",
+  "title": "Stacking photos that belong together",
+  "feature": "stacking",
+  "audience": "user",
+  "goal": "automate",
+  "order": 170,
+  "tip": "Stack RAW and JPEG pairs, edits and bursts."
+ },
+ {
+  "path": "guides/automate/immich-button.md",
+  "title": "Handing over from inside Immich",
+  "feature": "immich-button",
+  "audience": "user",
+  "goal": "automate",
+  "order": 180,
+  "tip": "Hand photos over from a button inside Immich, no tag needed."
+ },
+ {
+  "path": "guides/automate/controls.md",
+  "title": "Control what is handed over",
+  "feature": "controls",
+  "audience": "user",
+  "goal": "automate",
+  "order": 190,
+  "tip": "Limit, pause or take back what is handed over."
+ },
+ {
+  "path": "guides/automate/places.md",
+  "title": "Places for photos that have none",
+  "feature": "places",
+  "audience": "user",
+  "goal": "automate",
+  "order": 200,
+  "tip": "Give photos without a place the place of a photo taken next to them."
+ },
+ {
+  "path": "guides/show/notifications.md",
+  "title": "Be told: email, your phone, or a message you can answer",
+  "feature": "notifications",
+  "audience": "user",
+  "goal": "show",
+  "order": 210,
+  "tip": "Be told by ntfy, Home Assistant, a webhook, email or push."
+ },
+ {
+  "path": "guides/show/memories.md",
+  "title": "A daily \"On this day\" message",
+  "feature": "memories",
+  "audience": "user",
+  "goal": "show",
+  "order": 220,
+  "tip": "A daily message about the memories Immich has for today."
+ },
+ {
+  "path": "guides/show/frames-and-digest.md",
+  "title": "Frames and the weekly digest",
+  "feature": "frames-and-digest",
+  "audience": "user",
+  "goal": "show",
+  "order": 230,
+  "tip": "Show an album on a screen, and get a weekly best-of."
+ },
+ {
+  "path": "guides/show/stories.md",
+  "title": "Stories: a shareable animated recap",
+  "feature": "stories",
+  "audience": "user",
+  "goal": "show",
+  "order": 240,
+  "tip": "Turn an album, a person or a date range into an animated recap you can send."
+ },
+ {
+  "path": "guides/show/cast-to-tv.md",
+  "title": "Cast to a TV with a code",
+  "feature": "cast-to-tv",
+  "audience": "user",
+  "goal": "show",
+  "order": 250,
+  "tip": "Show photos on a TV with a short code, controlled from your phone."
+ },
+ {
+  "path": "guides/show/album-tree.md",
+  "title": "Album tree: albums as folders",
+  "feature": "album-tree",
+  "audience": "user",
+  "goal": "show",
+  "order": 260,
+  "tip": "See your albums as folders and move them around."
+ },
+ {
+  "path": "admin/install.md",
+  "title": "Install",
+  "feature": "install",
+  "audience": "admin",
+  "goal": "run",
+  "order": 280,
+  "tip": "Install immich-handoff next to Immich."
+ },
+ {
+  "path": "admin/operations.md",
+  "title": "Operations",
+  "feature": "operations",
+  "audience": "admin",
+  "goal": "run",
+  "order": 290,
+  "tip": "Reverse proxy, backups, upgrades and monitoring."
+ },
+ {
+  "path": "admin/fixed-accounts.md",
+  "title": "Fixed accounts",
+  "feature": "fixed-accounts",
+  "audience": "admin",
+  "goal": "run",
+  "order": 300,
+  "tip": "Set up accounts and keys by hand instead of from the page."
+ },
+ {
+  "path": "admin/find-handoff.md",
+  "title": "Make Handoff easy to find",
+  "feature": "find-handoff",
+  "audience": "admin",
+  "goal": "run",
+  "order": 310,
+  "tip": "Put a link and a hand-over button inside Immich."
+ },
+ {
+  "path": "admin/admin-page.md",
+  "title": "The administrator's page",
+  "feature": "admin-page",
+  "audience": "admin",
+  "goal": "run",
+  "order": 320,
+  "tip": "Look after the whole installation from one page."
+ },
+ {
+  "path": "reference/settings.md",
+  "title": "Settings",
+  "feature": "settings",
+  "audience": "admin",
+  "goal": "run",
+  "order": 330,
+  "tip": "Every setting and its default."
+ },
+ {
+  "path": "reference/security.md",
+  "title": "Security and trust",
+  "feature": "security",
+  "audience": "admin",
+  "goal": "run",
+  "order": 340,
+  "tip": "What you are trusting and what is stored."
+ },
+ {
+  "path": "reference/what-is-carried-over.md",
+  "title": "What is carried over",
+  "feature": "what-is-carried-over",
+  "audience": "user",
+  "goal": "run",
+  "order": 350,
+  "tip": "What travels with a photo and what does not."
+ },
+ {
+  "path": "reference/troubleshooting.md",
+  "title": "Troubleshooting",
+  "feature": "troubleshooting",
+  "audience": "admin",
+  "goal": "run",
+  "order": 360,
+  "tip": "Fix something that is not working."
+ }
+]

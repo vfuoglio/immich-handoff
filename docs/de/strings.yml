@@ -1,0 +1,41 @@
+# Titel und Kurzinfo jeder Seite auf Deutsch (siehe docs/contributing/translating.md). Maschinell übersetzt, noch nicht von einer Person geprüft.
+admin-page: {title: "Die Administratorseite", tip: "Die ganze Installation von einer Seite aus im Blick behalten."}
+find-handoff: {title: "Handoff leicht auffindbar machen", tip: "Einen Link und eine Übergeben-Schaltfläche in Immich selbst einbauen."}
+fixed-accounts: {title: "Feste Konten", tip: "Konten und Schlüssel von Hand einrichten statt über die Seite."}
+install: {title: "Installieren", tip: "immich-handoff neben Immich installieren."}
+operations: {title: "Betrieb", tip: "Reverse-Proxy, Sicherungen, Updates und Überwachung."}
+controls: {title: "Steuern, was übergeben wird", tip: "Begrenzen, pausieren oder das Übergebene zurücknehmen."}
+folder-albums: {title: "Alben aus den Ordnern einer externen Bibliothek", tip: "Ein Album für jeden Ordner einer externen Bibliothek."}
+immich-button: {title: "Aus Immich heraus übergeben", tip: "Fotos mit einer Schaltfläche in Immich übergeben, ganz ohne Tag."}
+pets: {title: "Regeln für ein Haustier und der Tier-Helfer", tip: "3 bis 8 Fotos deines Tiers wählen, und eine Regel schlägt die ähnlichsten Fotos vor."}
+places: {title: "Orte für Fotos ohne Ort", tip: "Fotos ohne Ort den Ort eines Fotos geben, das direkt daneben entstand."}
+rules: {title: "Regeln: Fotos nach Wer, Wo und Wann", tip: "Eine Regel findet Fotos von Personen, Orten und Daten und fragt vor dem Senden."}
+smart-albums: {title: "Intelligente Alben, die sich selbst füllen", tip: "Ein Album, das sich aus einer Regel füllt."}
+stacking: {title: "Zusammengehörende Fotos stapeln", tip: "RAW-und-JPEG-Paare, Bearbeitungen und Serien stapeln."}
+client-rooms: {title: "Ein Shooting an Kunden liefern", tip: "Kunden ein Album auf dem Handy zeigen, auswählen lassen und die Originale freigeben, wenn du es entscheidest."}
+events-extras: {title: "Galerie, Wand, Best-of und was nach der Veranstaltung kommt", tip: "Eine Gästegalerie, ein Moderationslink, eine Wand und ein Best-of für deine Veranstaltung."}
+events: {title: "Fotos von Gästen sammeln, die kein Immich haben", tip: "Ein Link oder QR-Code, an den jeder Fotos senden kann, ohne Konto."}
+phone: {title: "Fotos vom Handy senden", tip: "Fotos und Videos in Teilen senden, die einen Verbindungsabbruch überstehen."}
+circles: {title: "Kreise: jedes neue Album mit einer Gruppe teilen", tip: "Jedes neue Album automatisch mit einer Familie oder einem Verein teilen."}
+destinations: {title: "Fotos an einen Ordner, einen Cloud-Speicher oder einen Server übergeben", tip: "Fotos auch an einen Ordner, WebDAV, S3 oder einen SFTP-Server übergeben."}
+follow-album: {title: "Einem mit dir geteilten Album folgen", tip: "Neues aus einem mit dir geteilten Album zum Kopieren in deine Bibliothek angeboten bekommen."}
+household: {title: "Fotos mit Haushalt oder Freunden teilen", tip: "Fotos zwischen den Menschen bei dir zu Hause per Tag übergeben, Original behalten oder verschieben."}
+other-server: {title: "Auf einem anderen Immich-Server empfangen", tip: "Ein Album von einem anderen Server in dein eigenes Immich empfangen."}
+share-people: {title: "Fotos einer Person mit der Partnerin oder dem Partner teilen, in beide Richtungen", tip: "Die Fotos gewählter Personen einer anderen Person anbieten und ihre zurückbekommen."}
+shared-albums: {title: "Alben über Server hinweg teilen", tip: "Ein Album mit einer Freundin oder einem Freund teilen, deren Immich auf einem anderen Server läuft."}
+trip-pool: {title: "Eine Reise bündeln: alle bekommen alle Fotos", tip: "Ein Pool, in dem alle auf einer Reise oder Feier die Fotos aller bekommen."}
+album-tree: {title: "Albumbaum: Alben als Ordner", tip: "Deine Alben als Ordner sehen und verschieben."}
+cast-to-tv: {title: "Mit einem Code auf einem Fernseher zeigen", tip: "Fotos mit einem kurzen Code auf dem Fernseher zeigen, vom Handy gesteuert."}
+frames-and-digest: {title: "Rahmen und die wöchentliche Zusammenfassung", tip: "Ein Album auf einem Bildschirm zeigen und ein wöchentliches Best-of bekommen."}
+memories: {title: "Eine tägliche Nachricht „An diesem Tag“", tip: "Eine tägliche Nachricht über die Erinnerungen, die Immich für heute hat."}
+notifications: {title: "Informiert werden: E-Mail, dein Handy oder eine Nachricht, auf die du antworten kannst", tip: "Per ntfy, Home Assistant, Webhook, E-Mail oder Push informiert werden."}
+stories: {title: "Geschichten: ein teilbarer animierter Rückblick", tip: "Aus einem Album, einer Person oder einem Zeitraum einen animierten Rückblick machen, den du senden kannst."}
+faq: {title: "Fragen, die Leute zuerst stellen", tip: "Kurze Antworten auf das, was Leute vor dem Start fragen."}
+security: {title: "Sicherheit und Vertrauen", tip: "Wem du vertraust und was gespeichert wird."}
+settings: {title: "Einstellungen", tip: "Jede Einstellung und ihr Standardwert."}
+troubleshooting: {title: "Fehlerbehebung", tip: "Beheben, was nicht funktioniert."}
+what-is-carried-over: {title: "Was mitübertragen wird", tip: "Was mit einem Foto reist und was nicht."}
+quickstart: {title: "Schnellstart: deine erste Übergabe in zehn Minuten", tip: "Von null zur ersten Übergabe in zehn Minuten."}
+the-page: {title: "Sich auf der Seite zurechtfinden", tip: "Sich auf der Seite zurechtfinden und ein Wort nachschlagen."}
+using: {title: "Wähle, was du tun möchtest", tip: "Wähle, was du tun möchtest, und finde die passende Anleitung."}
+why-handoff: {title: "Warum Handoff, und was es kann", tip: "Was Handoff kann, was geteilte Alben und Links nicht können, und warum du ihm vertrauen kannst."}

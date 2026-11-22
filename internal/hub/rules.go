@@ -16,7 +16,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Rules (docs/design/rules-design.md): a sender's rule finds photos by who is in them, where and when, and suggests them for a service they
+// Rules (docs/contributing/design/rules-design.md): a sender's rule finds photos by who is in them, where and when, and suggests them for a service they
 // joined. This file is making, listing, pausing and ending rules.
 
 var (

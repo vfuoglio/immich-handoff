@@ -1,7 +1,7 @@
 name: develop-check
 # develop is not tested on every push. Once a day, if it has a commit from the last 24 hours, the whole CI runs on it,
 # so a problem shows up within a day and not on the day of a release. By hand: Actions, develop-check, Run workflow.
-# Scheduled runs happen only for the workflow file on the default branch. See docs/releasing.md.
+# Scheduled runs happen only for the workflow file on the default branch. See docs/contributing/releasing.md.
 on:
   schedule:
     - cron: "37 5 * * *"

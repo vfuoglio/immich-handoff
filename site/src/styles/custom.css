@@ -1,0 +1,23 @@
+:root { --sl-color-accent-high:#4250af; --sl-color-accent:#4250af; --sl-color-bg:#f5f2fd; --sl-color-text:#1d1745; }
+:root[data-theme='dark'] { --sl-color-accent-high:#98a6ff; --sl-color-accent:#4250af; --sl-color-bg:#0d0b20; --sl-color-text:#f3f0ff; --sl-color-bg-nav:#0d0b20; --sl-color-bg-sidebar:#0d0b20; }
+:root[data-theme='light'] { --sl-color-bg-nav:#f5f2fd; --sl-color-bg-sidebar:#f5f2fd; --sl-color-white:#1d1745; --sl-color-black:#f5f2fd; }
+.card { border-radius: 1rem; }
+
+/* tabs made from the ":::tabs" fence (public/doc-tabs.js) */
+.doc-tab::before { content: attr(data-label); display: block; font-weight: 600; margin-block: 0.5rem; }
+.doc-tabs.ready .doc-tab::before { display: none; }
+.doc-tabbar { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--sl-color-hairline); margin-top: 1rem; }
+.doc-tabbar button { background: none; border: 0; padding: 0.5rem 0.9rem; color: var(--sl-color-gray-2); cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+.doc-tabbar button[aria-selected='true'] { color: var(--sl-color-white); border-bottom-color: var(--sl-color-accent); }
+
+/* the landing page's goal cards */
+.goal-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+.goal-cards > div { border: 1px solid var(--sl-color-hairline); border-radius: 1rem; padding: 0 1.2rem 1rem; background: var(--sl-color-bg-nav); }
+.goal-cards h3 { margin-top: 1rem; }
+
+.hero img { object-fit: contain; }
+.goal-cards h3:first-child { margin-top: 1rem; }
+.goal-cards > div > :first-child { margin-top: 0; }
+
+/* a row of pictures written as HTML (<p align="center"><img ...> <img ...></p>) stays a row */
+.sl-markdown-content p[align='center'] img { display: inline-block; margin: 0 .25rem; vertical-align: top; }

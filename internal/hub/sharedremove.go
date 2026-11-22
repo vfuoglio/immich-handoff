@@ -13,7 +13,7 @@ import (
 	"github.com/vfuoglio/immich-handoff/internal/store"
 )
 
-// Taking photos out of a shared album, under the rule both people agreed (docs/design/shared-albums-design.md). With "nothing", removing
+// Taking photos out of a shared album, under the rule both people agreed (docs/contributing/design/shared-albums-design.md). With "nothing", removing
 // a photo changes nothing on the other side. With "follow", a photo taken out of the album is taken out of the other album too:
 // only out of the album, the photo stays in the library, and deleting a photo never travels. A large removal waits for the
 // person's yes, and a removal that came from the other side is not sent back.

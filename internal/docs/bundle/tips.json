@@ -1,0 +1,215 @@
+{
+ "admin-page": {
+  "title": "The administrator's page",
+  "tip": "Look after the whole installation from one page.",
+  "path": "admin/admin-page.md"
+ },
+ "album-tree": {
+  "title": "Album tree: albums as folders",
+  "tip": "See your albums as folders and move them around.",
+  "path": "guides/show/album-tree.md"
+ },
+ "cast-to-tv": {
+  "title": "Cast to a TV with a code",
+  "tip": "Show photos on a TV with a short code, controlled from your phone.",
+  "path": "guides/show/cast-to-tv.md"
+ },
+ "circles": {
+  "title": "Circles: share every new album with a group",
+  "tip": "Share every new album with a family or a club automatically.",
+  "path": "guides/share/circles.md"
+ },
+ "client-rooms": {
+  "title": "Deliver a shoot to a client",
+  "tip": "Show a client an album on a phone, let them choose, release the originals when you decide.",
+  "path": "guides/collect/client-rooms.md"
+ },
+ "controls": {
+  "title": "Control what is handed over",
+  "tip": "Limit, pause or take back what is handed over.",
+  "path": "guides/automate/controls.md"
+ },
+ "destinations": {
+  "title": "Hand photos over to a folder, a cloud drive or a server",
+  "tip": "Also hand photos to a folder, WebDAV, S3 or an SFTP server.",
+  "path": "guides/share/destinations.md"
+ },
+ "events": {
+  "title": "Collect photos from guests who have no Immich",
+  "tip": "A link or QR code anyone can send photos to, with no account.",
+  "path": "guides/collect/events.md"
+ },
+ "events-extras": {
+  "title": "Gallery, wall, best-of and what comes after the event",
+  "tip": "A guest gallery, a moderator link, a wall and a best-of for your event.",
+  "path": "guides/collect/events-extras.md"
+ },
+ "faq": {
+  "title": "Questions people ask first",
+  "tip": "Short answers to what people ask before they start.",
+  "path": "reference/faq.md"
+ },
+ "find-handoff": {
+  "title": "Make Handoff easy to find",
+  "tip": "Put a link and a hand-over button inside Immich.",
+  "path": "admin/find-handoff.md"
+ },
+ "fixed-accounts": {
+  "title": "Fixed accounts",
+  "tip": "Set up accounts and keys by hand instead of from the page.",
+  "path": "admin/fixed-accounts.md"
+ },
+ "folder-albums": {
+  "title": "Albums from the folders of an external library",
+  "tip": "An album for each folder of an external library.",
+  "path": "guides/automate/folder-albums.md"
+ },
+ "follow-album": {
+  "title": "Following an album shared with you",
+  "tip": "Have what is added to an album shared with you offered to copy into your library.",
+  "path": "guides/share/follow-album.md"
+ },
+ "frames-and-digest": {
+  "title": "Frames and the weekly digest",
+  "tip": "Show an album on a screen, and get a weekly best-of.",
+  "path": "guides/show/frames-and-digest.md"
+ },
+ "household": {
+  "title": "Share photos with your household or friends",
+  "tip": "Hand photos between the people in your home with a tag, keeping or moving the original.",
+  "path": "guides/share/household.md"
+ },
+ "immich-button": {
+  "title": "Handing over from inside Immich",
+  "tip": "Hand photos over from a button inside Immich, no tag needed.",
+  "path": "guides/automate/immich-button.md"
+ },
+ "install": {
+  "title": "Install",
+  "tip": "Install immich-handoff next to Immich.",
+  "path": "admin/install.md"
+ },
+ "memories": {
+  "title": "A daily \"On this day\" message",
+  "tip": "A daily message about the memories Immich has for today.",
+  "path": "guides/show/memories.md"
+ },
+ "notifications": {
+  "title": "Be told: email, your phone, or a message you can answer",
+  "tip": "Be told by ntfy, Home Assistant, a webhook, email or push.",
+  "path": "guides/show/notifications.md"
+ },
+ "operations": {
+  "title": "Operations",
+  "tip": "Reverse proxy, backups, upgrades and monitoring.",
+  "path": "admin/operations.md"
+ },
+ "other-server": {
+  "title": "Receive on another Immich server",
+  "tip": "Receive an album from another server into your own Immich.",
+  "path": "guides/share/other-server.md"
+ },
+ "pets": {
+  "title": "Rules for a pet, and the pet helper",
+  "tip": "Pick 3 to 8 photos of your pet and a rule offers the photos most like them.",
+  "path": "guides/automate/pets.md"
+ },
+ "phone": {
+  "title": "Send photos from a phone",
+  "tip": "Send photos and videos from the phone in pieces that survive a lost connection.",
+  "path": "guides/collect/phone.md"
+ },
+ "places": {
+  "title": "Places for photos that have none",
+  "tip": "Give photos without a place the place of a photo taken next to them.",
+  "path": "guides/automate/places.md"
+ },
+ "quickstart": {
+  "title": "Quick start: your first hand-over in ten minutes",
+  "tip": "From nothing to your first hand-over in ten minutes.",
+  "path": "start/quickstart.md"
+ },
+ "rules": {
+  "title": "Rules: photos by who, where and when",
+  "tip": "Let a rule find photos of people, places and dates and ask before sending.",
+  "path": "guides/automate/rules.md",
+  "tips": {
+   "look-back": "Suggest the older photos that match this rule too"
+  }
+ },
+ "security": {
+  "title": "Security and trust",
+  "tip": "What you are trusting and what is stored.",
+  "path": "reference/security.md"
+ },
+ "settings": {
+  "title": "Settings",
+  "tip": "Every setting and its default.",
+  "path": "reference/settings.md"
+ },
+ "share-people": {
+  "title": "Share a person's photos with your partner, both ways",
+  "tip": "Offer the photos of people you choose to one other person, and get theirs back.",
+  "path": "guides/share/share-people.md"
+ },
+ "shared-albums": {
+  "title": "Share albums across servers",
+  "tip": "Share an album with a friend whose Immich is on another server.",
+  "path": "guides/share/shared-albums.md"
+ },
+ "smart-albums": {
+  "title": "Smart albums that fill themselves",
+  "tip": "An album that fills itself from a rule.",
+  "path": "guides/automate/smart-albums.md"
+ },
+ "stacking": {
+  "title": "Stacking photos that belong together",
+  "tip": "Stack RAW and JPEG pairs, edits and bursts.",
+  "path": "guides/automate/stacking.md"
+ },
+ "stories": {
+  "title": "Stories: a shareable animated recap",
+  "tip": "Turn an album, a person or a date range into an animated recap you can send.",
+  "path": "guides/show/stories.md"
+ },
+ "the-page": {
+  "title": "Finding your way around the page",
+  "tip": "Find your way around the page and look up a word.",
+  "path": "start/the-page.md",
+  "tips": {
+   "language": "Language",
+   "live": "Live updates",
+   "palette": "Jump anywhere or do something from the keyboard (Ctrl K)",
+   "scheme": "Choose the colour scheme",
+   "send": "Send photos from this device",
+   "sound": "Arrival chime and vibration when a photo lands",
+   "theme": "Switch between the light and the dark theme",
+   "version": "The version of Immich Handoff that is running"
+  }
+ },
+ "trip-pool": {
+  "title": "Pool a trip: everybody gets everybody's photos",
+  "tip": "A pool where everybody on a trip or at a party gets everybody’s photos.",
+  "path": "guides/share/trip-pool.md"
+ },
+ "troubleshooting": {
+  "title": "Troubleshooting",
+  "tip": "Fix something that is not working.",
+  "path": "reference/troubleshooting.md"
+ },
+ "using": {
+  "title": "Pick what you want to do",
+  "tip": "Pick what you want to do, and find the guide for it.",
+  "path": "using.md"
+ },
+ "what-is-carried-over": {
+  "title": "What is carried over",
+  "tip": "What travels with a photo and what does not.",
+  "path": "reference/what-is-carried-over.md"
+ },
+ "why-handoff": {
+  "title": "Why Handoff, and what it does",
+  "tip": "What Handoff does that shared albums and links do not, and why you can trust it.",
+  "path": "start/why-handoff.md"
+ }
+}

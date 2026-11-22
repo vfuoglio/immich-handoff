@@ -20,7 +20,7 @@ import (
 // Choosing the photos of a story (#272): look at the photos of a source once, with the owner's session, through the small picture
 // Immich made of each (the same check as a drop box's best-of: too dark, too bright, blurred, or the same moment as a better shot),
 // keep about storyTarget of the best spread over time, and cut them into chapters. The result is stored; the public page never
-// looks at the library. See docs/design/stories-design.md.
+// looks at the library. See docs/contributing/design/stories-design.md.
 
 const (
 	storyTarget  = 40  // about how many photos a story shows

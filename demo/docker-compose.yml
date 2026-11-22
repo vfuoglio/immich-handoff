@@ -1,6 +1,6 @@
 # A try-it-first demonstration: a throwaway Immich with three people and sample photos, immich-handoff built from this
 # checkout, and a small nginx that puts both on one address, so the Hand over button shows inside Immich.
-# Nothing here leaves your machine; `docker compose down -v` removes it all. Not for real use: see docs/install.md.
+# Nothing here leaves your machine; `docker compose down -v` removes it all. Not for real use: see docs/admin/install.md.
 name: handoff-demo
 services:
   immich-server:

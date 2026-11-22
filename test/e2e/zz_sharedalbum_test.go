@@ -1,6 +1,6 @@
 //go:build e2e
 
-// What a shared album across servers (#131) relies on in Immich, asked of two real servers (docs/design/shared-albums-design.md
+// What a shared album across servers (#131) relies on in Immich, asked of two real servers (docs/contributing/design/shared-albums-design.md
 // has the findings). It started as the spike of #141 and stays as the check that Immich still behaves this way: the
 // permissions a key needs, the checksum as a photo's identity across servers, a duplicate upload as the answer to an echo,
 // and a trashed copy that a re-send leaves alone. It starts the second Immich, so it runs in the bridge group.

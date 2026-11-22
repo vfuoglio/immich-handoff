@@ -1,0 +1,23 @@
+{
+  "name": "immich-handoff-docs",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "The public documentation site. It reads the Markdown in ../docs; there is no content in this folder.",
+  "scripts": {
+    "prebuild": "node copy-images.mjs",
+    "predev": "node copy-images.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "node check-links.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.10",
+    "@astrojs/starlight": "0.43.1",
+    "astro": "7.3.6",
+    "sharp": "0.35.3",
+    "unist-util-visit": "5.0.0",
+    "yaml": "2.8.1"
+  }
+}
