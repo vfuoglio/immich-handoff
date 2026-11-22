@@ -24,6 +24,8 @@ A page may also carry `tips`, the tooltips of its buttons by key (`tips: {send: 
 
 `docs/start/the-page.md` also carries the stops of the first-run tour (`tour:`: `page` user or admin, `target`, `title`, `text`, optional `feature`). A `target` is one of `docs.TourTargets`; `internal/web/tour.go` says where each one is on the page (a selector, and the view, part or category of Settings to show first), and a test fails when the two lists differ. A stop whose element is not on the page (Settings with nothing on, the backups card without backups) is left out when the tour runs.
 
+Translations go in `docs/<language>/`: see [Translating the documentation](translating.md).
+
 Pages under `docs/contributing/` need only a `title`. Translations go in `docs/<language>/` with the same paths and a `source_rev` (the revision of the English page they were made from); a page that is not translated shows in English.
 
 Write plain Markdown. GitHub's alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) are the only addition, and so is one fence for tabs:

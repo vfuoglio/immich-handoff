@@ -6340,8 +6340,8 @@ templ HostKeyBox(fingerprint, problem string) {
 // HelpLink is the "?" beside a card's heading: the guide of the feature, opened in a drawer when the page's script is running and in a
 // new tab otherwise. It shows nothing for a feature that has no guide, so it can never point nowhere.
 templ HelpLink(feature string) {
-	if title, tip, _, ok := docs.Tip(feature); ok {
-		<a class="help-link" href={ templ.URL("help/" + feature) } target="_blank" rel="noopener" data-help={ feature } aria-label={ t(ctx, "Help: {title}", "title", title) } title={ t(ctx, tip) }>?</a>
+	if title, tip, ok := docs.Meta(loc(ctx).Code(), feature); ok {
+		<a class="help-link" href={ templ.URL("help/" + feature) } target="_blank" rel="noopener" data-help={ feature } aria-label={ t(ctx, "Help: {title}", "title", title) } title={ tip }>?</a>
 	}
 }
 
@@ -6378,6 +6378,9 @@ templ HelpPage(d HelpPageView) {
 		<p class="help-crumbs"><a href="help">{ t(ctx, "Help") }</a> · <a href="./">{ t(ctx, "Back to your own page") }</a></p>
 		<article class="help-body" data-feature={ d.Feature }>
 			<h1>{ d.Title }</h1>
+			if d.Note != "" {
+				<p class="meta help-note">{ d.Note }</p>
+			}
 			@templ.Raw(d.Body)
 		</article>
 	}
@@ -6390,6 +6393,9 @@ templ HelpDrawer(d HelpPageView) {
 		<a class="help-full" href={ templ.URL("help/" + d.Feature) } target="_blank" rel="noopener">{ t(ctx, "Open the full page") }</a>
 	</header>
 	<article class="help-body" data-feature={ d.Feature }>
+		if d.Note != "" {
+			<p class="meta help-note">{ d.Note }</p>
+		}
 		@templ.Raw(d.Body)
 	</article>
 }

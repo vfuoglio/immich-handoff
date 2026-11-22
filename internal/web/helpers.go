@@ -1181,6 +1181,9 @@ func settingsCatTitle(ctx context.Context, id string) string {
 // tipOf is the tooltip of one button, from the front matter of the guide of its feature (docs/), in the person's language where
 // the catalogue has it. It is empty for a key the guide does not have; a test keeps the templates and the guides in step.
 func tipOf(ctx context.Context, feature, key string) string {
+	if s, ok := docs.ButtonTipFor(loc(ctx).Code(), feature, key); ok {
+		return s
+	}
 	if s, ok := docs.ButtonTip(feature, key); ok {
 		return t(ctx, s)
 	}

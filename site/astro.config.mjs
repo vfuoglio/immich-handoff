@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight';
 import { unified } from '@astrojs/markdown-remark';
 import remarkDocs from './src/plugins/remark-docs.mjs';
 import { sidebar } from './src/plugins/sidebar.mjs';
+import { locales } from './src/plugins/labels.mjs';
 
 const base = '/immich-handoff';
 const repo = 'https://github.com/vfuoglio/immich-handoff';
@@ -14,6 +15,8 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Handoff',
+      defaultLocale: 'root',
+      locales,
       description: 'Hand photos from one Immich account to another, just by tagging them.',
       logo: { src: './src/assets/icon.svg', alt: '' },
       favicon: '/icon.svg',

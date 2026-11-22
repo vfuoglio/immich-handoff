@@ -35,7 +35,8 @@ type Page struct {
 	Goal      string `yaml:"goal"`
 	Order     int    `yaml:"order"`
 	Tip       string `yaml:"tip"`        // one line, shown as the tooltip of the "?" that opens this page
-	SourceRev string `yaml:"source_rev"` // translations only: the revision of the English page it was translated from
+	SourceRev string `yaml:"source_rev"` // translations only: the revision (BodyRev) of the English page it was translated from
+	Review    string `yaml:"review"`     // translations only: needed until a native speaker has checked it, then done
 	// Tips are the tooltips of the page's buttons and switches by key ("send-by-itself": "Sends without asking, ..."), asked for by the
 	// templates with the feature and the key, so the words live with the guide that explains the feature.
 	Tips map[string]string `yaml:"tips"`

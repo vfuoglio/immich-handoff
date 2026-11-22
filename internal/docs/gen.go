@@ -21,6 +21,7 @@ import (
 
 	"github.com/vfuoglio/immich-handoff/internal/docs"
 	xdraw "golang.org/x/image/draw"
+	"gopkg.in/yaml.v3"
 )
 
 type tipEntry struct {
@@ -43,6 +44,8 @@ type indexEntry struct {
 func main() {
 	root := "../../docs"
 	var pages []docs.Page
+	translated := map[string][]docs.Page{} // by language: the pages of docs/<language>/, with the path inside it
+	strs := map[string]docs.Strings{}
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
 			return err
@@ -56,6 +59,14 @@ func main() {
 		if err != nil {
 			return err
 		}
+		if lang, inner, ok := strings.Cut(rel, "/"); ok && docs.IsLanguage(lang) {
+			page, err := docs.Parse(inner, src)
+			if err != nil {
+				return fmt.Errorf("%s: %w", lang, err)
+			}
+			translated[lang] = append(translated[lang], page)
+			return nil
+		}
 		page, err := docs.Parse(rel, src)
 		if err != nil {
 			return err
@@ -63,6 +74,18 @@ func main() {
 		pages = append(pages, page)
 		return nil
 	})
+	for _, lang := range docs.Languages { // docs/<language>/strings.yml
+		if b, e := os.ReadFile(filepath.Join(root, lang, "strings.yml")); e == nil {
+			var m docs.Strings
+			dec := yaml.NewDecoder(strings.NewReader(string(b)))
+			dec.KnownFields(true)
+			if e := dec.Decode(&m); e != nil {
+				fmt.Fprintf(os.Stderr, "%s/strings.yml: %v\n", lang, e)
+				os.Exit(1)
+			}
+			strs[lang] = m
+		}
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -72,6 +95,33 @@ func main() {
 		os.Exit(1)
 	}
 	sort.Slice(pages, func(i, j int) bool { return pages[i].Path < pages[j].Path })
+	byPath := map[string]docs.Page{}
+	for _, p := range pages {
+		byPath[p.Path] = p
+	}
+	if len(os.Args) > 2 && os.Args[1] == "-rev" { // the source_rev for a translation of an English page: go run gen.go -rev start/quickstart.md
+		p, ok := byPath[os.Args[2]]
+		if !ok {
+			fmt.Fprintln(os.Stderr, "no such English page:", os.Args[2])
+			os.Exit(1)
+		}
+		fmt.Println(docs.BodyRev(p.Body))
+		return
+	}
+	if bad := checkTranslations(byPath, pages, translated, strs); len(bad) > 0 {
+		fmt.Fprintln(os.Stderr, "the translations have problems:\n  "+strings.Join(bad, "\n  "))
+		os.Exit(1)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "-stale" { // a list for CI: a translation whose English page has changed since it was made
+		for _, lang := range docs.Languages {
+			for _, t := range translated[lang] {
+				if en, ok := byPath[t.Path]; ok && docs.BodyRev(en.Body) != t.SourceRev {
+					fmt.Printf("::warning::docs/%s/%s was translated from an English page that has changed since (source_rev %s, now %s)\n", lang, t.Path, t.SourceRev, docs.BodyRev(en.Body))
+				}
+			}
+		}
+		return
+	}
 
 	out := "bundle"
 	if err := os.RemoveAll(filepath.Join(out, "en")); err != nil {
@@ -115,6 +165,95 @@ func main() {
 	})
 	write(filepath.Join(out, "index.json"), index)
 	write(filepath.Join(out, "tips.json"), tips)
+	for _, lang := range docs.Languages {
+		writeLanguage(out, lang, byPath, translated[lang], strs[lang])
+	}
+}
+
+type pageNote struct {
+	Review string `json:"review"`
+	Stale  bool   `json:"stale,omitempty"`
+}
+
+// writeLanguage writes a language's translated pages and its meta.json: the titles and tips of every page, the pages' notes (how far
+// each was reviewed, whether the English has changed since), the button tips and the tour stops that were translated.
+func writeLanguage(out, lang string, english map[string]docs.Page, pages []docs.Page, strs docs.Strings) {
+	dir := filepath.Join(out, lang)
+	if err := os.RemoveAll(dir); err != nil {
+		panic(err)
+	}
+	if len(pages) == 0 && len(strs) == 0 {
+		return
+	}
+	meta := struct {
+		Strings docs.Strings                 `json:"strings"`
+		Pages   map[string]pageNote          `json:"pages"`
+		Tips    map[string]map[string]string `json:"tips"`
+		Tour    []docs.TourStop              `json:"tour"`
+	}{Strings: strs, Pages: map[string]pageNote{}, Tips: map[string]map[string]string{}}
+	for _, p := range pages {
+		en := english[p.Path]
+		if en.Audience != "user" && en.Audience != "admin" {
+			continue
+		}
+		dest := filepath.Join(dir, filepath.FromSlash(p.Path))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(dest, []byte(p.Body), 0o644); err != nil {
+			panic(err)
+		}
+		meta.Pages[p.Path] = pageNote{p.Review, docs.BodyRev(en.Body) != p.SourceRev}
+		if len(p.Tips) > 0 {
+			meta.Tips[en.Feature] = p.Tips
+		}
+		meta.Tour = append(meta.Tour, p.Tour...)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		panic(err)
+	}
+	write(filepath.Join(dir, "meta.json"), meta)
+}
+
+// checkTranslations says what is wrong with the translated pages and strings of every language.
+func checkTranslations(english map[string]docs.Page, pages []docs.Page, translated map[string][]docs.Page, strs map[string]docs.Strings) []string {
+	var bad []string
+	features := map[string]bool{}
+	for _, p := range pages {
+		if p.Audience == "user" || p.Audience == "admin" {
+			features[p.Feature] = true
+		}
+	}
+	for _, lang := range docs.Languages {
+		for _, t := range translated[lang] {
+			en, ok := english[t.Path]
+			if !ok {
+				bad = append(bad, fmt.Sprintf("%s/%s: there is no English page %s", lang, t.Path, t.Path))
+				continue
+			}
+			bad = append(bad, docs.ValidateTranslation(lang, t, en)...)
+			if s, ok := strs[lang][en.Feature]; ok && s.Title != t.Title {
+				bad = append(bad, fmt.Sprintf("%s/%s: the title is %q but strings.yml says %q", lang, t.Path, t.Title, s.Title))
+			}
+		}
+		for f, s := range strs[lang] {
+			if !features[f] {
+				bad = append(bad, fmt.Sprintf("%s/strings.yml: %q is not a feature", lang, f))
+			}
+			if s.Title == "" || s.Tip == "" || len([]rune(s.Tip)) > 140 || strings.Contains(s.Tip, "\n") {
+				bad = append(bad, fmt.Sprintf("%s/strings.yml: %s needs a title and a tip of one line, 140 characters at most", lang, f))
+			}
+		}
+		if len(strs[lang]) > 0 {
+			for f := range features {
+				if _, ok := strs[lang][f]; !ok {
+					bad = append(bad, fmt.Sprintf("%s/strings.yml: no title and tip for %q", lang, f))
+				}
+			}
+		}
+	}
+	sort.Strings(bad)
+	return bad
 }
 
 func rank(goal string) int {

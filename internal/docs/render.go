@@ -24,7 +24,8 @@ var (
 // RenderHelp renders a page of the bundle for Help. A link to another page of the bundle becomes a link to that page in Help
 // (/help/<feature>, the anchor kept); a link to a page that is not in the app goes to the public site or the repository, opens
 // in a new tab and carries the class "leaves"; a picture becomes the slimmed copy served at /help/img. pagePath is the page's
-// path in the bundle and decides what a relative link means.
+// path in the bundle and decides what a relative link means (for a translated page, with its language folder in front:
+// "de/start/quickstart.md", because that is where the file is and what its relative links were written from).
 func RenderHelp(pagePath, body string, l Links) (string, error) {
 	out, err := Render(body)
 	if err != nil {
@@ -51,6 +52,9 @@ func RenderHelp(pagePath, body string, l Links) (string, error) {
 			frag = "#" + frag
 		}
 		target := path.Join(dir, p)
+		if first, rest, ok := strings.Cut(target, "/"); ok && IsLanguage(first) {
+			target = rest // a translated page links to a page that is translated (inside its language folder) as to one that is not
+		}
 		if f, ok := FeatureOfPath(target); ok {
 			return `<a href="` + l.Base + `help/` + f + html.EscapeString(frag) + `"`
 		}

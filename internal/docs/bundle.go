@@ -143,3 +143,84 @@ func Tour(page string) []TourStop {
 	}
 	return out
 }
+
+type pageNote struct {
+	Review string `json:"review"`
+	Stale  bool   `json:"stale"`
+}
+
+type langMeta struct {
+	Strings Strings                      `json:"strings"`
+	Pages   map[string]pageNote          `json:"pages"`
+	Tips    map[string]map[string]string `json:"tips"`
+	Tour    []TourStop                   `json:"tour"`
+}
+
+var metas sync.Map // language -> langMeta
+
+// meta is what the bundle holds for a language besides its pages; empty for English and for a language with nothing translated.
+func meta(lang string) langMeta {
+	if v, ok := metas.Load(lang); ok {
+		return v.(langMeta)
+	}
+	var m langMeta
+	if IsLanguage(lang) {
+		if b, err := bundle.ReadFile("bundle/" + lang + "/meta.json"); err == nil {
+			json.Unmarshal(b, &m)
+		}
+	}
+	metas.Store(lang, m)
+	return m
+}
+
+// Meta is the title and the tip of a feature's page in a language, falling back to English.
+func Meta(lang, feature string) (title, tip string, ok bool) {
+	if s, found := meta(lang).Strings[feature]; found {
+		return s.Title, s.Tip, true
+	}
+	title, tip, _, ok = Tip(feature)
+	return
+}
+
+// ButtonTipFor is a button's tip in a language, when the guide has been translated that far (false: use the English one).
+func ButtonTipFor(lang, feature, key string) (string, bool) {
+	s, ok := meta(lang).Tips[feature][key]
+	return s, ok
+}
+
+// TourFor is the stops of a page's tour in a language: the English stops, with the title and the text of each that was translated.
+func TourFor(lang, page string) []TourStop {
+	stops := Tour(page)
+	for i, s := range stops {
+		for _, t := range meta(lang).Tour {
+			if t.Target == s.Target && t.Page == s.Page {
+				stops[i].Title, stops[i].Text = t.Title, t.Text
+			}
+		}
+	}
+	return stops
+}
+
+// Used says which language a page is read in: the language asked for if the page has been translated, otherwise English.
+func Used(lang, path string) string {
+	if _, ok := meta(lang).Pages[path]; ok {
+		return lang
+	}
+	return "en"
+}
+
+// Stale says whether the page's translation was made from an English page that has changed since.
+func Stale(lang, path string) bool { return meta(lang).Pages[path].Stale }
+
+// Review says how far a translated page has been checked ("needed" or "done"), or "" when the page is not translated.
+func Review(lang, path string) string { return meta(lang).Pages[path].Review }
+
+// Translated lists the pages translated into a language, sorted.
+func Translated(lang string) []string {
+	var out []string
+	for p := range meta(lang).Pages {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}

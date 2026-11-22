@@ -55,7 +55,7 @@ type TourView struct {
 
 func (w *Server) tourView(ctx context.Context, me *member, kind string, gated bool) TourView {
 	v := TourView{Kind: kind, Targets: tourTargets}
-	for _, s := range docs.Tour(kind) {
+	for _, s := range docs.TourFor(loc(ctx).Code(), kind) {
 		stop := TourStopView{Target: s.Target, Title: t(ctx, s.Title), Text: t(ctx, s.Text)}
 		if _, _, _, ok := docs.Tip(s.Feature); ok && s.Feature != "" {
 			if e, ok := helpEntry(s.Feature, me.user.IsAdmin); ok {

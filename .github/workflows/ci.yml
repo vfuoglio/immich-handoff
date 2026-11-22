@@ -38,6 +38,8 @@ jobs:
         run: .github/scripts/e2e_groups_test.sh
       - name: Every link and anchor in the documentation points at something that exists
         run: .github/scripts/doc_links_test.sh
+      - name: Translations whose English page has changed since (a warning, never a failure)
+        run: cd internal/docs && go run gen.go -stale
       - name: Every package is in exactly one group of unit tests (see race below)
         run: .github/scripts/unit_test.sh
       - run: go vet ./... && go vet -tags e2e ./...

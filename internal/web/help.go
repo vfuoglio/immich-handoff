@@ -36,6 +36,7 @@ type HelpIndexView struct {
 // HelpPageView is one guide.
 type HelpPageView struct {
 	User, Feature, Title, Tip, Body string
+	Note                            string // what the person should know about this page: it is in English, or its translation may be out of date
 }
 
 var helpLinks = docs.Links{Base: "", Site: docsSiteURL, Repo: repoURL}
@@ -50,16 +51,37 @@ func helpHTML(lang, path string) (string, error) {
 	if v, ok := helpCache.Load(k); ok {
 		return v.(string), nil
 	}
-	body, err := docs.Source(lang, path)
+	used := docs.Used(lang, path)
+	body, err := docs.Source(used, path)
 	if err != nil {
 		return "", err
 	}
-	out, err := docs.RenderHelp(path, body, helpLinks)
+	pagePath := path
+	if used != "en" {
+		pagePath = used + "/" + path
+	}
+	out, err := docs.RenderHelp(pagePath, body, helpLinks)
 	if err != nil {
 		return "", err
 	}
 	helpCache.Store(k, out)
 	return out, nil
+}
+
+// helpView is a guide ready to show: its title and tip in the person's language, and a note when the page is not in it.
+func helpView(ctx context.Context, user string, e docs.Entry, body string) HelpPageView {
+	lang := string(loc(ctx).Lang)
+	title, tip, _ := docs.Meta(lang, e.Feature)
+	v := HelpPageView{User: user, Feature: e.Feature, Title: title, Tip: tip, Body: body}
+	if lang != "en" {
+		switch {
+		case docs.Used(lang, e.Path) == "en":
+			v.Note = t(ctx, "This guide is in English.")
+		case docs.Stale(lang, e.Path):
+			v.Note = t(ctx, "The English page has changed since this translation was made, so this page may be out of date.")
+		}
+	}
+	return v
 }
 
 // helpMember is the signed-in person, or a note that says to sign in.
@@ -117,7 +139,8 @@ func (w *Server) helpIndex(rw http.ResponseWriter, r *http.Request) {
 			v.Groups = append(v.Groups, HelpGroup{Title: goalTitle(ctx, e.Goal)})
 		}
 		g := &v.Groups[len(v.Groups)-1]
-		g.Entries = append(g.Entries, HelpEntry{e.Feature, e.Title, e.Tip})
+		title, tip, _ := docs.Meta(string(loc(ctx).Lang), e.Feature)
+		g.Entries = append(g.Entries, HelpEntry{e.Feature, title, tip})
 	}
 	HelpIndex(v).Render(ctx, rw)
 }
@@ -137,7 +160,7 @@ func (w *Server) helpPage(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	HelpPage(HelpPageView{User: me.user.Name, Feature: e.Feature, Title: e.Title, Tip: e.Tip, Body: body}).Render(ctx, rw)
+	HelpPage(helpView(ctx, me.user.Name, e, body)).Render(ctx, rw)
 }
 
 // helpDrawer is what the "?" on a card opens in place: the guide, without the page around it.
@@ -156,7 +179,7 @@ func (w *Server) helpDrawer(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 		return
 	}
-	HelpDrawer(HelpPageView{Feature: e.Feature, Title: e.Title, Tip: e.Tip, Body: body}).Render(ctx, rw)
+	HelpDrawer(helpView(ctx, "", e, body)).Render(ctx, rw)
 }
 
 // helpSearch answers the search box of Help and the command palette.
@@ -176,7 +199,8 @@ func (w *Server) helpSearch(rw http.ResponseWriter, r *http.Request) {
 		if i == 8 {
 			break
 		}
-		out = append(out, hit{h.Feature, h.Title, h.Tip, "help/" + h.Feature})
+		title, tip, _ := docs.Meta(string(loc(r.Context()).Lang), h.Feature)
+		out = append(out, hit{h.Feature, title, tip, "help/" + h.Feature})
 	}
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(out)
